@@ -20,6 +20,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 
 class AppRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -38,6 +39,9 @@ class AppRepository private constructor(private val context: Context) {
 
     private val _settings = MutableStateFlow(MySettings())
     val settings: StateFlow<MySettings> = _settings.asStateFlow()
+
+    // 【新增】胶囊状态管理器 - ✅ 直接初始化，避免 lazy 死锁
+    val capsuleStateManager: CapsuleStateManager = CapsuleStateManager(this, scope, context.applicationContext)
 
     private val eventMutex = Mutex()
     private val courseMutex = Mutex()
