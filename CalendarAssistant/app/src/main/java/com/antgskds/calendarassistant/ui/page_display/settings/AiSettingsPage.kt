@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -79,7 +81,7 @@ fun AiSettingsPage(
                 .align(Alignment.BottomCenter) // 绝对对齐到屏幕底部
                 .padding(bottom = 32.dp),      // 距离屏幕底部的距离（这里控制高低）
             snackbar = { data ->
-                ModernSuccessToast(message = data.visuals.message)
+                UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS)
             }
         )
     }
@@ -192,40 +194,3 @@ private fun AiConfigForm(
     }
 }
 
-/**
- * 现代化的 Toast 组件 (保持不变)
- */
-@Composable
-fun ModernSuccessToast(message: String) {
-    Surface(
-        color = Color(0xFF323232),
-        contentColor = Color.White,
-        shape = RoundedCornerShape(50),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .wrapContentWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.CheckCircle,
-                contentDescription = null,
-                tint = Color(0xFF4CAF50),
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium
-                )
-            )
-        }
-    }
-}

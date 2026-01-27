@@ -47,6 +47,7 @@ val REMINDER_OPTIONS = listOf(
 fun AddEventDialog(
     eventToEdit: MyEvent? = null,
     currentEventsCount: Int = 0,
+    onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (MyEvent) -> Unit
 ) {
@@ -83,6 +84,7 @@ fun AddEventDialog(
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var showReminderPicker by remember { mutableStateOf(false) }
+    var isEndTimeManuallySet by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(
@@ -107,7 +109,7 @@ fun AddEventDialog(
                     FilterChip(selected = eventType == "temp", onClick = { eventType = "temp" }, label = { Text("取件/取餐") })
                 }
 
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(if (eventType == "temp") "取件码/取餐码" else "标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("始", style = MaterialTheme.typography.bodyMedium)
@@ -144,7 +146,7 @@ fun AddEventDialog(
                 }
 
                 OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("地点") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text(if (eventType == "temp") "取件码/取餐码" else "备注") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
 
                 if (sourceBitmap != null) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -173,19 +175,87 @@ fun AddEventDialog(
         }
     }
 
-    if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }) { startDate = it; endDate = it; showStartDatePicker = false }
-    if (showEndDatePicker) WheelDatePickerDialog(endDate, { showEndDatePicker = false }) { endDate = it; showEndDatePicker = false }
+    if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }) {
+        startDate = it
+        // 第一优先级：合法性检查（DateTime比较）
+        val startDateTime = LocalDateTime.of(it, java.time.LocalTime.parse(startTime))
+        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(endTime))
+        if (startDateTime >= endDateTime) {
+            // 发生倒置，强制修正
+            onShowMessage("结束时间已自动调整为开始时间+1小时")
+            endDate = it
+            val startParts = startTime.split(":")
+            val startHour = startParts[0].toIntOrNull() ?: 0
+            val endHour = (startHour + 1) % 24
+            val startMinute = startParts.getOrElse(1) { "00" }
+            endTime = String.format("%02d:%s", endHour, startMinute)
+        } else if (!isEndTimeManuallySet) {
+            // 第二优先级：体验优化，同步日期
+            endDate = it
+        }
+        showStartDatePicker = false
+    }
+    if (showEndDatePicker) WheelDatePickerDialog(endDate, { showEndDatePicker = false }) {
+        // 第一优先级：合法性检查（DateTime比较）
+        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(startTime))
+        val endDateTime = LocalDateTime.of(it, java.time.LocalTime.parse(endTime))
+        if (startDateTime >= endDateTime) {
+            // 发生倒置，强制修正
+            onShowMessage("结束时间已自动调整为开始时间+1小时")
+            endDate = startDate
+            val startParts = startTime.split(":")
+            val startHour = startParts[0].toIntOrNull() ?: 0
+            val endHour = (startHour + 1) % 24
+            val startMinute = startParts.getOrElse(1) { "00" }
+            endTime = String.format("%02d:%s", endHour, startMinute)
+        } else {
+            endDate = it
+        }
+        isEndTimeManuallySet = true
+        showEndDatePicker = false
+    }
     if (showStartTimePicker) WheelTimePickerDialog(startTime, { showStartTimePicker = false }) {
         startTime = it
-        // 计算结束时间为开始时间+1小时
-        val startParts = it.split(":")
-        val startHour = startParts[0].toIntOrNull() ?: 0
-        val endHour = (startHour + 1) % 24
-        val startMinute = startParts.getOrElse(1) { "00" }
-        endTime = String.format("%02d:%s", endHour, startMinute)
+        // 第一优先级：合法性检查（DateTime比较）
+        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(it))
+        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(endTime))
+        if (startDateTime >= endDateTime) {
+            // 发生倒置，强制修正
+            endDate = startDate
+            val startParts = it.split(":")
+            val startHour = startParts[0].toIntOrNull() ?: 0
+            val endHour = (startHour + 1) % 24
+            val startMinute = startParts.getOrElse(1) { "00" }
+            endTime = String.format("%02d:%s", endHour, startMinute)
+        } else if (!isEndTimeManuallySet) {
+            // 第二优先级：体验优化，同步时间
+            val startParts = it.split(":")
+            val startHour = startParts[0].toIntOrNull() ?: 0
+            val endHour = (startHour + 1) % 24
+            val startMinute = startParts.getOrElse(1) { "00" }
+            endTime = String.format("%02d:%s", endHour, startMinute)
+        }
         showStartTimePicker = false
     }
-    if (showEndTimePicker) WheelTimePickerDialog(endTime, { showEndTimePicker = false }) { endTime = it; showEndTimePicker = false }
+    if (showEndTimePicker) WheelTimePickerDialog(endTime, { showEndTimePicker = false }) {
+        // 第一优先级：合法性检查（DateTime比较）
+        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(startTime))
+        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(it))
+        if (startDateTime >= endDateTime) {
+            // 发生倒置，强制修正
+            onShowMessage("结束时间已自动调整为开始时间+1小时")
+            endDate = startDate
+            val startParts = startTime.split(":")
+            val startHour = startParts[0].toIntOrNull() ?: 0
+            val endHour = (startHour + 1) % 24
+            val startMinute = startParts.getOrElse(1) { "00" }
+            endTime = String.format("%02d:%s", endHour, startMinute)
+        } else {
+            endTime = it
+        }
+        isEndTimeManuallySet = true
+        showEndTimePicker = false
+    }
     if (showReminderPicker) {
         WheelReminderPickerDialog(30, { showReminderPicker = false }) { if (!reminders.contains(it)) reminders.add(it) }
     }

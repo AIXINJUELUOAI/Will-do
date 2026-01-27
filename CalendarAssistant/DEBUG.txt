@@ -1,0 +1,292 @@
+# 胶囊通知聚合功能 - 潜在问题列表
+
+本文档记录了胶囊通知聚合功能中发现的潜在问题，供后续修复参考。
+
+---
+
+## 问题 1：单体模式显示问题（中优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/accessibility/TextAccessibilityService.kt:411`
+
+**代码：**
+```kotlin
+contentOverride = "取件码: ${event.description}"
+```
+
+**问题描述：**
+- 当聚合关闭或只有1个取件码时（单体模式），胶囊显示 "取件码: 快递取件"
+- AI识别返回的 `description` 都是固定的 "快递取件"，而不是实际的取件码号码
+- 应该显示 `title`（取件码号码）而不是 `description`
+
+**建议修复：**
+```kotlin
+contentOverride = "取件码: ${event.title}"
+```
+
+---
+
+## 问题 2：pendingCapsules 清理风险（中优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/capsule/CapsuleService.kt:111-142`
+
+**代码：**
+```kotlin
+pendingCapsules.add(eventId)
+// ... 创建通知 ...
+pendingCapsules.remove(eventId)
+```
+
+**问题描述：**
+- 如果在 `add` 和 `remove` 之间抛出异常，`pendingCapsules` 永远不会被清理
+- 导致该ID一直受保护，无法被 `handleSync` 清除
+- 可能造成内存泄漏和僵尸胶囊
+
+**建议修复：**
+```kotlin
+pendingCapsules.add(eventId)
+try {
+    // ... 创建通知 ...
+} finally {
+    pendingCapsules.remove(eventId)
+}
+```
+
+---
+
+## 问题 3：onDestroy 未清理 pendingCapsules（低优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/capsule/CapsuleService.kt:224`
+
+**代码：**
+```kotlin
+override fun onDestroy() {
+    super.onDestroy()
+    isServiceRunning = false
+    activeCapsules.clear()
+    // pendingCapsules 没有被清理
+}
+```
+
+**问题描述：**
+- 服务销毁时没有清理 `pendingCapsules`
+- 可能导致内存泄漏
+
+**建议修复：**
+```kotlin
+override fun onDestroy() {
+    super.onDestroy()
+    isServiceRunning = false
+    activeCapsules.clear()
+    pendingCapsules.clear()
+}
+```
+
+---
+
+## 问题 4：聚合模式下所有取件码使用相同时间（低优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/accessibility/TextAccessibilityService.kt:374-386`
+
+**代码：**
+```kotlin
+val latestStartMillis = pickupEvents.mapNotNull {
+    try {
+        LocalDateTime.of(it.startDate, LocalTime.parse(it.startTime, formatter))
+            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    } catch(e:Exception) { null }
+}.maxOrNull() ?: System.currentTimeMillis()
+
+val latestEndMillis = pickupEvents.mapNotNull {
+    try {
+        LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, formatter))
+            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    } catch(e:Exception) { null }
+}.maxOrNull() ?: System.currentTimeMillis()
+```
+
+**问题描述：**
+- 取件码的 `startDateTime` 和 `endDateTime` 都设置为 `now`（当前时间）
+- 所有取件码的时间几乎相同，`latestStartMillis` 和 `latestEndMillis` 可能不准确
+- 聚合胶囊的过期时间可能不正确
+
+**影响：**
+- 聚合胶囊可能不会在正确的时间过期
+- 但由于有定时删除机制，实际影响较小
+
+---
+
+## 问题 5：日志显示错误（低优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/capsule/CapsuleService.kt:186`
+
+**代码：**
+```kotlin
+Log.d(TAG, "refreshForegroundState: winnerId=${winner.notificationId}, winnerTitle=${winner.notification.hashCode()}, currentForegroundId=$currentForegroundId")
+```
+
+**问题描述：**
+- `winnerTitle` 应该显示通知标题，但显示的是 `notification.hashCode()`
+- 没有标题信息，不便于调试
+
+**建议修复：**
+```kotlin
+Log.d(TAG, "refreshForegroundState: winnerId=${winner.notificationId}, currentForegroundId=$currentForegroundId")
+// 在 handleStart 中已经记录了 eventId，所以这里不需要再记录
+```
+
+---
+
+## 问题 6：100ms 延迟可能影响响应速度（低优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/accessibility/TextAccessibilityService.kt:421-424`
+
+**代码：**
+```kotlin
+serviceScope.launch {
+    delay(100) // 给 CapsuleService 100ms 处理所有 START 请求
+    sendSyncIntent(currentActiveIds)
+}
+```
+
+**问题描述：**
+- 用户识别截图后，需要等待 100ms 才能看到胶囊通知
+- 可能影响用户体验
+
+**权衡：**
+- 去掉延迟可能导致竞态条件（新胶囊被 Sync 当作僵尸清除）
+- 保留延迟会增加响应时间
+
+**可能的优化方案：**
+- 使用 Handler 而不是协程，减少开销
+- 减少延迟到 50ms
+- 或者在 `handleSync` 中增加更智能的等待逻辑
+
+---
+
+## 问题 7：聚合胶囊更新时的重复通知问题（已修复）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/capsule/CapsuleService.kt:167-200`
+
+**已修复：**
+- 之前：只有当 `currentForegroundId != winner.notificationId` 时才更新通知
+- 现在：无论 ID 是否相同，都调用 `promoteToForeground` 更新通知
+
+---
+
+## 问题 8：取件码重复检测逻辑（已修复）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/accessibility/TextAccessibilityService.kt:247-259`
+
+**原始问题：**
+- 使用 `description`（固定文本 "快递取件"）判断重复
+- 导致所有新取件码都被判定为重复
+
+**已修复：**
+- 现在使用 `title`（取件码号码）判断重复
+- 正确识别不同的取件码
+
+---
+
+## 附录：修复记录
+
+### 2025-01-27
+- 修复了聚合胶囊更新时通知不显示的问题
+- 修复了取件码重复检测逻辑
+- 添加了 pendingCapsules 预注册保护机制
+- 优化了聚合显示（超过5个时显示省略号）
+- 移除了 recentlyDeleted 相关代码
+
+---
+
+## 待讨论问题
+
+1. **是否需要保留 100ms 延迟？**
+   - 优点：避免竞态条件
+   - 缺点：影响响应速度
+   - 建议：保留当前实现，用户反馈良好
+
+2. **是否需要优化聚合时间计算？**
+   - 当前实现使用最大值，对于取件码来说足够
+   - 如果需要更精确的时间范围，可以考虑最小开始时间和最大结束时间
+
+3. **是否需要添加更多日志？**
+   - 当前已有较完整的日志
+   - 如需调试，可临时添加更详细的日志
+
+---
+
+## 问题 9：聚合胶囊监听机制的逻辑漏洞（高优先级）
+
+**文件：** `app/src/main/java/com/antgskds/calendarassistant/service/accessibility/TextAccessibilityService.kt:90-103`
+
+**监听链路：**
+```
+事件变化 (addEvent/deleteEvent)
+    ↓
+repository.events (Flow)
+    ↓
+startObservingEvents() - collectLatest
+    ↓
+refreshAllNotifications() - 全量重新计算
+```
+
+**问题描述：**
+
+1. **过度触发的全量刷新**
+   - 任何单个事件变化都会触发所有胶囊的重新计算
+   - 没有增量更新机制
+   - 例如：添加1个取件码，会刷新所有日程的胶囊
+
+2. **聚合↔单体切换的竞态条件**
+   ```
+   场景：从1个取件码（单体）→ 2个取件码（聚合）
+
+   T1: 第1个事件添加 → 单体模式 → 白名单=[ID1] → 200ms后发送SYNC
+   T2: 第2个事件添加 → 聚合模式 → 白名单=[AGGREGATE] → 200ms后发送SYNC
+   T3: 第1个SYNC到达 → 白名单=[ID1] → 聚合胶囊被错误清除！
+   T4: 第2个SYNC到达 → 白名单=[AGGREGATE] → 重新创建聚合胶囊
+   ```
+
+3. **设置变化不触发刷新**
+   - 用户切换"取件码聚合"开关时不会自动刷新
+   - 需要等到下次事件变化才生效
+
+4. **没有监听事件内容更新**
+   - 如果用户修改取件码内容，Flow 不会触发
+   - 需要手动调用刷新
+
+5. **过期检测依赖下次触发**
+   - 取件码过期后不会自动清除
+   - 需要等下次事件变化才检测
+
+**建议优化方案：**
+
+1. **设置变化时触发刷新**
+   ```kotlin
+   // PreferenceSettingsPage.kt
+   onCheckedChange = { isChecked ->
+       viewModel.updatePreference(pickupAggregation = isChecked)
+       TextAccessibilityService.instance?.refreshCapsuleState()
+   }
+   ```
+
+2. **优化聚合/单体切换**
+   - 在批量添加时暂停 Flow 监听
+   - 添加完所有事件后手动触发一次刷新
+
+3. **添加定时过期检测**
+   ```kotlin
+   // 每分钟检查一次过期事件
+   private fun startExpiryCheckJob() {
+       serviceScope.launch {
+           while(isActive) {
+               delay(60_000)
+               refreshAllNotifications()
+           }
+       }
+   }
+   ```
+
+---
+
+最后更新：2026-01-27
