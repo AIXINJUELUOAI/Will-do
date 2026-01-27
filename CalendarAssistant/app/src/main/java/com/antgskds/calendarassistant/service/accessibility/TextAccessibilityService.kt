@@ -17,17 +17,14 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
@@ -39,13 +36,9 @@ class TextAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var analysisJob: Job? = null
-    private var eventObservationJob: Job? = null
 
     private val NOTIFICATION_ID_PROGRESS = 1001
     private val NOTIFICATION_ID_RESULT = 2002
-
-    private val AGGREGATE_ID_STR = "AGGREGATE_PICKUP"
-    private val AGGREGATE_NOTIF_ID = 99999
 
     private val repository by lazy { (applicationContext as App).repository }
 
@@ -62,12 +55,11 @@ class TextAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         Log.d(TAG, "无障碍服务已连接")
-        startObservingEvents()
+        // 胶囊逻辑已移至 CapsuleStateManager，不再需要在此监听事件
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
-        eventObservationJob?.cancel()
         return super.onUnbind(intent)
     }
 
@@ -82,17 +74,6 @@ class TextAccessibilityService : AccessibilityService() {
             cancelCurrentAnalysis()
         }
         return super.onStartCommand(intent, flags, startId)
-    }
-
-    private fun startObservingEvents() {
-        eventObservationJob?.cancel()
-        eventObservationJob = serviceScope.launch {
-            repository.events.collectLatest { events ->
-                delay(200) // 稍加延迟，等待数据库和Settings稳定
-                Log.d(TAG, "检测到数据源变更，正在刷新胶囊状态... (Events: ${events.size})")
-                refreshAllNotifications()
-            }
-        }
     }
 
     private fun cancelCurrentAnalysis() {
@@ -113,12 +94,6 @@ class TextAccessibilityService : AccessibilityService() {
             } else {
                 showResultNotification("系统版本过低", "截图功能需要 Android 11+")
             }
-        }
-    }
-
-    fun refreshCapsuleState() {
-        serviceScope.launch(Dispatchers.Main) {
-            refreshAllNotifications()
         }
     }
 
@@ -202,7 +177,7 @@ class TextAccessibilityService : AccessibilityService() {
                         showResultNotification(title, content)
                     }
                 } else {
-                    showResultNotification("无新增内容", "识别记录均为重复项")
+                    showResultNotification("无新增内容", "所有识别的事件都已存在")
                 }
             }
         } catch (e: Exception) {
@@ -221,7 +196,10 @@ class TextAccessibilityService : AccessibilityService() {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-        aiEvents.forEach { aiEvent ->
+        Log.d(TAG, "saveEventsLocally: AI返回了 ${aiEvents.size} 个事件")
+        Log.d(TAG, "saveEventsLocally: 当前存储中有 ${currentEvents.size} 个事件")
+
+        aiEvents.forEachIndexed { index, aiEvent ->
             try {
                 val now = LocalDateTime.now()
                 var startDateTime = try {
@@ -240,201 +218,86 @@ class TextAccessibilityService : AccessibilityService() {
                 val finalEventType = if (aiEvent.type == "pickup") "temp" else "event"
                 val newEventTitle = aiEvent.title.trim()
 
-                val isDuplicate = currentEvents.any { existing ->
+                // 修复：使用实时的 repository.events.value 而不是过时的 currentEvents 快照
+                // 这确保了即使删除操作刚刚发生，也能获取到最新的数据
+                val currentRepositoryEvents = repository.events.value
+                Log.d(TAG, "  -> 当前仓库中有 ${currentRepositoryEvents.size} 个事件")
+
+                val isDuplicate = currentRepositoryEvents.any { existing ->
                     val isExpired = existing.endDate.isBefore(LocalDate.now())
                     if (isExpired) return@any false
 
-                    if (finalEventType == "event") {
+                    val matches = if (finalEventType == "event") {
                         existing.startDate == startDateTime.toLocalDate() &&
                                 existing.startTime == startDateTime.format(timeFormatter) &&
                                 existing.title.trim().equals(newEventTitle, ignoreCase = true)
                     } else {
+                        // 【修复】对于取件码，使用 title（取件码号码）作为唯一标识
+                        // 而不是 description（通常是固定的"快递取件"等文本）
                         existing.eventType == "temp" &&
-                                existing.description.trim() == aiEvent.description.trim()
+                                existing.title.trim().equals(newEventTitle, ignoreCase = true)
                     }
+
+                    if (matches && finalEventType == "temp") {
+                        Log.d(TAG, "  -> 找到匹配: existing.id=${existing.id}, existing.title='${existing.title}', ai.title='${newEventTitle}'")
+                    }
+                    matches
                 }
 
-                if (!isDuplicate) {
-                    val newEvent = MyEvent(
-                        id = UUID.randomUUID().toString(),
-                        title = newEventTitle,
-                        startDate = startDateTime.toLocalDate(),
-                        endDate = endDateTime.toLocalDate(),
-                        startTime = startDateTime.format(timeFormatter),
-                        endTime = endDateTime.format(timeFormatter),
-                        location = aiEvent.location,
-                        description = aiEvent.description,
-                        color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % 8],
-                        sourceImagePath = imagePath,
-                        eventType = finalEventType
-                    )
-                    repository.addEvent(newEvent)
-                    actuallyAdded.add(newEvent)
+                // 添加日志以便调试
+                Log.d(TAG, "事件#$index: type=$finalEventType, title=$newEventTitle, desc='${aiEvent.description.trim()}'")
+                if (isDuplicate) {
+                    Log.d(TAG, "  -> 判定为重复（已存在于仓库中），跳过")
+                    return@forEachIndexed
+                }
 
-                    if (newEvent.eventType == "temp") {
-                        NotificationScheduler.scheduleExpiryWarning(this, newEvent)
-                    } else {
-                        NotificationScheduler.scheduleReminders(this, newEvent)
-                    }
+                Log.d(TAG, "  -> 不重复，准备添加新事件")
+
+                // 不重复，创建新事件（先添加到列表，稍后批量提交）
+                val newEvent = MyEvent(
+                    id = UUID.randomUUID().toString(),
+                    title = newEventTitle,
+                    startDate = startDateTime.toLocalDate(),
+                    endDate = endDateTime.toLocalDate(),
+                    startTime = startDateTime.format(timeFormatter),
+                    endTime = endDateTime.format(timeFormatter),
+                    location = aiEvent.location,
+                    description = aiEvent.description,
+                    color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % 8],
+                    sourceImagePath = imagePath,
+                    eventType = finalEventType
+                )
+                // 【修复】先收集到列表，不立即添加，避免多次触发Flow
+                actuallyAdded.add(newEvent)
+                Log.d(TAG, "  -> 准备添加新事件: id=${newEvent.id}, title='${newEvent.title}'")
+
+                if (newEvent.eventType == "temp") {
+                    NotificationScheduler.scheduleExpiryWarning(this, newEvent)
+                } else {
+                    NotificationScheduler.scheduleReminders(this, newEvent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "保存单个事件失败", e)
             }
         }
+
+        // 批量添加所有事件（胶囊逻辑已移至 CapsuleStateManager，会自动响应 Flow 变化）
+        if (actuallyAdded.isNotEmpty()) {
+            Log.d(TAG, "批量添加 ${actuallyAdded.size} 个事件")
+            actuallyAdded.forEach { event ->
+                repository.addEvent(event)
+                // 安排提醒
+                if (event.eventType == "temp") {
+                    NotificationScheduler.scheduleExpiryWarning(this, event)
+                } else {
+                    NotificationScheduler.scheduleReminders(this, event)
+                }
+            }
+            Log.d(TAG, "批量添加完成")
+        }
+
+        Log.d(TAG, "saveEventsLocally 完成: AI返回${aiEvents.size}个, 成功添加${actuallyAdded.size}个, 跳过${aiEvents.size - actuallyAdded.size}个")
         return actuallyAdded
-    }
-
-    /**
-     * 【完美修复】全量同步通知状态
-     * 不再依赖本地 diff，而是告诉 CapsuleService “这些是我现在要显示的，其他的请杀掉”
-     */
-    private suspend fun refreshAllNotifications() {
-        val settings = repository.settings.value
-
-        // 如果开关关闭，发送空列表给 CapsuleService，它会清空所有
-        if (!settings.isLiveCapsuleEnabled) {
-            sendSyncIntent(emptyList())
-            return
-        }
-
-        val nowDateTime = LocalDateTime.now()
-        val formatter = DateTimeFormatter.ofPattern("HH:mm")
-
-        val allEvents = repository.events.value.filter {
-            it.endDate.isAfter(LocalDate.now().minusDays(1))
-        }
-
-        val activeEvents = allEvents.filter { event ->
-            try {
-                val endDt = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, formatter))
-                nowDateTime.isBefore(endDt)
-            } catch (e: Exception) { false }
-        }
-
-        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.eventType == "temp" }
-
-        // === 1. 计算当前时刻【应该存在】的 ID 白名单 ===
-        val currentActiveIds = ArrayList<String>()
-
-        // Schedule: 全部上白名单
-        scheduleEvents.forEach { event ->
-            val startDt = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, formatter))
-            val endDt = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, formatter))
-
-            if (!nowDateTime.isBefore(startDt)) {
-                // 启动/更新
-                startCapsule(
-                    event = event,
-                    type = CapsuleService.TYPE_SCHEDULE,
-                    startMillis = startDt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                    endMillis = endDt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                    contentOverride = null
-                )
-                // 加入白名单
-                currentActiveIds.add(event.id)
-            }
-        }
-
-        // Pickup: 根据聚合逻辑上白名单
-        if (settings.isPickupAggregationEnabled && pickupEvents.size > 1) {
-            // >>> 聚合模式 >>>
-            val titleText = "${pickupEvents.size} 个待取事项"
-            val contentText = pickupEvents.mapIndexed { i, e -> "${i + 1}. ${e.title} ${e.description}" }
-                .joinToString("\n")
-
-            val latestStartMillis = pickupEvents.mapNotNull {
-                try {
-                    LocalDateTime.of(it.startDate, LocalTime.parse(it.startTime, formatter))
-                        .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                } catch(e:Exception) { null }
-            }.maxOrNull() ?: System.currentTimeMillis()
-
-            val latestEndMillis = pickupEvents.mapNotNull {
-                try {
-                    LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, formatter))
-                        .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                } catch(e:Exception) { null }
-            }.maxOrNull() ?: System.currentTimeMillis()
-
-            startServiceIntent(
-                idStr = AGGREGATE_ID_STR,
-                notifId = AGGREGATE_NOTIF_ID,
-                title = titleText,
-                content = contentText,
-                type = CapsuleService.TYPE_PICKUP,
-                startMillis = latestStartMillis,
-                endMillis = latestEndMillis
-            )
-            // 只有聚合 ID 入选白名单，单独的 ID 不入选 -> 它们会被 Sync 杀掉
-            currentActiveIds.add(AGGREGATE_ID_STR)
-
-        } else {
-            // >>> 单体模式 >>>
-            pickupEvents.forEach { event ->
-                val startDt = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, formatter))
-                val endDt = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, formatter))
-
-                startCapsule(
-                    event = event,
-                    type = CapsuleService.TYPE_PICKUP,
-                    startMillis = startDt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                    endMillis = endDt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                    contentOverride = "取件码: ${event.description}"
-                )
-                currentActiveIds.add(event.id)
-            }
-            // 聚合 ID 不在白名单 -> 如果之前有聚合，会被 Sync 杀掉
-        }
-
-        // === 2. 发送同步指令 ===
-        // 这一步是关键：告诉 CapsuleService 只有 list 里的能活，其他的都是僵尸
-        sendSyncIntent(currentActiveIds)
-    }
-
-    private fun sendSyncIntent(activeIds: List<String>) {
-        val intent = Intent(this, CapsuleService::class.java).apply {
-            action = CapsuleService.ACTION_SYNC
-            putStringArrayListExtra("ACTIVE_IDS", ArrayList(activeIds))
-        }
-        startService(intent)
-    }
-
-    private fun startCapsule(event: MyEvent, type: Int, startMillis: Long, endMillis: Long, contentOverride: String?) {
-        startServiceIntent(
-            idStr = event.id,
-            notifId = event.id.hashCode(),
-            title = event.title,
-            content = contentOverride ?: "${event.startTime} - ${event.endTime}\n${event.location}",
-            type = type,
-            startMillis = startMillis,
-            endMillis = endMillis
-        )
-    }
-
-    private fun startServiceIntent(
-        idStr: String,
-        notifId: Int,
-        title: String,
-        content: String,
-        type: Int,
-        startMillis: Long,
-        endMillis: Long
-    ) {
-        val intent = Intent(this, CapsuleService::class.java).apply {
-            action = CapsuleService.ACTION_START
-            putExtra("EVENT_ID", idStr)
-            putExtra("NOTIF_ID", notifId)
-            putExtra("EVENT_TITLE", title)
-            putExtra("EVENT_CONTENT", content)
-            putExtra("TYPE", type)
-            putExtra("START_MILLIS", startMillis)
-            putExtra("END_MILLIS", endMillis)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
     }
 
     private fun showProgressNotification(title: String, content: String) {

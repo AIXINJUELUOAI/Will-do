@@ -1,7 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -22,6 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.TimeNode
+import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
@@ -46,6 +47,16 @@ fun TimeTableEditorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val jsonParser = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
+
+    fun showToast(message: String, type: ToastType = ToastType.SUCCESS) {
+        currentToastType = type
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     // --- 状态管理 ---
     var totalNodes by remember { mutableIntStateOf(12) }
@@ -126,121 +137,133 @@ fun TimeTableEditorScreen(
                                     customBreaks.clear()
                                     // 导入即保存
                                     viewModel.updateTimeTable(json)
-                                    Toast.makeText(context, "导入成功并保存", Toast.LENGTH_SHORT).show()
+                                    showToast("导入成功并保存", ToastType.SUCCESS)
                                 }
                             } catch(e:Exception) {
-                                Toast.makeText(context, "文件格式错误", Toast.LENGTH_SHORT).show()
+                                showToast("文件格式错误", ToastType.ERROR)
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) { showToast("导入失败: ${e.message}", ToastType.ERROR) }
                 }
             }
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        // 工具栏
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { showTotalNodesPicker = true }) { Text("总节数: $totalNodes") }
-                // 暂时隐藏导入按钮（待实现导出功能后再显示）
-                // OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) {
-                //     Icon(Icons.Default.UploadFile, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
-                //     Text("导入")
-                // }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            // 工具栏
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { showTotalNodesPicker = true }) { Text("总节数: $totalNodes") }
+                    // 暂时隐藏导入按钮（待实现导出功能后再显示）
+                    // OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) {
+                    //     Icon(Icons.Default.UploadFile, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
+                    //     Text("导入")
+                    // }
+                }
+                Button(onClick = {
+                    val jsonStr = jsonParser.encodeToString(generatedNodes)
+                    viewModel.updateTimeTable(jsonStr)
+                    showToast("作息时间已保存", ToastType.SUCCESS)
+                }) { Text("保存生效") }
             }
-            Button(onClick = {
-                val jsonStr = jsonParser.encodeToString(generatedNodes)
-                viewModel.updateTimeTable(jsonStr)
-                Toast.makeText(context, "作息时间已保存", Toast.LENGTH_SHORT).show()
-            }) { Text("保存生效") }
-        }
 
-        HorizontalDivider()
+            HorizontalDivider()
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(generatedNodes) { index, node ->
-                val nodeIndex = node.index
-                if (nodeIndex == 1) SectionHeader("上午课程", morningStart) { showTimePickerForAnchor = "morning" }
-                else if (nodeIndex == 5) SectionHeader("下午课程", afternoonStart) { showTimePickerForAnchor = "afternoon" }
-                else if (nodeIndex == 9) SectionHeader("晚上课程", nightStart) { showTimePickerForAnchor = "night" }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(generatedNodes) { index, node ->
+                    val nodeIndex = node.index
+                    if (nodeIndex == 1) SectionHeader("上午课程", morningStart) { showTimePickerForAnchor = "morning" }
+                    else if (nodeIndex == 5) SectionHeader("下午课程", afternoonStart) { showTimePickerForAnchor = "afternoon" }
+                    else if (nodeIndex == 9) SectionHeader("晚上课程", nightStart) { showTimePickerForAnchor = "night" }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(nodeIndex.toString(), modifier = Modifier.padding(4.dp)) }
-                            Spacer(Modifier.width(16.dp))
-                            Text("${node.startTime} - ${node.endTime}", style = MaterialTheme.typography.titleMedium)
-                        }
-                        Text("${courseDuration}分", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    }
-                }
-
-                // 课间休息 (Modified Section)
-                if (nodeIndex < totalNodes) {
-                    if (nodeIndex == 4 || nodeIndex == 8) {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            HorizontalDivider(modifier = Modifier.alpha(0.3f))
-                            Text(
-                                if(nodeIndex==4)"午休" else "晚饭",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.background)
-                                    .padding(horizontal = 8.dp)
-                            )
-                        }
-                    } else {
-                        val breakTime = customBreaks[nodeIndex] ?: 10
-                        Box(
+                        Row(
                             Modifier
-                                .fillMaxWidth()
-                                .height(36.dp) // 增加高度方便点击
-                                .clickable { showBreakPickerForNode = nodeIndex },
-                            contentAlignment = Alignment.Center
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 背景横线
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.7f) // 控制横线宽度，0.7看起来比较平衡
-                                    .alpha(0.2f),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            // 文字 (带背景遮挡)
-                            Text(
-                                text = "休息 ${breakTime} 分钟",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.background) // 使用背景色遮挡横线
-                                    .padding(horizontal = 8.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(nodeIndex.toString(), modifier = Modifier.padding(4.dp)) }
+                                Spacer(Modifier.width(16.dp))
+                                Text("${node.startTime} - ${node.endTime}", style = MaterialTheme.typography.titleMedium)
+                            }
+                            Text("${courseDuration}分", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                    }
+
+                    // 课间休息 (Modified Section)
+                    if (nodeIndex < totalNodes) {
+                        if (nodeIndex == 4 || nodeIndex == 8) {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                HorizontalDivider(modifier = Modifier.alpha(0.3f))
+                                Text(
+                                    if(nodeIndex==4)"午休" else "晚饭",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.background)
+                                        .padding(horizontal = 8.dp)
+                                )
+                            }
+                        } else {
+                            val breakTime = customBreaks[nodeIndex] ?: 10
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp) // 增加高度方便点击
+                                    .clickable { showBreakPickerForNode = nodeIndex },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // 背景横线
+                                HorizontalDivider(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.7f) // 控制横线宽度，0.7看起来比较平衡
+                                        .alpha(0.2f),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                // 文字 (带背景遮挡)
+                                Text(
+                                    text = "休息 ${breakTime} 分钟",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.background) // 使用背景色遮挡横线
+                                        .padding(horizontal = 8.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp),
+            snackbar = { data ->
+                UniversalToast(message = data.visuals.message, type = currentToastType)
+            }
+        )
     }
 
     // 弹窗逻辑
