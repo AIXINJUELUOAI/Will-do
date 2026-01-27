@@ -5,16 +5,25 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import android.widget.RemoteViews
+import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 
+/**
+ * Flyme 实况胶囊提供者
+ *
+ * 第二阶段修复：使用 RemoteViews 加载自定义布局，解决通知中心展开空白问题
+ */
 class FlymeCapsuleProvider : ICapsuleProvider {
+
     companion object {
         private const val TAG = "FlymeCapsuleProvider"
     }
@@ -24,7 +33,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         eventId: String,
         title: String,
         content: String,
-        color: Int
+        color: Int,
+        capsuleType: Int  // 1=日程, 2=取件码
     ): Notification {
 
         // 1. 点击跳转
@@ -39,43 +49,17 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         )
 
         // 2. 准备图标 (Flyme 要求白色 Bitmap)
-        // 优先尝试 ic_qs_recognition (如果存在), 否则用 launcher_round
-        // 注意：这里为了稳健，直接用 ic_launcher_round，你可以根据资源情况调整
-        val rawBitmap = CapsuleUiUtils.drawableToBitmap(context, R.mipmap.ic_launcher_round)
+        var iconDrawable: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_qs_recognition)
+        if (iconDrawable == null) iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+
+        val rawBitmap = iconDrawable?.let { CapsuleUiUtils.drawableToBitmap(it) }
         val whiteIconBitmap = if (rawBitmap != null) CapsuleUiUtils.tintBitmap(rawBitmap, Color.WHITE) else null
         val iconObj = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
-        // 3. 构建 Flyme 专属 Bundle
-        val collapsedTitle = if (title.length > 10) title.take(10) else title
+        // 3. 创建 RemoteViews（关键修复）
+        val remoteViews = createRemoteViews(context, capsuleType, title, content)
 
-        val capsuleBundle = Bundle().apply {
-            putInt("notification.live.capsuleStatus", 1) // 1=进行中
-            putInt("notification.live.capsuleType", 1)   // 1=普通胶囊
-            putString("notification.live.capsuleContent", collapsedTitle)
-
-            if (iconObj != null) {
-                putParcelable("notification.live.capsuleIcon", iconObj)
-            }
-            putInt("notification.live.capsuleBgColor", color)
-            putInt("notification.live.capsuleContentColor", Color.WHITE)
-        }
-
-        val liveBundle = Bundle().apply {
-            putBoolean("is_live", true)
-            putInt("notification.live.operation", 0)
-            putInt("notification.live.type", 10)
-            putBundle("notification.live.capsule", capsuleBundle)
-            putInt("notification.live.contentColor", Color.BLACK)
-        }
-
-        val extras = Bundle().apply {
-            putBundle("com.meizu.flyme.live_notification", liveBundle)
-            // 兼容普通视图的显示
-            putBoolean("android.substName", true)
-            putString("android.title", collapsedTitle)
-        }
-
-        // 4. 构建 Notification
+        // 4. 构建 Notification Builder
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -83,8 +67,10 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             Notification.Builder(context)
         }
 
+        val collapsedTitle = if (title.length > 10) title.take(10) else title
         val icon = Icon.createWithResource(context, R.mipmap.ic_launcher_round)
 
+        // 5. 设置基础属性
         builder.setSmallIcon(icon)
             .setContentTitle(collapsedTitle)
             .setContentText("进行中")
@@ -94,42 +80,104 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             .setColor(color)
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setStyle(Notification.BigTextStyle()
-                .setBigContentTitle(title)
-                .bigText(content)
-            )
 
-        // Android 12+: 立即显示，不折叠
+        // 6. ✅ 关键：设置 RemoteViews（双重设置）
+        builder.setCustomContentView(remoteViews)
+            .setCustomBigContentView(remoteViews)
+
+        // 7. ✅ 保留 BigTextStyle 作为兜底
+        builder.setStyle(Notification.BigTextStyle()
+            .setBigContentTitle(title)
+            .bigText(content)
+        )
+
+        // 8. Android 版本适配
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
         builder.setGroup("LIVE_CAPSULE_GROUP")
-        builder.setGroupSummary(false)
-        builder.setWhen(System.currentTimeMillis())
-        builder.setShowWhen(true)
+            .setGroupSummary(false)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
 
-        // Android 16 (Baklava) 适配 (反射调用)
+        // Android 16 (Baklava) 适配
         try {
             val methodSetText = Notification.Builder::class.java.getMethod("setShortCriticalText", String::class.java)
             methodSetText.invoke(builder, collapsedTitle)
         } catch (e: Exception) {
-            Log.d(TAG, "setShortCriticalText not available")
+            // ignore
         }
 
         try {
             val methodSetPromoted = Notification.Builder::class.java.getMethod("setRequestPromotedOngoing", Boolean::class.java)
             methodSetPromoted.invoke(builder, true)
         } catch (e: Exception) {
-            Log.d(TAG, "setRequestPromotedOngoing not available")
+            // ignore
         }
 
-        // 注入 Flyme 参数和其他 extras
-        builder.addExtras(extras)
+        // 9. 构建 Flyme 专属 Bundle（胶囊信息）
+        val capsuleBundle = Bundle().apply {
+            putInt("notification.live.capsuleStatus", 1)
+            putInt("notification.live.capsuleType", 1)
+            putString("notification.live.capsuleContent", collapsedTitle)
+            putInt("notification.live.capsuleBgColor", color)
+            putInt("notification.live.capsuleContentColor", Color.WHITE)
+            if (iconObj != null) {
+                putParcelable("notification.live.capsuleIcon", iconObj)
+            }
+        }
 
-        // 只提醒一次，避免重复响铃
+        // 10. ✅ 添加 Extras（扁平化结构 + String 类型修正）
+        val finalExtras = Bundle().apply {
+            putBoolean("is_live", true)
+            putInt("notification.live.operation", 0)
+            putInt("notification.live.type", 10)
+            putBundle("notification.live.capsule", capsuleBundle)
+            // ❌ 移除 notification.live.contentColor（让 XML 控制颜色）
+            // ✅ String 类型（防止崩溃）
+            putString("android.substName", context.getString(R.string.app_name))
+            putString("android.title", title)
+        }
+        builder.addExtras(finalExtras)
+
         builder.setOnlyAlertOnce(true)
 
         return builder.build()
+    }
+
+    /**
+     * 创建 RemoteViews
+     * 封装 Flyme 实况通知的自定义布局逻辑
+     */
+    private fun createRemoteViews(
+        context: Context,
+        capsuleType: Int,
+        title: String,
+        content: String
+    ): RemoteViews {
+        return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
+
+            // 左上角小标题：根据类型显示
+            val headerText = if (capsuleType == CapsuleService.TYPE_PICKUP) {
+                "取件提醒"  // capsuleType == 2
+            } else {
+                "日程提醒"  // capsuleType == 1
+            }
+            setTextViewText(R.id.live_title, headerText)
+
+            // 中间大字：绑定 title
+            // (取件码时是号码，日程时是标题)
+            setTextViewText(R.id.live_content, title)
+
+            // 底部位置/详情：绑定 content
+            setTextViewText(R.id.live_location, content)
+
+            // 时间：固定值
+            setTextViewText(R.id.live_time, "进行中")
+
+            // 图标
+            setImageViewResource(R.id.live_icon, R.mipmap.ic_launcher)
+        }
     }
 }

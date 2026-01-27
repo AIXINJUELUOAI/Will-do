@@ -9,6 +9,7 @@ interface ICapsuleProvider {
         eventId: String,
         title: String,
         content: String,
-        color: Int
+        color: Int,
+        capsuleType: Int  // 新增参数：1=日程, 2=取件码
     ): Notification
 }
