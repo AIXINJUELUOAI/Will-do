@@ -22,7 +22,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
         eventId: String,
         title: String,
         content: String,
-        color: Int
+        color: Int,
+        capsuleType: Int  // 新增参数，但原生胶囊暂时忽略此参数
     ): Notification {
 
         val tapIntent = Intent(context, MainActivity::class.java).apply {
