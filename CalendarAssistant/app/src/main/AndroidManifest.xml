@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 基础网络与通知 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+
+    <!-- 闹钟权限 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!-- 全屏意图 (闹钟响铃页) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- 前台服务 (胶囊) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- 🔥 新增：开机自启权限 (必须有这个，BootReceiver 才能工作) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Flyme 专用 -->
+    <uses-permission android:name="flyme.permission.READ_NOTIFICATION_LIVE_STATE" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CalendarAssistant"
+        tools:targetApi="35">
+
+        <!-- Flyme 实况通知支持 -->
+        <meta-data
+            android:name="com.meizu.flyme.live_notification"
+            android:value="true" />
+
+        <!-- Samsung 灵动岛支持 -->
+        <meta-data
+            android:name="com.samsung.android.support.ongoing_activity"
+            android:value="true" />
+
+        <!-- UI 入口 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.CalendarAssistant">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 1. 无障碍服务 (截图用) -->
+        <service
+            android:name=".service.accessibility.TextAccessibilityService"
+            android:exported="true"
+            android:label="Will do"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 2. 实况胶囊服务 -->
+        <service
+            android:name=".service.capsule.CapsuleService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.service.foreground.specialUse"
+                android:value="live_capsule" />
+        </service>
+
+        <!-- 3. 下拉磁贴服务 -->
+        <service
+            android:name=".service.tile.CaptureTileService"
+            android:icon="@drawable/ic_launcher_foreground"
+            android:label="识别日程"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- 4. 闹钟广播接收器 -->
+        <receiver android:name=".service.receiver.AlarmReceiver" />
+
+        <!-- 5. 每日汇总接收器 (已修正) -->
+        <!-- 这里的 exported=false 是对的，因为我们是用显式 Intent 调用的 -->
+        <receiver
+            android:name=".service.receiver.DailySummaryReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- 🔥 新增：开机启动接收器 (必须添加) -->
+        <!-- exported=true 是必须的，因为要接收系统的 BOOT 广播 -->
+        <receiver
+            android:name=".service.receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".service.receiver.PickupExpiryReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.antgskds.calendarassistant.action.PICKUP_WARNING" />
+                <action android:name="com.antgskds.calendarassistant.action.EXTEND_30" />
+                <action android:name="com.antgskds.calendarassistant.action.DISMISS_WARNING" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>
