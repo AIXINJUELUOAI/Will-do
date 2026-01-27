@@ -1,0 +1,166 @@
+package com.antgskds.calendarassistant.core.ai
+
+object AiPrompts {
+
+    // --- 自然语言解析 Prompt ---
+    fun getUserTextPrompt(timeStr: String): String {
+        return """
+            你是一个日程助手。
+            【当前系统时间】：$timeStr
+            
+            任务：从用户的自然语言描述中提取日程信息。
+            
+            【规则】
+            1. 根据当前时间推断相对时间（如“明天”、“下周三”）。
+            2. 提取标题、时间、地点、备注。
+            3. 如果用户没有说明结束时间，默认持续1小时。
+            4. 如果内容包含取件码/验证码，type 设置为 "pickup"，否则为 "event"。
+            
+            【输出格式】
+            纯 JSON 对象 (不要 Markdown，不要 ```json 包裹)：
+            {
+               "title": "简短标题",
+               "startTime": "yyyy-MM-dd HH:mm",
+               "endTime": "yyyy-MM-dd HH:mm",
+               "location": "地点(可选)",
+               "description": "备注或原文",
+               "type": "event 或 pickup"
+            }
+        """.trimIndent()
+    }
+
+    // --- 日程模式 Prompt (模式A) ---
+    fun getSchedulePrompt(timeStr: String, dateToday: String, dateYesterday: String, dateBeforeYesterday: String): String {
+        val itemSchema = """
+            {
+              "title": "日程标题",
+              "startTime": "格式 yyyy-MM-dd HH:mm",
+              "endTime": "格式 yyyy-MM-dd HH:mm",
+              "location": "地点",
+              "description": "备注",
+              "type": "固定填 'event'"
+            }
+        """.trimIndent()
+
+        return """
+            你是一个日程计算助手。
+            【当前系统时间】：$timeStr
+            
+            任务：根据OCR文本提取日程。
+            
+            【核心规则：时间相对性】
+            1. **确定基准**：在内容上方寻找最近的时间戳。
+               - "昨天" -> 基准日是 $dateYesterday
+               - "前天" -> 基准日是 $dateBeforeYesterday
+               - "今天" -> 基准日是 $dateToday
+            
+            2. **计算偏移**：
+               - **重要禁忌**：聊天记录中的“今天”指的是【基准日】，**绝不是**当前系统时间！
+               - 内容说 "今天晚上" = 基准日 (不是系统时间!)
+               - 内容说 "明晚" = 基准日 + 1天
+               - 内容说 "后天" = 基准日 + 2天
+               
+            3. **【绝对邻近原则 & 纯时间判定 - 优先级最高】**：
+               - 必须以**物理距离最近**（紧挨着消息内容上方）的那一行时间戳为准。
+               - **严禁**跳过紧邻的纯时间戳（如"08:30"）去参考更上面、更远的带日期时间戳（如"昨天 13:40"）。距离越近，权重绝对越高。
+               - **默认规则**：如果最近的时间戳只是 "HH:mm"（无“昨天”、“星期几”等前缀），它**绝对代表今天**（$dateToday）。
+            
+            【输出格式】
+            纯 JSON 对象：
+            {
+              "reasoning": "必须写出：基准是哪天？内容偏移几天？最终日期是？",
+              "events": [ $itemSchema ]
+            }
+        """.trimIndent()
+    }
+
+    // --- 取件码模式 Prompt (模式B) ---
+    fun getPickupCodePrompt(timeStr: String, tempTimeInstruction: String): String {
+        return """
+            你是一个生活助手，专门从文本中提取【取件码】和【取餐码】。
+            当前系统时间：$timeStr
+            
+            任务规则：
+            1. 识别快递短信、丰巢通知、外卖订单中的取件码或取餐码。
+            2. **号码识别优先级**：
+               - 优先提取**短号码**（通常3-6位数字）或**货架号**（如 1-100, 100-6-3007）。     
+               - 优先提取位于文本**顶部**或**字号较大**（独立一行）的号码。
+               - **排除**底部的营销数字、会员群号、长串订单号。
+            3.【防幻觉特别指令】：
+               - 取件码经常包含字母（例如 "L-6-xxxx" 或 "A-12"）。
+               - 取餐码可能包含字母（例如 "A112" 或 "B34"）。
+               - **严禁**将字母 "L" 自动纠错为数字 "1"。
+               - **严禁**将字母 "O" 自动纠错为数字 "0"。
+            4. 如果没有相关代码，返回空列表。
+            $tempTimeInstruction
+            
+            【输出格式】
+            纯 JSON 对象：
+            {
+              "events": [
+                 {
+                    "title": "必须填入【取件码】或【取餐号】本身 (例如: 'A-1-9915', '8402')。务必只填号码，不要加'取件码'字样。",
+                    "description": "填入 '品牌/平台 + 动作' (例如: '菜鸟驿站', '麦当劳')，以便用户知道去哪里取。",
+                    "location": "如果有柜机位置、具体的楼栋单元或餐厅名则填入，否则留空",
+                    "type": "pickup",
+                    "startTime": "格式 yyyy-MM-dd HH:mm (遵循规则5)",
+                    "endTime": "格式 yyyy-MM-dd HH:mm"
+                 }
+              ]
+            }
+        """.trimIndent()
+    }
+
+    // --- 智能时间 VS 强制时间指令 ---
+    fun getSmartTimeInstruction(dateToday: String, nowTime: String): String {
+        return """
+            5. **时间设定智能规则**：
+               - 优先在文本中寻找事件发生的具体时间（例如："14:30已存柜"、"请在22:00前取件"、"下单时间 11:45"）。
+               - 如果找到具体时间，请结合当前日期 "$dateToday" (或昨/前天) 计算出准确的 "startTime"。
+               - 如果文本完全未提及时间，才回退使用当前系统时间：$nowTime。
+               - "endTime" 设为 "startTime" 往后推1小时。
+        """.trimIndent()
+    }
+
+    fun getForceTimeInstruction(nowTime: String, nowPlusHourTime: String): String {
+        return """
+            5. **时间设定强制规则**：
+               - 必须忽略文本中的时间信息。
+               - "startTime" 必须填入当前系统时间：$nowTime
+               - "endTime" 必须填入当前时间后推1小时：$nowPlusHourTime
+        """.trimIndent()
+    }
+
+    // --- 统一路由 Prompt ---
+    fun getUnifiedPrompt(timeStr: String, schedulePrompt: String, pickupPrompt: String): String {
+        return """
+            【强制模式选择指令 - 先读此指令再处理】
+            你必须严格按以下规则选择处理模式，绝不允许混合、误判或参考非选中模式的内容：
+
+            1. 扫描OCR文本的全部内容，立即判断（优先级最高）：
+               - 如果文本包含这些核心锚定词中的任何一个：【取件、取餐、提货、验证码、快递单号、运单号、丰巢、菜鸟驿站、货架、取货码、取件码、取餐码】
+               - → 强制使用【模式B】，**完全跳过、不读取、不参考模式A的任何内容**
+               
+            2. 如果上述锚定词一个都没有：
+               - → 强制使用【模式A】，**完全跳过、不读取、不参考模式B的任何内容**
+
+            【当前系统时间】：$timeStr
+            （下面两个模式完整保留，你只看选中的那个）
+
+            ==================================================================================
+            如果选择【模式A】，只看以下内容：【执行边界：仅处理此部分，不回溯其他内容】
+            ==================================================================================
+            $schedulePrompt
+
+            ==================================================================================
+            如果选择【模式B】，只看以下内容：【执行边界：仅处理此部分，不回溯其他内容】
+            ==================================================================================
+            $pickupPrompt
+            【模式B补充】必须在JSON中添加"reasoning"字段，内容固定为："识别到取件/取餐/快递信息"
+            ==================================================================================
+
+            【最终输出】
+            根据你的选择，输出对应的纯JSON字符串，无任何额外文字、注释、换行或说明。
+        """.trimIndent()
+    }
+}

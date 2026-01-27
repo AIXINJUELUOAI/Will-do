@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(copy:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(if not exist \"C:\\\\Users\\\\ASUS\\\\Desktop\\\\mycode\" mkdir \"C:\\\\Users\\\\ASUS\\\\Desktop\\\\mycode\")",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)"
+    ]
+  }
+}

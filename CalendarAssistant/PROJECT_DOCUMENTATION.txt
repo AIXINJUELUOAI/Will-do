@@ -1,0 +1,1992 @@
+# CalendarAssistant 项目完整技术文档
+
+## 项目概述
+
+CalendarAssistant 是一个基于 Android 的智能日程管理应用，使用 Jetpack Compose 构建，采用 MVVM 架构模式。项目经过重构，实现了更清晰的代码分层和更模块化的设计。
+
+### 核心功能
+- **课程表管理**：支持单双周、排除日期、影子课程（单次修改）
+- **智能日程识别**：基于 AI 的 OCR 和自然语言处理
+- **实况胶囊通知**：支持 Android 14+ 原生、Flyme 系统
+- **系统闹钟集成**：自动创建系统闹钟
+- **每日日程提醒**：早晚汇总通知
+- **快速设置磁贴**：一键识别日程
+- **响应式设计**：支持缩放、深色模式
+
+### 核心架构哲学
+
+**架构模式：MVVM + Repository**
+- 采用单例 Repository 模式管理数据
+- ViewModel 负责业务逻辑和状态管理
+- StateFlow 实现响应式数据流
+
+**数据源设计：单一 JSON 本源**
+- 不使用 SQLite/Room 数据库
+- 数据量级 < 5000 条时，JSON 全量读写 I/O 耗时远小于数据库 ORM
+- 天然支持备份导出，零 Migration 成本
+
+**UI 渲染：全量 Jetpack Compose**
+- 100% 声明式 UI，代码简洁易维护
+- 原生支持动画和过渡效果
+- 手势冲突处理更加灵活可控
+
+**后台能力：系统级服务**
+- 利用无障碍服务实现无感截图
+- 利用前台服务实现实况胶囊
+- 利用快速设置磁贴实现快速访问
+
+---
+
+## 重要约束（绝对不可改变）
+
+### 1. 事件模型结构冻结
+
+**⚠️ 警告：以下数据模型的结构绝对不可修改**
+
+项目的核心数据模型已经固化，任何修改都会导致：
+- 已存储的 JSON 数据无法解析
+- 用户数据丢失
+- 版本升级失败
+
+#### 1.1 MyEvent（日程事件模型）
+
+**文件位置**: `data/model/MyEvent.kt`
+
+```kotlin
+@Serializable
+data class MyEvent(
+    val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    @Serializable(with = LocalDateSerializer::class)
+    val startDate: LocalDate,
+    @Serializable(with = LocalDateSerializer::class)
+    val endDate: LocalDate,
+    val startTime: String,     // HH:mm
+    val endTime: String,       // HH:mm
+    val location: String,
+    val description: String,
+    @Serializable(with = ColorSerializer::class)
+    val color: Color,
+    val isImportant: Boolean = false,
+    val sourceImagePath: String? = null,
+    val reminders: List<Int> = emptyList(),
+    val eventType: String = "event"  // ⚠️ 核心字段：不可改变
+)
+```
+
+**`eventType` 字段的三种值（不可改变）**：
+
+| 值 | 含义 | 说明 |
+|----|------|------|
+| `"event"` | 普通日程 | 用户手动添加或 AI 解析的日程 |
+| `"temp"` | 临时取件/取餐 | AI 识别的取件码，存储在 description |
+| `"course"` | 虚拟课程日程 | 仅在运行时生成，虚拟 ID 格式：`course_{CourseID}_{Date}` |
+
+#### 1.2 Course（课程模型）
+
+**文件位置**: `data/model/Course.kt`
+
+```kotlin
+@Serializable
+data class Course(
+    val id: String,
+    val name: String,
+    val location: String = "",
+    val teacher: String = "",
+    @Serializable(with = ColorSerializer::class)
+    val color: Color,
+    val dayOfWeek: Int,        // 1=Mon, 7=Sun
+    val startNode: Int,
+    val endNode: Int,
+    val startWeek: Int,
+    val endWeek: Int,
+    val weekType: Int = 0,     // 0=All, 1=Odd, 2=Even
+    val excludedDates: List<String> = emptyList(),
+    val isTemp: Boolean = false,           // ⚠️ 影子课程标记
+    val parentCourseId: String? = null     // ⚠️ 父课程关联
+)
+```
+
+**影子课程机制（不可改变）**：
+- `isTemp = true`：标记为影子课程（单次修改产生的临时课程）
+- `parentCourseId`：记录父课程 ID，删除主课程时需同步删除所有影子
+
+#### 1.3 MySettings（设置模型）
+
+**文件位置**: `data/model/MySettings.kt`
+
+```kotlin
+@Serializable
+data class MySettings(
+    // AI 模型配置
+    val modelKey: String = "",
+    val modelName: String = "gpt-3.5-turbo",
+    val modelUrl: String = "",
+    val modelProvider: String = "",
+
+    // 功能开关
+    val showTomorrowEvents: Boolean = false,
+    val isDailySummaryEnabled: Boolean = false,
+
+    // 识别设置
+    val tempEventsUseRecognitionTime: Boolean = true,
+    val screenshotDelayMs: Long = 500L,
+    val isLiveCapsuleEnabled: Boolean = false,
+
+    // 课表设置
+    val semesterStartDate: String = "",
+    val totalWeeks: Int = 20,
+    val timeTableJson: String = ""
+)
+```
+
+#### 1.4 CalendarEventData（AI 识别中间模型）
+
+**文件位置**: `data/model/CalendarEventData.kt`
+
+```kotlin
+@Serializable
+data class CalendarEventData(
+    val hasEvent: Boolean = false,
+    val title: String = "",
+    val startTime: String = "",     // 格式: yyyy-MM-dd HH:mm
+    val endTime: String = "",       // 格式: yyyy-MM-dd HH:mm
+    val location: String = "",
+    val description: String = "",
+    val type: String = "event"      // "event" 或 "pickup"
+)
+```
+
+**为什么不可改变**：
+1. **向后兼容性**：用户已存储的 JSON 文件依赖这些字段
+2. **序列化稳定性**：`@Serializable` 注解要求编译时生成代码，结构改变会破坏反序列化
+3. **类型识别逻辑**：`eventType` 和 `type` 是类型系统的核心，改变会导致业务逻辑崩溃
+
+**如果需要扩展功能，请**：
+- 使用新字段（提供默认值）
+- 创建新的数据模型
+- 迁移数据后保留旧字段兼容
+
+---
+
+### 2. AI Prompt 冻结
+
+**⚠️ 警告：以下 AI Prompt 内容绝对不可修改**
+
+项目的 AI 识别能力依赖于精确设计的 Prompt，任何修改都会导致：
+- 识别准确率下降
+- 特殊场景失效（如取件码识别）
+- 时间计算错误
+
+#### 2.1 自然语言输入 Prompt
+
+**位置**：`core/ai/AiPrompts.kt` - `getUserTextPrompt()`
+
+```
+你是一个日程助手。
+【当前系统时间】：$timeStr
+
+任务：从用户的自然语言描述中提取日程信息。
+
+【规则】
+1. 根据当前时间推断相对时间（如"明天"、"下周三"）。
+2. 提取标题、时间、地点、备注。
+3. 如果用户没有说明结束时间，默认持续1小时。
+4. 如果内容包含取件码/验证码，type 设置为 "pickup"，否则为 "event"。
+
+【输出格式】
+纯 JSON 对象 (不要 Markdown，不要 ```json 包裹)：
+{
+   "title": "简短标题",
+   "startTime": "yyyy-MM-dd HH:mm",
+   "endTime": "yyyy-MM-dd HH:mm",
+   "location": "地点(可选)",
+   "description": "备注或原文",
+   "type": "event 或 pickup"
+}
+```
+
+**不可改变的关键点**：
+- **系统时间注入**：必须包含当前系统时间，否则无法计算相对时间
+- **默认 1 小时**：用户未说明结束时间的处理逻辑
+- **纯 JSON 输出**：禁止 Markdown 包裹，简化解析
+- **类型识别规则**：`pickup` 类型的判断逻辑
+
+#### 2.2 图片分析 Prompt - 模式路由
+
+**位置**：`core/ai/AiPrompts.kt` - `getUnifiedPrompt()`
+
+**强制模式选择指令**（不可改变）：
+
+```
+【强制模式选择指令 - 先读此指令再处理】
+你必须严格按以下规则选择处理模式，绝不允许混合、误判或参考非选中模式的内容：
+
+1. 扫描OCR文本的全部内容，立即判断（优先级最高）：
+   - 如果文本包含这些核心锚定词中的任何一个：【取件、取餐、提货、验证码、快递单号、运单号、丰巢、菜鸟驿站、货架、取货码、取件码、取餐码】
+   - → 强制使用【模式B】，**完全跳过、不读取、不参考模式A的任何内容**
+
+2. 如果上述锚定词一个都没有：
+   - → 强制使用【模式A】，**完全跳过、不读取、不参考模式B的任何内容**
+```
+
+**为什么不可改变**：
+- **模式隔离**：取件码模式和日程模式是互斥的，混合会导致 AI 纠结
+- **关键词列表**：基于大量测试优化，增减会影响识别率
+- **优先级声明**：AI 容易被后续指令干扰，必须强调"优先级最高"
+
+#### 2.3 模式 A（日程解析）Prompt
+
+**位置**：`core/ai/AiPrompts.kt` - `getSchedulePrompt()`
+
+**核心规则：时间相对性**（不可改变）：
+
+```
+【核心规则：时间相对性】
+1. **确定基准**：在内容上方寻找最近的时间戳。
+   - "昨天" -> 基准日是 $dateYesterday
+   - "前天" -> 基准日是 $dateBeforeYesterday
+   - "今天" -> 基准日是 $dateToday
+
+2. **计算偏移**：
+   - **重要禁忌**：聊天记录中的"今天"指的是【基准日】，**绝不是**当前系统时间！
+   - 内容说 "今天晚上" = 基准日 (不是系统时间!)
+   - 内容说 "明晚" = 基准日 + 1天
+   - 内容说 "后天" = 基准日 + 2天
+
+3. **【绝对邻近原则 & 纯时间判定 - 优先级最高】**：
+   - 必须以**物理距离最近**（紧挨着消息内容上方）的那一行时间戳为准。
+   - **严禁**跳过紧邻的纯时间戳（如"08:30"）去参考更上面、更远的带日期时间戳（如"昨天 13:40"）。
+   - **默认规则**：如果最近的时间戳只是 "HH:mm"（无"昨天"、"星期几"等前缀），它**绝对代表今天**。
+```
+
+**为什么不可改变**：
+- **基准日期注入**：`$dateYesterday` 等变量必须注入，否则 AI 无法理解相对时间
+- **绝对邻近原则**：防止 AI 使用远处的时间戳导致计算错误
+- **重要禁忌声明**：反复强调防止 AI 忽略
+
+#### 2.4 模式 B（取件码提取）Prompt
+
+**位置**：`core/ai/AiPrompts.kt` - `getPickupCodePrompt()`
+
+**防幻觉特别指令**（不可改变）：
+
+```
+3.【防幻觉特别指令】：
+   - 取件码经常包含字母（例如 "L-6-xxxx" 或 "A-12"）。
+   - 取餐码可能包含字母（例如 "A112" 或 "B34"）。
+   - **严禁**将字母 "L" 自动纠错为数字 "1"。
+   - **严禁**将字母 "O" 自动纠错为数字 "0"。
+```
+
+**号码识别优先级**（不可改变）：
+
+```
+2. **号码识别优先级**：
+   - 优先提取**短号码**（通常3-6位数字）或**货架号**（如 1-100, 100-6-3007）。
+   - 优先提取位于文本**顶部**或**字号较大**（独立一行）的号码。
+   - **排除**底部的营销数字、会员群号、长串订单号。
+```
+
+**为什么不可改变**：
+- **L/1 O/0 混淆**：LLM 有强烈的纠错倾向，必须明确禁止
+- **优先级规则**：防止提取错误的号码（如会员群号）
+
+#### 2.5 时间设定规则
+
+**智能规则**（默认，不可改变）：
+
+**位置**：`core/ai/AiPrompts.kt` - `getSmartTimeInstruction()`
+
+```
+5. **时间设定智能规则**：
+   - 优先在文本中寻找事件发生的具体时间（例如："14:30已存柜"、"请在22:00前取件"、"下单时间 11:45"）。
+   - 如果找到具体时间，请结合当前日期 "$dateToday" (或昨/前天) 计算出准确的 "startTime"。
+   - 如果文本完全未提及时间，才回退使用当前系统时间：${now.format(dtfTime)}。
+   - "endTime" 设为 "startTime" 往后推1小时。
+```
+
+**强制规则**（用户开启"智能提取取件时间"时，不可改变）：
+
+**位置**：`core/ai/AiPrompts.kt` - `getForceTimeInstruction()`
+
+```
+5. **时间设定强制规则**：
+   - 必须忽略文本中的时间信息。
+   - "startTime" 必须填入当前系统时间：${now.format(dtfTime)}
+   - "endTime" 必须填入当前时间后推1小时：${now.plusHours(1).format(dtfTime)}
+```
+
+**为什么不可改变**：
+- **回退逻辑**：找不到时间时使用当前时间
+- **用户开关**：用户可选择使用短信内时间或当前时间
+
+#### 2.6 输出格式
+
+**必须固定**（不可改变）：
+
+```
+【输出格式】
+纯 JSON 对象：
+{
+  "reasoning": "必须写出：基准是哪天？内容偏移几天？最终日期是？",
+  "events": [ ... ]
+}
+```
+
+**为什么不可改变**：
+- **reasoning 字段**：用于调试和验证 AI 的推理过程
+- **events 数组**：支持一次识别多个事件
+
+---
+
+### 3. 违反约束的后果
+
+| 违反类型 | 直接后果 | 长期影响 |
+|---------|---------|---------|
+| 修改 MyEvent 字段 | 用户数据无法加载 | 应用崩溃，用户流失 |
+| 修改 eventType 值 | 类型识别逻辑失效 | 功能异常 |
+| 修改 AI Prompt | 识别准确率下降 | 用户信任度降低 |
+| 删除 Prompt 关键词 | 特殊场景失效 | 用户投诉增加 |
+
+---
+
+### 4. 正确的扩展方式
+
+如果需要添加新功能，请遵循以下原则：
+
+**数据模型扩展**：
+```kotlin
+// ✅ 正确：添加新字段（提供默认值）
+data class MyEvent(
+    // ... 原有字段保持不变
+    val newField: String = ""  // 新字段必须有默认值
+)
+
+// ❌ 错误：修改现有字段类型
+val eventType: Int  // 破坏序列化兼容性
+```
+
+**Prompt 优化**：
+```kotlin
+// ✅ 正确：添加新的规则（在现有规则之后）
+val prompt = """
+    ${originalPrompt}
+
+    【新增规则】
+    5. 如果遇到 XXX 特殊情况，按以下方式处理...
+"""
+
+// ❌ 错误：修改现有规则的核心逻辑
+// 将 "严禁修改字符" 改为 "可适当修正"
+```
+
+---
+
+## 目录结构
+
+```
+F:\CalendarAssistant\
+├── app/                                    # 主应用模块
+│   ├── src/main/
+│   │   ├── java/com/antgskds/calendarassistant/
+│   │   │   ├── App.kt                     # Application 单例
+│   │   │   ├── MainActivity.kt            # 主入口 Activity
+│   │   │   ├── core/                      # 核心业务逻辑层
+│   │   │   │   ├── ai/                    # AI 相关功能
+│   │   │   │   │   ├── AiPrompts.kt       # AI 提示词模板
+│   │   │   │   │   ├── ApiModelProvider.kt    # AI API 提供者
+│   │   │   │   │   └── RecognitionProcessor.kt # 识别处理器
+│   │   │   │   ├── course/                # 课程管理
+│   │   │   │   │   └── CourseManager.kt   # 课程管理器
+│   │   │   │   └── util/                  # 工具类
+│   │   │   │       ├── DateCalculator.kt  # 日期计算工具
+│   │   │   │       ├── FlymeUtils.kt      # Flyme 系统工具
+│   │   │   │       └── LunarCalendarUtils.kt # 农历工具
+│   │   │   ├── data/                      # 数据层
+│   │   │   │   ├── model/                 # 数据模型
+│   │   │   │   │   ├── CalendarEventData.kt # 日历事件数据
+│   │   │   │   │   ├── Course.kt          # 课程模型
+│   │   │   │   │   ├── ModelPayload.kt    # 模型请求数据
+│   │   │   │   │   ├── MyEvent.kt         # 用户事件模型
+│   │   │   │   │   ├── MySettings.kt      # 设置模型
+│   │   │   │   │   ├── TimeNode.kt        # 时间节点模型
+│   │   │   │   │   └── serializers/       # 序列化器
+│   │   │   │   │       ├── ColorSerializer.kt # 颜色序列化
+│   │   │   │   │       └── LocalDateSerializer.kt # 日期序列化
+│   │   │   │   ├── repository/            # 仓储层
+│   │   │   │   │   └── AppRepository.kt   # 应用仓储（单例）
+│   │   │   │   └── source/                # 数据源
+│   │   │   │       ├── CourseJsonDataSource.kt # 课程数据源
+│   │   │   │       ├── EventJsonDataSource.kt  # 事件数据源
+│   │   │   │       └── SettingsDataSource.kt   # 设置数据源
+│   │   │   ├── service/                   # 服务层
+│   │   │   │   ├── accessibility/         # 无障碍服务
+│   │   │   │   │   └── TextAccessibilityService.kt # 文本无障碍服务
+│   │   │   │   ├── capsule/               # 胶囊服务
+│   │   │   │   │   ├── CapsuleService.kt  # 胶囊服务
+│   │   │   │   │   ├── CapsuleUiUtils.kt  # 胶囊 UI 工具
+│   │   │   │   │   └── provider/          # 胶囊提供者
+│   │   │   │   │       ├── FlymeCapsuleProvider.kt # Flyme 胶囊
+│   │   │   │   │       ├── ICapsuleProvider.kt     # 胶囊接口
+│   │   │   │   │       └── NativeCapsuleProvider.kt # 原生胶囊
+│   │   │   │   ├── notification/          # 通知服务
+│   │   │   │   │   └── NotificationScheduler.kt # 通知调度器
+│   │   │   │   ├── receiver/              # 广播接收器
+│   │   │   │   │   ├── AlarmReceiver.kt   # 闹钟接收器
+│   │   │   │   │   ├── BootReceiver.kt    # 开机启动接收器
+│   │   │   │   │   └── DailySummaryReceiver.kt # 每日摘要接收器
+│   │   │   │   └── tile/                  # 快捷服务
+│   │   │   │       └── CaptureTileService.kt # 截图快捷服务
+│   │   │   └── ui/                        # 用户界面
+│   │   │       ├── components/            # 通用组件
+│   │   │       │   └── CommonSettings.kt  # 通用设置组件
+│   │   │       ├── dialogs/               # 对话框组件
+│   │   │       │   ├── AddEventDialog.kt  # 添加事件对话框
+│   │   │       │   ├── AiInputDialog.kt   # AI 输入对话框
+│   │   │       │   ├── CourseManagementDialog.kt # 课程管理对话框
+│   │   │       │   ├── DialogContainer.kt # 对话框容器
+│   │   │       │   └── TimeTableEditorDialog.kt # 课表编辑对话框
+│   │   │       ├── event_display/         # 事件显示组件
+│   │   │       │   ├── EventCardFactory.kt # 事件卡片工厂
+│   │   │       │   └── SwipeableEventItem.kt # 可滑动事件项
+│   │   │       ├── page_display/          # 页面显示
+│   │   │       │   ├── AllEventsPage.kt   # 所有事件页面
+│   │   │       │   ├── HomePage.kt        # 主页
+│   │   │       │   ├── SchedulePage.kt    # 日程页面
+│   │   │       │   └── SettingsPage.kt    # 设置页面
+│   │   │       ├── theme/                 # 主题配置
+│   │   │       │   ├── Color.kt           # 颜色定义
+│   │   │       │   ├── Theme.kt           # 主题定义
+│   │   │       │   └── Type.kt            # 字体类型定义
+│   │   │       └── viewmodel/             # ViewModel
+│   │   │           ├── MainViewModel.kt   # 主 ViewModel
+│   │   │           └── SettingsViewModel.kt # 设置 ViewModel
+│   │   ├── res/                           # 资源文件
+│   │   │   ├── values/                    # 值资源
+│   │   │   ├── drawable/                  # 图形资源
+│   │   │   ├── mipmap-*/                  # 应用图标
+│   │   │   └── xml/                       # XML 配置
+│   │   └── AndroidManifest.xml            # 应用清单
+│   └── build.gradle.kts                   # 应用级构建配置
+├── gradle/                                # Gradle 包装器
+├── build.gradle.kts                       # 项目级构建配置
+├── settings.gradle.kts                    # 项目设置
+└── gradle.properties                      # Gradle 属性
+```
+
+---
+
+# 第一部分：用户操作手册
+
+## 1. 基础导航
+
+### 1.1 主界面布局
+
+应用采用底部导航栏设计：
+- **主页**：显示当前选中日期的日程列表和课程卡片
+- **全部日程**：显示所有日程的列表视图，支持搜索和筛选
+- **设置**：AI 模型设置、课程表设置、偏好设置、数据备份
+
+### 1.2 设置页面
+
+点击底部导航栏的设置图标，可打开设置页面，包含：
+- AI 模型设置
+- 课程表设置
+- 偏好设置
+- 数据备份（导入/导出）
+
+---
+
+## 2. 手势操作详解
+
+### 2.1 下拉查看课表 ⭐
+
+**操作方式**：在主页视图中，向下拖动屏幕
+
+**效果**：
+- 课程表视图会从底部逐渐浮现
+- 当前日程列表会同时向上滑动并淡出
+- 课程表会呈现缩放放大的动画效果
+
+**动画参数**：
+```kotlin
+最大偏移量: 600dp
+透明度变化: 0% → 100%
+缩放变化: 90% → 100%
+```
+
+**实现位置**：`ui/page_display/HomePage.kt:70-103`
+
+### 2.2 课表视图的撤销机制
+
+**触发条件**：下拉课表后，不松手反悔了
+
+**撤销阈值详解**：
+
+| 滑动速度 | 效果 | 阈值 |
+|---------|------|------|
+| 快速下滑 | 完全展开课表 | 速度 > 1000 |
+| 快速上滑 | 完全收起课表 | 速度 < -1000 |
+| 普通滑动 | 超过 1/3 展开，否则收起 | 位置 > 200dp (600dp/3) |
+
+### 2.3 日期切换（左右滑动）
+
+**操作方式**：在主页视图的日期卡片上左右滑动
+
+**阈值**：
+- 左滑 > 50px → 切换到下一天
+- 右滑 > 50px → 切换到上一天
+
+### 2.4 课程表周次切换
+
+在课表视图中：
+- 点击左上角箭头或周次文字 → 切换周次
+- 点击当前周次 → 快速跳转到本周
+
+### 2.5 事件项操作菜单
+
+**操作方式**：在日程项上向左滑动
+
+**阈值**：
+- 超过菜单宽度的一半 (80dp) → 展开操作菜单
+- 否则 → 收回
+
+**操作菜单包含三个按钮**：
+1. **编辑**（绿色）：修改日程内容
+2. **星标**（黄色）：标记为重要
+3. **删除**（红色）：删除日程
+
+### 2.6 物理返回键
+
+**功能**：当课表视图已展开时，按返回键会收起课表视图
+
+---
+
+## 3. 课程表功能
+
+### 3.1 查看课程表
+1. 在主页视图中向下拉动屏幕
+2. 课程表会从底部浮现
+3. 可查看整周的课程安排
+
+### 3.2 课程表显示逻辑
+
+**周次计算**：
+```kotlin
+// 根据学期开始日期计算当前周
+val realCurrentWeek = (daysBetween(semesterStart, today) / 7) + 1
+```
+
+**课程筛选条件**：
+1. 周次范围匹配：`currentWeek in course.startWeek..course.endWeek`
+2. 单双周匹配：
+   - 0 = 每周
+   - 1 = 单周
+   - 2 = 双周
+3. 星期几匹配
+4. 排除日期：课程在该日期被排除时不显示
+
+**实现位置**：`ui/page_display/SchedulePage.kt:85-102`
+
+### 3.3 周次切换
+- 点击左右箭头切换周次
+- 点击周次标题快速返回本周
+- 周次标题显示当前月份
+
+### 3.4 课程卡片显示
+- 显示课程名称（最多3行，超出显示省略号）
+- 显示地点信息（如 @A101）
+- 使用课程设置的颜色作为背景
+
+---
+
+## 4. 课程管理
+
+### 4.1 添加课程
+
+**入口**：设置 → 课程表设置 → 管理课程 → 添加课程
+
+**可设置字段**：
+- 课程名称（必填）
+- 上课地点
+- 授课教师
+- **上课时间**：星期几、第几节到第几节
+- **周次范围**：第几周到第几周
+- **课程频率**：每周/单周/双周
+- 颜色标签
+
+**实现位置**：`ui/dialogs/CourseManagementDialog.kt`
+
+### 4.2 编辑课程
+点击课程列表中的课程，进入编辑界面
+
+### 4.3 删除课程
+点击课程列表项右侧的删除图标
+
+**删除逻辑**：
+```
+删除主课程 → 同时删除所有关联的影子课程（单次修改的课程）
+```
+
+**实现位置**：`data/repository/AppRepository.kt:116-130`
+
+### 4.4 单次课程编辑（影子课程机制）
+
+**场景**：某次课临时调整时间/地点/取消
+
+**操作方式**：
+1. 在主页视图中点击课程卡片
+2. 选择"编辑单次课程"
+3. 修改名称、地点、节次、日期
+4. 保存
+
+**技术实现**：
+1. 原课程被加入该日期的排除列表
+2. 创建一个新的影子课程（`isTemp = true`）
+3. 影子课程关联父课程（`parentCourseId`）
+
+**删除单次课程**：
+- 如果是影子课程 → 直接删除
+- 如果是主课程 → 加入排除列表
+
+### 4.5 导入/导出课程
+
+**导出**：
+- 设置 → 课程表设置 → 导出课程表
+- 文件保存到下载目录
+- 文件名格式：`CoursesBackup_时间戳.json`
+
+**导入**：
+- 设置 → 课程表设置 → 导入课程表
+- 支持两种格式：
+  1. 完整备份（包含颜色、ID等）
+  2. 简化格式（仅包含基本信息，颜色自动分配）
+
+---
+
+## 5. 作息时间设置
+
+### 5.1 打开作息时间编辑器
+
+**入口**：设置 → 课程表设置 → 编辑作息时间
+
+### 5.2 可调整项
+
+1. **总节数**：4-16节可选
+2. **上课时长**：默认45分钟
+3. **开始时间**：
+   - 上午课程开始时间（默认8:00）
+   - 下午课程开始时间（默认14:00）
+   - 晚上课程开始时间（默认19:00）
+4. **课间休息**：每节课之间的休息时间（默认10分钟）
+
+### 5.3 时间计算逻辑
+
+```kotlin
+// 第1节：上午开始时间
+if (i == 1) startTime = morningStart
+
+// 第5节：下午开始时间
+else if (i == 5) startTime = afternoonStart
+
+// 第9节：晚上开始时间
+else if (i == 9) startTime = nightStart
+
+// 其他节次：前一节结束 + 课间休息
+else {
+    prevEnd + breakMinutes
+}
+```
+
+### 5.4 导入/导出配置
+
+- 支持将作息配置导出为 JSON
+- 可从文件导入已保存的配置
+
+---
+
+## 6. 日程管理
+
+### 6.1 添加日程
+
+**方式一：手动添加**
+1. 点击右下角悬浮按钮（+）
+2. 填写以下信息：
+   - 标题（必填）
+   - 类型：日程 / 取件取餐
+   - 开始日期和时间
+   - 结束日期和时间
+   - 地点
+   - 备注
+   - 提醒时间
+3. 点击确定
+
+**提醒选项**：
+```
+开始时、5分钟前、10分钟前、15分钟前、30分钟前、
+1小时前、2小时前、6小时前、1天前、2天前
+```
+
+**方式二：AI 智能创建**
+1. 点击右上角小悬浮按钮（✨）
+2. 输入自然语言，例如：
+   - "明天下午3点在会议室开会"
+   - "下周五晚上8点去取快递 5566"
+3. 点击"解析生成"
+
+### 6.2 编辑日程
+
+1. 在日程列表中左滑展开操作菜单
+2. 点击编辑按钮（绿色）
+3. 修改内容后保存
+
+### 6.3 删除日程
+
+1. 在日程列表中左滑展开操作菜单
+2. 点击删除按钮（红色）
+
+**注意**：课程类型日程的删除会触发"排除日期"逻辑，而非真正删除
+
+### 6.4 标记重要
+
+1. 在日程列表中左滑展开操作菜单
+2. 点击星标按钮（黄色）
+3. 重要日程会显示星标图标
+
+### 6.5 排除单次课程
+
+对于课程类型的日程，删除操作会：
+1. 将该日期加入课程的排除列表
+2. 该课程在该日期不再显示
+
+---
+
+## 7. 导入/导出数据
+
+### 7.1 导出所有日程
+
+1. 打开设置页面
+2. 点击"导出所有日程"
+3. 文件保存到下载目录
+4. 文件名格式：`CalendarBackup_时间戳.json`
+
+### 7.2 导入日程
+
+1. 打开设置页面
+2. 点击"导入日程"
+3. 选择 JSON 文件
+4. 系统自动去重，只导入新日程
+
+---
+
+## 8. 设置说明
+
+### 8.1 AI 模型设置
+
+**可配置项**：
+- API 地址
+- 模型名称
+- API Key
+
+**支持格式**：
+- OpenAI 格式
+- Google Gemini 格式
+
+### 8.2 课程表设置
+
+1. **学期开始日期**：用于计算当前周次
+2. **总周数**：默认20周
+3. **管理课程**：进入课程管理界面
+4. **编辑作息时间**：调整上课时间
+
+### 8.3 偏好设置
+
+- 自动创建系统闹钟
+- 显示明日日程
+- 每日汇总通知
+- 临时事件使用识别时间
+- 截图延迟时间
+- 实况胶囊开关
+
+---
+
+## 9. 智能识别功能
+
+### 9.1 截图识别（需无障碍服务）
+
+1. 开启无障碍服务
+2. 下拉快捷设置，点击"智能识别"磁贴
+3. 等待延迟后自动截图
+4. AI 自动识别日程信息
+
+### 9.2 取件码模式
+
+识别取件码/取餐码后，会：
+1. 创建临时事件类型
+2. 将取件码显示在备注中
+3. 可快速查看号码
+
+---
+
+## 10. 实况胶囊通知
+
+### 10.1 功能说明
+
+在日程开始前，会在通知栏显示实况胶囊，包含：
+- 日程标题
+- 剩余时间倒计时
+- 快捷操作按钮
+
+### 10.2 系统支持
+
+- Android 14+ 原生实况胶囊
+- Flyme 系统（魅族）
+
+---
+
+# 第二部分：技术实现详解
+
+## 1. 架构设计
+
+### 1.1 MVVM 架构模式
+
+项目采用标准的 MVVM（Model-View-ViewModel）架构：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        UI Layer                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │  HomePage    │  │ SettingsPage │  │  Dialogs     │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘ │
+│         │                  │                  │         │
+│         └──────────────────┼──────────────────┘         │
+│                            │                            │
+│  ┌─────────────────────────▼─────────────────────────┐ │
+│  │              MainViewModel / SettingsViewModel     │ │
+│  └─────────────────────────┬─────────────────────────┘ │
+└────────────────────────────┼────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────┐
+│                    Repository Layer                      │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │              AppRepository (Singleton)            │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────────────────┐ │ │
+│  │  │ Events  │ │ Courses │ │     Settings        │ │ │
+│  │  └────┬────┘ └────┬────┘ └──────────┬──────────┘ │ │
+│  └───────┼───────────┼─────────────────┼────────────┘ │
+└──────────┼───────────┼─────────────────┼───────────────┘
+           │           │                 │
+┌──────────▼──────┐ ┌──▼──────────────┐ ┌▼──────────────┐
+│ EventJsonData   │ │ CourseJsonData  │ │ SettingsData   │
+│ Source          │ │ Source          │ │ Source         │
+└─────────────────┘ └─────────────────┘ └────────────────┘
+```
+
+**关键特性**：
+1. **单向数据流**：UI → 观察 ViewModel → 调用 Repository → 更新数据 → 回流到 UI
+2. **状态管理**：使用 `StateFlow` 管理响应式状态
+3. **单例 Repository**：`AppRepository` 采用单例模式，确保数据一致性
+4. **协程支持**：所有数据操作使用 Kotlin 协程进行异步处理
+
+### 1.2 Repository 模式详解
+
+**文件位置**：`data/repository/AppRepository.kt`
+
+```kotlin
+class AppRepository private constructor(private val context: Context) {
+    // 数据源
+    private val eventSource = EventJsonDataSource(context)
+    private val courseSource = CourseJsonDataSource(context)
+    private val settingsSource = SettingsDataSource(context)
+
+    // StateFlows - 响应式数据流
+    private val _events = MutableStateFlow<List<MyEvent>>(emptyList())
+    val events: StateFlow<List<MyEvent>> = _events.asStateFlow()
+
+    private val _courses = MutableStateFlow<List<Course>>(emptyList())
+    val courses: StateFlow<List<Course>> = _courses.asStateFlow()
+
+    private val _settings = MutableStateFlow(MySettings())
+    val settings: StateFlow<MySettings> = _settings.asStateFlow()
+
+    // 并发控制
+    private val eventMutex = Mutex()
+    private val courseMutex = Mutex()
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppRepository? = null
+
+        fun getInstance(context: Context): AppRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AppRepository(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
+}
+```
+
+**设计亮点**：
+1. **双重检查锁定单例**：线程安全的单例实现
+2. **Mutex 并发控制**：防止数据竞争
+3. **自动调度通知**：数据变更时自动调度提醒
+
+### 1.3 ViewModel 架构
+
+**MainViewModel**（`ui/viewmodel/MainViewModel.kt`）：
+- 管理主 UI 状态
+- 处理事件操作（增删改）
+- 处理课程管理
+- 协调 Repository 和 UI
+
+**SettingsViewModel**（`ui/viewmodel/SettingsViewModel.kt`）：
+- 管理设置状态
+- 处理设置变更
+- 协调数据导入导出
+
+---
+
+## 2. 核心文件详解
+
+### 2.1 HomePage.kt
+
+**文件位置**：`ui/page_display/HomePage.kt`
+
+**功能概述**：主页面，包含今日视图、全部日程、课程表交互
+
+**关键常量**：
+```kotlin
+val maxOffsetPx = with(LocalDensity.current) { 600.dp.toPx() }  // 最大下拉距离
+```
+
+**主要组件**：
+
+| 组件名 | 功能 | 代码位置 |
+|--------|------|----------|
+| `NestedScrollConnection` | 下拉课表手势处理 | 74-103 行 |
+| `CenterAlignedTopAppBar` | 顶部标题栏 | 190-200 行 |
+| `DateSelector` | 日期选择器 | 约 200+ 行 |
+| `EventList` | 日程列表 | 约 250+ 行 |
+
+**下拉手势实现**：
+```kotlin
+val nestedScrollConnection = remember {
+    object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (offsetY.value > 0 && available.y < 0) {
+                val newOffset = (offsetY.value + available.y).coerceAtLeast(0f)
+                val consumed = offsetY.value - newOffset
+                scope.launch { offsetY.snapTo(newOffset) }
+                return Offset(0f, -consumed)
+            }
+            return Offset.Zero
+        }
+
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            if (available.y > 0) {
+                val newOffset = (offsetY.value + available.y).coerceAtMost(maxOffsetPx)
+                scope.launch { offsetY.snapTo(newOffset) }
+                return Offset(0f, available.y)
+            }
+            return Offset.Zero
+        }
+
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            val target = if (available.y > 1000f) maxOffsetPx
+            else if (available.y < -1000f) 0f
+            else if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
+            scope.launch { offsetY.animateTo(target) }
+            return super.onPostFling(consumed, available)
+        }
+    }
+}
+```
+
+### 2.2 SchedulePage.kt
+
+**文件位置**：`ui/page_display/SchedulePage.kt`
+
+**功能概述**：课程表的可视化展示组件
+
+**常量定义**：
+```kotlin
+private val HeaderHeight = 50.dp      // 表头高度
+private val SidebarWidth = 35.dp      // 节次栏宽度
+private val NodeHeight = 64.dp        // 每节课程高度
+```
+
+**组件结构**：
+
+| 组件名 | 功能 | 代码位置 |
+|--------|------|----------|
+| `ScheduleView()` | 主课表视图 | 33-153 行 |
+| `WeekControllerBar()` | 周次切换控制器 | 156-205 行 |
+| `WeekHeaderRow()` | 星期表头（含日期） | 208-241 行 |
+| `SidebarColumn()` | 左侧节次栏（1-12节） | 244-266 行 |
+| `CourseCard()` | 课程卡片组件 | 269-315 行 |
+
+**周次计算**：
+```kotlin
+// 计算当前周（1-based）
+val systemCurrentWeek = remember(semesterStart) {
+    if (semesterStartDateStr.isNullOrBlank()) {
+        1 // 未设置开学日期 → 显示第1周
+    } else {
+        val today = LocalDate.now()
+        val daysDiff = ChronoUnit.DAYS.between(semesterStart, today)
+        (daysDiff / 7).toInt() + 1
+    }
+}
+
+// 计算查看周的周一
+val viewingWeekMonday = remember(semesterStart, viewingWeek) {
+    semesterStart.plusWeeks((viewingWeek - 1).toLong())
+}
+```
+
+**课程筛选逻辑**：
+```kotlin
+val displayCourses = remember(courses, viewingWeek, viewingWeekMonday) {
+    courses.filter { course ->
+        // 1. 基础周次筛选
+        val weekRangeMatch = viewingWeek in course.startWeek..course.endWeek
+
+        // 2. 单双周匹配
+        val isOdd = viewingWeek % 2 != 0
+        val targetType = if (isOdd) 1 else 2
+        val typeMatch = course.weekType == 0 || course.weekType == targetType
+
+        // 3. 排除日期逻辑
+        val courseDate = viewingWeekMonday.plusDays((course.dayOfWeek - 1).toLong())
+        val notExcluded = !course.excludedDates.contains(courseDate.toString())
+
+        weekRangeMatch && typeMatch && notExcluded
+    }
+}
+```
+
+**课程卡片布局**：
+```kotlin
+// 水平位置：根据星期几计算
+val xOffset = colWidthDp * (course.dayOfWeek - 1)
+
+// 垂直位置：根据开始节次计算
+val yOffset = NodeHeight * (course.startNode - 1)
+
+// 高度：根据跨越节数计算
+val span = (course.endNode - course.startNode + 1)
+val height = NodeHeight * span - 4.dp  // 留4dp间隙
+```
+
+**设计决策**：为什么不用 LazyVerticalGrid？
+
+课程的跨度是不规则的（有的跨2节，有的跨3节），且需要精确对应左侧的时间轴。Grid 布局很难处理"跨行且即使空行也要保留高度"的逻辑。
+
+绝对定位方案虽然原始，但在处理"时间轴对齐"这种强坐标依赖的 UI 时，是性能最高且最无 Bug 的方案。
+
+### 2.3 虚拟课程 ID 设计
+
+**为什么需要"虚拟化"ID？**
+
+课程表生成的虚拟日程使用特殊 ID 格式：`course_{CourseID}_{Date}`
+
+**实现位置**：`core/course/CourseManager.kt:58`
+
+```kotlin
+// 生成虚拟 ID
+val virtualId = "course_${course.id}_${targetDateStr}"
+```
+
+如果把每天的课都生成真实的 Event 存入数据库：
+1. 一旦用户修改"作息时间表"或"当前周次"，需要批量更新成百上千条数据
+2. 极易出错，产生脏数据风险
+
+动态计算方案：
+- 课表配置修改后，UI 刷新时重新计算 `getDailyCourses`
+- 瞬间完成，零脏数据风险
+- 天然支持"单次修改"功能（通过解析 ID）
+
+**ID 解析逻辑**：
+```kotlin
+// UI 层解析 ID
+val parts = event.id.split("_")
+val courseId = parts[1]           // 原课程 ID
+val courseDate = LocalDate.parse(parts[2])  // 具体日期
+```
+
+### 2.4 课程管理核心设计
+
+#### 为什么不用 Room/SQLite？
+
+使用 JSON 文件存储的原因：
+
+| 对比项 | JSON | Room/SQLite |
+|--------|------|-------------|
+| 结构灵活性 | 字段增删宽容，配合 `ignoreUnknownKeys` | 需要编写 Migration 脚本 |
+| 项目重构 | 新增字段无需额外操作 | 数据库版本升级容易 Crash |
+| 可移植性 | 直接复制文件即可备份 | 需要复杂的导出逻辑 |
+| 数据量级 | < 5000 条时性能更优 | 适合大量数据 |
+
+对于日程管理应用，数据量级通常在数百到数千条，JSON 的 I/O 耗时远小于数据库 ORM 的维护成本。
+
+---
+
+## 3. 手势交互详细实现
+
+### 3.1 下拉课表手势
+
+**NestedScrollConnection 实现**：
+
+**文件位置**：`ui/page_display/HomePage.kt:74-103`
+
+```kotlin
+val nestedScrollConnection = remember {
+    object : NestedScrollConnection {
+        // 预滚动：处理课表已展开时的上滑
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (offsetY.value > 0 && available.y < 0) {
+                val newOffset = (offsetY.value + available.y).coerceAtLeast(0f)
+                val consumed = offsetY.value - newOffset
+                scope.launch { offsetY.snapTo(newOffset) }
+                return Offset(0f, -consumed)
+            }
+            return Offset.Zero
+        }
+
+        // 后滚动：处理下拉
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            if (available.y > 0) {
+                val newOffset = (offsetY.value + available.y).coerceAtMost(maxOffsetPx)
+                scope.launch { offsetY.snapTo(newOffset) }
+                return Offset(0f, available.y)
+            }
+            return Offset.Zero
+        }
+
+        // 抛掷动画：判断最终状态
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            val target = if (available.y > 1000f) {
+                maxOffsetPx  // 快速下滑 → 展开
+            } else if (available.y < -1000f) {
+                0f  // 快速上滑 → 收起
+            } else {
+                // 位置判断
+                if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
+            }
+            scope.launch { offsetY.animateTo(target) }
+            return super.onPostFling(consumed, available)
+        }
+    }
+}
+```
+
+**视觉效果**：
+```kotlin
+// 课表：从透明到不透明，从小到大
+ScheduleView(
+    modifier = Modifier
+        .graphicsLayer {
+            alpha = progress  // 0 → 1
+            scaleX = 0.9f + (0.1f * progress)  // 0.9 → 1.0
+            scaleY = 0.9f + (0.1f * progress)
+        }
+)
+
+// 日程列表：从不透明到透明
+Box(
+    modifier = Modifier
+        .offset { IntOffset(0, offsetY.value.roundToInt()) }
+        .graphicsLayer { alpha = 1f - progress }  // 1 → 0
+)
+```
+
+### 3.2 横向日期切换
+
+```kotlin
+var totalDrag = 0f
+detectHorizontalDragGestures(
+    onDragEnd = {
+        if (totalDrag < -50) {
+            onSelectedDateChange(selectedDate.plusDays(1))  // 下一天
+        } else if (totalDrag > 50) {
+            onSelectedDateChange(selectedDate.minusDays(1))  // 上一天
+        }
+        totalDrag = 0f
+    },
+    onHorizontalDrag = { change, dragAmount ->
+        change.consume()
+        totalDrag += dragAmount
+    }
+)
+```
+
+### 3.3 事件项滑动菜单
+
+```kotlin
+val actionMenuWidth = 160.dp
+val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
+
+// 动画到展开或收起状态
+LaunchedEffect(isRevealed) {
+    if (isRevealed) {
+        offsetX.animateTo(-actionMenuWidthPx)
+    } else {
+        offsetX.animateTo(0f)
+    }
+}
+
+// 拖动手势
+detectHorizontalDragGestures(
+    onDragEnd = {
+        scope.launch {
+            if (offsetX.value < -actionMenuWidthPx / 2) {
+                offsetX.animateTo(-actionMenuWidthPx)  // 展开
+                onExpand()
+            } else {
+                offsetX.animateTo(0f)  // 收起
+                onCollapse()
+            }
+        }
+    }
+)
+```
+
+**实现位置**：`ui/event_display/SwipeableEventItem.kt`
+
+---
+
+## 4. 数据模型详解
+
+### 4.1 MyEvent（日程事件模型）
+
+**文件位置**：`data/model/MyEvent.kt`
+
+```kotlin
+@Serializable
+data class MyEvent(
+    val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    @Serializable(with = LocalDateSerializer::class)
+    val startDate: LocalDate,
+    @Serializable(with = LocalDateSerializer::class)
+    val endDate: LocalDate,
+    val startTime: String,             // HH:mm
+    val endTime: String,               // HH:mm
+    val location: String,
+    val description: String,
+    @Serializable(with = ColorSerializer::class)
+    val color: Color,
+    val isImportant: Boolean = false,
+    val sourceImagePath: String? = null,
+    val reminders: List<Int> = emptyList(),
+    val eventType: String = "event"    // "event" | "course" | "temp"
+)
+```
+
+### 4.2 Course（课程模型）
+
+**文件位置**：`data/model/Course.kt`
+
+```kotlin
+@Serializable
+data class Course(
+    val id: String,
+    val name: String,
+    val location: String = "",
+    val teacher: String = "",
+    @Serializable(with = ColorSerializer::class)
+    val color: Color,
+    val dayOfWeek: Int,                // 1=Mon, 7=Sun
+    val startNode: Int,
+    val endNode: Int,
+    val startWeek: Int,
+    val endWeek: Int,
+    val weekType: Int = 0,             // 0=All, 1=Odd, 2=Even
+    val excludedDates: List<String> = emptyList(),
+    val isTemp: Boolean = false,       // 是否为影子课程
+    val parentCourseId: String? = null // 父课程ID（影子课程用）
+)
+```
+
+### 4.3 MySettings（设置模型）
+
+**文件位置**：`data/model/MySettings.kt`
+
+```kotlin
+@Serializable
+data class MySettings(
+    // AI 模型配置
+    val modelKey: String = "",
+    val modelName: String = "gpt-3.5-turbo",
+    val modelUrl: String = "",
+    val modelProvider: String = "",
+
+    // 功能开关
+    val showTomorrowEvents: Boolean = false,
+    val isDailySummaryEnabled: Boolean = false,
+
+    // 识别设置
+    val tempEventsUseRecognitionTime: Boolean = true,
+    val screenshotDelayMs: Long = 500L,
+    val isLiveCapsuleEnabled: Boolean = false,
+
+    // 课表设置
+    val semesterStartDate: String = "",
+    val totalWeeks: Int = 20,
+    val timeTableJson: String = ""
+)
+```
+
+### 4.4 TimeNode（时间节点模型）
+
+```kotlin
+@Serializable
+data class TimeNode(
+    val index: Int,      // 节次 (1-12)
+    val startTime: String,  // 开始时间 (HH:mm)
+    val endTime: String    // 结束时间 (HH:mm)
+)
+```
+
+---
+
+## 5. 核心功能实现流程
+
+### 5.1 智能日程识别流程
+
+```
+用户点击磁贴
+    ↓
+TextAccessibilityService.startAnalysis()
+    ↓ (延迟)
+takeScreenshotAndAnalyze()
+    ↓
+RecognitionProcessor.analyzeImage(bitmap)
+    ↓
+ML Kit OCR 识别中文文字
+    ↓
+ApiModelProvider.generate() 发送 AI 请求
+    ↓
+AI 解析返回 CalendarEventData
+    ↓
+saveEventsLocally()
+    ├─ 去重检查
+    ├─ 创建 MyEvent
+    └─ 调度提醒
+    ↓
+postLiveUpdateSafely()
+    ↓
+显示实况胶囊通知
+```
+
+**实现位置**：
+- 无障碍服务入口：`service/accessibility/TextAccessibilityService.kt:82-97`
+- AI 处理器：`core/ai/RecognitionProcessor.kt`
+
+### 5.2 课程表渲染流程
+
+```
+用户打开今日视图
+    ↓
+CourseManager.getDailyCourses(selectedDate)
+    ↓
+计算当前周次
+    ├─ daysBetween(semesterStart, today) / 7 + 1
+    ↓
+筛选符合条件的课程
+    ├─ 周次范围匹配
+    ├─ 单双周匹配
+    ├─ 星期几匹配
+    └─ 排除日期检查
+    ↓
+转换为 MyEvent 列表
+    ├─ 生成虚拟ID: course_{id}_{date}
+    └─ 设置 eventType = "course"
+    ↓
+ScheduleView 渲染课程卡片
+    ├─ 计算卡片位置
+    │   ├─ xOffset = colWidth * (dayOfWeek - 1)
+    │   └─ yOffset = nodeHeight * (startNode - 1)
+    └─ 绘制卡片
+```
+
+**实现位置**：
+- 课程管理器：`core/course/CourseManager.kt:13-76`
+- 课表视图：`ui/page_display/SchedulePage.kt`
+
+### 5.3 影子课程创建流程
+
+```
+用户编辑单次课程
+    ↓
+检查原课程类型
+    ↓
+如果 isTemp = true（已是影子）
+    ↓
+    └─ 直接更新影子课程属性
+    ↓
+如果 isTemp = false（主课程）
+    ↓
+    ├─ 1. 将原课程的该日期加入排除列表
+    │   courses[idx] = oldCourse.copy(
+    │       excludedDates = oldCourse.excludedDates + dateStr
+    │   )
+    │
+    └─ 2. 创建新的影子课程
+        val shadowCourse = Course(
+            id = UUID.randomUUID().toString(),
+            // ... 其他属性
+            isTemp = true,
+            parentCourseId = oldCourse.id
+        )
+        courses.add(shadowCourse)
+```
+
+### 5.4 通知调度流程
+
+```
+保存/修改日程
+    ↓
+NotificationScheduler.scheduleReminders(context, event)
+    ↓
+遍历 event.reminders
+    ↓
+为每个提醒时间创建 Alarm
+    ├─ scheduleSingleAlarm()  // 普通提醒
+    ├─ scheduleCapsuleAlarm() // 胶囊开始
+    └─ scheduleCapsuleAlarm() // 胶囊结束
+    ↓
+AlarmManager.setAlarmClock()
+    ↓
+到达时间后触发
+    ↓
+AlarmReceiver.onReceive()
+    ↓
+根据 action 类型处理
+    ├─ ACTION_REMINDER → 显示通知
+    ├─ ACTION_CAPSULE_START → 启动胶囊服务
+    └─ ACTION_CAPSULE_END → 停止胶囊服务
+```
+
+**实现位置**：`service/notification/NotificationScheduler.kt`
+
+---
+
+## 6. 服务组件详解
+
+### 6.1 无障碍服务
+
+**文件位置**：`service/accessibility/TextAccessibilityService.kt`
+
+**功能概述**：实现无感截图和 AI 识别
+
+**关键方法**：
+
+| 方法名 | 功能 | 代码位置 |
+|--------|------|----------|
+| `startAnalysis()` | 启动分析流程 | 82-97 行 |
+| `closeNotificationPanel()` | 收起通知栏 | 77-79 行 |
+| `takeScreenshotAndAnalyze()` | 截图并分析 | 99+ 行 |
+| `cancelCurrentAnalysis()` | 取消分析 | 70-74 行 |
+
+**单例模式**：
+```kotlin
+companion object {
+    @Volatile
+    var instance: TextAccessibilityService? = null
+        private set
+}
+
+override fun onCreate() {
+    super.onCreate()
+    instance = this
+}
+```
+
+### 6.2 胶囊服务
+
+**文件位置**：`service/capsule/CapsuleService.kt`
+
+**功能概述**：前台服务，实况胶囊的核心实现
+
+**策略模式**：根据系统环境选择不同的 Provider
+- `FlymeCapsuleProvider`：Flyme 系统胶囊
+- `NativeCapsuleProvider`：Android 原生胶囊
+
+**锚点转移机制**：
+```kotlin
+private val activeNotifications = mutableMapOf<Int, Notification>()
+private var currentForegroundId = -1
+
+private fun handleStop(notificationId: Int) {
+    activeNotifications.remove(notificationId)
+
+    if (notificationId == currentForegroundId) {
+        // 如果停止的是当前的锚点，需要转移所有权给下一个胶囊
+        if (activeNotifications.isNotEmpty()) {
+            val nextAnchorId = activeNotifications.keys.last()
+            val nextNotification = activeNotifications[nextAnchorId]!!
+            promoteToForeground(nextAnchorId, nextNotification)
+        } else {
+            // 没有其他胶囊了，完全停止服务
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+}
+```
+
+**为什么需要"锚点转移"？**
+
+Android 的 ForegroundService 必须绑定一个可见的 Notification。如果我们只是简单的 notify 多个通知，当用户手动划掉那个"绑定服务"的通知，整个 Service 就会被系统杀死，导致其他胶囊也消失。
+
+"锚点转移"逻辑确保了只要还有一个胶囊活着，Service 就永远有"宿主"，是实现多胶囊并存且稳定的唯一解。
+
+### 6.3 通知调度器
+
+**文件位置**：`service/notification/NotificationScheduler.kt`
+
+**功能概述**：管理所有闹钟和提醒的调度
+
+**提醒选项**：
+```kotlin
+val REMINDER_OPTIONS = listOf(
+    0 to "日程开始时",
+    5 to "5分钟前",
+    10 to "10分钟前",
+    15 to "15分钟前",
+    30 to "30分钟前",
+    60 to "1小时前",
+    120 to "2小时前",
+    360 to "6小时前",
+    1440 to "1天前",
+    2880 to "2天前"
+)
+```
+
+**偏移量设计**：
+```kotlin
+private const val OFFSET_CAPSULE_START = 100000
+private const val OFFSET_CAPSULE_END = 200000
+
+// 同一事件的不同闹钟需要不同的 requestCode
+val requestCode = (event.id.hashCode() + offset).toInt()
+```
+
+### 6.4 广播接收器
+
+| 接收器 | 功能 | 文件位置 |
+|--------|------|----------|
+| `AlarmReceiver` | 接收闹钟通知 | `service/receiver/AlarmReceiver.kt` |
+| `BootReceiver` | 开机启动服务 | `service/receiver/BootReceiver.kt` |
+| `DailySummaryReceiver` | 每日摘要通知 | `service/receiver/DailySummaryReceiver.kt` |
+
+---
+
+## 7. UI 组件架构
+
+### 7.1 主题系统
+
+**文件位置**：`ui/theme/Color.kt`
+
+```kotlin
+// 默认颜色
+val Purple80 = Color(0xFFD0BCFF)
+val PurpleGrey80 = Color(0xFFCCC2DC)
+val Pink80 = Color(0xFFEFB8C8)
+
+// 事件颜色（循环使用）
+val EventColors = listOf(
+    Color(0xFF91A3B0), Color(0xFFB4C3A1), Color(0xFFD1B29E),
+    Color(0xFF968D8D), Color(0xFFBCCAD6), Color(0xFFCFD1D3),
+    Color(0xFFA2B5BB), Color(0xFFE2C4C4)
+)
+```
+
+### 7.2 主要 Compose 组件
+
+| 组件 | 文件位置 | 功能 |
+|------|----------|------|
+| `HomePage` | `ui/page_display/HomePage.kt` | 主页 |
+| `AllEventsPage` | `ui/page_display/AllEventsPage.kt` | 全部日程列表 |
+| `ScheduleView` | `ui/page_display/SchedulePage.kt` | 课程表视图 |
+| `SettingsPage` | `ui/page_display/SettingsPage.kt` | 设置页面 |
+| `DialogContainer` | `ui/dialogs/DialogContainer.kt` | 对话框容器 |
+| `SwipeableEventItem` | `ui/event_display/SwipeableEventItem.kt` | 可滑动事件项 |
+
+### 7.3 对话框组件
+
+| 组件 | 文件位置 | 功能 |
+|------|----------|------|
+| `AddEventDialog` | `ui/dialogs/AddEventDialog.kt` | 添加/编辑事件 |
+| `AiInputDialog` | `ui/dialogs/AiInputDialog.kt` | AI 输入对话框 |
+| `CourseManagementDialog` | `ui/dialogs/CourseManagementDialog.kt` | 课程管理 |
+| `TimeTableEditorDialog` | `ui/dialogs/TimeTableEditorDialog.kt` | 作息时间编辑 |
+
+---
+
+## 8. 通知渠道与常量速查表
+
+### 8.1 通知渠道配置
+
+| 渠道 ID | 名称 | 重要性 | 用途 |
+|---------|------|--------|------|
+| `calendar_assistant_popup_channel_v2` | 普通通知 | HIGH | 日程提醒通知 |
+| `calendar_assistant_live_channel_v3` | 实况胶囊 | HIGH | 实况胶囊（无声高优） |
+
+### 8.2 UI 尺寸常量
+
+| 常量 | 值 | 说明 |
+|------|------|------|
+| `HeaderHeight` | 50.dp | 课表表头高度 |
+| `SidebarWidth` | 35.dp | 节次栏宽度 |
+| `NodeHeight` | 64.dp | 单节课程高度 |
+| 下拉展开阈值 | 200.dp (Drag) 或 1000f (Velocity) | 1/3 屏幕或快速甩动 |
+| 侧滑菜单宽度 | 160.dp | 操作菜单宽度 |
+| 侧滑展开阈值 | 80.dp | 菜单宽度的一半 |
+| 截图默认延迟 | 500ms | 可在设置调整 |
+
+### 8.3 时间常量
+
+| 常量 | 值 | 说明 |
+|------|------|------|
+| 早报时间 | 06:00 | 每日汇总通知 |
+| 晚报时间 | 22:00 | 每日汇总通知 |
+
+### 8.4 组件尺寸规范
+
+**课表卡片**：
+```
+宽度 = (ScreenW - 35dp) / 7 - 4dp
+高度 = 64dp * 节数 - 4dp
+```
+说明：`-4dp` 是为了留出视觉间隙，避免色块连成一片
+
+**编辑弹窗**：
+- `AddEventDialog`：高度限制 450.dp（确保软键盘不遮挡按钮）
+- `CourseManagementDialog`：宽度 90%，高度 600.dp
+- `CourseEditDialog`：高度 650.dp
+
+---
+
+## 9. 权限清单（完整版）
+
+### 9.1 Android 权限声明
+
+| 权限 | 用途 | 必要性 | 说明 |
+|------|------|--------|------|
+| `INTERNET` | 网络请求 | 必需 | AI API 调用需要 |
+| `POST_NOTIFICATIONS` | 发送通知 | 必需 | Android 13+ 需要用户授权 |
+| `SCHEDULE_EXACT_ALARM` | 调度精确闹钟 | 必需 | Android 12+ 需要 |
+| `USE_EXACT_ALARM` | 使用精确闹钟 | 必需 | Android 14+ 需要 |
+| `FOREGROUND_SERVICE` | 前台服务 | 必需 | 实况胶囊需要 |
+| `FOREGROUND_SERVICE_SPECIAL_USE` | 特殊用途前台服务 | 必需 | 实况胶囊服务类型 |
+| `com.android.alarm.permission.SET_ALARM` | 设置系统闹钟 | 必需 | 调用系统闹钟应用 |
+
+### 9.2 AndroidManifest 组件声明
+
+| 组件 | 属性 | 值 | 必要性 |
+|------|------|------|--------|
+| MainActivity | `exported` | true | 必需（启动入口） |
+| TextAccessibilityService | `exported` | true | 必需 |
+| **CapsuleService** | `foregroundServiceType` | specialUse | **必需** |
+| CaptureTileService | `exported` | true | 必需 |
+| AlarmReceiver | （无特殊属性） | - | 必需 |
+| DailySummaryReceiver | `exported` | false | 推荐 |
+
+---
+
+## 10. 实况通知实现详解
+
+### 10.1 Flyme 实况通知（魅族 Flyme 系统）
+
+#### 前置条件检查清单
+
+| 项目 | 检查方式 | 不满足时的后果 |
+|------|----------|----------------|
+| 系统检测 | `FlymeUtils.isFlyme()` | 非魅族设备跳过 Flyme 适配 |
+| 权限声明 | AndroidManifest 中声明权限 | 无法检测实况开关状态 |
+| 系统开关 | ContentProvider 查询 | 开关关闭时实况不显示 |
+| 用户开关 | `settings.isLiveCapsuleEnabled` | 用户关闭时降级为普通通知 |
+| 无障碍服务 | `TextAccessibilityService.instance != null` | **作为系统能力锁**，服务未运行时降级 |
+
+#### Flyme 胶囊 Bundle 参数详解
+
+**实现位置**：`service/capsule/provider/FlymeCapsuleProvider.kt`
+
+```kotlin
+val capsuleBundle = Bundle().apply {
+    // === 必需参数 ===
+    putInt("notification.live.capsuleStatus", 1)      // 状态：1=进行中
+    putInt("notification.live.capsuleType", 1)         // 类型：1=普通日程
+    putString("notification.live.capsuleContent", collapsedTitle)  // 显示文本（4字符内）
+
+    // === 可选参数 ===
+    putParcelable("notification.live.capsuleIcon", iconObj)  // 图标（白色 Bitmap）
+    putInt("notification.live.capsuleBgColor", capsuleColor)  // 背景色
+    putInt("notification.live.capsuleContentColor", Color.WHITE)  // 文字颜色
+}
+
+val liveBundle = Bundle().apply {
+    putBoolean("is_live", true)                        // 标记为实况通知
+    putInt("notification.live.operation", 0)           // 操作类型
+    putInt("notification.live.type", 10)               // 实况类型
+    putBundle("notification.live.capsule", capsuleBundle)  // 胶囊配置
+    putInt("notification.live.contentColor", Color.BLACK)  // 内容颜色
+}
+```
+
+### 10.2 Android 14+ 原生胶囊通知
+
+#### 前置条件
+
+| 项目 | 要求 | 代码检查 |
+|------|------|----------|
+| Android 版本 | SDK 34+ (Android 14) | `Build.VERSION.SDK_INT >= 34` |
+| Service 类型 | `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` | Manifest 中声明 |
+| 通知渠道 | 高重要性渠道 | `IMPORTANCE_HIGH` |
+
+#### 实现方式
+
+**实现位置**：`service/capsule/provider/NativeCapsuleProvider.kt`
+
+使用反射调用 Android 16+ 的新 API：
+```kotlin
+// 设置短文本（胶囊中显示的文本）
+val methodSetText = Notification.Builder::class.java.getMethod(
+    "setShortCriticalText", String::class.java
+)
+methodSetText.invoke(builder, collapsedTitle)
+
+// 请求提升为实况胶囊
+val methodSetPromoted = Notification.Builder::class.java.getMethod(
+    "setRequestPromotedOngoing", Boolean::class.java
+)
+methodSetPromoted.invoke(builder, true)  // true = 请求提升
+```
+
+### 10.3 降级逻辑
+
+当胶囊模式条件不满足时（开关关闭 或 无障碍未开启），发送普通通知作为降级方案：
+
+```kotlin
+if (isEnabled && isServiceRunning) {
+    // 启动胶囊
+    startForegroundService(serviceIntent)
+} else {
+    // 降级为普通通知
+    showStandardNotification(context, eventId, title, "日程开始")
+}
+```
+
+这样即使胶囊不可用，用户仍能收到提醒。
+
+---
+
+## 11. 第三方依赖
+
+| 库名 | 用途 | 版本要求 |
+|------|------|----------|
+| Jetpack Compose | UI 框架 | 1.5+ |
+| Ktor | HTTP 客户端 | 2.3+ |
+| ML Kit | 文字识别 (OCR) | 最新版 |
+| Kotlinx Serialization | JSON 序列化 | 1.6+ |
+| kotlinx.coroutines | 协程支持 | 1.7+ |
+
+---
+
+## 12. 版本要求
+
+| 项目 | 版本 |
+|------|------|
+| 最低 SDK | 26 (Android 8.0) |
+| 目标 SDK | 35 (Android 15) |
+| 编译 SDK | 35 |
+| 截图功能 | Android 11+ (SDK 30+) |
+| 实况胶囊 | Android 14+ 或 Flyme |
+
+---
+
+## 13. 颜色常量
+
+```kotlin
+val EventColors = listOf(
+    Color(0xFF91A3B0),  // 蓝灰
+    Color(0xFFB4C3A1),  // 绿灰
+    Color(0xFFD1B29E),  // 粉灰
+    Color(0xFF968D8D),  // 棕灰
+    Color(0xFFBCCAD6),  // 浅蓝灰
+    Color(0xFFCFD1D3),  // 浅灰
+    Color(0xFFA2B5BB),  // 青灰
+    Color(0xFFE2C4C4)   // 浅粉灰
+)
+```
+
+自动循环分配给新创建的日程事件。
+
+---
+
+## 14. 数据存储位置
+
+| 数据类型 | 存储位置 | 格式 |
+|---------|----------|------|
+| 日程事件 | `filesDir/events.json` | JSON |
+| 课程数据 | `filesDir/courses.json` | JSON |
+| 应用设置 | SharedPreferences | Key-Value |
+| 导出备份 | `Downloads/CalendarBackup_*.json` | JSON |
+| 课程备份 | `Downloads/CoursesBackup_*.json` | JSON |
+| 截图缓存 | `filesDir/event_screenshots/` | JPEG |
+
+---
+
+## 15. 函数/常量速查表
+
+### 15.1 通知 ID 速查表
+
+| ID | 用途 | 所在文件 |
+|----|------|----------|
+| `1001` | 正在分析状态通知 | TextAccessibilityService.kt |
+| `2077` | 取件码实况通知 | TextAccessibilityService.kt |
+| `2001` | 磁贴提示通知（服务未开启） | CaptureTileService.kt |
+| `8001` | 早报通知（6:00） | DailySummaryReceiver.kt |
+| `8002` | 晚报通知（22:00） | DailySummaryReceiver.kt |
+| `999` | 权限引导通知 | TextAccessibilityService.kt |
+
+### 15.2 胶囊服务相关常量
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `OFFSET_CAPSULE_START` | 100000 | 胶囊开始闹钟的 requestCode 偏移量 |
+| `OFFSET_CAPSULE_END` | 200000 | 胶囊结束闹钟的 requestCode 偏移量 |
+
+**为什么用偏移量？**
+```kotlin
+// 同一事件的不同闹钟需要不同的 requestCode
+val requestCode = (event.id.hashCode() + offset).toInt()
+// 这样普通提醒、胶囊开始、胶囊结束各有独立ID
+```
+
+### 15.3 颜色常量详解
+
+| 用途 | 色值 | 说明 |
+|------|------|------|
+| 默认日程 | `#91A3B0` | 蓝灰（循环起始） |
+| 绿色 | `#00C853` | 取件码实况胶囊默认色 |
+| 黄色 | `#FFD600` | 取餐/麦当劳等品牌 |
+| 蓝色 | `#2196F3` | 快递/京东/顺丰 |
+
+### 15.4 核心辅助函数
+
+#### MainViewModel / HomePage 相关
+
+| 函数名 | 功能 | 返回值 |
+|--------|------|--------|
+| `getNextColor(currentListSize)` | 从颜色表循环取色 | `Color` |
+| `getLunarDate(date)` | 获取农历日期 | `String`（如"正月十五"） |
+| `isEventExpired(event)` | 判断事件是否过期 | `Boolean` |
+
+#### CourseManager
+
+| 函数名 | 功能 | 默认值 |
+|--------|------|--------|
+| `getDailyCourses()` | 获取指定日期的课程列表 | 见下方默认作息表 |
+| `getDefaultTimeNodes()` | 获取默认12节课时间表 | 见下方默认作息表 |
+
+**默认作息时间表**：
+```kotlin
+TimeNode(1, "08:00", "08:45"),   TimeNode(2, "08:55", "09:40"),
+TimeNode(3, "10:00", "10:45"),   TimeNode(4, "10:55", "11:40"),
+TimeNode(5, "14:00", "14:45"),   TimeNode(6, "14:55", "15:40"),
+TimeNode(7, "16:00", "16:45"),   TimeNode(8, "16:55", "17:40"),
+TimeNode(9, "19:00", "19:45"),   TimeNode(10, "19:55", "20:40"),
+TimeNode(11, "20:50", "21:35"),  TimeNode(12, "21:45", "22:30")
+```
+
+---
+
+## 16. 设计决策速查
+
+| 决策点 | 选择 | 为什么 |
+|--------|------|--------|
+| 为什么用 `event.id.hashCode()` 作为通知ID？ | hashCode() | Android 通知ID必须是int，String转int，同一事件始终对应同一ID |
+| 为什么取件码默认1小时后失效？ | `plusHours(1)` | 取件码通常需要在短时间内使用，设置1小时有效期是合理的默认行为 |
+| 为什么截图保存为JPEG 80%质量？ | JPEG 80% | 节省空间，视觉清晰度和文件大小取得平衡 |
+| 为什么需要"智能提取取件时间"开关？ | 可选 | 开启：使用短信内时间；关闭：始终使用当前时间；适配不同用户习惯 |
+| 为什么影子课程 `weekType = 0`？ | 设为每周 | 影子课程只针对当前周，设为每周配合起止周次即可 |
+| 为什么胶囊服务需要"锚点转移"？ | 多胶囊并存 | 当用户划掉当前胶囊时，自动将下一个胶囊提升为锚点 |
+| 为什么去重同时检查 title + time + type？ | 多条件 | 避免同一事件重复创建 |
+| 为什么取件码颜色自动分配？ | 关键词匹配 | 用户可快速区分取餐和快递 |
+
+---
+
+# 附录：重构后的架构改进
+
+## 与旧版本的主要变化
+
+### 1. 架构层面
+
+| 方面 | 旧版本 | 重构后 |
+|------|--------|--------|
+| 代码组织 | 单一巨型文件 (MainActivity.kt 1682行) | 模块化分层设计 |
+| 数据管理 | 直接在 Activity 中操作 | Repository 单例模式 |
+| 状态管理 | State + remember | StateFlow + ViewModel |
+| 依赖注入 | 无 | Repository 单例注入 |
+
+### 2. 目录结构变化
+
+**旧版本**：
+```
+CalendarAssistant/
+├── MainActivity.kt (1682行)
+├── ScheduleView.kt
+├── CourseManager.kt
+├── llm/
+├── model/
+├── receiver/
+├── service/
+└── ui/
+```
+
+**重构后**：
+```
+CalendarAssistant/
+├── App.kt (Application 单例)
+├── MainActivity.kt
+├── core/          # 核心业务逻辑
+├── data/          # 数据层（model + repository + source）
+├── service/       # 服务层（accessibility + capsule + notification）
+└── ui/            # UI 层（components + dialogs + page_display + viewmodel）
+```
+
+### 3. 数据流变化
+
+**旧版本**：
+```
+UI → 直接操作 → MutableStateListOf
+    ↓
+saveDataToFile()
+```
+
+**重构后**：
+```
+UI → 观察 → StateFlow
+        ↑
+        │
+    Repository → 操作 → DataSource
+        ↓
+    自动通知 → NotificationScheduler
+```
+
+### 4. 新增特性
+
+1. **策略模式的胶囊实现**：`ICapsuleProvider` 接口 + `FlymeCapsuleProvider` / `NativeCapsuleProvider`
+2. **独立的 ViewModel**：`MainViewModel` 和 `SettingsViewModel` 分离业务逻辑
+3. **Mutex 并发控制**：防止数据竞争
+4. **更清晰的职责分离**：每个模块只负责自己的功能
+
+---
+
+*文档版本：重构后 v1.0*
+*最后更新：2026年1月25日*
+*适用于 CalendarAssistant v3.0.0+*
