@@ -5,12 +5,14 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -133,10 +135,16 @@ class PickupExpiryReceiver : BroadcastReceiver() {
         // 4. 重新设置预警闹钟 (递归：延长后的新结束时间前5分钟再次提醒)
         NotificationScheduler.scheduleExpiryWarning(context, updatedEvent)
 
-        // 5. 立即刷新胶囊服务
+        // ✅ 新架构：启动 CapsuleService 来刷新状态
+        // Service 会自动订阅 uiState，数据库更新后 uiState 会自动变化
         CoroutineScope(Dispatchers.Main).launch {
-            TextAccessibilityService.instance?.refreshCapsuleState()
-            Toast.makeText(context, "已延长至 $newEndTime", Toast.LENGTH_SHORT).show()
+            val serviceIntent = Intent(context, CapsuleService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+            UniversalToastUtil.showSuccess(context, "已延长至 $newEndTime")
         }
     }
 }

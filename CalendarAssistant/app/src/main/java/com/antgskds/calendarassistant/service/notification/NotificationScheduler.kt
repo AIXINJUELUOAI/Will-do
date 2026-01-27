@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.service.notification
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -30,10 +31,10 @@ object NotificationScheduler {
         2880 to "2天前"
     )
 
-    // Action 常量，与 CapsuleService 保持一致
+    // Action 常量
     const val ACTION_REMINDER = "ACTION_REMINDER"
-    const val ACTION_CAPSULE_START = CapsuleService.ACTION_START
-    const val ACTION_CAPSULE_END = "ACTION_CAPSULE_END"
+    const val ACTION_CAPSULE_START = "ACTION_CAPSULE_START"  // 保留用于 Alarm 识别
+    const val ACTION_CAPSULE_END = "ACTION_CAPSULE_END"    // 保留用于 Alarm 识别
 
     private const val OFFSET_CAPSULE_START = 100000
     private const val OFFSET_CAPSULE_END = 200000
@@ -73,6 +74,11 @@ object NotificationScheduler {
         // 3. 调度胶囊结束
         if (endMillis > System.currentTimeMillis()) {
             scheduleCapsuleAlarm(context, event, endMillis, ACTION_CAPSULE_END, alarmManager)
+        }
+
+        // 4. 为取件码/取餐码设置过期预警
+        if (event.eventType == "temp") {
+            scheduleExpiryWarning(context, event)
         }
     }
 
@@ -183,34 +189,24 @@ object NotificationScheduler {
 
         // 1. 取消普通提醒
         event.reminders.forEach { minutesBefore ->
-            cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, alarmManager)
+            cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
         }
 
         // 2. 取消胶囊开始
-        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_START, ACTION_CAPSULE_START, alarmManager)
+        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_START, ACTION_CAPSULE_START, AlarmReceiver::class.java, alarmManager)
 
         // 3. 取消胶囊结束
-        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, alarmManager)
+        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, AlarmReceiver::class.java, alarmManager)
 
-        // 4. 取消取件码预警 (假设 offset 是 500000)
-        cancelPendingIntent(context, event.id.hashCode() + 500000, PickupExpiryReceiver.ACTION_SHOW_WARNING, alarmManager)
+        // 4. 取消取件码预警
+        cancelPendingIntent(context, event.id.hashCode() + 500000, PickupExpiryReceiver.ACTION_SHOW_WARNING, PickupExpiryReceiver::class.java, alarmManager)
 
-        // 5. 安全停止胶囊服务
-        if (CapsuleService.isServiceRunning) {
-            try {
-                val stopIntent = Intent(context, CapsuleService::class.java).apply {
-                    this.action = CapsuleService.ACTION_STOP
-                    putExtra("EVENT_ID", event.id)
-                }
-                context.startService(stopIntent)
-            } catch (e: Exception) {
-                Log.e("Scheduler", "停止胶囊服务失败", e)
-            }
-        }
+        // ✅ 新架构：Dumb Service 不需要手动停止
+        // Service 会通过 uiState 自动管理生命周期
     }
 
-    private fun cancelPendingIntent(context: Context, requestCode: Int, action: String, alarmManager: AlarmManager) {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
+    private fun cancelPendingIntent(context: Context, requestCode: Int, action: String, receiverClass: Class<out BroadcastReceiver>, alarmManager: AlarmManager) {
+        val intent = Intent(context, receiverClass).apply {
             this.action = action
         }
         val pendingIntent = PendingIntent.getBroadcast(

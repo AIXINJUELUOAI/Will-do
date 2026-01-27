@@ -11,7 +11,8 @@ CalendarAssistant 是一个基于 Android 的智能日程管理应用，使用 J
 - **系统闹钟集成**：自动创建系统闹钟
 - **每日日程提醒**：早晚汇总通知
 - **快速设置磁贴**：一键识别日程
-- **响应式设计**：支持缩放、深色模式
+- **响应式设计**：支持缩放、深色模式、侧边栏导航
+- **取件码过期预警**：取件码即将过期时自动提醒，支持一键延长30分钟
 
 ### 核心架构哲学
 
@@ -435,26 +436,39 @@ F:\CalendarAssistant\
 │   │   │   │   ├── receiver/              # 广播接收器
 │   │   │   │   │   ├── AlarmReceiver.kt   # 闹钟接收器
 │   │   │   │   │   ├── BootReceiver.kt    # 开机启动接收器
-│   │   │   │   │   └── DailySummaryReceiver.kt # 每日摘要接收器
+│   │   │   │   │   ├── DailySummaryReceiver.kt # 每日摘要接收器
+│   │   │   │   │   └── PickupExpiryReceiver.kt  # 取件码过期预警接收器（新增）
 │   │   │   │   └── tile/                  # 快捷服务
 │   │   │   │       └── CaptureTileService.kt # 截图快捷服务
 │   │   │   └── ui/                        # 用户界面
 │   │   │       ├── components/            # 通用组件
-│   │   │       │   └── CommonSettings.kt  # 通用设置组件
+│   │   │       │   ├── CommonSettings.kt  # 通用设置组件（含 WheelPicker 等）
+│   │   │       │   ├── SettingsSidebar.kt # 设置侧边栏（新增）
+│   │   │       │   └── UniversalToast.kt  # 通用 Toast 组件（新增）
 │   │   │       ├── dialogs/               # 对话框组件
 │   │   │       │   ├── AddEventDialog.kt  # 添加事件对话框
 │   │   │       │   ├── AiInputDialog.kt   # AI 输入对话框
 │   │   │       │   ├── CourseManagementDialog.kt # 课程管理对话框
-│   │   │       │   ├── DialogContainer.kt # 对话框容器
-│   │   │       │   └── TimeTableEditorDialog.kt # 课表编辑对话框
+│   │   │       │   └── DialogContainer.kt # 对话框容器
 │   │   │       ├── event_display/         # 事件显示组件
 │   │   │       │   ├── EventCardFactory.kt # 事件卡片工厂
 │   │   │       │   └── SwipeableEventItem.kt # 可滑动事件项
+│   │   │       ├── layout/                # 自定义布局
+│   │   │       │   └── PushSlideLayout.kt # 侧滑抽屉布局（新增）
 │   │   │       ├── page_display/          # 页面显示
 │   │   │       │   ├── AllEventsPage.kt   # 所有事件页面
-│   │   │       │   ├── HomePage.kt        # 主页
+│   │   │       │   ├── HomePage.kt        # 主页（今日视图）
+│   │   │       │   ├── HomeScreen.kt      # 主屏容器（新增，含侧边栏逻辑）
 │   │   │       │   ├── SchedulePage.kt    # 日程页面
-│   │   │       │   └── SettingsPage.kt    # 设置页面
+│   │   │       │   ├── SettingsDetailScreen.kt # 设置详情容器（新增）
+│   │   │       │   └── settings/          # 设置子页面（新增目录）
+│   │   │       │       ├── AboutPage.kt           # 关于页面
+│   │   │       │       ├── AiSettingsPage.kt      # AI 模型设置
+│   │   │       │       ├── BackupSettingsPage.kt  # 数据备份设置
+│   │   │       │       ├── CourseManagerScreen.kt # 课程管理页面
+│   │   │       │       ├── PreferenceSettingsPage.kt # 偏好设置
+│   │   │       │       ├── ScheduleSettingsPage.kt  # 课表设置（新增）
+│   │   │       │       └── TimeTableEditorScreen.kt # 作息时间编辑
 │   │   │       ├── theme/                 # 主题配置
 │   │   │       │   ├── Color.kt           # 颜色定义
 │   │   │       │   ├── Theme.kt           # 主题定义
@@ -1581,6 +1595,28 @@ val requestCode = (event.id.hashCode() + offset).toInt()
 | `AlarmReceiver` | 接收闹钟通知 | `service/receiver/AlarmReceiver.kt` |
 | `BootReceiver` | 开机启动服务 | `service/receiver/BootReceiver.kt` |
 | `DailySummaryReceiver` | 每日摘要通知 | `service/receiver/DailySummaryReceiver.kt` |
+| `PickupExpiryReceiver` | 取件码过期预警（新增） | `service/receiver/PickupExpiryReceiver.kt` |
+
+#### 6.4.1 PickupExpiryReceiver（取件码过期预警接收器）
+
+**功能概述**：当取件码即将过期时，自动弹出预警通知，用户可一键延长30分钟。
+
+**文件位置**：`service/receiver/PickupExpiryReceiver.kt`
+
+**核心功能**：
+1. **预警通知**：在取件码过期前5分钟弹出通知
+2. **一键延长**：点击"延长30分钟"按钮，自动更新事件结束时间
+3. **递归提醒**：延长后会重新设置预警闹钟
+4. **胶囊刷新**：延长后自动刷新实况胶囊显示
+
+**Action 常量**：
+```kotlin
+ACTION_SHOW_WARNING = "com.antgskds.calendarassistant.action.PICKUP_WARNING"
+ACTION_EXTEND_30 = "com.antgskds.calendarassistant.action.EXTEND_30"
+ACTION_DISMISS = "com.antgskds.calendarassistant.action.DISMISS_WARNING"
+```
+
+**通知 ID**：基准 ID = 50000，事件 ID 取模后防冲突
 
 ---
 
@@ -1624,18 +1660,217 @@ val EventColors = listOf(
 | `CourseManagementDialog` | `ui/dialogs/CourseManagementDialog.kt` | 课程管理 |
 | `TimeTableEditorDialog` | `ui/dialogs/TimeTableEditorDialog.kt` | 作息时间编辑 |
 
+### 7.4 新增组件（v1.1.1+）
+
+#### 7.4.1 UniversalToast（通用 Toast 组件）
+
+**文件位置**：`ui/components/UniversalToast.kt`
+
+**功能概述**：统一的 Toast 提示组件，支持三种类型，可在 Compose 环境中与 SnackbarHost 配合使用。
+
+**Toast 类型**：
+```kotlin
+enum class ToastType {
+    SUCCESS,   // 成功（绿色图标）
+    ERROR,     // 错误（红色图标）
+    INFO       // 信息（蓝色图标）
+}
+```
+
+**使用方式**：
+```kotlin
+// Compose 环境中使用
+@Composable
+fun UniversalToast(message: String, type: ToastType = ToastType.INFO)
+
+// 非 Compose 环境（如 BroadcastReceiver、Service）
+UniversalToastUtil.showSuccess(context, "操作成功")
+UniversalToastUtil.showError(context, "操作失败")
+UniversalToastUtil.showInfo(context, "提示信息")
+```
+
+**样式特点**：
+- 深灰色背景（`#323232`）
+- 圆角胶囊形状（`RoundedCornerShape(50)`）
+- 带图标和文字的横向布局
+- 阴影效果提升视觉层次
+
+#### 7.4.2 SettingsSidebar（设置侧边栏）
+
+**文件位置**：`ui/components/SettingsSidebar.kt`
+
+**功能概述**：侧边栏导航组件，提供设置页面的分类导航入口。
+
+**导航目标枚举**：
+```kotlin
+enum class SettingsDestination {
+    CourseManage,      // 课表管理
+    TimeTableManage,   // 作息表管理
+    SemesterConfig,    // 学期配置
+    AI,                // 模型配置
+    Preference,        // 偏好设置
+    Backup,            // 数据备份
+    ThemeToggle,       // 深色/浅色模式切换
+    Logout,            // 退出登录
+    About              // 关于软件
+}
+```
+
+**组件结构**：
+- **顶部操作卡片**：主题切换、关于、退出登录
+- **课表管理卡片**：课表管理、作息表管理、学期配置
+- **其他设置卡片**：模型配置、偏好设置、数据备份
+
+#### 7.4.3 PushSlideLayout（侧滑抽屉布局）
+
+**文件位置**：`ui/layout/PushSlideLayout.kt`
+
+**功能概述**：自定义侧滑抽屉布局，支持手势操作和平滑动画。
+
+**核心特性**：
+- 侧边栏宽度为屏幕宽度的 50%
+- 支持手势拖动开关
+- 遮罩层点击关闭
+- 动画时长 300ms
+- 可禁用手势（`enableGesture` 参数）
+
+**动画参数**：
+```kotlin
+// 动画进度：0 = 关闭，1 = 打开
+val progress = Animatable(0f)
+
+// 侧边栏偏移：从 -50% 到 0
+val offsetDp = (progress.value - 1f) * sidebarWidthDp.value
+
+// 主内容偏移：从 0 到 50%
+val offsetDp = progress.value * sidebarWidthDp.value
+
+// 遮罩透明度：0 到 0.5
+val scrimAlpha = progress.value * 0.5f
+```
+
+#### 7.4.4 WheelPicker（滚轮选择器）
+
+**文件位置**：`ui/components/CommonSettings.kt`
+
+**功能概述**：基于 VerticalPager 实现的滚轮选择器组件。
+
+**提供的变体**：
+| 组件 | 用途 |
+|------|------|
+| `WheelPicker` | 通用字符串列表选择器 |
+| `WheelDatePicker` | 日期选择器（年-月-日） |
+| `WheelDatePickerDialog` | 日期选择对话框 |
+| `WheelTimePicker` | 时间选择器（时:分） |
+| `WheelTimePickerDialog` | 时间选择对话框 |
+| `WheelReminderPickerDialog` | 提醒时间选择对话框 |
+
+**使用示例**：
+```kotlin
+WheelPicker(
+    items = listOf("选项1", "选项2", "选项3"),
+    initialIndex = 0,
+    onSelectionChanged = { index -> /* 处理选择变化 */ }
+)
+```
+
+**视觉效果**：
+- 中间项高亮显示（加粗）
+- 两侧项透明度降低
+- 背景高亮框标识选中项
+- 平滑滚动动画
+
 ---
 
-## 8. 通知渠道与常量速查表
+## 8. 导航架构（v1.1.1+ 新增）
 
-### 8.1 通知渠道配置
+### 8.1 双层导航结构
+
+项目采用双层导航架构：底部 Tab 导航 + 侧边栏设置导航。
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  HomeScreen（顶层容器）                                    │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │  PushSlideLayout                                     │ │
+│  │  ┌─────────────┬───────────────────────────────────┐ │ │
+│  │  │ SettingsSidebar │  内容区域                     │ │ │
+│  │  │ （侧边栏）    │  ┌─────────────────────────────┐│ │ │
+│  │  │             │  │  TopBar + HomePage          ││ │ │
+│  │  │ - AI        │  │  - 今日视图                  ││ │ │
+│  │  │ - 课表管理   │  │  - 全部日程                  ││ │ │
+│  │  │ - 作息表    │  │  - 课表视图（可下拉展开）      ││ │ │
+│  │  │ - 偏好设置   │  └─────────────────────────────┘│ │ │
+│  │  │ - 数据备份   │                               │ │ │
+│  │  │             │  ┌─────────────────────────────┐│ │ │
+│  │  │             │  │  BottomBar                  ││ │ │
+│  │  │             │  │  - 今日 | 全部              ││ │ │
+│  │  │             │  └─────────────────────────────┘│ │ │
+│  │  └─────────────┴───────────────────────────────────┘ │ │
+│  └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│  SnackbarHost（全局 Toast）                               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 8.2 导航流程
+
+**主界面** → 点击设置按钮 → 打开侧边栏 → 选择设置项 → 关闭侧边栏 → 导航到设置详情页
+
+**设置详情页** → 点击返回 → 返回主界面
+
+**导航实现**：
+```kotlin
+// HomeScreen.kt
+fun HomeScreen(
+    mainViewModel: MainViewModel,
+    settingsViewModel: SettingsViewModel,
+    onNavigateToSettings: (SettingsDestination) -> Unit
+) {
+    var isSidebarOpen by remember { mutableStateOf(false) }
+
+    PushSlideLayout(
+        isOpen = isSidebarOpen,
+        onOpenChange = { isSidebarOpen = it },
+        sidebar = {
+            SettingsSidebar(
+                onNavigate = { destination ->
+                    isSidebarOpen = false
+                    onNavigateToSettings(destination)
+                }
+            )
+        },
+        content = { /* 主内容 */ }
+    )
+}
+```
+
+### 8.3 设置页面路由
+
+| 路由 | 目标页面 | 说明 |
+|------|----------|------|
+| `settings/AI` | AiSettingsPage | AI 模型配置 |
+| `settings/CourseManage` | CourseManagerScreen | 课程管理 |
+| `settings/TimeTableManage` | TimeTableEditorScreen | 作息时间编辑 |
+| `settings/SemesterConfig` | ScheduleSettingsPage | 学期配置 |
+| `settings/Preference` | PreferenceSettingsPage | 偏好设置 |
+| `settings/Backup` | BackupSettingsPage | 数据备份 |
+| `settings/About` | AboutPage | 关于应用 |
+| `course_manager` | CourseManagerScreen | 课程管理（兼容路由） |
+| `timetable_editor` | TimeTableEditorScreen | 作息时间编辑（兼容路由） |
+
+---
+
+## 9. 通知渠道与常量速查表
+
+### 9.1 通知渠道配置
 
 | 渠道 ID | 名称 | 重要性 | 用途 |
 |---------|------|--------|------|
 | `calendar_assistant_popup_channel_v2` | 普通通知 | HIGH | 日程提醒通知 |
 | `calendar_assistant_live_channel_v3` | 实况胶囊 | HIGH | 实况胶囊（无声高优） |
 
-### 8.2 UI 尺寸常量
+### 9.2 UI 尺寸常量
 
 | 常量 | 值 | 说明 |
 |------|------|------|
@@ -1647,14 +1882,14 @@ val EventColors = listOf(
 | 侧滑展开阈值 | 80.dp | 菜单宽度的一半 |
 | 截图默认延迟 | 500ms | 可在设置调整 |
 
-### 8.3 时间常量
+### 9.3 时间常量
 
 | 常量 | 值 | 说明 |
 |------|------|------|
 | 早报时间 | 06:00 | 每日汇总通知 |
 | 晚报时间 | 22:00 | 每日汇总通知 |
 
-### 8.4 组件尺寸规范
+### 9.4 组件尺寸规范
 
 **课表卡片**：
 ```
@@ -1670,9 +1905,9 @@ val EventColors = listOf(
 
 ---
 
-## 9. 权限清单（完整版）
+## 10. 权限清单（完整版）
 
-### 9.1 Android 权限声明
+### 10.1 Android 权限声明
 
 | 权限 | 用途 | 必要性 | 说明 |
 |------|------|--------|------|
@@ -1684,7 +1919,7 @@ val EventColors = listOf(
 | `FOREGROUND_SERVICE_SPECIAL_USE` | 特殊用途前台服务 | 必需 | 实况胶囊服务类型 |
 | `com.android.alarm.permission.SET_ALARM` | 设置系统闹钟 | 必需 | 调用系统闹钟应用 |
 
-### 9.2 AndroidManifest 组件声明
+### 10.2 AndroidManifest 组件声明
 
 | 组件 | 属性 | 值 | 必要性 |
 |------|------|------|--------|
@@ -1697,9 +1932,9 @@ val EventColors = listOf(
 
 ---
 
-## 10. 实况通知实现详解
+## 11. 实况通知实现详解
 
-### 10.1 Flyme 实况通知（魅族 Flyme 系统）
+### 11.1 Flyme 实况通知（魅族 Flyme 系统）
 
 #### 前置条件检查清单
 
@@ -1737,7 +1972,7 @@ val liveBundle = Bundle().apply {
 }
 ```
 
-### 10.2 Android 14+ 原生胶囊通知
+### 11.2 Android 14+ 原生胶囊通知
 
 #### 前置条件
 
@@ -1766,7 +2001,7 @@ val methodSetPromoted = Notification.Builder::class.java.getMethod(
 methodSetPromoted.invoke(builder, true)  // true = 请求提升
 ```
 
-### 10.3 降级逻辑
+### 11.3 降级逻辑
 
 当胶囊模式条件不满足时（开关关闭 或 无障碍未开启），发送普通通知作为降级方案：
 
@@ -1784,7 +2019,7 @@ if (isEnabled && isServiceRunning) {
 
 ---
 
-## 11. 第三方依赖
+## 12. 第三方依赖
 
 | 库名 | 用途 | 版本要求 |
 |------|------|----------|
@@ -1796,7 +2031,7 @@ if (isEnabled && isServiceRunning) {
 
 ---
 
-## 12. 版本要求
+## 13. 版本要求
 
 | 项目 | 版本 |
 |------|------|
@@ -1808,7 +2043,7 @@ if (isEnabled && isServiceRunning) {
 
 ---
 
-## 13. 颜色常量
+## 14. 颜色常量
 
 ```kotlin
 val EventColors = listOf(
@@ -1827,7 +2062,7 @@ val EventColors = listOf(
 
 ---
 
-## 14. 数据存储位置
+## 15. 数据存储位置
 
 | 数据类型 | 存储位置 | 格式 |
 |---------|----------|------|
@@ -1840,9 +2075,19 @@ val EventColors = listOf(
 
 ---
 
-## 15. 函数/常量速查表
+## 16. 函数/常量速查表
 
-### 15.1 通知 ID 速查表
+### 16.1 通知 ID 速查表
+
+| ID | 用途 | 所在文件 |
+|----|------|----------|
+| `1001` | 正在分析状态通知 | TextAccessibilityService.kt |
+| `2077` | 取件码实况通知 | TextAccessibilityService.kt |
+| `2001` | 磁贴提示通知（服务未开启） | CaptureTileService.kt |
+| `50000 + hash` | 取件码过期预警通知（新增） | PickupExpiryReceiver.kt |
+| `8001` | 早报通知（6:00） | DailySummaryReceiver.kt |
+| `8002` | 晚报通知（22:00） | DailySummaryReceiver.kt |
+| `999` | 权限引导通知 | TextAccessibilityService.kt |
 
 | ID | 用途 | 所在文件 |
 |----|------|----------|
@@ -1853,7 +2098,7 @@ val EventColors = listOf(
 | `8002` | 晚报通知（22:00） | DailySummaryReceiver.kt |
 | `999` | 权限引导通知 | TextAccessibilityService.kt |
 
-### 15.2 胶囊服务相关常量
+### 16.2 胶囊服务相关常量
 
 | 常量 | 值 | 说明 |
 |------|-----|------|
@@ -1867,7 +2112,7 @@ val requestCode = (event.id.hashCode() + offset).toInt()
 // 这样普通提醒、胶囊开始、胶囊结束各有独立ID
 ```
 
-### 15.3 颜色常量详解
+### 16.3 颜色常量详解
 
 | 用途 | 色值 | 说明 |
 |------|------|------|
@@ -1876,7 +2121,7 @@ val requestCode = (event.id.hashCode() + offset).toInt()
 | 黄色 | `#FFD600` | 取餐/麦当劳等品牌 |
 | 蓝色 | `#2196F3` | 快递/京东/顺丰 |
 
-### 15.4 核心辅助函数
+### 16.4 核心辅助函数
 
 #### MainViewModel / HomePage 相关
 
@@ -1905,7 +2150,7 @@ TimeNode(11, "20:50", "21:35"),  TimeNode(12, "21:45", "22:30")
 
 ---
 
-## 16. 设计决策速查
+## 17. 设计决策速查
 
 | 决策点 | 选择 | 为什么 |
 |--------|------|--------|
@@ -1987,6 +2232,41 @@ UI → 观察 → StateFlow
 
 ---
 
-*文档版本：重构后 v1.0*
-*最后更新：2026年1月25日*
-*适用于 CalendarAssistant v3.0.0+*
+*文档版本：v1.1.1*
+*最后更新：2026年1月27日*
+*适用于 CalendarAssistant v1.1.1+*
+
+## 版本更新记录
+
+### v1.1.1（2026-01-27）
+
+**新增功能**：
+- 取件码过期预警功能（PickupExpiryReceiver）
+- 侧边栏导航系统（SettingsSidebar + PushSlideLayout）
+- 通用 Toast 组件（UniversalToast）
+- 滚轮选择器系列组件（WheelPicker）
+- 设置页面模块化重构
+
+**架构改进**：
+- 设置页面拆分为独立的子页面（settings/ 目录）
+- 新增 HomeScreen 作为顶层容器
+- 新增 SettingsDetailScreen 统一管理设置详情页
+- UI 尺寸缩放支持（uiSize 参数）
+
+**UI/UX 优化**：
+- 侧边栏导航体验
+- 深色/浅色模式切换
+- 设置页面卡片化分组展示
+
+**已知问题**：
+- 深色模式浅色模式切换时 TopBar 不同步
+- Flyme 实况通知不生效
+- 部分页面小白条未适配
+
+### v1.0（重构后版本）
+
+**核心架构**：
+- MVVM + Repository 模式
+- 单一 JSON 本源数据存储
+- 全量 Jetpack Compose UI
+- 系统级服务集成

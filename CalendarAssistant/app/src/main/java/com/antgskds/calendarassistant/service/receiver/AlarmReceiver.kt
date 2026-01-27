@@ -128,13 +128,11 @@ class AlarmReceiver : BroadcastReceiver() {
         val isEnabled = settings.isLiveCapsuleEnabled
 
         if (isEnabled && isServiceRunning) {
-            Log.d(TAG, "启动胶囊服务: $title")
+            Log.d(TAG, "启动胶囊服务: $title (新架构：启动后会自动订阅uiState)")
 
-            // 1. 视觉层：启动胶囊 UI
-            val serviceIntent = Intent(context, CapsuleService::class.java).apply {
-                this.action = CapsuleService.ACTION_START
-                putExtras(intent) // 转发所有参数
-            }
+            // ✅ 新架构：Dumb Service 只需要启动，会自动订阅 uiState 并显示胶囊
+            val serviceIntent = Intent(context, CapsuleService::class.java)
+            // 不再需要 action，Service 启动后会自动处理
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent)
@@ -161,10 +159,10 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleCapsuleEnd(context: Context, eventId: String) {
-        val serviceIntent = Intent(context, CapsuleService::class.java).apply {
-            this.action = CapsuleService.ACTION_STOP
-            putExtra("EVENT_ID", eventId)
-        }
+        // ✅ 新架构：Dumb Service 不需要 ACTION_STOP
+        // 只需启动 Service，它会重新订阅 uiState 并自动更新/停止
+        val serviceIntent = Intent(context, CapsuleService::class.java)
+        // 不需要 action，Service 启动后会自动检查状态并更新
 
         // 使用 startService 发送停止指令通常足够且更安全（避免 Foreground 限制）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
