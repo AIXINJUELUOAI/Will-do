@@ -3,6 +3,10 @@ package com.antgskds.calendarassistant.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
@@ -11,6 +15,20 @@ class SettingsViewModel(
 
     // 直接观察 Repository 的数据源
     val settings = repository.settings
+
+    // 日历同步状态
+    private val _syncStatus = MutableStateFlow(CalendarSyncManager.SyncStatus(
+        isEnabled = false,
+        hasPermission = false,
+        targetCalendarId = -1L,
+        lastSyncTime = 0L,
+        mappedEventCount = 0
+    ))
+    val syncStatus: StateFlow<CalendarSyncManager.SyncStatus> = _syncStatus.asStateFlow()
+
+    init {
+        refreshSyncStatus()
+    }
 
     // 更新 AI 设置
     fun updateAiSettings(key: String, name: String, url: String) {
@@ -115,4 +133,43 @@ class SettingsViewModel(
 
     fun getCoursesCount(): Int = repository.getCoursesCount()
     fun getEventsCount(): Int = repository.getEventsCount()
+
+    // ==================== 日历同步相关 ====================
+
+    /**
+     * 刷新同步状态
+     */
+    fun refreshSyncStatus() {
+        viewModelScope.launch {
+            _syncStatus.value = repository.getSyncStatus()
+        }
+    }
+
+    /**
+     * 切换日历同步开关
+     */
+    fun toggleCalendarSync(enabled: Boolean) {
+        viewModelScope.launch {
+            val result = if (enabled) {
+                repository.enableCalendarSync()
+            } else {
+                repository.disableCalendarSync()
+            }
+
+            if (result.isSuccess) {
+                refreshSyncStatus()
+            }
+        }
+    }
+
+    /**
+     * 手动触发同步
+     */
+    suspend fun manualSync(): Result<Unit> {
+        val result = repository.manualSync()
+        if (result.isSuccess) {
+            refreshSyncStatus()
+        }
+        return result
+    }
 }

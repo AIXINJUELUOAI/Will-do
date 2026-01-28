@@ -263,7 +263,7 @@ class TextAccessibilityService : AccessibilityService() {
                     endTime = endDateTime.format(timeFormatter),
                     location = aiEvent.location,
                     description = aiEvent.description,
-                    color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % 8],
+                    color = com.antgskds.calendarassistant.ui.theme.AppEventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.AppEventColors.size],
                     sourceImagePath = imagePath,
                     eventType = finalEventType
                 )
