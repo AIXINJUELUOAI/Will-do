@@ -25,6 +25,10 @@
     <!-- Flyme 专用 -->
     <uses-permission android:name="flyme.permission.READ_NOTIFICATION_LIVE_STATE" />
 
+    <!-- 日历同步权限 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
     <application
         android:name=".App"
         android:allowBackup="true"
