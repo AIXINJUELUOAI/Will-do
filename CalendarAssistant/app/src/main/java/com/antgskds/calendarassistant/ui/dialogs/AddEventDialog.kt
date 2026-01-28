@@ -28,7 +28,7 @@ import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
-import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.ui.theme.AppEventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -159,7 +159,7 @@ fun AddEventDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = {
                         if (title.isNotBlank()) {
-                            val nextColor = if (EventColors.isNotEmpty()) EventColors[currentEventsCount % EventColors.size] else Color.Gray
+                            val nextColor = if (AppEventColors.isNotEmpty()) AppEventColors[currentEventsCount % AppEventColors.size] else Color.Gray
                             val newEvent = MyEvent(
                                 id = eventToEdit?.id ?: UUID.randomUUID().toString(),
                                 title = title, startDate = startDate, endDate = endDate, startTime = startTime, endTime = endTime,
