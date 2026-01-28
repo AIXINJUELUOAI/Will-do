@@ -1,5 +1,13 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.text.format.DateFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,22 +18,66 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
+import java.util.Date
 
 @Composable
 fun PreferenceSettingsPage(
     viewModel: SettingsViewModel
 ) {
     val settings by viewModel.settings.collectAsState()
+    val syncStatus by viewModel.syncStatus.collectAsState()
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
+
+    // 日历权限请求
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            scope.launch {
+                viewModel.toggleCalendarSync(true)
+                viewModel.manualSync()
+
+                // 立即初始化观察者，无需重启
+                (context.applicationContext as? App)?.initCalendarObserver()
+
+                snackbarHostState.showSnackbar("日历同步已开启")
+            }
+        } else {
+            // 权限被拒绝，显示带 "去设置" 的 Snackbar
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "需要日历权限才能使用同步功能",
+                    actionLabel = "去设置",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    // 跳转到应用设置页面
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // 降级：跳转到系统设置页面
+                        context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                    }
+                }
+            }
+        }
+    }
 
     fun showToast(message: String, type: ToastType = ToastType.INFO) {
         currentToastType = type
@@ -37,6 +89,16 @@ fun PreferenceSettingsPage(
 
     // 使用 float 状态来控制 Slider 的流畅滑动
     var delayMs by remember(settings.screenshotDelayMs) { mutableFloatStateOf(settings.screenshotDelayMs.toFloat()) }
+
+    // 格式化上次同步时间（使用系统格式化器，避免重复创建 SimpleDateFormat）
+    val lastSyncTimeText = remember(syncStatus.lastSyncTime) {
+        if (syncStatus.lastSyncTime > 0) {
+            DateFormat.getDateFormat(context).format(Date(syncStatus.lastSyncTime)) +
+            " " + android.text.format.DateFormat.getTimeFormat(context).format(Date(syncStatus.lastSyncTime))
+        } else {
+            "未同步"
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -83,7 +145,7 @@ fun PreferenceSettingsPage(
                 }
             )
 
-            // 【新增】只有当开启实况胶囊时，才显示聚合开关（可选优化，或者一直显示）
+            // 只有当开启实况胶囊时，才显示聚合开关
             if (settings.isLiveCapsuleEnabled) {
                 SwitchSettingItem(
                     title = "取件码聚合 (Beta)",
@@ -95,27 +157,91 @@ fun PreferenceSettingsPage(
                 )
             }
 
-            // 隐藏识别延迟设置
-//        HorizontalDivider()
-//        Text("智能识别", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-//        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-//            Text("截图识别延迟: ${delayMs.toLong()}ms", style = MaterialTheme.typography.bodyMedium)
-//            Slider(
-//                value = delayMs,
-//                onValueChange = { delayMs = it },
-//                onValueChangeFinished = {
-//                    // 【修复】松手时保存设置
-//                    viewModel.updateScreenshotDelay(delayMs.toLong())
-//                },
-//                valueRange = 200f..2000f,
-//                steps = 17 // (2000-200)/100 = 18个点，steps = 17
-//            )
-//            Text(
-//                text = "针对不同手机截图动画时间调整，避免截到通知栏",
-//                style = MaterialTheme.typography.bodySmall,
-//                color = Color.Gray
-//            )
-//        }
+            // ==================== 日历同步 ====================
+            HorizontalDivider()
+            Text("同步", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+
+            SwitchSettingItem(
+                title = "日历同步",
+                subtitle = "将课程和日程同步到系统日历",
+                checked = syncStatus.isEnabled,
+                onCheckedChange = { isChecked ->
+                    if (isChecked) {
+                        // 检查权限
+                        if (CalendarPermissionHelper.hasAllPermissions(context)) {
+                            scope.launch {
+                                viewModel.toggleCalendarSync(true)
+                                viewModel.manualSync()
+
+                                // 确保观察者已启动（App.kt 中有防重复检查，所以这里调用是安全的）
+                                (context.applicationContext as? App)?.initCalendarObserver()
+
+                                showToast("日历同步已开启")
+                            }
+                        } else {
+                            // 显示权限说明对话框
+                            showPermissionDialog = true
+                        }
+                    } else {
+                        viewModel.toggleCalendarSync(false)
+                        showToast("日历同步已关闭")
+                    }
+                }
+            )
+
+            // 显示同步状态
+            if (syncStatus.isEnabled) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 4.dp, bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "上次同步: $lastSyncTimeText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "已同步 ${syncStatus.mappedEventCount} 个事件",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // 手动同步按钮
+                    var isSyncing by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = {
+                            if (!isSyncing) {
+                                scope.launch {
+                                    isSyncing = true
+                                    val result = viewModel.manualSync()
+                                    isSyncing = false
+                                    if (result.isSuccess) {
+                                        showToast("同步成功", ToastType.SUCCESS)
+                                    } else {
+                                        showToast("同步失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isSyncing,
+                        modifier = Modifier.padding(top = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(if (isSyncing) "同步中..." else "立即同步")
+                    }
+                }
+            }
         }
 
         SnackbarHost(
@@ -125,6 +251,41 @@ fun PreferenceSettingsPage(
                 .padding(bottom = 32.dp),
             snackbar = { data ->
                 UniversalToast(message = data.visuals.message, type = currentToastType)
+            }
+        )
+    }
+
+    // 权限请求对话框
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("需要日历权限") },
+            text = {
+                Text("为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPermissionDialog = false
+                        // 请求日历权限
+                        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            arrayOf(
+                                Manifest.permission.READ_CALENDAR,
+                                Manifest.permission.WRITE_CALENDAR
+                            )
+                        } else {
+                            emptyArray()
+                        }
+                        calendarPermissionLauncher.launch(permissions)
+                    }
+                ) {
+                    Text("授予权限")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("取消")
+                }
             }
         )
     }
@@ -139,7 +300,11 @@ fun SwitchSettingItem(title: String, subtitle: String, checked: Boolean, onCheck
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -163,7 +328,11 @@ fun SliderSettingItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Text(
                 text = sizeLabels[value] ?: "",
