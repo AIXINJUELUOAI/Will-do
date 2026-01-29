@@ -68,7 +68,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         }
 
         val collapsedTitle = if (title.length > 10) title.take(10) else title
-        val icon = Icon.createWithResource(context, R.mipmap.ic_launcher_round)
+        val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
 
         // 5. 设置基础属性
         builder.setSmallIcon(icon)
