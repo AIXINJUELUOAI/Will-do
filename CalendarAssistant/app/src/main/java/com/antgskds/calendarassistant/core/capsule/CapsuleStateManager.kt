@@ -185,6 +185,7 @@ class CapsuleStateManager(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
+                eventType = event.eventType,  // 新增: 传递 eventType
                 title = event.title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
                 color = event.color.toArgb(), // ✅ 修复：使用 toArgb() 正确转换 Compose Color
@@ -216,6 +217,7 @@ class CapsuleStateManager(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = CapsuleService.TYPE_PICKUP,
+                eventType = "temp",  // 新增: 取件码类型
                 title = "${pickupEvents.size} 个待取事项",
                 content = contentText,
                 color = android.graphics.Color.GREEN,
@@ -230,6 +232,7 @@ class CapsuleStateManager(
                     id = event.id,
                     notifId = event.id.hashCode(),
                     type = CapsuleService.TYPE_PICKUP,
+                    eventType = event.eventType,  // 新增: 传递 eventType
                     title = event.title,
                     content = "取件码: ${event.description}",
                     color = android.graphics.Color.GREEN,

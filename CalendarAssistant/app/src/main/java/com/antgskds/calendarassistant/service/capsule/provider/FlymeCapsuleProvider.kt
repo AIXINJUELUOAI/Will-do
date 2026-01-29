@@ -34,7 +34,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         title: String,
         content: String,
         color: Int,
-        capsuleType: Int  // 1=日程, 2=取件码
+        capsuleType: Int,  // 1=日程, 2=取件码
+        eventType: String  // 事件类型：event=日程, temp=取件码, course=课程
     ): Notification {
 
         // 1. 点击跳转
@@ -57,7 +58,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val iconObj = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
         // 3. 创建 RemoteViews（关键修复）
-        val remoteViews = createRemoteViews(context, capsuleType, title, content)
+        val remoteViews = createRemoteViews(context, capsuleType, eventType, title, content)
 
         // 4. 构建 Notification Builder
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -153,31 +154,31 @@ class FlymeCapsuleProvider : ICapsuleProvider {
     private fun createRemoteViews(
         context: Context,
         capsuleType: Int,
+        eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
         title: String,
         content: String
     ): RemoteViews {
         return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
 
-            // 左上角小标题：根据类型显示
-            val headerText = if (capsuleType == CapsuleService.TYPE_PICKUP) {
-                "取件提醒"  // capsuleType == 2
+            // 主标题：绑定 title
+            setTextViewText(R.id.tv_main_content, title)
+
+            // 副标题：地点 + 时间
+            val subInfo = if (content.isNotEmpty()) {
+                "$content • 进行中"
             } else {
-                "日程提醒"  // capsuleType == 1
+                "进行中"
             }
-            setTextViewText(R.id.live_title, headerText)
+            setTextViewText(R.id.tv_sub_info, subInfo)
 
-            // 中间大字：绑定 title
-            // (取件码时是号码，日程时是标题)
-            setTextViewText(R.id.live_content, title)
-
-            // 底部位置/详情：绑定 content
-            setTextViewText(R.id.live_location, content)
-
-            // 时间：固定值
-            setTextViewText(R.id.live_time, "进行中")
-
-            // 图标
-            setImageViewResource(R.id.live_icon, R.mipmap.ic_launcher)
+            // 图标：根据 eventType 区分
+            val iconRes = when (eventType) {
+                "temp" -> R.drawable.ic_capsule_pickup      // 取件/取餐
+                "course" -> R.drawable.ic_capsule_course    // 课程
+                "event" -> R.drawable.ic_capsule_event      // 普通日程
+                else -> R.drawable.ic_capsule_event         // 默认
+            }
+            setImageViewResource(R.id.iv_icon, iconRes)
         }
     }
 }
