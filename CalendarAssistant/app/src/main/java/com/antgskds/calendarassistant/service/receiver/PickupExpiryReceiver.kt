@@ -98,7 +98,7 @@ class PickupExpiryReceiver : BroadcastReceiver() {
 
         // 3. 发送通知
         val notification = NotificationCompat.Builder(context, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // 确保有此资源，或者换成你的 ic_notification
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle("取件码即将过期")
             .setContentText("是否延长显示 30 分钟？")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

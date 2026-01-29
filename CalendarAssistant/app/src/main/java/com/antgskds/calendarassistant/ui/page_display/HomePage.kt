@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -76,108 +77,106 @@ fun HomePage(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 根据 uiSize 计算 FAB 尺寸
     val fabSize = when (uiSize) {
-        1 -> 56.dp  // 小
-        2 -> 64.dp  // 中
-        else -> 72.dp // 大
+        1 -> 56.dp
+        2 -> 64.dp
+        else -> 72.dp
     }
     val fabIconSize = when (uiSize) {
-        1 -> 24.dp  // 小
-        2 -> 28.dp  // 中
-        else -> 32.dp // 大
+        1 -> 24.dp
+        2 -> 28.dp
+        else -> 32.dp
     }
 
     // --- 1. 手势与动画状态 ---
     val offsetY = remember { Animatable(0f) }
     val maxOffsetPx = with(LocalDensity.current) { 600.dp.toPx() }
 
-    // 通知父组件课表展开状态
+    // 提升 listState，用于精确判断列表是否到达顶部
+    val listState = rememberLazyListState()
+
     LaunchedEffect(offsetY.value) {
         onScheduleExpandedChange(offsetY.value > 0)
     }
 
     // === 核心修改：NestedScrollConnection ===
-    // 增加 currentTab 作为 key，确保 Tab 切换时逻辑能实时响应
     val nestedScrollConnection = remember(currentTab) {
         object : NestedScrollConnection {
-            // 1. 拦截逻辑：处理【收起课表】的手指拖动阶段
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // 只要课表有一点点展开 (offsetY > 0)，且手指是向上滑 (available.y < 0)
-                // 我们就拦截所有事件，专用于收起课表，绝对不把事件分发给 LazyColumn
-                if (offsetY.value > 0f && available.y < 0) {
-                    val newOffset = (offsetY.value + available.y).coerceAtLeast(0f)
-                    scope.launch { offsetY.snapTo(newOffset) }
 
-                    // 返回 available.y (全额消耗)，告诉系统事件已被消费
-                    // 这样列表就不会因为这个上滑动作而滚动
+            // 1. 拦截逻辑：主要处理【收起课表】
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // 如果课表是展开的 (offsetY > 0)
+                if (offsetY.value > 0f) {
+                    val newOffset = (offsetY.value + available.y).coerceIn(0f, maxOffsetPx)
+
+                    // 只要有位移变化，就执行
+                    if (newOffset != offsetY.value) {
+                        scope.launch { offsetY.snapTo(newOffset) }
+                    }
+
+                    // 【关键修复】：
+                    // 只要课表处于展开模式（或正在关闭的过程中），我们就“吃掉”所有的垂直滑动事件。
+                    // 返回 available 表示该事件已被父容器消费，不会分发给 LazyColumn。
+                    // 这防止了“收起课表”的滑动惯性直接传导给列表导致列表滑动。
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
             }
 
-            // 2. 后处理逻辑：处理【下拉展开课表】的手指拖动阶段
+            // 2. 后处理逻辑：主要处理【下拉展开课表】
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                // available.y > 0 表示列表已经到顶了，用户还在往下拉
-                // 【关键修改】：只允许在 Tab 0 (今日视图) 下拉展开
-                if (available.y > 0 && currentTab == 0) {
-                    // * 0.5f 增加阻尼感，手感更厚重
+                // 只有在今日 Tab 才允许下拉
+                if (currentTab != 0) return Offset.Zero
+
+                // 检查列表是否完全在顶部
+                val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+
+                // 【关键修复】：consumed.y == 0f
+                // 这表示子View (LazyColumn) 在这一帧里没有消费任何滚动距离。
+                // 意味着列表已经“顶死”在顶部了，滑不动了。
+                // 如果不加这个检查，当列表从底部快速滑到顶部时，剩下的动量会立即触发课表展开。
+                // 加了这个检查，必须先停在顶部，再次下拉才能触发。
+                val isListStationary = consumed.y == 0f
+
+                if (available.y > 0 && isAtTop && isListStationary) {
                     val newOffset = (offsetY.value + available.y * 0.5f).coerceAtMost(maxOffsetPx)
                     scope.launch { offsetY.snapTo(newOffset) }
-
-                    // 全额消耗，虽然列表也滑不动，但表明这是父容器的操作
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
             }
 
-            // 3. 惯性处理：实现“分段式停顿” + “防缓慢漂移”
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                val currentOffset = offsetY.value
-
-                // 场景 A：课表处于展开或半展开状态 (currentOffset > 0)
-                // 此时的惯性用于控制课表的“开”或“合”，必须消耗掉，不能传给列表
-                // 注意：如果 currentTab != 0，但 offsetY 已经是 0，这个 if 进不来，所以不会误触
-                if (currentOffset > 0f) {
-                    // 1. 决定目标位置
-                    val target = when {
-                        available.y > 1000f -> maxOffsetPx // 猛力下滑 -> 展开
-                        available.y < -1000f -> 0f      // 猛力上滑 -> 收起
-                        currentOffset > maxOffsetPx / 3f -> maxOffsetPx // 慢拖过 1/3 -> 展开
-                        else -> 0f // 慢拖没过线 -> 收起
-                    }
-
-                    // 2. 决定动画类型（防缓慢漂移）
-                    val isHighVelocity = kotlin.math.abs(available.y) > 1000f
-                    val animSpec: AnimationSpec<Float> = if (isHighVelocity) {
-                        // 速度快：使用弹簧，有物理感
-                        spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
-                    } else {
-                        // 速度慢：使用 Tween，强制在 350ms 内完成，干脆利落
-                        tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                    }
-
+            // 3. 惯性拦截：防止手指抬起后的惯性导致列表滑动
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // 如果课表开着（或者半开），拦截所有惯性
+                if (offsetY.value > 0f) {
+                    val target = if (available.y > 1000f) maxOffsetPx else 0f
+                    // 执行课表的归位动画
                     scope.launch {
-                        if (target != currentOffset) {
-                            offsetY.animateTo(target, animSpec)
-                        }
+                        offsetY.animateTo(
+                            targetValue = target,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)
+                        )
                     }
-
-                    // 【关键】：返回 available，消耗所有速度。
-                    // 这样当课表收起到 0 时，剩下的惯性不会让列表滚动到底部。
+                    // 消耗所有速度，不让 LazyColumn 发生惯性滚动
                     return available
                 }
+                return Velocity.Zero
+            }
 
-                // 场景 B：课表完全关闭 (currentOffset == 0)
-                // 此时如果列表快速滚动到顶 (available.y > 0)，我们不操作 offsetY。
-                // 让系统默认处理（列表停住或边缘发光）。
-                // 必须完全停稳后，再次下拉触发 onPostScroll 才能拉出课表。
+            // 4. 惯性后处理（原有逻辑保持，处理边缘情况）
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (offsetY.value > 0f) {
+                    // 逻辑同 onPreFling，双重保险
+                    val target = if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
+                    scope.launch { offsetY.animateTo(target, tween(300)) }
+                    return available
+                }
                 return super.onPostFling(consumed, available)
             }
         }
     }
 
-    // 只有当课表展开时才拦截返回键，用于收起课表
     BackHandler(enabled = offsetY.value > 0f) {
         scope.launch { offsetY.animateTo(0f) }
     }
@@ -221,7 +220,7 @@ fun HomePage(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .padding(top = 50.dp) // 预留给标题栏的空间
+                .padding(top = 50.dp)
                 .draggable(
                     state = rememberDraggableState { delta ->
                         if (offsetY.value > 0) {
@@ -231,21 +230,12 @@ fun HomePage(
                     },
                     orientation = Orientation.Vertical,
                     onDragStopped = { velocity ->
-                        // 这里是背景层的直接拖拽逻辑，保持与 nestedScroll 一致
                         val target = if (velocity > 1000f) maxOffsetPx
                         else if (velocity < -500f) 0f
                         else if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
 
-                        // 同样的防漂移逻辑
-                        val isHighVelocity = kotlin.math.abs(velocity) > 1000f
-                        val animSpec: AnimationSpec<Float> = if (isHighVelocity) {
-                            spring(dampingRatio = Spring.DampingRatioMediumBouncy)
-                        } else {
-                            tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                        }
-
                         scope.launch {
-                            offsetY.animateTo(target, animSpec)
+                            offsetY.animateTo(target, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
                         }
                     }
                 )
@@ -389,6 +379,8 @@ fun HomePage(
                     if (currentTab == 0) {
                         // === 今日视图内容 ===
                         LazyColumn(
+                            // 绑定 listState
+                            state = listState,
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
