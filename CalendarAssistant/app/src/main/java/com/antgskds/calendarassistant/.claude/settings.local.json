@@ -16,7 +16,8 @@
       "Bash(git branch:*)",
       "Bash(./gradlew:*)",
       "Bash(git fetch:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(where:*)"
     ]
   }
 }

@@ -29,6 +29,7 @@ sealed interface CapsuleUiState {
             val id: String,           // 唯一标识（事件ID或聚合ID）
             val notifId: Int,         // 通知ID（用于NotificationManager）
             val type: Int,            // 类型：1=日程, 2=取件码
+            val eventType: String,    // 事件类型：event=日程, temp=取件码, course=课程
             val title: String,        // 标题
             val content: String,      // 内容描述
             val color: Int,           // 颜色（Android Color Int）
