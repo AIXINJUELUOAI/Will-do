@@ -4,15 +4,27 @@
 
 CalendarAssistant 是一个基于 Android 的智能日程管理应用，使用 Jetpack Compose 构建，采用 MVVM 架构模式。项目经过重构，实现了更清晰的代码分层和更模块化的设计。
 
+**当前版本**：v1.1.1 (versionCode: 2)
+**开发语言**：Kotlin 2.0.21
+**最低支持**：Android 8.0 (API 26)
+**目标平台**：Android 16 (API 36)
+
+**项目特色**：
+- 智能日程识别（AI + OCR）
+- 多厂商实况胶囊支持（Flyme/Samsung/原生）
+- 完整的课程表管理系统
+- 优雅的 Compose UI 设计
+
 ### 核心功能
 - **课程表管理**：支持单双周、排除日期、影子课程（单次修改）
 - **智能日程识别**：基于 AI 的 OCR 和自然语言处理
-- **实况胶囊通知**：支持 Android 14+ 原生、Flyme 系统
+- **实况胶囊通知**：支持 Android 14+ 原生、Flyme 系统、Samsung 灵动岛
 - **系统闹钟集成**：自动创建系统闹钟
 - **每日日程提醒**：早晚汇总通知
 - **快速设置磁贴**：一键识别日程
 - **响应式设计**：支持缩放、深色模式、侧边栏导航
 - **取件码过期预警**：取件码即将过期时自动提醒，支持一键延长30分钟
+- **多厂商适配**：Flyme 实况通知、Samsung 灵动岛、原生 Live Activity
 
 ### 核心架构哲学
 
@@ -2021,13 +2033,18 @@ if (isEnabled && isServiceRunning) {
 
 ## 12. 第三方依赖
 
-| 库名 | 用途 | 版本要求 |
-|------|------|----------|
-| Jetpack Compose | UI 框架 | 1.5+ |
-| Ktor | HTTP 客户端 | 2.3+ |
-| ML Kit | 文字识别 (OCR) | 最新版 |
-| Kotlinx Serialization | JSON 序列化 | 1.6+ |
-| kotlinx.coroutines | 协程支持 | 1.7+ |
+| 库名 | 用途 | 版本 |
+|------|------|------|
+| Jetpack Compose | UI 框架 | 2024.09.00 BOM |
+| Material3 | UI 组件 | 1.5.4 |
+| Ktor Client | HTTP 客户端 | 2.3.7 |
+| ML Kit Text Recognition | 文字识别 (OCR) | 16.0.1 |
+| Kotlinx Serialization | JSON 序列化 | 1.6.3 |
+| Kotlinx Coroutines | 协程支持 | 1.7.3 |
+| Navigation Compose | 页面导航 | 2.8.0 |
+| Lifecycle ViewModel | 状态管理 | 2.8.5 |
+| Core KTX | Android 核心扩展 | 1.17.0 |
+| Desugar JDK Libs | Java 8+ API 兼容 | 2.0.4 |
 
 ---
 
@@ -2035,11 +2052,14 @@ if (isEnabled && isServiceRunning) {
 
 | 项目 | 版本 |
 |------|------|
+| 应用版本 | 1.1.1 (versionCode: 2) |
 | 最低 SDK | 26 (Android 8.0) |
-| 目标 SDK | 35 (Android 15) |
-| 编译 SDK | 35 |
+| 目标 SDK | 36 (Android 16) |
+| 编译 SDK | 36 |
 | 截图功能 | Android 11+ (SDK 30+) |
 | 实况胶囊 | Android 14+ 或 Flyme |
+| Kotlin 版本 | 2.0.21 |
+| Compose BOM | 2024.09.00 |
 
 ---
 
@@ -2232,13 +2252,26 @@ UI → 观察 → StateFlow
 
 ---
 
+## 开发状态
+
+**当前分支**：`sync-calendar`
+**主分支**：`main`
+**最新提交**：
+- 修复 Flyme 实况通知展开空白问题
+- 修复胶囊通知残留问题
+- 合并 gitignore 配置
+
+**项目状态**：活跃开发中
+
+---
+
 *文档版本：v1.1.1*
-*最后更新：2026年1月27日*
+*最后更新：2026年1月28日*
 *适用于 CalendarAssistant v1.1.1+*
 
 ## 版本更新记录
 
-### v1.1.1（2026-01-27）
+### v1.1.1（当前版本）
 
 **新增功能**：
 - 取件码过期预警功能（PickupExpiryReceiver）
@@ -2258,9 +2291,12 @@ UI → 观察 → StateFlow
 - 深色/浅色模式切换
 - 设置页面卡片化分组展示
 
+**最近修复**：
+- 修复 Flyme 实况通知展开空白问题
+- 修复胶囊通知残留问题
+
 **已知问题**：
 - 深色模式浅色模式切换时 TopBar 不同步
-- Flyme 实况通知不生效
 - 部分页面小白条未适配
 
 ### v1.0（重构后版本）
