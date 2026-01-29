@@ -1,83 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root_layout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@android:color/white"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:padding="16dp">
 
-    <!-- 左侧文字信息区 -->
+    <!-- 左侧文字区 (自动占据剩余空间) -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <!-- 顶部行：标题 + 时间 -->
-        <LinearLayout
+        <!-- 主标题：取件码 / 课程名 / 日程名 -->
+        <TextView
+            android:id="@+id/tv_main_content"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#1A1A1A"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            tools:text="12-34-56" />
 
-            <TextView
-                android:id="@+id/live_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="取件提醒"
-                android:textColor="@android:color/primary_text_light"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/live_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="刚刚"
-                android:textColor="@android:color/secondary_text_light"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- 核心内容：取件码 (大字显示) -->
+        <!-- 副标题：地点 • 时间 -->
         <TextView
-            android:id="@+id/live_content"
+            android:id="@+id/tv_sub_info"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:text="12-34-56"
-            android:textColor="@android:color/primary_text_light"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <!-- 底部：位置信息 -->
-        <TextView
-            android:id="@+id/live_location"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="菜鸟驿站"
-            android:textColor="@android:color/secondary_text_light"
-            android:textSize="14sp" />
+            android:textColor="#757575"
+            android:textSize="14sp"
+            tools:text="菜鸟驿站 • 刚刚" />
 
     </LinearLayout>
 
     <!-- 右侧图标区 -->
     <ImageView
-        android:id="@+id/live_icon"
+        android:id="@+id/iv_icon"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="16dp"
         android:contentDescription="@null"
         android:scaleType="fitCenter"
-        android:src="@mipmap/ic_launcher" />
+        tools:src="@android:drawable/ic_dialog_email"
+        tools:tint="#FF9800" />
 
 </LinearLayout>
