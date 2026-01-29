@@ -85,6 +85,9 @@ fun ScheduleSettingsPage(
             icon = Icons.Default.AccessTime,
             onClick = { onNavigateTo("settings/timetable_editor") }
         )
+
+        // 修改：增加底部Spacer，确保最后一行不贴底，适配小白条
+        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 
     // --- 弹窗逻辑 ---

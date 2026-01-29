@@ -39,6 +39,9 @@ fun PreferenceSettingsPage(
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
 
+    // 获取底部导航栏高度
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     // 日历权限请求
     var showPermissionDialog by remember { mutableStateOf(false) }
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
@@ -105,7 +108,9 @@ fun PreferenceSettingsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(16.dp)
+                // 修改：确保内容不被底部 Snackbar 和 小白条 遮挡
+                .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("显示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -248,6 +253,7 @@ fun PreferenceSettingsPage(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .navigationBarsPadding() // 修改：避让小白条
                 .padding(bottom = 32.dp),
             snackbar = { data ->
                 UniversalToast(message = data.visuals.message, type = currentToastType)
