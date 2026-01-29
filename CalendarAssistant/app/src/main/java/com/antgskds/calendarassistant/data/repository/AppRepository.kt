@@ -10,6 +10,9 @@ import com.antgskds.calendarassistant.data.source.EventJsonDataSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
+import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
+import com.antgskds.calendarassistant.core.importer.ImportMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +25,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 class AppRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -266,9 +272,75 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     /**
-     * 导入课程数据
+     * 标准化日期格式
+     * 将 yyyy-M-d 格式（如 2025-9-1）转换为 ISO-8601 格式（yyyy-MM-dd，如 2025-09-01）
+     * 用于处理外部导入文件中缺失前导零的日期字符串
+     *
+     * @param dateStr 原始日期字符串
+     * @return 标准化后的日期字符串（ISO-8601 格式），如果解析失败则返回 null
+     */
+    private fun normalizeDateFormat(dateStr: String?): String? {
+        if (dateStr.isNullOrBlank()) return null
+
+        return try {
+            // 先尝试直接解析（已经是标准格式的情况）
+            LocalDate.parse(dateStr)
+            dateStr
+        } catch (e: DateTimeParseException) {
+            // 如果直接解析失败，尝试使用宽松格式解析
+            try {
+                val formatter = DateTimeFormatter.ofPattern("yyyy-M-d")
+                val parsedDate = LocalDate.parse(dateStr, formatter)
+                // 转换为 ISO-8601 格式字符串
+                parsedDate.toString()
+            } catch (e2: Exception) {
+                Log.e("AppRepository", "日期格式标准化失败: $dateStr", e2)
+                null
+            }
+        }
+    }
+
+    /**
+     * 导入课程数据（支持应用备份格式和 WakeUp 课表格式）
      */
     suspend fun importCoursesData(jsonString: String): Result<Unit> {
+        // 优先尝试使用 WakeUpCourseImporter 解析
+        val wakeUpImporter = WakeUpCourseImporter()
+        if (wakeUpImporter.supports(jsonString)) {
+            Log.d("AppRepository", "检测到 WakeUp 课表格式，开始导入")
+            return try {
+                val result = wakeUpImporter.parse(jsonString)
+                if (result.isSuccess) {
+                    val importResult = result.getOrThrow()
+
+                    // 导入课程
+                    saveCourses(importResult.courses)
+
+                    // 导入设置（如果有）
+                    if (importResult.semesterStartDate != null || importResult.totalWeeks != null) {
+                        val currentSettings = _settings.value
+                        // 标准化日期格式
+                        val normalizedDate = importResult.semesterStartDate?.let { normalizeDateFormat(it) }
+                        val newSettings = currentSettings.copy(
+                            semesterStartDate = normalizedDate ?: currentSettings.semesterStartDate,
+                            totalWeeks = importResult.totalWeeks ?: currentSettings.totalWeeks
+                        )
+                        updateSettings(newSettings)
+                    }
+
+                    Log.d("AppRepository", "WakeUp 课表导入成功，共 ${importResult.courses.size} 门课程")
+                    Result.success(Unit)
+                } else {
+                    Log.e("AppRepository", "WakeUp 课表解析失败: ${result.exceptionOrNull()?.message}")
+                    Result.failure(result.exceptionOrNull() ?: Exception("解析失败"))
+                }
+            } catch (e: Exception) {
+                Log.e("AppRepository", "WakeUp 课表导入异常", e)
+                Result.failure(e)
+            }
+        }
+
+        // 如果不是 WakeUp 格式，尝试应用自己的备份格式
         return try {
             val data = json.decodeFromString<CoursesBackupData>(jsonString)
 
@@ -287,6 +359,64 @@ class AppRepository private constructor(private val context: Context) {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("AppRepository", "导入课程数据失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 导入外部课表文件（WakeUp 格式）
+     * @param content 文件内容
+     * @param mode 导入模式（追加/覆盖）
+     * @param importSettings 是否导入设置（开学日期、总周数）
+     * @return 成功导入的课程数量
+     */
+    suspend fun importWakeUpFile(
+        content: String,
+        mode: ImportMode,
+        importSettings: Boolean
+    ): Result<Int> {
+        val importer = WakeUpCourseImporter()
+        return try {
+            val result = importer.parse(content)
+            if (result.isSuccess) {
+                val importResult = result.getOrThrow()
+                val courses = importResult.courses
+
+                // 根据模式处理课程
+                if (mode == ImportMode.OVERWRITE) {
+                    // 覆盖模式：清空现有课程
+                    saveCourses(courses)
+                    Log.d("AppRepository", "覆盖模式：清空后导入 ${courses.size} 门课程")
+                } else {
+                    // 追加模式：保留现有课程，添加新课程
+                    val existingCourses = _courses.value
+                    val mergedCourses = existingCourses + courses
+                    saveCourses(mergedCourses)
+                    Log.d("AppRepository", "追加模式：从 ${existingCourses.size} 门增加到 ${mergedCourses.size} 门课程")
+                }
+
+                // 导入设置（如果需要）
+                if (importSettings) {
+                    if (importResult.semesterStartDate != null || importResult.totalWeeks != null) {
+                        val currentSettings = _settings.value
+                        // 标准化日期格式
+                        val normalizedDate = importResult.semesterStartDate?.let { normalizeDateFormat(it) }
+                        val newSettings = currentSettings.copy(
+                            semesterStartDate = normalizedDate ?: currentSettings.semesterStartDate,
+                            totalWeeks = importResult.totalWeeks ?: currentSettings.totalWeeks
+                        )
+                        updateSettings(newSettings)
+                        Log.d("AppRepository", "设置已更新，日期: $normalizedDate")
+                    }
+                }
+
+                Result.success(courses.size)
+            } else {
+                Log.e("AppRepository", "解析失败: ${result.exceptionOrNull()?.message}")
+                Result.failure(result.exceptionOrNull() ?: Exception("解析失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("AppRepository", "导入异常", e)
             Result.failure(e)
         }
     }
@@ -417,19 +547,49 @@ class AppRepository private constructor(private val context: Context) {
     /**
      * 从系统日历同步变更到应用
      * 由 CalendarContentObserver 在检测到系统日历变化时触发
+     *
+     * 颜色策略：
+     * - 新增事件：随机分配一个 APP 内的颜色，避免统一的青灰色
+     * - 更新事件：保留本地原有的颜色、提醒、重要性设置（作为 UI 防火墙）
+     * - 删除事件：正常删除
      */
     suspend fun syncFromCalendar(): Result<Int> {
         return syncManager.syncFromCalendar(
             onEventAdded = { newEvent ->
-                // 新增事件，传入 triggerSync = false 避免死循环
-                addEvent(newEvent, triggerSync = false)
+                // 【场景：新增事件】
+                // 策略：不信任系统传来的颜色（可能是被同步源污染的颜色）
+                // 随机分配一个 APP 自己的颜色，让界面色彩更丰富
+                val eventWithRandomColor = newEvent.copy(
+                    color = getRandomEventColor()
+                )
+                addEvent(eventWithRandomColor, triggerSync = false)
             },
-            onEventUpdated = { updatedEvent ->
-                // 更新事件，传入 triggerSync = false 避免死循环
-                updateEvent(updatedEvent, triggerSync = false)
+            onEventUpdated = { incomingEvent ->
+                // 【场景：更新事件】
+                // 策略：先在本地查找这个事件
+                val oldEvent = _events.value.find { it.id == incomingEvent.id }
+
+                val eventToSave = if (oldEvent != null) {
+                    // 如果是老朋友：
+                    // 1. 接受系统传来的 内容变更 (标题、时间、地点、描述)
+                    // 2. 拒绝系统传来的 样式变更 (强制保留 App 原有的颜色、提醒、重要性)
+                    // 这作为"UI 防火墙"，防止外部同步源的颜色污染我们的 UI
+                    incomingEvent.copy(
+                        color = oldEvent.color,
+                        reminders = oldEvent.reminders,
+                        isImportant = oldEvent.isImportant
+                    )
+                } else {
+                    // 理论上只有映射存在的才会走到 onEventUpdated
+                    // 但防守性编程：如果没找到旧对象，就当做新的处理，给个随机色
+                    incomingEvent.copy(color = getRandomEventColor())
+                }
+
+                updateEvent(eventToSave, triggerSync = false)
             },
             onEventDeleted = { eventId ->
-                // 🔥 新增：删除事件，传入 triggerSync = false
+                // 【场景：删除事件】
+                // 直接删除
                 deleteEvent(eventId, triggerSync = false)
             }
         )

@@ -27,3 +27,9 @@ val AppEventColors = listOf(
 fun getNextColor(index: Int): Color = EventColors[index % EventColors.size]
 
 fun getNextAppColor(index: Int): Color = AppEventColors[index % AppEventColors.size]
+
+/**
+ * 从 EventColors 中随机获取一个颜色
+ * 用于从系统日历同步进来的事件分配颜色
+ */
+fun getRandomEventColor(): Color = EventColors.random()
