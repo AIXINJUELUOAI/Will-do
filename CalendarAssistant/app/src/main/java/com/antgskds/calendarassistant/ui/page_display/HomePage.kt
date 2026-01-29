@@ -6,7 +6,6 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -92,6 +91,9 @@ fun HomePage(
     val offsetY = remember { Animatable(0f) }
     val maxOffsetPx = with(LocalDensity.current) { 600.dp.toPx() }
 
+    // 触发阈值：约 100dp
+    val snapThresholdPx = with(LocalDensity.current) { 100.dp.toPx() }
+
     // 提升 listState，用于精确判断列表是否到达顶部
     val listState = rememberLazyListState()
 
@@ -103,73 +105,73 @@ fun HomePage(
     val nestedScrollConnection = remember(currentTab) {
         object : NestedScrollConnection {
 
-            // 1. 拦截逻辑：主要处理【收起课表】
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // 如果课表是展开的 (offsetY > 0)
                 if (offsetY.value > 0f) {
                     val newOffset = (offsetY.value + available.y).coerceIn(0f, maxOffsetPx)
-
-                    // 只要有位移变化，就执行
                     if (newOffset != offsetY.value) {
                         scope.launch { offsetY.snapTo(newOffset) }
                     }
-
-                    // 【关键修复】：
-                    // 只要课表处于展开模式（或正在关闭的过程中），我们就“吃掉”所有的垂直滑动事件。
-                    // 返回 available 表示该事件已被父容器消费，不会分发给 LazyColumn。
-                    // 这防止了“收起课表”的滑动惯性直接传导给列表导致列表滑动。
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
             }
 
-            // 2. 后处理逻辑：主要处理【下拉展开课表】
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                // 只有在今日 Tab 才允许下拉
                 if (currentTab != 0) return Offset.Zero
 
-                // 检查列表是否完全在顶部
                 val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-
-                // 【关键修复】：consumed.y == 0f
-                // 这表示子View (LazyColumn) 在这一帧里没有消费任何滚动距离。
-                // 意味着列表已经“顶死”在顶部了，滑不动了。
-                // 如果不加这个检查，当列表从底部快速滑到顶部时，剩下的动量会立即触发课表展开。
-                // 加了这个检查，必须先停在顶部，再次下拉才能触发。
                 val isListStationary = consumed.y == 0f
 
                 if (available.y > 0 && isAtTop && isListStationary) {
-                    val newOffset = (offsetY.value + available.y * 0.5f).coerceAtMost(maxOffsetPx)
+                    val newOffset = (offsetY.value + available.y).coerceAtMost(maxOffsetPx)
                     scope.launch { offsetY.snapTo(newOffset) }
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
             }
 
-            // 3. 惯性拦截：防止手指抬起后的惯性导致列表滑动
+            // === 关键修改：分区域判断意图 ===
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // 如果课表开着（或者半开），拦截所有惯性
                 if (offsetY.value > 0f) {
-                    val target = if (available.y > 1000f) maxOffsetPx else 0f
-                    // 执行课表的归位动画
+                    val target = when {
+                        // 1. 速度优先 (降低阈值到 300f，轻轻一划就能触发)
+                        available.y > 300f -> maxOffsetPx // 快速下滑 -> 展开
+                        available.y < -300f -> 0f         // 快速上滑 -> 收起
+
+                        // 2. 慢速拖动时的位置判断
+                        // 分割线：屏幕中间
+                        offsetY.value < (maxOffsetPx / 2) -> {
+                            // 【上半区逻辑】：我们在尝试“打开”
+                            // 只要向下拉过的距离超过阈值，就去全开，否则回弹关闭
+                            if (offsetY.value > snapThresholdPx) maxOffsetPx else 0f
+                        }
+                        else -> {
+                            // 【下半区逻辑】：我们在尝试“关闭”
+                            // 只要向上推的距离超过阈值 (当前位置 < Max - Threshold)，就去关闭，否则回弹全开
+                            if (offsetY.value < (maxOffsetPx - snapThresholdPx)) 0f else maxOffsetPx
+                        }
+                    }
+
                     scope.launch {
                         offsetY.animateTo(
                             targetValue = target,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
                         )
                     }
-                    // 消耗所有速度，不让 LazyColumn 发生惯性滚动
                     return available
                 }
                 return Velocity.Zero
             }
 
-            // 4. 惯性后处理（原有逻辑保持，处理边缘情况）
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 if (offsetY.value > 0f) {
-                    // 逻辑同 onPreFling，双重保险
-                    val target = if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
-                    scope.launch { offsetY.animateTo(target, tween(300)) }
+                    // 同步 onPreFling 的逻辑，确保双重保险
+                    val target = if (offsetY.value < (maxOffsetPx / 2)) {
+                        if (offsetY.value > snapThresholdPx) maxOffsetPx else 0f
+                    } else {
+                        if (offsetY.value < (maxOffsetPx - snapThresholdPx)) 0f else maxOffsetPx
+                    }
+                    scope.launch { offsetY.animateTo(target) }
                     return available
                 }
                 return super.onPostFling(consumed, available)
@@ -221,6 +223,7 @@ fun HomePage(
             modifier = Modifier
                 .matchParentSize()
                 .padding(top = 50.dp)
+                // 处理在课表区域直接触摸滑动的逻辑
                 .draggable(
                     state = rememberDraggableState { delta ->
                         if (offsetY.value > 0) {
@@ -230,9 +233,18 @@ fun HomePage(
                     },
                     orientation = Orientation.Vertical,
                     onDragStopped = { velocity ->
-                        val target = if (velocity > 1000f) maxOffsetPx
-                        else if (velocity < -500f) 0f
-                        else if (offsetY.value > maxOffsetPx / 3f) maxOffsetPx else 0f
+                        // === 关键修改：Draggable 的松手逻辑同步 ===
+                        val target = when {
+                            velocity > 300f -> maxOffsetPx
+                            velocity < -300f -> 0f
+                            // 慢速松手判断：
+                            offsetY.value < (maxOffsetPx / 2) -> {
+                                if (offsetY.value > snapThresholdPx) maxOffsetPx else 0f
+                            }
+                            else -> {
+                                if (offsetY.value < (maxOffsetPx - snapThresholdPx)) 0f else maxOffsetPx
+                            }
+                        }
 
                         scope.launch {
                             offsetY.animateTo(target, spring(dampingRatio = Spring.DampingRatioMediumBouncy))

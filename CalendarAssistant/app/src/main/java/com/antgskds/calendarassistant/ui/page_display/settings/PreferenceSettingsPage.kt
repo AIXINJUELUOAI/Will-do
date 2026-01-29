@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -15,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
@@ -25,7 +23,6 @@ import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
-import java.util.Date
 
 @Composable
 fun PreferenceSettingsPage(
@@ -92,16 +89,6 @@ fun PreferenceSettingsPage(
 
     // 使用 float 状态来控制 Slider 的流畅滑动
     var delayMs by remember(settings.screenshotDelayMs) { mutableFloatStateOf(settings.screenshotDelayMs.toFloat()) }
-
-    // 格式化上次同步时间（使用系统格式化器，避免重复创建 SimpleDateFormat）
-    val lastSyncTimeText = remember(syncStatus.lastSyncTime) {
-        if (syncStatus.lastSyncTime > 0) {
-            DateFormat.getDateFormat(context).format(Date(syncStatus.lastSyncTime)) +
-            " " + android.text.format.DateFormat.getTimeFormat(context).format(Date(syncStatus.lastSyncTime))
-        } else {
-            "未同步"
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -194,59 +181,6 @@ fun PreferenceSettingsPage(
                 }
             )
 
-            // 显示同步状态
-            if (syncStatus.isEnabled) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, top = 4.dp, bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "上次同步: $lastSyncTimeText",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "已同步 ${syncStatus.mappedEventCount} 个事件",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // 手动同步按钮
-                    var isSyncing by remember { mutableStateOf(false) }
-                    Button(
-                        onClick = {
-                            if (!isSyncing) {
-                                scope.launch {
-                                    isSyncing = true
-                                    val result = viewModel.manualSync()
-                                    isSyncing = false
-                                    if (result.isSuccess) {
-                                        showToast("同步成功", ToastType.SUCCESS)
-                                    } else {
-                                        showToast("同步失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isSyncing,
-                        modifier = Modifier.padding(top = 8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(if (isSyncing) "同步中..." else "立即同步")
-                    }
-                }
-            }
         }
 
         SnackbarHost(

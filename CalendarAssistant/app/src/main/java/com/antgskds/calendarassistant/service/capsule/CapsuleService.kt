@@ -224,7 +224,8 @@ class CapsuleService : Service() {
             item.title,
             item.content,
             item.color,
-            item.type  // 传入 CapsuleItem 的 type 字段 (1=日程, 2=取件码)
+            item.type,  // 传入 CapsuleItem 的 type 字段 (1=日程, 2=取件码)
+            item.eventType  // 新增: 传入 eventType 字段
         )
 
         val metadata = CapsuleMetadata(
