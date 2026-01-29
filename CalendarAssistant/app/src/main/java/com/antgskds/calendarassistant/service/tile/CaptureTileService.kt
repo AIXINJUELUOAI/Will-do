@@ -86,7 +86,7 @@ class CaptureTileService : TileService() {
 
         // 使用 App 中定义的全局 Channel ID
         val notification = NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle("服务未开启")
             .setContentText("点击此处前往设置开启“无障碍服务”以使用识别功能")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

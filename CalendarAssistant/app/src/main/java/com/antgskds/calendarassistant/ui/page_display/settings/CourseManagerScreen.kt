@@ -27,6 +27,9 @@ fun CourseManagerScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
 
+    // 获取导航栏高度
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     // 根据 uiSize 计算 FAB 尺寸，与主页保持一致
     val fabSize = when (uiSize) {
         1 -> 56.dp  // 小
@@ -52,7 +55,13 @@ fun CourseManagerScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 80.dp), // 底部留出 FAB 空间
+                // 修改：contentPadding 加上导航栏高度，防止列表最后一项被 FAB 和 小白条 遮挡
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = 80.dp + bottomInset
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(displayCourses, key = { it.id }) { course ->
@@ -71,6 +80,7 @@ fun CourseManagerScreen(
             onClick = { courseToEdit = null; showEditDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
+                .navigationBarsPadding() // 修改：避让小白条
                 .padding(24.dp)
                 .size(fabSize),
             shape = CircleShape,

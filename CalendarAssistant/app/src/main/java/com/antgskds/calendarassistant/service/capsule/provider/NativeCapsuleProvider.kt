@@ -45,7 +45,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
             Notification.Builder(context)
         }
 
-        val icon = Icon.createWithResource(context, R.mipmap.ic_launcher_round)
+        val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
 
         builder.setSmallIcon(icon)
             .setContentTitle(collapsedTitle)

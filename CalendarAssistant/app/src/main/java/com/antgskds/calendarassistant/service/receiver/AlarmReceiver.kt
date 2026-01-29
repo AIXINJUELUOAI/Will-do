@@ -186,7 +186,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val channelId = App.CHANNEL_ID_POPUP
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(if(label.isNotEmpty()) "$label: $title" else "日程即将开始")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

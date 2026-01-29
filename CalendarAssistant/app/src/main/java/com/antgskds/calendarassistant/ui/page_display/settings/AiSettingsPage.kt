@@ -32,6 +32,9 @@ fun AiSettingsPage(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // 获取底部导航栏的高度，用于动态计算Padding
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     // 2. 使用 Box 填满全屏，作为根容器
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -40,7 +43,10 @@ fun AiSettingsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(16.dp)
+                // 修改：动态计算底部 padding，确保内容不被 Snackbar 和小白条遮挡
+                // 80.dp 是为了避让 Snackbar，bottomInset 是为了避让小白条
+                .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Card(
@@ -69,9 +75,6 @@ fun AiSettingsPage(
                     )
                 }
             }
-
-            // 底部增加一点留白，防止内容滚动到底部时被 Toast 遮挡（可选）
-            Spacer(modifier = Modifier.height(80.dp))
         }
 
         // 4. 将 SnackbarHost 放在最外层的 Box 底部
@@ -79,7 +82,8 @@ fun AiSettingsPage(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter) // 绝对对齐到屏幕底部
-                .padding(bottom = 32.dp),      // 距离屏幕底部的距离（这里控制高低）
+                .navigationBarsPadding()       // 修改：自动避让小白条
+                .padding(bottom = 16.dp),      // 视觉微调
             snackbar = { data ->
                 UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS)
             }

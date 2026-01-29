@@ -14,7 +14,9 @@
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git branch:*)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(git fetch:*)",
+      "Bash(grep:*)"
     ]
   }
 }

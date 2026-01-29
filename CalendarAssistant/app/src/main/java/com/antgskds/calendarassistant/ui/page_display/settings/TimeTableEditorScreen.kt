@@ -50,6 +50,9 @@ fun TimeTableEditorScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
+    // 获取底部导航栏高度
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     fun showToast(message: String, type: ToastType = ToastType.SUCCESS) {
         currentToastType = type
         scope.launch {
@@ -180,7 +183,13 @@ fun TimeTableEditorScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                // 修改：确保内容不被底部 Snackbar 和 小白条 遮挡 (80dp是预估Snackbar高度，bottomInset是小白条)
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = 80.dp + bottomInset
+                ),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 itemsIndexed(generatedNodes) { index, node ->
@@ -259,6 +268,7 @@ fun TimeTableEditorScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .navigationBarsPadding() // 修改：自动避让小白条
                 .padding(bottom = 32.dp),
             snackbar = { data ->
                 UniversalToast(message = data.visuals.message, type = currentToastType)

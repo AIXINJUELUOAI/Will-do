@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.data.model.Course
 import java.time.LocalDate
@@ -27,7 +28,6 @@ import java.time.temporal.ChronoUnit
 // === 依据技术文档定义的常量 ===
 private val HeaderHeight = 50.dp
 private val SidebarWidth = 35.dp
-private val NodeHeight = 64.dp
 
 @Composable
 fun ScheduleView(
@@ -54,7 +54,7 @@ fun ScheduleView(
         }
     }
 
-    // 2. 计算“系统今天”是第几周
+    // 2. 计算"系统今天"是第几周
     val systemCurrentWeek = remember(semesterStart) {
         // 修复：使用 isNullOrBlank() 安全判断
         if (semesterStartDateStr.isNullOrBlank()) {
@@ -120,33 +120,42 @@ fun ScheduleView(
         WeekHeaderRow(viewingWeekMonday, today)
 
         // 滚动网格区域
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
         ) {
-            // 左侧节次
-            SidebarColumn(maxNodes)
+            val availableHeight = maxHeight
+            val dynamicNodeHeight = availableHeight / maxNodes
 
-            // 右侧绝对定位网格
-            BoxWithConstraints(
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(NodeHeight * maxNodes)
+                    .fillMaxWidth()
+                    .height(dynamicNodeHeight * maxNodes)
+                    .verticalScroll(rememberScrollState())
             ) {
-                val colWidth = maxWidth / 7
+                // 左侧节次
+                SidebarColumn(maxNodes, dynamicNodeHeight)
 
-                // 绘制背景参考线 (可选)
-                // ...
+                // 右侧绝对定位网格
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    val colWidth = this@BoxWithConstraints.maxWidth / 7
 
-                // 渲染课程卡片
-                displayCourses.forEach { course ->
-                    CourseCard(
-                        course = course,
-                        viewingWeekMonday = viewingWeekMonday,  // 新增：传入周以便计算日期
-                        colWidthDp = colWidth,
-                        onCourseClick = onCourseClick
-                    )
+                    // 绘制背景参考线 (可选)
+                    // ...
+
+                    // 渲染课程卡片
+                    displayCourses.forEach { course ->
+                        CourseCard(
+                            course = course,
+                            viewingWeekMonday = viewingWeekMonday,
+                            colWidthDp = colWidth,
+                            nodeHeight = dynamicNodeHeight,
+                            onCourseClick = onCourseClick
+                        )
+                    }
                 }
             }
         }
@@ -243,18 +252,18 @@ private fun WeekHeaderRow(monday: LocalDate, today: LocalDate) {
 }
 
 @Composable
-private fun SidebarColumn(maxNodes: Int) {
+private fun SidebarColumn(maxNodes: Int, nodeHeight: Dp) {
     Column(
         modifier = Modifier
             .width(SidebarWidth)
-            .height(NodeHeight * maxNodes)
+            .height(nodeHeight * maxNodes)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         for (i in 1..maxNodes) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(NodeHeight),
+                    .height(nodeHeight),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -271,7 +280,8 @@ private fun SidebarColumn(maxNodes: Int) {
 private fun CourseCard(
     course: Course,
     viewingWeekMonday: LocalDate,  // 新增：当前查看周的周一
-    colWidthDp: androidx.compose.ui.unit.Dp,
+    colWidthDp: Dp,
+    nodeHeight: Dp,
     onCourseClick: (Course, LocalDate) -> Unit
 ) {
     // 计算该课程在本周的具体日期
@@ -279,9 +289,9 @@ private fun CourseCard(
 
     // 依据文档实现的定位逻辑
     val xOffset = colWidthDp * (course.dayOfWeek - 1)
-    val yOffset = NodeHeight * (course.startNode - 1)
+    val yOffset = nodeHeight * (course.startNode - 1)
     val span = (course.endNode - course.startNode + 1)
-    val height = NodeHeight * span - 4.dp // 留出视觉间隙
+    val height = nodeHeight * span - 4.dp // 留出视觉间隙
 
     Card(
         modifier = Modifier

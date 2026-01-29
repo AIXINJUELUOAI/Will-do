@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import kotlinx.coroutines.CoroutineScope
@@ -75,7 +76,7 @@ class DailySummaryReceiver : BroadcastReceiver() {
         )
 
         val builder = NotificationCompat.Builder(context, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm) // TODO: 替换为您的 App 图标资源
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(content)
             .setStyle(NotificationCompat.BigTextStyle().bigText(content))
