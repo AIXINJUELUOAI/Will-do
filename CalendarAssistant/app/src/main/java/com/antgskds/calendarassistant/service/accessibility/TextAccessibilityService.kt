@@ -263,7 +263,7 @@ class TextAccessibilityService : AccessibilityService() {
                     endTime = endDateTime.format(timeFormatter),
                     location = aiEvent.location,
                     description = aiEvent.description,
-                    color = com.antgskds.calendarassistant.ui.theme.AppEventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.AppEventColors.size],
+                    color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.EventColors.size],
                     sourceImagePath = imagePath,
                     eventType = finalEventType
                 )
@@ -323,7 +323,7 @@ class TextAccessibilityService : AccessibilityService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val builder = NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(content)
             .setAutoCancel(true)

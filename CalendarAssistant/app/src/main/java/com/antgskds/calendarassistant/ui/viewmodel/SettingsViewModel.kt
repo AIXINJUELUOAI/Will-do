@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import com.antgskds.calendarassistant.core.importer.ImportMode
+import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,6 +135,25 @@ class SettingsViewModel(
 
     fun getCoursesCount(): Int = repository.getCoursesCount()
     fun getEventsCount(): Int = repository.getEventsCount()
+
+    /**
+     * 导入外部课表文件（WakeUp 格式）
+     * @param content 文件内容
+     * @param mode 导入模式（追加/覆盖）
+     * @param importSettings 是否导入设置（开学日期、总周数）
+     * @param callback 导入完成回调，返回成功导入的课程数量
+     */
+    fun importWakeUpFile(
+        content: String,
+        mode: ImportMode,
+        importSettings: Boolean,
+        callback: suspend (Result<Int>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.importWakeUpFile(content, mode, importSettings)
+            callback(result)
+        }
+    }
 
     // ==================== 日历同步相关 ====================
 

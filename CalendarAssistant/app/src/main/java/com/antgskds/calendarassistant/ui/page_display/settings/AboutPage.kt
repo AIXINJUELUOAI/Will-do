@@ -80,6 +80,9 @@ fun AboutPage() {
 
         // 底部留白
         Spacer(modifier = Modifier.height(24.dp))
+
+        // --- 修改：增加导航栏适配，防止小白条遮挡最后的内容 ---
+        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
