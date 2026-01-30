@@ -1,18 +1,34 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -23,82 +39,125 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiSettingsPage(
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
     val scrollState = rememberScrollState()
-
-    // 1. 状态提升：在最外层管理 Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // 获取底部导航栏的高度，用于动态计算Padding
+    var modelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
+    var modelName by remember(settings) { mutableStateOf(settings.modelName) }
+    var modelKey by remember(settings) { mutableStateOf(settings.modelKey) }
+
+    val fabSize = when (uiSize) { 1 -> 56.dp; 2 -> 64.dp; else -> 72.dp }
+    val fabIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
+
+    // --- 样式定义优化 (Material 3) ---
+    // 板块标题：加粗 + 主色
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary
+    )
+    // 卡片标题：中等字重 + 黑色 (OnSurface)
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+    // 右侧数值/只读状态：常规字重 + 灰色 (OnSurfaceVariant)
+    val cardValueStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    // 副标题/提示：Grey + Transparent
+    val cardSubtitleStyle = MaterialTheme.typography.bodySmall.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    )
+    val contentBodyStyle = MaterialTheme.typography.bodyMedium
+
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val focusManager = LocalFocusManager.current
 
-    // 2. 使用 Box 填满全屏，作为根容器
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        // 内容区域（可滚动）
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) { focusManager.clearFocus() }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(16.dp)
-                // 修改：动态计算底部 padding，确保内容不被 Snackbar 和小白条遮挡
-                // 80.dp 是为了避让 Snackbar，bottomInset 是为了避让小白条
-                .padding(bottom = 80.dp + bottomInset),
+                .padding(bottom = 120.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("模型配置", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "配置用于自然语言解析和OCR识别的 AI 模型。推荐使用 DeepSeek 或 OpenAI。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            // 参数配置板块标题
+            Text("参数配置", style = sectionTitleStyle)
 
-            // 3. 传入回调函数：当表单保存时，通知外层显示 Snackbar
-            AiConfigForm(settings) { key, name, url ->
-                viewModel.updateAiSettings(key, name, url)
-
-                scope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(
-                        message = "配置保存成功",
-                        duration = SnackbarDuration.Short
-                    )
-                }
-            }
+            AiConfigForm(
+                initialUrl = modelUrl,
+                initialName = modelName,
+                initialKey = modelKey,
+                onUrlChange = { modelUrl = it },
+                onNameChange = { modelName = it },
+                onKeyChange = { modelKey = it },
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                contentBodyStyle = contentBodyStyle
+            )
         }
 
-        // 4. 将 SnackbarHost 放在最外层的 Box 底部
+        FloatingActionButton(
+            onClick = {
+                viewModel.updateAiSettings(modelKey.trim(), modelName.trim(), modelUrl.trim())
+                scope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(message = "配置保存成功", duration = SnackbarDuration.Short)
+                }
+            },
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 32.dp)
+                .navigationBarsPadding()
+                .size(fabSize)
+        ) {
+            Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(fabIconSize))
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
-                .align(Alignment.BottomCenter) // 绝对对齐到屏幕底部
-                .navigationBarsPadding()       // 修改：自动避让小白条
-                .padding(bottom = 16.dp),      // 视觉微调
-            snackbar = { data ->
-                UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS)
-            }
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            snackbar = { data -> UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS) }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AiConfigForm(
-    settings: MySettings,
-    onSaveAndShowMessage: (String, String, String) -> Unit // 修改回调签名
+    initialUrl: String,
+    initialName: String,
+    initialKey: String,
+    onUrlChange: (String) -> Unit,
+    onNameChange: (String) -> Unit,
+    onKeyChange: (String) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardValueStyle: TextStyle, // 传入的是灰色的样式
+    cardSubtitleStyle: TextStyle,
+    contentBodyStyle: TextStyle
 ) {
-    val currentUrl = settings.modelUrl
-    val currentModel = settings.modelName
+    val currentUrl = initialUrl
+    val currentModel = initialName
 
     val initialProvider = when {
         currentUrl.contains("deepseek") -> "DeepSeek"
@@ -109,92 +168,272 @@ private fun AiConfigForm(
     }
 
     var selectedProvider by remember { mutableStateOf(initialProvider) }
-    var expandedProvider by remember { mutableStateOf(false) }
-    var expandedModel by remember { mutableStateOf(false) }
+    var isProviderExpanded by remember { mutableStateOf(initialKey.isBlank()) }
+    var isModelExpanded by remember { mutableStateOf(initialKey.isBlank()) }
 
-    var modelUrl by remember { mutableStateOf(settings.modelUrl) }
-    var modelName by remember { mutableStateOf(settings.modelName) }
-    var modelKey by remember { mutableStateOf(settings.modelKey) }
-
-    LaunchedEffect(selectedProvider) {
-        if (selectedProvider != "自定义") {
-            modelUrl = when (selectedProvider) {
-                "DeepSeek" -> "https://api.deepseek.com/chat/completions"
-                "OpenAI" -> "https://api.openai.com/v1/chat/completions"
-                "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-                else -> ""
-            }
+    LaunchedEffect(initialKey) {
+        if (initialKey.isBlank()) {
+            isProviderExpanded = true
+            isModelExpanded = true
         }
     }
 
-    // 这里不需要 Box 和 SnackbarHost 了，只保留表单列
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ExposedDropdownMenuBox(
-            expanded = expandedProvider,
-            onExpandedChange = { expandedProvider = !expandedProvider }
-        ) {
-            OutlinedTextField(
-                value = selectedProvider,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("服务提供商") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedProvider) },
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedProvider,
-                onDismissRequest = { expandedProvider = false }
-            ) {
-                listOf("DeepSeek", "OpenAI", "Gemini", "自定义").forEach { item ->
-                    DropdownMenuItem(text = { Text(item) }, onClick = { selectedProvider = item; expandedProvider = false })
+    LaunchedEffect(selectedProvider) {
+        if (selectedProvider != "自定义") {
+            onUrlChange(
+                when (selectedProvider) {
+                    "DeepSeek" -> "https://api.deepseek.com/chat/completions"
+                    "OpenAI" -> "https://api.openai.com/v1/chat/completions"
+                    "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+                    else -> ""
                 }
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            // 1. 服务提供商
+            ExpandableSelectionItem(
+                title = "服务提供商",
+                currentValue = selectedProvider,
+                isExpanded = isProviderExpanded,
+                onToggle = { isProviderExpanded = !isProviderExpanded },
+                options = listOf("DeepSeek", "OpenAI", "Gemini", "自定义"),
+                onOptionSelected = {
+                    selectedProvider = it
+                    isProviderExpanded = false
+                },
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle // 灰色显示
+            )
+
+            MyDivider()
+
+            // 2. 模型名称
+            if (selectedProvider != "自定义") {
+                val models = when(selectedProvider) {
+                    "DeepSeek" -> listOf("deepseek-chat", "deepseek-coder", "deepseek-reasoner")
+                    "OpenAI" -> listOf("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo")
+                    "Gemini" -> listOf("gemini-1.5-flash", "gemini-1.5-pro")
+                    else -> emptyList()
+                }
+
+                ExpandableSelectionItem(
+                    title = "模型名称",
+                    currentValue = initialName.ifBlank { "请选择模型" },
+                    isExpanded = isModelExpanded,
+                    onToggle = { isModelExpanded = !isModelExpanded },
+                    options = models,
+                    onOptionSelected = {
+                        onNameChange(it)
+                        isModelExpanded = false
+                        if (selectedProvider == "Gemini") {
+                            onUrlChange("https://generativelanguage.googleapis.com/v1beta/models/$it:generateContent")
+                        }
+                    },
+                    cardTitleStyle = cardTitleStyle,
+                    cardValueStyle = cardValueStyle
+                )
+            } else {
+                TextInputItem(
+                    title = "模型名称",
+                    value = initialName,
+                    onValueChange = onNameChange,
+                    placeholder = "输入模型名称",
+                    cardTitleStyle = cardTitleStyle,
+                    cardValueStyle = cardValueStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+            }
+
+            MyDivider()
+
+            // 3. API Key
+            TextInputItem(
+                title = "API Key",
+                value = initialKey,
+                onValueChange = onKeyChange,
+                placeholder = "点击输入 Key",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle
+            )
+
+            MyDivider()
+
+            // 4. API Endpoint
+            TextInputItem(
+                title = "API 地址",
+                value = initialUrl,
+                onValueChange = onUrlChange,
+                readOnly = selectedProvider != "自定义",
+                placeholder = "API 请求地址",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle
+            )
+        }
+    }
+}
+
+@Composable
+private fun MyDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
+}
+
+@Composable
+private fun ExpandableSelectionItem(
+    title: String,
+    currentValue: String,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    options: List<String>,
+    onOptionSelected: (String) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardValueStyle: TextStyle
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                style = cardTitleStyle
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = currentValue,
+                    // 右侧显示当前值：如果是展开状态，稍微高亮一下（Primary），否则用灰色（cardValueStyle）
+                    style = cardValueStyle,
+                    color = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
-        if (selectedProvider != "自定义") {
-            val models = when(selectedProvider) {
-                "DeepSeek" -> listOf("deepseek-chat", "deepseek-coder", "deepseek-reasoner")
-                "OpenAI" -> listOf("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo")
-                "Gemini" -> listOf("gemini-1.5-flash", "gemini-1.5-pro")
-                else -> emptyList()
-            }
-            ExposedDropdownMenuBox(
-                expanded = expandedModel,
-                onExpandedChange = { expandedModel = !expandedModel }
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
             ) {
-                OutlinedTextField(
-                    value = modelName,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("模型名称") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedModel) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-                ExposedDropdownMenu(expanded = expandedModel, onDismissRequest = { expandedModel = false }) {
-                    models.forEach { item ->
-                        DropdownMenuItem(text = { Text(item) }, onClick = {
-                            modelName = item; expandedModel = false
-                            if (selectedProvider == "Gemini") modelUrl = "https://generativelanguage.googleapis.com/v1beta/models/$item:generateContent"
-                        })
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOptionSelected(option) }
+                            .height(48.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = option,
+                            fontWeight = if (option == currentValue) FontWeight.Bold else FontWeight.Normal,
+                            color = if (option == currentValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            style = cardValueStyle
+                        )
                     }
                 }
-            }
-        } else {
-            OutlinedTextField(value = modelName, onValueChange = { modelName = it }, label = { Text("Model Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        }
-
-        OutlinedTextField(value = modelKey, onValueChange = { modelKey = it }, label = { Text("API Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = modelUrl, onValueChange = { modelUrl = it }, label = { Text("API Endpoint URL") }, readOnly = selectedProvider != "自定义", modifier = Modifier.fillMaxWidth(), singleLine = true)
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Button(onClick = {
-                // 触发外层的回调
-                onSaveAndShowMessage(modelKey.trim(), modelName.trim(), modelUrl.trim())
-            }) {
-                Text("保存配置")
             }
         }
     }
 }
 
+@Composable
+private fun TextInputItem(
+    title: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = "",
+    readOnly: Boolean = false,
+    cardTitleStyle: TextStyle,
+    cardValueStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val isPasswordField = title == "API Key"
+    val visualTransformation = if (isPasswordField && !isFocused && value.isNotEmpty()) {
+        PasswordVisualTransformation()
+    } else {
+        VisualTransformation.None
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = cardTitleStyle,
+            modifier = Modifier.width(100.dp)
+        )
+
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    text = placeholder,
+                    style = cardSubtitleStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                readOnly = readOnly,
+                textStyle = cardValueStyle.copy(
+                    // 输入框内的文字颜色：
+                    // 如果只读 -> 灰色 (OnSurface.alpha(0.5) 或者 OnSurfaceVariant)
+                    // 如果可编辑 -> 黑色 (OnSurface)，保证输入时看得清。虽然你说右侧要灰，但这里是输入框，黑色更合适。
+                    color = if (readOnly) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.End
+                ),
+                visualTransformation = visualTransformation,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState -> isFocused = focusState.isFocused }
+            )
+        }
+    }
+}
