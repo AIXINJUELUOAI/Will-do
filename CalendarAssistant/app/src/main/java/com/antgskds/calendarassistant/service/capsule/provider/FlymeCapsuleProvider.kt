@@ -50,7 +50,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         )
 
         // 2. 准备图标 (Flyme 要求白色 Bitmap)
-        var iconDrawable: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_qs_recognition)
+        var iconDrawable: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_notification_small)
         if (iconDrawable == null) iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
 
         val rawBitmap = iconDrawable?.let { CapsuleUiUtils.drawableToBitmap(it) }

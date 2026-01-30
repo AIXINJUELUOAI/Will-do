@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
@@ -53,7 +54,21 @@ fun AllEventsPage(
                             event.location.contains(searchQuery, ignoreCase = true)
                 }
                 categoryMatch && searchMatch
-            }.sortedByDescending { it.startDate }
+            }.sortedWith(compareBy(
+                // 优先级排序：未过期重要(0) > 未过期(1) > 已过期重要(2) > 已过期(3)
+                { event ->
+                    val isExpired = DateCalculator.isEventExpired(event)
+                    val isImportant = event.isImportant
+                    when {
+                        !isExpired && isImportant -> 0
+                        !isExpired && !isImportant -> 1
+                        isExpired && isImportant -> 2
+                        else -> 3
+                    }
+                },
+                // 同优先级内按开始日期降序（最近的在前）
+                { event -> -event.startDate.toEpochDay() }
+            ))
         }
     }
 
