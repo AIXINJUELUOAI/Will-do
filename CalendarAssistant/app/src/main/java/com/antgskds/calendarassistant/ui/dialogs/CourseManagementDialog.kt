@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,6 +34,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
+import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -46,7 +47,6 @@ import kotlin.math.roundToInt
  * 1. 课程编辑/添加弹窗 (完整版)
  * 包含名称、地点、老师、周次、节次、颜色等
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CourseEditDialog(
     course: Course?,
@@ -62,7 +62,7 @@ fun CourseEditDialog(
     var startWeek by remember { mutableIntStateOf(course?.startWeek ?: 1) }
     var endWeek by remember { mutableIntStateOf(course?.endWeek ?: 18) }
     var weekType by remember { mutableIntStateOf(course?.weekType ?: 0) }
-    var color by remember { mutableStateOf(course?.color ?: Color(0xFF6200EE)) }
+    var color by remember { mutableStateOf(course?.color ?: getRandomEventColor()) }
 
     var showDayPicker by remember { mutableStateOf(false) }
     var showNodeRangePicker by remember { mutableStateOf(false) }
@@ -70,13 +70,6 @@ fun CourseEditDialog(
     var showWeekTypePicker by remember { mutableStateOf(false) }
 
     val weekTypeOptions = listOf("每周", "单周", "双周")
-    val colors = listOf(
-        Color(0xFFF44336), Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF673AB7),
-        Color(0xFF3F51B5), Color(0xFF2196F3), Color(0xFF03A9F4), Color(0xFF00BCD4),
-        Color(0xFF009688), Color(0xFF4CAF50), Color(0xFF8BC34A), Color(0xFFCDDC39),
-        Color(0xFFFFEB3B), Color(0xFFFFC107), Color(0xFFFF9800), Color(0xFFFF5722),
-        Color(0xFF795548), Color(0xFF9E9E9E), Color(0xFF607D8B), Color(0xFF000000)
-    )
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(
@@ -110,15 +103,7 @@ fun CourseEditDialog(
                         ButtonSelector(weekTypeOptions.getOrElse(weekType){""}, Modifier.weight(1f)) { showWeekTypePicker = true }
                     }
 
-                    HorizontalDivider()
-                    Text("颜色标签", style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        colors.forEach { c ->
-                            Box(modifier = Modifier.size(32.dp).background(c, CircleShape).clickable { color = c }.padding(4.dp)) {
-                                if (color == c) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.align(Alignment.Center))
-                            }
-                        }
-                    }
+                    //HorizontalDivider()
                     Spacer(Modifier.height(16.dp))
                 }
 

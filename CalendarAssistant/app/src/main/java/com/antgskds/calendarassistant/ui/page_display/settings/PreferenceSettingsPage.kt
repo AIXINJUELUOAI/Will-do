@@ -9,12 +9,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
@@ -26,7 +29,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun PreferenceSettingsPage(
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
@@ -35,9 +39,28 @@ fun PreferenceSettingsPage(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
-
-    // 获取底部导航栏高度
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    // --- 字体样式优化 ---
+    // 板块标题：Primary + ExtraBold
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary
+    )
+    // 列表项标题：OnSurface + Medium
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+    // 副标题：Grey + Transparent
+    val cardSubtitleStyle = MaterialTheme.typography.bodySmall.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    )
+    // 右侧数值：Grey + Normal (不抢眼)
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     // 日历权限请求
     var showPermissionDialog by remember { mutableStateOf(false) }
@@ -49,14 +72,10 @@ fun PreferenceSettingsPage(
             scope.launch {
                 viewModel.toggleCalendarSync(true)
                 viewModel.manualSync()
-
-                // 立即初始化观察者，无需重启
                 (context.applicationContext as? App)?.initCalendarObserver()
-
                 snackbarHostState.showSnackbar("日历同步已开启")
             }
         } else {
-            // 权限被拒绝，显示带 "去设置" 的 Snackbar
             scope.launch {
                 val result = snackbarHostState.showSnackbar(
                     message = "需要日历权限才能使用同步功能",
@@ -64,14 +83,12 @@ fun PreferenceSettingsPage(
                     duration = SnackbarDuration.Long
                 )
                 if (result == SnackbarResult.ActionPerformed) {
-                    // 跳转到应用设置页面
                     try {
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", context.packageName, null)
                         }
                         context.startActivity(intent)
                     } catch (e: Exception) {
-                        // 降级：跳转到系统设置页面
                         context.startActivity(Intent(Settings.ACTION_SETTINGS))
                     }
                 }
@@ -87,164 +104,195 @@ fun PreferenceSettingsPage(
         }
     }
 
-    // 使用 float 状态来控制 Slider 的流畅滑动
-    var delayMs by remember(settings.screenshotDelayMs) { mutableFloatStateOf(settings.screenshotDelayMs.toFloat()) }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(16.dp)
-                // 修改：确保内容不被底部 Snackbar 和 小白条 遮挡
                 .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("显示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            SliderSettingItem(
-                title = "界面大小",
-                subtitle = "调整字体大小",
-                value = settings.uiSize.toFloat(),
-                onValueChange = { viewModel.updateUiSize(it.toInt()) },
-                valueRange = 1f..3f,
-                steps = 1
-            )
-            SwitchSettingItem(
-                title = "显示明日日程",
-                subtitle = "在今日日程列表底部预览明日安排",
-                checked = settings.showTomorrowEvents,
-                onCheckedChange = { viewModel.updatePreference(showTomorrow = it) }
-            )
-
-            HorizontalDivider()
-            Text("通知", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            SwitchSettingItem(
-                title = "每日日程提醒",
-                subtitle = "早06:00和晚22:00推送汇总",
-                checked = settings.isDailySummaryEnabled,
-                onCheckedChange = { isChecked ->
-                    viewModel.updatePreference(dailySummary = isChecked)
-                    if (isChecked) DailySummaryReceiver.schedule(context)
+            // 显示板块
+            Text("显示", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SliderSettingItem(
+                        title = "界面大小",
+                        subtitle = "调整字体大小",
+                        value = settings.uiSize.toFloat(),
+                        onValueChange = { viewModel.updateUiSize(it.toInt()) },
+                        valueRange = 1f..3f,
+                        steps = 1,
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SwitchSettingItem(
+                        title = "显示明日日程",
+                        subtitle = "在今日日程列表底部预览明日安排",
+                        checked = settings.showTomorrowEvents,
+                        onCheckedChange = { viewModel.updatePreference(showTomorrow = it) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
                 }
-            )
-            SwitchSettingItem(
-                title = "实况胶囊通知 (Beta)",
-                subtitle = "日程开始前显示灵动岛/胶囊",
-                checked = settings.isLiveCapsuleEnabled,
-                onCheckedChange = { isChecked ->
-                    viewModel.updatePreference(liveCapsule = isChecked)
-                    if (isChecked) showToast("请确保已开启无障碍权限", ToastType.INFO)
-                }
-            )
-
-            // 只有当开启实况胶囊时，才显示聚合开关
-            if (settings.isLiveCapsuleEnabled) {
-                SwitchSettingItem(
-                    title = "取件码聚合 (Beta)",
-                    subtitle = "当有多个取件码时合并显示为一个胶囊",
-                    checked = settings.isPickupAggregationEnabled,
-                    onCheckedChange = { isChecked ->
-                        viewModel.updatePreference(pickupAggregation = isChecked)
-                    }
-                )
             }
 
-            // ==================== 日历同步 ====================
-            HorizontalDivider()
-            Text("同步", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            // 通知板块
+            Text("通知", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "每日日程提醒",
+                        subtitle = "早06:00和晚22:00推送汇总",
+                        checked = settings.isDailySummaryEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(dailySummary = isChecked)
+                            if (isChecked) DailySummaryReceiver.schedule(context)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SwitchSettingItem(
+                        title = "实况胶囊通知 (Beta)",
+                        subtitle = "日程开始前显示灵动岛/胶囊",
+                        checked = settings.isLiveCapsuleEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(liveCapsule = isChecked)
+                            if (isChecked) showToast("请确保已开启无障碍权限", ToastType.INFO)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
 
-            SwitchSettingItem(
-                title = "日历同步",
-                subtitle = "将课程和日程同步到系统日历",
-                checked = syncStatus.isEnabled,
-                onCheckedChange = { isChecked ->
-                    if (isChecked) {
-                        // 检查权限
-                        if (CalendarPermissionHelper.hasAllPermissions(context)) {
-                            scope.launch {
-                                viewModel.toggleCalendarSync(true)
-                                viewModel.manualSync()
-
-                                // 确保观察者已启动（App.kt 中有防重复检查，所以这里调用是安全的）
-                                (context.applicationContext as? App)?.initCalendarObserver()
-
-                                showToast("日历同步已开启")
-                            }
-                        } else {
-                            // 显示权限说明对话框
-                            showPermissionDialog = true
-                        }
-                    } else {
-                        viewModel.toggleCalendarSync(false)
-                        showToast("日历同步已关闭")
+                    if (settings.isLiveCapsuleEnabled) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SwitchSettingItem(
+                            title = "取件码聚合 (Beta)",
+                            subtitle = "当有多个取件码时合并显示为一个胶囊",
+                            checked = settings.isPickupAggregationEnabled,
+                            onCheckedChange = { isChecked ->
+                                viewModel.updatePreference(pickupAggregation = isChecked)
+                            },
+                            cardTitleStyle = cardTitleStyle,
+                            cardSubtitleStyle = cardSubtitleStyle
+                        )
                     }
                 }
-            )
+            }
 
+            // 同步板块
+            Text("同步", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "日历同步",
+                        subtitle = "将课程和日程同步到系统日历",
+                        checked = syncStatus.isEnabled,
+                        onCheckedChange = { isChecked ->
+                            if (isChecked) {
+                                if (CalendarPermissionHelper.hasAllPermissions(context)) {
+                                    scope.launch {
+                                        viewModel.toggleCalendarSync(true)
+                                        viewModel.manualSync()
+                                        (context.applicationContext as? App)?.initCalendarObserver()
+                                        showToast("日历同步已开启")
+                                    }
+                                } else {
+                                    showPermissionDialog = true
+                                }
+                            } else {
+                                viewModel.toggleCalendarSync(false)
+                                showToast("日历同步已关闭")
+                            }
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                }
+            }
         }
 
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding() // 修改：避让小白条
+                .navigationBarsPadding()
                 .padding(bottom = 32.dp),
-            snackbar = { data ->
-                UniversalToast(message = data.visuals.message, type = currentToastType)
-            }
+            snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }
 
-    // 权限请求对话框
     if (showPermissionDialog) {
         AlertDialog(
             onDismissRequest = { showPermissionDialog = false },
             title = { Text("需要日历权限") },
-            text = {
-                Text("为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。")
-            },
+            text = { Text("为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showPermissionDialog = false
-                        // 请求日历权限
                         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            arrayOf(
-                                Manifest.permission.READ_CALENDAR,
-                                Manifest.permission.WRITE_CALENDAR
-                            )
-                        } else {
-                            emptyArray()
-                        }
+                            arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
+                        } else { emptyArray() }
                         calendarPermissionLauncher.launch(permissions)
                     }
-                ) {
-                    Text("授予权限")
-                }
+                ) { Text("授予权限") }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) {
-                    Text("取消")
-                }
+                TextButton(onClick = { showPermissionDialog = false }) { Text("取消") }
             }
         )
     }
 }
 
 @Composable
-fun SwitchSettingItem(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun SwitchSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(title, style = cardTitleStyle)
+            Text(subtitle, style = cardSubtitleStyle)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -257,27 +305,25 @@ fun SliderSettingItem(
     value: Float,
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int
+    steps: Int,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle
 ) {
     val sizeLabels = mapOf(1f to "小", 2f to "中", 3f to "大")
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(title, style = cardTitleStyle)
+                Text(subtitle, style = cardSubtitleStyle)
             }
             Text(
                 text = sizeLabels[value] ?: "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
+                style = cardValueStyle // 灰色
             )
         }
         Slider(

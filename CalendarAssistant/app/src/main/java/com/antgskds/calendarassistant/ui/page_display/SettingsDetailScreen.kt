@@ -34,7 +34,7 @@ fun SettingsDetailScreen(
     val titleText = when {
         destinationStr == "course_manager" -> "课程管理"
         destinationStr == "timetable_editor" -> "作息时间"
-        destination == SettingsDestination.AI -> "AI 智能配置"
+        destination == SettingsDestination.AI -> "模型配置"
         destination == SettingsDestination.Schedule -> "课表设置"
         destination == SettingsDestination.CourseManage -> "课表管理"
         destination == SettingsDestination.TimeTableManage -> "作息表管理"
@@ -74,21 +74,23 @@ fun SettingsDetailScreen(
         ) {
             when {
                 destinationStr == "course_manager" -> CourseManagerScreen(mainViewModel, uiSize)
-                destinationStr == "timetable_editor" -> TimeTableEditorScreen(settingsViewModel)
-                destination == SettingsDestination.AI -> AiSettingsPage(settingsViewModel)
+                destinationStr == "timetable_editor" -> TimeTableEditorScreen(settingsViewModel, uiSize)
+                destination == SettingsDestination.AI -> AiSettingsPage(settingsViewModel, uiSize)
                 destination == SettingsDestination.Schedule -> ScheduleSettingsPage(
                     viewModel = settingsViewModel,
-                    onNavigateTo = onNavigateTo
+                    onNavigateTo = onNavigateTo,
+                    uiSize = uiSize
                 )
                 destination == SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
-                destination == SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel)
+                destination == SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
                 destination == SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
                     viewModel = settingsViewModel,
-                    onNavigateTo = onNavigateTo
+                    onNavigateTo = onNavigateTo,
+                    uiSize = uiSize
                 )
-                destination == SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel)
-                destination == SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel)
-                destination == SettingsDestination.About -> AboutPage()
+                destination == SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
+                destination == SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, uiSize)
+                destination == SettingsDestination.About -> AboutPage(uiSize)
             }
         }
     }
