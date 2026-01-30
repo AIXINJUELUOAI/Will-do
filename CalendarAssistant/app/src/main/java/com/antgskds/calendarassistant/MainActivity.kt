@@ -156,7 +156,12 @@ class MainActivity : ComponentActivity() {
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             onNavigateToSettings = { destination ->
-                                navController.navigate("settings/${destination.name}")
+                                // 处理退出登录操作
+                                if (destination == SettingsDestination.Logout) {
+                                    finish()
+                                } else {
+                                    navController.navigate("settings/${destination.name}")
+                                }
                             }
                         )
                     }
