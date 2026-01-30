@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -42,13 +43,39 @@ class MainViewModel(
 
         val todayNormal = events.filter { it.startDate == date }
         val todayCourses = CourseManager.getDailyCourses(date, courses, settings)
-        val todayMerged = (todayNormal + todayCourses).sortedBy { it.startTime }
+        val todayMerged = (todayNormal + todayCourses).sortedWith(compareBy(
+            // 优先级排序：未过期重要 > 未过期 > 已过期重要 > 已过期
+            { event ->
+                val isExpired = DateCalculator.isEventExpired(event)
+                val isImportant = event.isImportant
+                when {
+                    !isExpired && isImportant -> 0
+                    !isExpired && !isImportant -> 1
+                    isExpired && isImportant -> 2
+                    else -> 3
+                }
+            },
+            // 同优先级内按开始时间排序
+            { it.startTime }
+        ))
 
         val tomorrowMerged = if (settings.showTomorrowEvents) {
             val tomorrow = date.plusDays(1)
             val tomorrowNormal = events.filter { it.startDate == tomorrow }
             val tomorrowCourses = CourseManager.getDailyCourses(tomorrow, courses, settings)
-            (tomorrowNormal + tomorrowCourses).sortedBy { it.startTime }
+            (tomorrowNormal + tomorrowCourses).sortedWith(compareBy(
+                { event ->
+                    val isExpired = DateCalculator.isEventExpired(event)
+                    val isImportant = event.isImportant
+                    when {
+                        !isExpired && isImportant -> 0
+                        !isExpired && !isImportant -> 1
+                        isExpired && isImportant -> 2
+                        else -> 3
+                    }
+                },
+                { it.startTime }
+            ))
         } else { emptyList() }
 
         MainUiState(
