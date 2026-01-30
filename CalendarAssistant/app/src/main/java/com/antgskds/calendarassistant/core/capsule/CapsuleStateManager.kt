@@ -234,7 +234,7 @@ class CapsuleStateManager(
                     type = CapsuleService.TYPE_PICKUP,
                     eventType = event.eventType,  // 新增: 传递 eventType
                     title = event.title,
-                    content = "取件码: ${event.description}",
+                    content = "备注: ${event.description}",
                     color = android.graphics.Color.GREEN,
                     startMillis = System.currentTimeMillis(),
                     endMillis = toMillis(event, event.endTime)

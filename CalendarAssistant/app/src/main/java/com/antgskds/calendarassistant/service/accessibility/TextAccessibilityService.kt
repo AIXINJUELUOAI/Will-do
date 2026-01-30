@@ -170,7 +170,7 @@ class TextAccessibilityService : AccessibilityService() {
                         val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
                         val content = if (count == 1) {
                             val e = addedEvents.first()
-                            if (e.eventType == "temp") "取件码: ${e.description}" else "${e.title} (${e.startTime})"
+                            if (e.eventType == "temp") "取件码: ${e.title}" else " ${e.description}(${e.startTime})"
                         } else {
                             addedEvents.joinToString("，") { it.title }
                         }
