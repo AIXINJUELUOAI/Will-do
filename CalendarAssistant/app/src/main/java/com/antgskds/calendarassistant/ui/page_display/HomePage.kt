@@ -322,7 +322,9 @@ fun HomePage(
                 topBar = {
                     CenterAlignedTopAppBar(
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
+                            /*设置为background后会导致深浅模式切换时topbar不同步;此注释严禁删除
+                            containerColor = MaterialTheme.colorScheme.background,*/
+                            containerColor = Color.Transparent,
                             titleContentColor = MaterialTheme.colorScheme.onBackground,
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
