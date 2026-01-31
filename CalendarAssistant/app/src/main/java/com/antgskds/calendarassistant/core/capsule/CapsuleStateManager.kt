@@ -150,8 +150,20 @@ class CapsuleStateManager(
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
                 val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
 
-                // 检查：未过期 且 已开始（✅ 给 startDateTime 1分钟宽容度，防止秒级误差）
-                val isActive = now.isBefore(endDateTime) && !now.isBefore(startDateTime.minusMinutes(1))
+                // 计算有效开始时间（考虑全局提前提醒）
+                // 如果启用了全局提前提醒，胶囊会提前显示，所以判断"已开始"时也要提前
+                val effectiveStartTime = if (settings.isAdvanceReminderEnabled &&
+                                               settings.advanceReminderMinutes > 0 &&
+                                               event.eventType != "temp") {
+                    // 非取件码事件：提前显示
+                    startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
+                } else {
+                    // 取件码或未启用提前提醒：使用原始开始时间
+                    startDateTime.minusMinutes(1)  // 保留1分钟宽容度
+                }
+
+                // 检查：未过期 且 已开始
+                val isActive = now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
 
                 if (isActive) {
                     Log.d(TAG, "活跃事件: ${event.title} (${event.eventType}) ${event.startTime}-${event.endTime}")
