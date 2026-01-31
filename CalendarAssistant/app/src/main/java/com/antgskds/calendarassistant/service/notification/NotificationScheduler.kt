@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.PickupExpiryReceiver
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
@@ -35,9 +36,11 @@ object NotificationScheduler {
     const val ACTION_REMINDER = "ACTION_REMINDER"
     const val ACTION_CAPSULE_START = "ACTION_CAPSULE_START"  // 保留用于 Alarm 识别
     const val ACTION_CAPSULE_END = "ACTION_CAPSULE_END"    // 保留用于 Alarm 识别
+    const val ACTION_REFRESH_CAPSULE = "ACTION_REFRESH_CAPSULE" // 刷新胶囊文案（准点时）
 
     private const val OFFSET_CAPSULE_START = 100000
     private const val OFFSET_CAPSULE_END = 200000
+    private const val OFFSET_REFRESH_CAPSULE = 300000 // 刷新胶囊的偏移量
 
     fun scheduleReminders(context: Context, event: MyEvent) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -54,7 +57,25 @@ object NotificationScheduler {
         val startMillis = startDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endMillis = endDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-        // 1. 调度普通提醒
+        // 获取全局设置
+        val settings = AppRepository.getInstance(context).settings.value
+        val isAdvanceEnabled = settings.isAdvanceReminderEnabled
+        val advanceMinutes = settings.advanceReminderMinutes
+
+        // 临时取件码不应用全局提前提醒
+        val shouldApplyAdvance = isAdvanceEnabled && event.eventType != "temp"
+
+        // 计算胶囊启动时间（可能提前）
+        val capsuleStartTime = if (shouldApplyAdvance) {
+            startMillis - (advanceMinutes * 60 * 1000)
+        } else {
+            startMillis
+        }
+
+        // 1. 调度普通提醒（叠加全局提前提醒）
+        val scheduledMinutes = mutableSetOf<Int>() // 用于去重
+
+        // 用户自定义的提醒
         event.reminders.forEach { minutesBefore ->
             val triggerTime = startMillis - (minutesBefore * 60 * 1000)
             if (triggerTime > System.currentTimeMillis()) {
@@ -63,20 +84,38 @@ object NotificationScheduler {
                     context, event, minutesBefore, triggerTime, label,
                     ACTION_REMINDER, alarmManager
                 )
+                scheduledMinutes.add(minutesBefore)
             }
         }
 
-        // 2. 调度胶囊开始
-        if (startMillis > System.currentTimeMillis()) {
-            scheduleCapsuleAlarm(context, event, startMillis, ACTION_CAPSULE_START, alarmManager)
+        // 全局提前提醒（叠加模式，需去重）
+        if (shouldApplyAdvance && advanceMinutes > 0 && advanceMinutes !in scheduledMinutes) {
+            val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
+            if (triggerTime > System.currentTimeMillis()) {
+                val label = "提前${advanceMinutes}分钟"
+                scheduleSingleAlarm(
+                    context, event, advanceMinutes, triggerTime, label,
+                    ACTION_REMINDER, alarmManager
+                )
+            }
         }
 
-        // 3. 调度胶囊结束
+        // 2. 调度胶囊开始（可能提前）
+        if (capsuleStartTime > System.currentTimeMillis()) {
+            scheduleCapsuleAlarm(context, event, capsuleStartTime, startMillis, ACTION_CAPSULE_START, alarmManager)
+        }
+
+        // 3. 如果启用了提前提醒，额外设定准点刷新闹钟
+        if (shouldApplyAdvance && startMillis > System.currentTimeMillis()) {
+            scheduleRefreshCapsuleAlarm(context, event, startMillis, alarmManager)
+        }
+
+        // 4. 调度胶囊结束（时间不变）
         if (endMillis > System.currentTimeMillis()) {
-            scheduleCapsuleAlarm(context, event, endMillis, ACTION_CAPSULE_END, alarmManager)
+            scheduleCapsuleAlarm(context, event, endMillis, -1L, ACTION_CAPSULE_END, alarmManager)
         }
 
-        // 4. 为取件码/取餐码设置过期预警
+        // 5. 为取件码/取餐码设置过期预警
         if (event.eventType == "temp") {
             scheduleExpiryWarning(context, event)
         }
@@ -145,7 +184,7 @@ object NotificationScheduler {
     }
 
     private fun scheduleCapsuleAlarm(
-        context: Context, event: MyEvent, triggerTime: Long, actionType: String, alarmManager: AlarmManager
+        context: Context, event: MyEvent, triggerTime: Long, actualStartTime: Long, actionType: String, alarmManager: AlarmManager
     ) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = actionType
@@ -160,10 +199,44 @@ object NotificationScheduler {
                 (event.color.green * 255).toInt(),
                 (event.color.blue * 255).toInt()
             ))
+            // 传入实际开始时间戳（用于胶囊判断显示"还有x分钟"还是"进行中"）
+            if (actualStartTime > 0) {
+                putExtra("ACTUAL_START_MILLIS", actualStartTime)
+            }
         }
-        val offset = if (actionType == ACTION_CAPSULE_START) OFFSET_CAPSULE_START else OFFSET_CAPSULE_END
+        val offset = when (actionType) {
+            ACTION_CAPSULE_START -> OFFSET_CAPSULE_START
+            ACTION_CAPSULE_END -> OFFSET_CAPSULE_END
+            else -> 0
+        }
         val requestCode = (event.id.hashCode() + offset).toInt()
         scheduleAlarmExact(context, triggerTime, intent, requestCode, alarmManager)
+    }
+
+    /**
+     * 调度刷新胶囊的准点闹钟
+     * 当启用了提前提醒时，需要在课程真正开始时刷新胶囊文案（从"还有x分钟"改为"进行中"）
+     */
+    private fun scheduleRefreshCapsuleAlarm(
+        context: Context, event: MyEvent, actualStartTime: Long, alarmManager: AlarmManager
+    ) {
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = ACTION_REFRESH_CAPSULE
+            putExtra("EVENT_ID", event.id)
+            putExtra("EVENT_TITLE", event.title)
+            putExtra("EVENT_LOCATION", event.location)
+            putExtra("EVENT_START_TIME", "${event.startTime}")
+            putExtra("EVENT_END_TIME", "${event.endTime}")
+            putExtra("ACTUAL_START_MILLIS", actualStartTime)
+            putExtra("EVENT_COLOR", android.graphics.Color.argb(
+                (event.color.alpha * 255).toInt(),
+                (event.color.red * 255).toInt(),
+                (event.color.green * 255).toInt(),
+                (event.color.blue * 255).toInt()
+            ))
+        }
+        val requestCode = (event.id.hashCode() + OFFSET_REFRESH_CAPSULE).toInt()
+        scheduleAlarmExact(context, actualStartTime, intent, requestCode, alarmManager)
     }
 
     private fun scheduleAlarmExact(
@@ -187,9 +260,17 @@ object NotificationScheduler {
     fun cancelReminders(context: Context, event: MyEvent) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-        // 1. 取消普通提醒
+        // 1. 取消普通提醒（包括全局提前提醒）
         event.reminders.forEach { minutesBefore ->
             cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
+        }
+
+        // 【修复】暴力清除所有可能的全局提醒残留（10/20/30分钟）
+        // 即使这些分钟数不在 event.reminders 中，也要尝试取消
+        listOf(10, 20, 30).forEach { mins ->
+            if (mins !in event.reminders) {
+                cancelPendingIntent(context, event.id.hashCode() + mins, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
+            }
         }
 
         // 2. 取消胶囊开始
@@ -198,7 +279,10 @@ object NotificationScheduler {
         // 3. 取消胶囊结束
         cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, AlarmReceiver::class.java, alarmManager)
 
-        // 4. 取消取件码预警
+        // 4. 取消刷新胶囊闹钟
+        cancelPendingIntent(context, event.id.hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
+
+        // 5. 取消取件码预警
         cancelPendingIntent(context, event.id.hashCode() + 500000, PickupExpiryReceiver.ACTION_SHOW_WARNING, PickupExpiryReceiver::class.java, alarmManager)
 
         // ✅ 新架构：Dumb Service 不需要手动停止
