@@ -27,7 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -71,7 +72,7 @@ fun AiSettingsPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     // 副标题/提示：Grey + Transparent
-    val cardSubtitleStyle = MaterialTheme.typography.bodySmall.copy(
+    val cardSubtitleStyle = MaterialTheme.typography.bodyLarge.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
     val contentBodyStyle = MaterialTheme.typography.bodyMedium
@@ -212,6 +213,11 @@ private fun AiConfigForm(
                 onOptionSelected = {
                     selectedProvider = it
                     isProviderExpanded = false
+                    // 切换到"自定义"时自动清空模型名称和 API 地址
+                    if (it == "自定义") {
+                        onNameChange("")
+                        onUrlChange("")
+                    }
                 },
                 cardTitleStyle = cardTitleStyle,
                 cardValueStyle = cardValueStyle // 灰色显示
@@ -355,7 +361,7 @@ private fun ExpandableSelectionItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOptionSelected(option) }
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
@@ -385,6 +391,7 @@ private fun TextInputItem(
     cardSubtitleStyle: TextStyle
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
     val isPasswordField = title == "API Key"
     val visualTransformation = if (isPasswordField && !isFocused && value.isNotEmpty()) {
         PasswordVisualTransformation()
@@ -405,7 +412,15 @@ private fun TextInputItem(
         )
 
         Box(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clickable(
+                    enabled = !readOnly,
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    focusRequester.requestFocus()
+                },
             contentAlignment = Alignment.CenterEnd
         ) {
             if (value.isEmpty()) {
@@ -421,9 +436,6 @@ private fun TextInputItem(
                 onValueChange = onValueChange,
                 readOnly = readOnly,
                 textStyle = cardValueStyle.copy(
-                    // 输入框内的文字颜色：
-                    // 如果只读 -> 灰色 (OnSurface.alpha(0.5) 或者 OnSurfaceVariant)
-                    // 如果可编辑 -> 黑色 (OnSurface)，保证输入时看得清。虽然你说右侧要灰，但这里是输入框，黑色更合适。
                     color = if (readOnly) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.End
@@ -432,6 +444,7 @@ private fun TextInputItem(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(focusRequester)
                     .onFocusChanged { focusState -> isFocused = focusState.isFocused }
             )
         }
