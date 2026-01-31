@@ -73,14 +73,56 @@ class CapsuleService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         provider = if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
 
+        // 立即启动前台服务，防止 ANR
+        // 使用占位通知，后续会在状态监听中用真实通知替换
+        val placeholderNotification = provider.buildNotification(
+            this,
+            "placeholder",
+            "日程提醒",
+            "正在加载...",
+            android.graphics.Color.BLUE,
+            TYPE_SCHEDULE,
+            "event",
+            System.currentTimeMillis()
+        )
+
+        val placeholderId = 1 // 占位通知 ID
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(placeholderId, placeholderNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(placeholderId, placeholderNotification)
+        }
+        currentForegroundId = placeholderId
+        Log.d(TAG, "CapsuleService created, 立即启动前台服务 (占位通知)")
+
         // 开始监听胶囊状态
         startObservingCapsuleState()
-        Log.d(TAG, "CapsuleService created, 开始监听胶囊状态")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Dumb Service：不再处理 ACTION_START/ACTION_SYNC
-        // 所有通知更新由状态监听触发
+        // 确保前台服务状态（处理服务已存在但前台被停止的情况）
+        if (currentForegroundId == -1) {
+            val placeholderNotification = provider.buildNotification(
+                this,
+                "placeholder",
+                "日程提醒",
+                "正在加载...",
+                android.graphics.Color.BLUE,
+                TYPE_SCHEDULE,
+                "event",
+                System.currentTimeMillis()
+            )
+
+            val placeholderId = 1
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(placeholderId, placeholderNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(placeholderId, placeholderNotification)
+            }
+            currentForegroundId = placeholderId
+            Log.d(TAG, "onStartCommand: 重新启动前台服务")
+        }
+
         return START_NOT_STICKY
     }
 
@@ -225,7 +267,8 @@ class CapsuleService : Service() {
             item.content,
             item.color,
             item.type,  // 传入 CapsuleItem 的 type 字段 (1=日程, 2=取件码)
-            item.eventType  // 新增: 传入 eventType 字段
+            item.eventType,  // 新增: 传入 eventType 字段
+            item.startMillis  // 传入实际开始时间，用于计算"还有x分钟开始"
         )
 
         val metadata = CapsuleMetadata(
@@ -355,7 +398,8 @@ class CapsuleService : Service() {
 
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
-            // stopSelf() // ✅ 注释掉，防止自杀导致监听断开。Service会由系统在无通知时自动回收。
+            currentForegroundId = -1  // 重置前台 ID
+            stopSelf()  // 真正停止服务，防止进程残留
             Log.d(TAG, "前台服务已停止，所有胶囊通知已清理")
         } catch (e: Exception) {
             Log.e(TAG, "停止服务时出错", e)

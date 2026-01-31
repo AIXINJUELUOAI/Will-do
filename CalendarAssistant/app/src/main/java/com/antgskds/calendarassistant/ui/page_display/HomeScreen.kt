@@ -135,6 +135,7 @@ fun HomeScreen(
         AddEventDialog(
             eventToEdit = eventToEdit,
             currentEventsCount = uiState.allEvents.size,
+            settings = settings,  // 传入 settings 参数
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
                 showAddEventDialog = false

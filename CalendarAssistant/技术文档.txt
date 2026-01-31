@@ -1,30 +1,33 @@
-# CalendarAssistant 项目完整技术文档
+# Will do 项目完整技术文档
 
 ## 项目概述
 
-CalendarAssistant 是一个基于 Android 的智能日程管理应用，使用 Jetpack Compose 构建，采用 MVVM 架构模式。项目经过重构，实现了更清晰的代码分层和更模块化的设计。
+Will do 是一个基于 Android 的智能日程管理应用，使用 Jetpack Compose 构建，采用 MVVM 架构模式。项目经过重构，实现了更清晰的代码分层和更模块化的设计。
 
-**当前版本**：v1.1.2 (versionCode: 2)
+**当前版本**：v1.2.0 (versionCode: 3)
 **开发语言**：Kotlin 2.0.21
 **最低支持**：Android 8.0 (API 26)
 **目标平台**：Android 16 (API 36)
 
 **项目特色**：
 - 智能日程识别（AI + OCR）
-- 多厂商实况胶囊支持（Flyme/Samsung/原生）
-- 完整的课程表管理系统
-- 优雅的 Compose UI 设计
+- 多厂商实况胶囊支持（Flyme/原生 Android）
+- 完善的课程表管理系统
+- 简约优雅的 Compose UI 设计
 
 ### 核心功能
 - **课程表管理**：支持单双周、排除日期、影子课程（单次修改）
 - **智能日程识别**：基于 AI 的 OCR 和自然语言处理
-- **实况胶囊通知**：支持 Android 14+ 原生、Flyme 系统、Samsung 灵动岛
+- **实况胶囊通知**：支持 Android 14+ 原生、Flyme 系统
+- **全局提前提醒**：所有日程可提前 10/20/30 分钟显示胶囊和提醒
+- **胶囊状态显示**：动态显示"还有 x 分钟开始"或"进行中"
+- **取件码聚合显示**：多个取件码自动聚合为一个胶囊（可选）
 - **系统闹钟集成**：自动创建系统闹钟
 - **每日日程提醒**：早晚汇总通知
 - **快速设置磁贴**：一键识别日程
 - **响应式设计**：支持缩放、深色模式、侧边栏导航
 - **取件码过期预警**：取件码即将过期时自动提醒，支持一键延长30分钟
-- **多厂商适配**：Flyme 实况通知、Samsung 灵动岛、原生 Live Activity
+- **多厂商适配**：Flyme 实况通知、原生 Live Activity
 
 ### 核心架构哲学
 
@@ -141,15 +144,28 @@ data class MySettings(
     val showTomorrowEvents: Boolean = false,
     val isDailySummaryEnabled: Boolean = false,
 
+    // ✨ 新增：全局提前提醒设置
+    val isAdvanceReminderEnabled: Boolean = false,
+    val advanceReminderMinutes: Int = 20,  // 10/20/30 分钟可选
+
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true,
     val screenshotDelayMs: Long = 500L,
     val isLiveCapsuleEnabled: Boolean = false,
 
+    // ✨ 新增：取件码聚合开关
+    val isPickupAggregationEnabled: Boolean = false,
+
     // 课表设置
     val semesterStartDate: String = "",
     val totalWeeks: Int = 20,
     val timeTableJson: String = ""
+
+    // 主题设置
+    val isDarkMode: Boolean = false,
+
+    // UI 大小设置：1=小, 2=中(默认), 3=大
+    val uiSize: Int = 2
 )
 ```
 
@@ -410,6 +426,8 @@ F:\CalendarAssistant\
 │   │   │   │   │   ├── AiPrompts.kt       # AI 提示词模板
 │   │   │   │   │   ├── ApiModelProvider.kt    # AI API 提供者
 │   │   │   │   │   └── RecognitionProcessor.kt # 识别处理器
+│   │   │   │   ├── capsule/               # ✨ 胶囊状态管理（新增）
+│   │   │   │   │   └── CapsuleStateManager.kt # 胶囊状态管理器
 │   │   │   │   ├── course/                # 课程管理
 │   │   │   │   │   └── CourseManager.kt   # 课程管理器
 │   │   │   │   └── util/                  # 工具类
@@ -429,34 +447,36 @@ F:\CalendarAssistant\
 │   │   │   │   │       └── LocalDateSerializer.kt # 日期序列化
 │   │   │   │   ├── repository/            # 仓储层
 │   │   │   │   │   └── AppRepository.kt   # 应用仓储（单例）
-│   │   │   │   └── source/                # 数据源
-│   │   │   │       ├── CourseJsonDataSource.kt # 课程数据源
-│   │   │   │       ├── EventJsonDataSource.kt  # 事件数据源
-│   │   │   │       └── SettingsDataSource.kt   # 设置数据源
+│   │   │   │   ├── source/                # 数据源
+│   │   │   │   │   ├── CourseJsonDataSource.kt # 课程数据源
+│   │   │   │   │   ├── EventJsonDataSource.kt  # 事件数据源
+│   │   │   │   │   └── SettingsDataSource.kt   # 设置数据源
+│   │   │   │   └── state/                 # ✨ 状态定义（新增）
+│   │   │   │       └── CapsuleUiState.kt  # 胶囊UI状态
 │   │   │   ├── service/                   # 服务层
 │   │   │   │   ├── accessibility/         # 无障碍服务
 │   │   │   │   │   └── TextAccessibilityService.kt # 文本无障碍服务
 │   │   │   │   ├── capsule/               # 胶囊服务
-│   │   │   │   │   ├── CapsuleService.kt  # 胶囊服务
+│   │   │   │   │   ├── CapsuleService.kt  # ✨ 胶囊服务（重构为Dumb Service）
 │   │   │   │   │   ├── CapsuleUiUtils.kt  # 胶囊 UI 工具
 │   │   │   │   │   └── provider/          # 胶囊提供者
-│   │   │   │   │       ├── FlymeCapsuleProvider.kt # Flyme 胶囊
-│   │   │   │   │       ├── ICapsuleProvider.kt     # 胶囊接口
-│   │   │   │   │       └── NativeCapsuleProvider.kt # 原生胶囊
+│   │   │   │   │       ├── FlymeCapsuleProvider.kt # ✨ Flyme 胶囊（使用RemoteViews）
+│   │   │   │   │       ├── ICapsuleProvider.kt     # ✨ 胶囊接口（新增参数）
+│   │   │   │   │       └── NativeCapsuleProvider.kt # ✨ 原生胶囊（新增状态显示）
 │   │   │   │   ├── notification/          # 通知服务
-│   │   │   │   │   └── NotificationScheduler.kt # 通知调度器
+│   │   │   │   │   └── NotificationScheduler.kt # ✨ 通知调度器（新增刷新胶囊闹钟）
 │   │   │   │   ├── receiver/              # 广播接收器
-│   │   │   │   │   ├── AlarmReceiver.kt   # 闹钟接收器
+│   │   │   │   │   ├── AlarmReceiver.kt   # ✨ 闹钟接收器（新增胶囊刷新处理）
 │   │   │   │   │   ├── BootReceiver.kt    # 开机启动接收器
 │   │   │   │   │   ├── DailySummaryReceiver.kt # 每日摘要接收器
-│   │   │   │   │   └── PickupExpiryReceiver.kt  # 取件码过期预警接收器（新增）
+│   │   │   │   │   └── PickupExpiryReceiver.kt  # 取件码过期预警接收器
 │   │   │   │   └── tile/                  # 快捷服务
 │   │   │   │       └── CaptureTileService.kt # 截图快捷服务
 │   │   │   └── ui/                        # 用户界面
 │   │   │       ├── components/            # 通用组件
 │   │   │       │   ├── CommonSettings.kt  # 通用设置组件（含 WheelPicker 等）
-│   │   │       │   ├── SettingsSidebar.kt # 设置侧边栏（新增）
-│   │   │       │   └── UniversalToast.kt  # 通用 Toast 组件（新增）
+│   │   │       │   ├── SettingsSidebar.kt # 设置侧边栏
+│   │   │       │   └── UniversalToast.kt  # 通用 Toast 组件
 │   │   │       ├── dialogs/               # 对话框组件
 │   │   │       │   ├── AddEventDialog.kt  # 添加事件对话框
 │   │   │       │   ├── AiInputDialog.kt   # AI 输入对话框
@@ -466,20 +486,20 @@ F:\CalendarAssistant\
 │   │   │       │   ├── EventCardFactory.kt # 事件卡片工厂
 │   │   │       │   └── SwipeableEventItem.kt # 可滑动事件项
 │   │   │       ├── layout/                # 自定义布局
-│   │   │       │   └── PushSlideLayout.kt # 侧滑抽屉布局（新增）
+│   │   │       │   └── PushSlideLayout.kt # 侧滑抽屉布局
 │   │   │       ├── page_display/          # 页面显示
 │   │   │       │   ├── AllEventsPage.kt   # 所有事件页面
 │   │   │       │   ├── HomePage.kt        # 主页（今日视图）
-│   │   │       │   ├── HomeScreen.kt      # 主屏容器（新增，含侧边栏逻辑）
+│   │   │       │   ├── HomeScreen.kt      # 主屏容器（含侧边栏逻辑）
 │   │   │       │   ├── SchedulePage.kt    # 日程页面
-│   │   │       │   ├── SettingsDetailScreen.kt # 设置详情容器（新增）
-│   │   │       │   └── settings/          # 设置子页面（新增目录）
+│   │   │       │   ├── SettingsDetailScreen.kt # 设置详情容器
+│   │   │       │   └── settings/          # 设置子页面
 │   │   │       │       ├── AboutPage.kt           # 关于页面
 │   │   │       │       ├── AiSettingsPage.kt      # AI 模型设置
 │   │   │       │       ├── BackupSettingsPage.kt  # 数据备份设置
 │   │   │       │       ├── CourseManagerScreen.kt # 课程管理页面
 │   │   │       │       ├── PreferenceSettingsPage.kt # 偏好设置
-│   │   │       │       ├── ScheduleSettingsPage.kt  # 课表设置（新增）
+│   │   │       │       ├── ScheduleSettingsPage.kt  # 课表设置
 │   │   │       │       └── TimeTableEditorScreen.kt # 作息时间编辑
 │   │   │       ├── theme/                 # 主题配置
 │   │   │       │   ├── Color.kt           # 颜色定义
@@ -489,8 +509,14 @@ F:\CalendarAssistant\
 │   │   │           ├── MainViewModel.kt   # 主 ViewModel
 │   │   │           └── SettingsViewModel.kt # 设置 ViewModel
 │   │   ├── res/                           # 资源文件
-│   │   │   ├── values/                    # 值资源
+│   │   │   ├── layout/                    # ✨ 布局资源（新增）
+│   │   │   │   └── notification_live_flyme.xml # Flyme实况通知布局
 │   │   │   ├── drawable/                  # 图形资源
+│   │   │   │   ├── ic_capsule_course.xml  # ✨ 课程胶囊图标
+│   │   │   │   ├── ic_capsule_pickup.xml  # ✨ 取件码胶囊图标
+│   │   │   │   ├── ic_capsule_event.xml   # ✨ 日程胶囊图标
+│   │   │   │   └── ...
+│   │   │   ├── values/                    # 值资源
 │   │   │   ├── mipmap-*/                  # 应用图标
 │   │   │   └── xml/                       # XML 配置
 │   │   └── AndroidManifest.xml            # 应用清单
@@ -880,7 +906,126 @@ else {
 
 ## 1. 架构设计
 
-### 1.1 MVVM 架构模式
+### 1.1 MVVM + 胶囊状态管理架构（v1.2.0 重构）
+
+项目采用标准的 MVVM（Model-View-ViewModel）架构，并引入了胶囊状态管理器实现主动唤醒模式：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        UI Layer                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
+│  │  HomePage    │  │ SettingsPage │  │  Dialogs     │         │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘         │
+│         │                  │                  │                 │
+│         └──────────────────┼──────────────────┘                 │
+│                            │                                    │
+│  ┌─────────────────────────▼─────────────────────────┐         │
+│  │              MainViewModel / SettingsViewModel     │         │
+│  └─────────────────────────┬─────────────────────────┘         │
+└────────────────────────────┼────────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────────┐
+│                    Repository Layer                              │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │              AppRepository (Singleton)                     │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────────────────────────┐ │ │
+│  │  │ Events  │ │ Courses │ │  CapsuleStateManager (新增)  │ │ │
+│  │  └────┬────┘ └────┬────┘ └──────────┬──────────────────┘ │ │
+│  └───────┼───────────┼─────────────────┼─────────────────────┘ │
+└──────────┼───────────┼─────────────────┼────────────────────────┘
+           │           │                 │
+┌──────────▼──────┐ ┌──▼──────────────┐ ┌▼────────────────────────┐
+│ EventJsonData   │ │ CourseJsonData  │ │ CapsuleUiState (StateFlow)│
+│ Source          │ │ Source          │ │ (None / Active)          │
+└─────────────────┘ └─────────────────┘ └──────────────────────────┘
+                                                      │
+                                          ┌───────────▼─────────────┐
+                                          │  CapsuleService         │
+                                          │  (Dumb Service)         │
+                                          │  - 白名单机制           │
+                                          │  - 主动唤醒             │
+                                          └─────────────────────────┘
+```
+
+**关键特性**：
+1. **单向数据流**：UI → 观察 ViewModel → 调用 Repository → 更新数据 → 回流到 UI
+2. **状态管理**：使用 `StateFlow` 管理响应式状态
+3. **单例 Repository**：`AppRepository` 采用单例模式，确保数据一致性
+4. **协程支持**：所有数据操作使用 Kotlin 协程进行异步处理
+5. **✨ 胶囊状态管理**：`CapsuleStateManager` 统一计算胶囊状态，主动唤醒 `CapsuleService`
+
+### 1.2 胶囊状态管理器（CapsuleStateManager）
+
+**文件位置**: `core/capsule/CapsuleStateManager.kt`
+
+**职责**：
+1. 统一计算胶囊状态（合并日程、课程、取件码）
+2. 监听时间变化（每分钟）实现过期检测
+3. 主动唤醒：当计算出 Active 状态时，启动 `CapsuleService`
+
+**核心设计**：
+
+```kotlin
+class CapsuleStateManager(
+    private val repository: AppRepository,
+    private val appScope: CoroutineScope,
+    private val context: Context
+) {
+    // 胶囊UI状态 - StateFlow
+    val uiState: StateFlow<CapsuleUiState> = createCapsuleStateFlow()
+
+    init {
+        // ✅ 主动唤醒机制：监听 uiState，当变为 Active 时启动 Service
+        startServiceWakeup()
+    }
+
+    // 合并：events + courses + settings + ticker(每分钟)
+    private fun createCapsuleStateFlow(): StateFlow<CapsuleUiState> {
+        val tickerFlow = flow {
+            emit(System.currentTimeMillis()) // 立即发射第一个值
+            while (true) {
+                delay(60_000) // 每分钟
+                emit(System.currentTimeMillis())
+            }
+        }
+
+        return combine(
+            repository.events,
+            repository.courses,
+            repository.settings,
+            tickerFlow
+        ) { events, courses, settings, _ ->
+            computeCapsuleState(events, courses, settings)
+        }.stateIn(...)
+    }
+}
+```
+
+**胶囊状态**（`CapsuleUiState.kt`）：
+
+```kotlin
+sealed interface CapsuleUiState {
+    // 无胶囊显示
+    data object None : CapsuleUiState
+
+    // 有胶囊显示
+    data class Active(val capsules: List<CapsuleItem>) : CapsuleUiState {
+        data class CapsuleItem(
+            val id: String,
+            val notifId: Int,
+            val type: Int,           // 1=日程, 2=取件码
+            val eventType: String,   // event/temp/course
+            val title: String,
+            val content: String,
+            val color: Int,
+            val startMillis: Long,
+            val endMillis: Long
+        )
+    }
+}
+```
+
+### 1.3 Repository 模式详解
 
 项目采用标准的 MVVM（Model-View-ViewModel）架构：
 
@@ -1481,11 +1626,12 @@ ScheduleView 渲染课程卡片
     ↓
 NotificationScheduler.scheduleReminders(context, event)
     ↓
-遍历 event.reminders
+获取全局设置（提前提醒开关）
     ↓
 为每个提醒时间创建 Alarm
     ├─ scheduleSingleAlarm()  // 普通提醒
-    ├─ scheduleCapsuleAlarm() // 胶囊开始
+    ├─ ✨ scheduleCapsuleAlarm() // 胶囊开始（可能提前）
+    ├─ ✨ scheduleRefreshCapsuleAlarm() // 胶囊刷新（准点刷新文案）
     └─ scheduleCapsuleAlarm() // 胶囊结束
     ↓
 AlarmManager.setAlarmClock()
@@ -1497,10 +1643,34 @@ AlarmReceiver.onReceive()
 根据 action 类型处理
     ├─ ACTION_REMINDER → 显示通知
     ├─ ACTION_CAPSULE_START → 启动胶囊服务
-    └─ ACTION_CAPSULE_END → 停止胶囊服务
+    ├─ ✨ ACTION_REFRESH_CAPSULE → 刷新胶囊文案
+    └─ ACTION_CAPSULE_END → 服务自动检测并停止
 ```
 
 **实现位置**：`service/notification/NotificationScheduler.kt`
+
+**提前提醒调度逻辑**：
+
+```kotlin
+// 获取全局设置
+val isAdvanceEnabled = settings.isAdvanceReminderEnabled
+val advanceMinutes = settings.advanceReminderMinutes
+
+// 临时取件码不应用全局提前提醒
+val shouldApplyAdvance = isAdvanceEnabled && event.eventType != "temp"
+
+// 计算胶囊启动时间（可能提前）
+val capsuleStartTime = if (shouldApplyAdvance) {
+    startMillis - (advanceMinutes * 60 * 1000)
+} else {
+    startMillis
+}
+
+// 如果启用了提前提醒，额外设定准点刷新闹钟
+if (shouldApplyAdvance && startMillis > System.currentTimeMillis()) {
+    scheduleRefreshCapsuleAlarm(context, event, startMillis, alarmManager)
+}
+```
 
 ---
 
@@ -1951,7 +2121,128 @@ fun HomeScreen(
 
 ## 11. 实况通知实现详解
 
-### 11.1 Flyme 实况通知（魅族 Flyme 系统）
+### 11.1 胶囊架构概览
+
+**v1.2.0 重构**：胶囊实现从原来的"复杂业务逻辑服务"重构为"Dumb Service"模式：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   CapsuleStateManager                       │
+│                   （主动计算 + 主动唤醒）                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  computeCapsuleState()                              │    │
+│  │  - 合并 events + courses (虚拟课程)                  │    │
+│  │  - 过滤活跃事件（考虑全局提前提醒）                   │    │
+│  │  - 取件码聚合判断                                    │    │
+│  │  - 生成 CapsuleUiState (None/Active)                │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                            │                                 │
+│                            ▼                                 │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  uiState.collect { state ->                         │    │
+│  │    if (state is Active) 启动 CapsuleService         │    │
+│  │    if (state is None) Service 自动停止              │    │
+│  │  }                                                  │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     CapsuleService                           │
+│                     （Dumb Service）                          │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  职责：                                               │    │
+│  │  1. 监听 uiState                                     │    │
+│  │  2. 显示/隐藏胶囊通知                                │    │
+│  │  3. 白名单机制：只保留合法通知                        │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**核心优势**：
+1. **计算与显示分离**：`CapsuleStateManager` 负责计算，`CapsuleService` 只负责显示
+2. **主动唤醒**：状态变为 Active 时自动启动服务
+3. **白名单机制**：只显示 Repository 下发的合法胶囊
+4. **自动清理**：过期胶囊自动从通知栏移除
+
+### 11.2 全局提前提醒功能
+
+**设置选项**（`MySettings.kt`）：
+```kotlin
+val isAdvanceReminderEnabled: Boolean = false  // 全局提前提醒总开关
+val advanceReminderMinutes: Int = 20           // 提前分钟数（10/20/30）
+```
+
+**影响范围**：
+1. **胶囊启动时间**：胶囊会提前显示，文案显示"还有 x 分钟开始"
+2. **提醒通知**：额外发送一条提前提醒通知
+3. **胶囊文案刷新**：准点时自动刷新为"进行中"
+
+**实现位置**：
+- 状态计算：`CapsuleStateManager.kt:155-163`
+- 通知调度：`NotificationScheduler.kt:60-111`
+- 文案显示：`FlymeCapsuleProvider.kt:67-81` 和 `NativeCapsuleProvider.kt:46-61`
+
+**文案显示逻辑**：
+
+```kotlin
+val now = System.currentTimeMillis()
+val statusText = when {
+    actualStartTime > 0 && now < actualStartTime -> {
+        // 提前提醒阶段：显示"还有 x 分钟开始"
+        val minutesRemaining = Duration.between(
+            Instant.ofEpochMilli(now),
+            Instant.ofEpochMilli(actualStartTime)
+        ).toMinutes()
+        when {
+            minutesRemaining <= 0 -> "即将开始"
+            minutesRemaining == 1L -> "还有 1 分钟开始"
+            else -> "还有 ${minutesRemaining} 分钟开始"
+        }
+    }
+    else -> "进行中"
+}
+```
+
+### 11.3 取件码聚合功能
+
+**设置选项**（`MySettings.kt`）：
+```kotlin
+val isPickupAggregationEnabled: Boolean = false  // 取件码聚合开关
+```
+
+**聚合规则**：
+1. 当有 2 个及以上取件码时，自动聚合为一个胶囊
+2. 聚合胶囊显示"X 个待取事项"
+3. 内容区域显示前 5 个取件码的列表
+4. 结束时间取所有取件码中最晚的
+
+**实现位置**：`CapsuleStateManager.kt:209-238`
+
+```kotlin
+val aggregateMode = settings.isPickupAggregationEnabled && pickupEvents.size > 1
+
+if (aggregateMode) {
+    // 聚合模式
+    val contentText = pickupEvents.take(5).mapIndexed { i, e ->
+        val line = "${i + 1}. ${e.title}"
+        if (i == 4 && pickupEvents.size > 5) "$line ..." else line
+    }.joinToString("\n")
+
+    val latestEndMillis = pickupEvents.mapNotNull { ... }.maxOrNull() ?: ...
+
+    capsules.add(CapsuleItem(
+        id = AGGREGATE_PICKUP_ID,
+        notifId = AGGREGATE_NOTIF_ID,
+        type = TYPE_PICKUP,
+        title = "${pickupEvents.size} 个待取事项",
+        content = contentText,
+        ...
+    ))
+}
+```
+
+### 11.4 Flyme 实况通知（魅族 Flyme 系统）
 
 #### 前置条件检查清单
 
@@ -1963,33 +2254,68 @@ fun HomeScreen(
 | 用户开关 | `settings.isLiveCapsuleEnabled` | 用户关闭时降级为普通通知 |
 | 无障碍服务 | `TextAccessibilityService.instance != null` | **作为系统能力锁**，服务未运行时降级 |
 
-#### Flyme 胶囊 Bundle 参数详解
+#### ✨ RemoteViews 自定义布局（v1.2.0 新增）
 
-**实现位置**：`service/capsule/provider/FlymeCapsuleProvider.kt`
+**问题**：通知中心展开后内容空白
+**解决**：使用 `RemoteViews` 加载自定义 XML 布局
+
+**实现位置**：`FlymeCapsuleProvider.kt:84-207`
+
+**布局文件**：`res/layout/notification_live_flyme.xml`
+
+```xml
+<LinearLayout ...>
+    <!-- 左侧文字区 -->
+    <LinearLayout android:layout_weight="1">
+        <!-- 主标题：取件码 / 课程名 / 日程名 -->
+        <TextView android:id="@+id/tv_main_content"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <!-- 副标题：地点 • 状态 -->
+        <TextView android:id="@+id/tv_sub_info"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <!-- 右侧图标区 -->
+    <ImageView android:id="@+id/iv_icon"
+        android:layout_width="48dp"
+        android:layout_height="48dp" />
+</LinearLayout>
+```
+
+**图标映射**：
+| eventType | 图标资源 |
+|-----------|----------|
+| `temp` | `ic_capsule_pickup`（取件/取餐） |
+| `course` | `ic_capsule_course`（课程） |
+| `event` | `ic_capsule_event`（普通日程） |
+
+#### Flyme 胶囊 Bundle 参数详解
 
 ```kotlin
 val capsuleBundle = Bundle().apply {
-    // === 必需参数 ===
-    putInt("notification.live.capsuleStatus", 1)      // 状态：1=进行中
-    putInt("notification.live.capsuleType", 1)         // 类型：1=普通日程
-    putString("notification.live.capsuleContent", collapsedTitle)  // 显示文本（4字符内）
-
-    // === 可选参数 ===
-    putParcelable("notification.live.capsuleIcon", iconObj)  // 图标（白色 Bitmap）
-    putInt("notification.live.capsuleBgColor", capsuleColor)  // 背景色
-    putInt("notification.live.capsuleContentColor", Color.WHITE)  // 文字颜色
+    putInt("notification.live.capsuleStatus", 1)
+    putInt("notification.live.capsuleType", 1)
+    putString("notification.live.capsuleContent", collapsedTitle)
+    putInt("notification.live.capsuleBgColor", color)
+    putInt("notification.live.capsuleContentColor", Color.WHITE)
+    if (iconObj != null) {
+        putParcelable("notification.live.capsuleIcon", iconObj)
+    }
 }
 
 val liveBundle = Bundle().apply {
-    putBoolean("is_live", true)                        // 标记为实况通知
-    putInt("notification.live.operation", 0)           // 操作类型
-    putInt("notification.live.type", 10)               // 实况类型
-    putBundle("notification.live.capsule", capsuleBundle)  // 胶囊配置
-    putInt("notification.live.contentColor", Color.BLACK)  // 内容颜色
+    putBoolean("is_live", true)
+    putInt("notification.live.operation", 0)
+    putInt("notification.live.type", 10)
+    putBundle("notification.live.capsule", capsuleBundle)
+    putString("android.substName", context.getString(R.string.app_name))
+    putString("android.title", title)
 }
 ```
 
-### 11.2 Android 14+ 原生胶囊通知
+### 11.5 Android 14+ 原生胶囊通知
 
 #### 前置条件
 
@@ -2018,7 +2344,24 @@ val methodSetPromoted = Notification.Builder::class.java.getMethod(
 methodSetPromoted.invoke(builder, true)  // true = 请求提升
 ```
 
-### 11.3 降级逻辑
+#### ICapsuleProvider 接口（v1.2.0 更新）
+
+```kotlin
+interface ICapsuleProvider {
+    fun buildNotification(
+        context: Context,
+        eventId: String,
+        title: String,
+        content: String,
+        color: Int,
+        capsuleType: Int,          // 1=日程, 2=取件码
+        eventType: String,          // event/temp/course
+        actualStartTime: Long = -1  // 实际开始时间，用于计算"还有x分钟"
+    ): Notification
+}
+```
+
+### 11.6 降级逻辑
 
 当胶囊模式条件不满足时（开关关闭 或 无障碍未开启），发送普通通知作为降级方案：
 
@@ -2057,7 +2400,7 @@ if (isEnabled && isServiceRunning) {
 
 | 项目 | 版本 |
 |------|------|
-| 应用版本 | 1.1.1 (versionCode: 2) |
+| 应用版本 | 1.2.0 (versionCode: 3) |
 | 最低 SDK | 26 (Android 8.0) |
 | 目标 SDK | 36 (Android 16) |
 | 编译 SDK | 36 |
@@ -2109,19 +2452,12 @@ val EventColors = listOf(
 | `1001` | 正在分析状态通知 | TextAccessibilityService.kt |
 | `2077` | 取件码实况通知 | TextAccessibilityService.kt |
 | `2001` | 磁贴提示通知（服务未开启） | CaptureTileService.kt |
-| `50000 + hash` | 取件码过期预警通知（新增） | PickupExpiryReceiver.kt |
+| `50000 + hash` | 取件码过期预警通知 | PickupExpiryReceiver.kt |
 | `8001` | 早报通知（6:00） | DailySummaryReceiver.kt |
 | `8002` | 晚报通知（22:00） | DailySummaryReceiver.kt |
 | `999` | 权限引导通知 | TextAccessibilityService.kt |
-
-| ID | 用途 | 所在文件 |
-|----|------|----------|
-| `1001` | 正在分析状态通知 | TextAccessibilityService.kt |
-| `2077` | 取件码实况通知 | TextAccessibilityService.kt |
-| `2001` | 磁贴提示通知（服务未开启） | CaptureTileService.kt |
-| `8001` | 早报通知（6:00） | DailySummaryReceiver.kt |
-| `8002` | 晚报通知（22:00） | DailySummaryReceiver.kt |
-| `999` | 权限引导通知 | TextAccessibilityService.kt |
+| `99999` | ✨ 聚合取件码胶囊通知 | CapsuleStateManager.kt |
+| `hash` | ✨ 胶囊通知（动态计算） | CapsuleService.kt |
 
 ### 16.2 胶囊服务相关常量
 
@@ -2129,12 +2465,13 @@ val EventColors = listOf(
 |------|-----|------|
 | `OFFSET_CAPSULE_START` | 100000 | 胶囊开始闹钟的 requestCode 偏移量 |
 | `OFFSET_CAPSULE_END` | 200000 | 胶囊结束闹钟的 requestCode 偏移量 |
+| `OFFSET_REFRESH_CAPSULE` | 300000 | ✨ 胶囊刷新闹钟的 requestCode 偏移量 |
 
 **为什么用偏移量？**
 ```kotlin
 // 同一事件的不同闹钟需要不同的 requestCode
 val requestCode = (event.id.hashCode() + offset).toInt()
-// 这样普通提醒、胶囊开始、胶囊结束各有独立ID
+// 这样普通提醒、胶囊开始、胶囊结束、胶囊刷新各有独立ID
 ```
 
 ### 16.3 颜色常量详解
@@ -2259,25 +2596,66 @@ UI → 观察 → StateFlow
 
 ## 开发状态
 
-**当前分支**：`main`
+**当前分支**：`test`
 **最新提交**：
+- 3ba614a 修复部分显示问题
 - 72bb756 修复多日日程显示问题并优化排序逻辑
 - ae7baf3 优化设置页样式和交互体验
 - 9c4e158 修复实况通知显示问题和深浅模式切换时 topbar 不同步
 - c8c1f83 更新 Flyme 胶囊图标资源文件
-- 56fcd22 优化事件列表排序逻辑并更换胶囊图标
 
 **项目状态**：活跃开发中
 
 ---
 
-*文档版本：v1.1.2*
+*文档版本：v1.2.0*
 *最后更新：2026年1月31日*
-*适用于 CalendarAssistant v1.1.2+*
+*适用于 CalendarAssistant v1.2.0+*
 
 ## 版本更新记录
 
-### v1.1.2（当前版本）
+### v1.2.0（当前版本）
+
+**架构重构**：
+- ✨ 新增 `CapsuleStateManager`（胶囊状态管理器）：主动唤醒模式
+- ✨ `CapsuleService` 重构为 Dumb Service：白名单机制，计算与显示分离
+- ✨ 新增 `CapsuleUiState`：胶囊UI状态定义（None/Active）
+
+**新增功能**：
+- ✨ 全局提前提醒：所有日程可提前 10/20/30 分钟显示胶囊和提醒
+- ✨ 胶囊状态显示：动态显示"还有 x 分钟开始"或"进行中"
+- ✨ 取件码聚合显示：多个取件码自动聚合为一个胶囊（可选）
+- ✨ 胶囊准点刷新：自动刷新胶囊文案从"还有x分钟"改为"进行中"
+
+**Flyme 胶囊优化**：
+- ✨ 使用 RemoteViews 自定义布局，修复通知中心展开空白问题
+- ✨ 新增胶囊图标资源：课程/取件码/日程区分显示
+
+**ICapsuleProvider 接口更新**：
+- 新增 `capsuleType` 参数：1=日程, 2=取件码
+- 新增 `eventType` 参数：event/temp/course
+- 新增 `actualStartTime` 参数：用于计算"还有x分钟开始"
+
+**MySettings 新增字段**：
+- `isAdvanceReminderEnabled`: Boolean = false  // 全局提前提醒总开关
+- `advanceReminderMinutes`: Int = 20          // 提前分钟数（10/20/30）
+- `isPickupAggregationEnabled`: Boolean = false // 取件码聚合开关
+
+**通知调度优化**：
+- 新增 `ACTION_REFRESH_CAPSULE`：准点时刷新胶囊文案
+- 新增 `OFFSET_REFRESH_CAPSULE`：刷新胶囊的偏移量
+- 提前提醒叠加模式：与用户自定义提醒叠加，自动去重
+
+**最近修复**：
+- 修复多日日程显示问题
+- 修复事件列表排序逻辑
+- 修复Flyme实况通知展开空白问题
+- 修复深色/浅色模式切换时TopBar不同步问题
+- 修复胶囊通知白名单清理逻辑
+
+---
+
+### v1.1.2
 
 **新增功能**：
 - AI服务提供商快速选择：支持DeepSeek、OpenAI、Gemini、自定义
