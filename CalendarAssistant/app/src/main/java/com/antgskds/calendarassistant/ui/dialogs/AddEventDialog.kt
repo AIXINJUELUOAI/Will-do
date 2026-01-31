@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
@@ -47,6 +48,7 @@ val REMINDER_OPTIONS = listOf(
 fun AddEventDialog(
     eventToEdit: MyEvent? = null,
     currentEventsCount: Int = 0,
+    settings: MySettings = MySettings(),  // 新增：接收设置参数
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (MyEvent) -> Unit
@@ -55,6 +57,17 @@ fun AddEventDialog(
     val now = LocalDateTime.now()
     val defaultEnd = now.plusHours(1)
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+    // 计算过滤后的提醒选项
+    val filteredReminderOptions = remember(settings.isAdvanceReminderEnabled, settings.advanceReminderMinutes) {
+        if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
+            // 隐藏小于等于全局提前提醒时长的选项
+            REMINDER_OPTIONS.filter { it.first > settings.advanceReminderMinutes }
+        } else {
+            // 全局提前提醒关闭，显示所有选项
+            REMINDER_OPTIONS
+        }
+    }
 
     var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
     var startDate by remember { mutableStateOf(eventToEdit?.startDate ?: now.toLocalDate()) }
@@ -257,6 +270,11 @@ fun AddEventDialog(
         showEndTimePicker = false
     }
     if (showReminderPicker) {
-        WheelReminderPickerDialog(30, { showReminderPicker = false }) { if (!reminders.contains(it)) reminders.add(it) }
+        WheelReminderPickerDialog(
+            initialMinutes = 30,
+            onDismiss = { showReminderPicker = false },
+            onConfirm = { if (!reminders.contains(it)) reminders.add(it) },
+            availableOptions = filteredReminderOptions  // 传入过滤后的选项
+        )
     }
 }

@@ -11,6 +11,8 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import java.time.Duration
+import java.time.Instant
 
 class NativeCapsuleProvider : ICapsuleProvider {
     companion object {
@@ -24,7 +26,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
         content: String,
         color: Int,
         capsuleType: Int,  // 新增参数，但原生胶囊暂时忽略此参数
-        eventType: String  // 新增参数：事件类型（暂时忽略）
+        eventType: String,  // 新增参数：事件类型（暂时忽略）
+        actualStartTime: Long  // 实际开始时间（毫秒），用于计算"还有x分钟开始"
     ): Notification {
 
         val tapIntent = Intent(context, MainActivity::class.java).apply {
@@ -39,6 +42,24 @@ class NativeCapsuleProvider : ICapsuleProvider {
 
         val collapsedTitle = if (title.length > 10) "${title.take(10)}..." else title
 
+        // 计算胶囊文案（根据是否提前开始）
+        val now = System.currentTimeMillis()
+        val statusText = when {
+            actualStartTime > 0 && now < actualStartTime -> {
+                // 提前提醒阶段：显示"还有 x 分钟开始"
+                val minutesRemaining = Duration.between(
+                    Instant.ofEpochMilli(now),
+                    Instant.ofEpochMilli(actualStartTime)
+                ).toMinutes()
+                when {
+                    minutesRemaining <= 0 -> "即将开始"
+                    minutesRemaining == 1L -> "还有 1 分钟开始"
+                    else -> "还有 ${minutesRemaining} 分钟开始"
+                }
+            }
+            else -> "进行中"
+        }
+
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -50,7 +71,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
 
         builder.setSmallIcon(icon)
             .setContentTitle(collapsedTitle)
-            .setContentText("进行中")
+            .setContentText(statusText)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setAutoCancel(false)

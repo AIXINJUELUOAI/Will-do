@@ -161,12 +161,13 @@ fun WheelTimePicker(initialHour: Int, initialMinute: Int, onTimeChanged: (Int, I
 fun WheelReminderPickerDialog(
     initialMinutes: Int,
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
+    onConfirm: (Int) -> Unit,
+    availableOptions: List<Pair<Int, String>>? = null  // 可选的自定义选项（用于过滤）
 ) {
-    // 【关键修复】现在能正确引用了
-    val options = NotificationScheduler.REMINDER_OPTIONS
+    // 如果提供了自定义选项则使用，否则使用默认选项
+    val options = availableOptions ?: NotificationScheduler.REMINDER_OPTIONS
     val defaultIndex = options.indexOfFirst { it.first == initialMinutes }.takeIf { it != -1 }
-        ?: options.indexOfFirst { it.first == 30 }.takeIf { it != -1 } ?: 4
+        ?: options.indexOfFirst { it.first == 30 }.takeIf { it != -1 } ?: 0
 
     var selectedIndex by remember { mutableIntStateOf(defaultIndex) }
 
@@ -174,17 +175,26 @@ fun WheelReminderPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加提醒", style = MaterialTheme.typography.titleMedium) },
         text = {
-            WheelPicker(
-                items = options.map { it.second },
-                initialIndex = defaultIndex,
-                onSelectionChanged = { selectedIndex = it }
-            )
+            if (options.isEmpty()) {
+                Text("当前设置下无需额外添加提醒", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                WheelPicker(
+                    items = options.map { it.second },
+                    initialIndex = defaultIndex,
+                    onSelectionChanged = { selectedIndex = it }
+                )
+            }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onConfirm(options[selectedIndex].first)
-                onDismiss()
-            }) { Text("确定") }
+            TextButton(
+                onClick = {
+                    if (options.isNotEmpty()) {
+                        onConfirm(options[selectedIndex].first)
+                    }
+                    onDismiss()
+                },
+                enabled = options.isNotEmpty()
+            ) { Text("确定") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
