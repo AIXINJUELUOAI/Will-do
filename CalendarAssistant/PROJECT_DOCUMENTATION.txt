@@ -4,7 +4,7 @@
 
 CalendarAssistant 是一个基于 Android 的智能日程管理应用，使用 Jetpack Compose 构建，采用 MVVM 架构模式。项目经过重构，实现了更清晰的代码分层和更模块化的设计。
 
-**当前版本**：v1.1.1 (versionCode: 2)
+**当前版本**：v1.1.2 (versionCode: 2)
 **开发语言**：Kotlin 2.0.21
 **最低支持**：Android 8.0 (API 26)
 **目标平台**：Android 16 (API 36)
@@ -640,7 +640,7 @@ val realCurrentWeek = (daysBetween(semesterStart, today) / 7) + 1
 - **上课时间**：星期几、第几节到第几节
 - **周次范围**：第几周到第几周
 - **课程频率**：每周/单周/双周
-- 颜色标签
+- **颜色标签**：新增课程时自动从 EventColors 随机分配（无需手动选择）
 
 **实现位置**：`ui/dialogs/CourseManagementDialog.kt`
 
@@ -811,13 +811,18 @@ else {
 ### 8.1 AI 模型设置
 
 **可配置项**：
-- API 地址
-- 模型名称
+- 服务提供商（快速选择或自定义）
+- 模型名称（根据提供商自动提供下拉选项）
+- API 地址（提供商自动填充，自定义可手动输入）
 - API Key
 
-**支持格式**：
-- OpenAI 格式
-- Google Gemini 格式
+**支持的服务商**：
+- **DeepSeek**: deepseek-chat, deepseek-coder, deepseek-reasoner
+- **OpenAI**: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
+- **Gemini**: gemini-1.5-flash, gemini-1.5-pro
+- **自定义**: 支持任意兼容OpenAI格式的API地址
+
+**默认提供商**：DeepSeek（API Key为空时显示）
 
 ### 8.2 课程表设置
 
@@ -2254,24 +2259,52 @@ UI → 观察 → StateFlow
 
 ## 开发状态
 
-**当前分支**：`sync-calendar`
-**主分支**：`main`
+**当前分支**：`main`
 **最新提交**：
-- 修复 Flyme 实况通知展开空白问题
-- 修复胶囊通知残留问题
-- 合并 gitignore 配置
+- 72bb756 修复多日日程显示问题并优化排序逻辑
+- ae7baf3 优化设置页样式和交互体验
+- 9c4e158 修复实况通知显示问题和深浅模式切换时 topbar 不同步
+- c8c1f83 更新 Flyme 胶囊图标资源文件
+- 56fcd22 优化事件列表排序逻辑并更换胶囊图标
 
 **项目状态**：活跃开发中
 
 ---
 
-*文档版本：v1.1.1*
-*最后更新：2026年1月28日*
-*适用于 CalendarAssistant v1.1.1+*
+*文档版本：v1.1.2*
+*最后更新：2026年1月31日*
+*适用于 CalendarAssistant v1.1.2+*
 
 ## 版本更新记录
 
-### v1.1.1（当前版本）
+### v1.1.2（当前版本）
+
+**新增功能**：
+- AI服务提供商快速选择：支持DeepSeek、OpenAI、Gemini、自定义
+- 模型名称下拉选择器（根据提供商自动更新可选模型）
+- 作息表编辑器优化：可点击修改课间休息时间、开始时间
+
+**UI/UX 优化**：
+- AI配置页全面采用Material 3设计规范
+- 作息表编辑器样式优化，层次更清晰
+- 字体样式层次化：Primary标题、OnSurface正文、OnSurfaceVariant辅助信息
+- 卡片阴影统一移除，更符合扁平化设计
+
+**最近修复**：
+- 修复多日日程显示问题
+- 修复事件列表排序逻辑
+- 修复Flyme实况通知展开空白问题
+- 修复深色/浅色模式切换时TopBar不同步问题
+- 更新Flyme胶囊图标资源
+
+**技术改进**：
+- 课程颜色改用EventColors随机分配
+- FAB按钮样式统一（圆形 + 动态大小）
+- 设置页面字体大小动态调控（uiSize参数）
+
+---
+
+### v1.1.1
 
 **新增功能**：
 - 取件码过期预警功能（PickupExpiryReceiver）
@@ -2290,14 +2323,6 @@ UI → 观察 → StateFlow
 - 侧边栏导航体验
 - 深色/浅色模式切换
 - 设置页面卡片化分组展示
-
-**最近修复**：
-- 修复 Flyme 实况通知展开空白问题
-- 修复胶囊通知残留问题
-
-**已知问题**：
-- 深色模式浅色模式切换时 TopBar 不同步
-- 部分页面小白条未适配
 
 ### v1.0（重构后版本）
 

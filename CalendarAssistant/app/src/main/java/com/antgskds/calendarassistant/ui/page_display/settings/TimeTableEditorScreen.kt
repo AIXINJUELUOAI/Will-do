@@ -187,7 +187,7 @@ fun TimeTableEditorScreen(
                         val breakTime = customBreaks[nodeIndex] ?: 10
                         Box(Modifier.fillMaxWidth().height(36.dp).clickable { showBreakPickerForNode = nodeIndex }, contentAlignment = Alignment.Center) {
                             HorizontalDivider(modifier = Modifier.fillMaxWidth(0.7f).alpha(0.2f), color = MaterialTheme.colorScheme.onSurface)
-                            Text(text = "休息 ${breakTime} 分钟", style = contentBodyStyle, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp))
+                            Text(text = "休息 ${breakTime} 分钟", style = contentBodyStyle, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.background(MaterialTheme.colorScheme.background).padding(horizontal = 7.dp))
                         }
                     }
                 }
