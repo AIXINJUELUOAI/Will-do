@@ -55,15 +55,20 @@ fun AllEventsPage(
                 }
                 categoryMatch && searchMatch
             }.sortedWith(compareBy(
-                // 优先级排序：未过期重要(0) > 未过期(1) > 已过期重要(2) > 已过期(3)
+                // 8级优先级：过期状态 > 重要性 > 单多日
                 { event ->
                     val isExpired = DateCalculator.isEventExpired(event)
                     val isImportant = event.isImportant
+                    val isMultiDay = event.startDate != event.endDate
                     when {
-                        !isExpired && isImportant -> 0
-                        !isExpired && !isImportant -> 1
-                        isExpired && isImportant -> 2
-                        else -> 3
+                        !isExpired && isImportant && isMultiDay -> 0
+                        !isExpired && isImportant && !isMultiDay -> 1
+                        !isExpired && !isImportant && isMultiDay -> 2
+                        !isExpired && !isImportant && !isMultiDay -> 3
+                        isExpired && isImportant && isMultiDay -> 4
+                        isExpired && isImportant && !isMultiDay -> 5
+                        isExpired && !isImportant && isMultiDay -> 6
+                        else -> 7
                     }
                 },
                 // 同优先级内按开始日期降序（最近的在前）
