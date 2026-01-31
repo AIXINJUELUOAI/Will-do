@@ -65,6 +65,9 @@ class AlarmReceiver : BroadcastReceiver() {
             NotificationScheduler.ACTION_CAPSULE_END -> {
                 handleCapsuleEnd(context, eventId)
             }
+            NotificationScheduler.ACTION_REFRESH_CAPSULE -> {
+                handleCapsuleRefresh(context, eventId, eventTitle)
+            }
             NotificationScheduler.ACTION_REMINDER, null -> {
                 // 处理普通提醒（action 可能为 null 的情况作为兜底）
                 val reminderLabel = intent.getStringExtra("REMINDER_LABEL") ?: ""
@@ -155,6 +158,23 @@ class AlarmReceiver : BroadcastReceiver() {
             // 【降级逻辑】
             Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled, OCR服务:$isServiceRunning) -> 降级为普通通知")
             showStandardNotification(context, eventId, title, "日程开始")
+        }
+    }
+
+    /**
+     * 处理胶囊刷新（准点时刷新文案从"还有x分钟"改为"进行中"）
+     * 新架构：Dumb Service 只需要重新启动，会自动重新订阅 uiState 并更新胶囊显示
+     */
+    private fun handleCapsuleRefresh(context: Context, eventId: String, title: String) {
+        Log.d(TAG, "刷新胶囊: $title (准点时刷新文案)")
+
+        // 重新启动 CapsuleService，它会重新计算状态并更新通知
+        val serviceIntent = Intent(context, CapsuleService::class.java)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
         }
     }
 

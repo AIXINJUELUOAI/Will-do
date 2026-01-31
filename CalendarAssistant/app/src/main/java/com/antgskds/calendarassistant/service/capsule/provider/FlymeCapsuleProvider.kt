@@ -16,6 +16,10 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.LocalDateTime
 
 /**
  * Flyme 实况胶囊提供者
@@ -35,7 +39,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         content: String,
         color: Int,
         capsuleType: Int,  // 1=日程, 2=取件码
-        eventType: String  // 事件类型：event=日程, temp=取件码, course=课程
+        eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
+        actualStartTime: Long  // 实际开始时间（毫秒），用于计算"还有x分钟开始"
     ): Notification {
 
         // 1. 点击跳转
@@ -57,10 +62,28 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val whiteIconBitmap = if (rawBitmap != null) CapsuleUiUtils.tintBitmap(rawBitmap, Color.WHITE) else null
         val iconObj = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
-        // 3. 创建 RemoteViews（关键修复）
-        val remoteViews = createRemoteViews(context, capsuleType, eventType, title, content)
+        // 3. 计算胶囊文案（根据是否提前开始）
+        val now = System.currentTimeMillis()
+        val statusText = when {
+            actualStartTime > 0 && now < actualStartTime -> {
+                // 提前提醒阶段：显示"还有 x 分钟开始"
+                val minutesRemaining = Duration.between(
+                    Instant.ofEpochMilli(now),
+                    Instant.ofEpochMilli(actualStartTime)
+                ).toMinutes()
+                when {
+                    minutesRemaining <= 0 -> "即将开始"
+                    minutesRemaining == 1L -> "还有 1 分钟开始"
+                    else -> "还有 ${minutesRemaining} 分钟开始"
+                }
+            }
+            else -> "进行中"
+        }
 
-        // 4. 构建 Notification Builder
+        // 4. 创建 RemoteViews（关键修复）
+        val remoteViews = createRemoteViews(context, capsuleType, eventType, title, content, statusText)
+
+        // 5. 构建 Notification Builder
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -71,10 +94,10 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val collapsedTitle = if (title.length > 10) title.take(10) else title
         val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
 
-        // 5. 设置基础属性
+        // 6. 设置基础属性
         builder.setSmallIcon(icon)
             .setContentTitle(collapsedTitle)
-            .setContentText("进行中")
+            .setContentText(statusText)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setAutoCancel(false)
@@ -82,11 +105,11 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
 
-        // 6. ✅ 关键：设置 RemoteViews（双重设置）
+        // 7. ✅ 关键：设置 RemoteViews（双重设置）
         builder.setCustomContentView(remoteViews)
             .setCustomBigContentView(remoteViews)
 
-        // 7. ✅ 保留 BigTextStyle 作为兜底
+        // 8. ✅ 保留 BigTextStyle 作为兜底
         builder.setStyle(Notification.BigTextStyle()
             .setBigContentTitle(title)
             .bigText(content)
@@ -156,18 +179,19 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         capsuleType: Int,
         eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
         title: String,
-        content: String
+        content: String,
+        statusText: String  // 状态文本："进行中" 或 "还有 x 分钟开始"
     ): RemoteViews {
         return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
 
             // 主标题：绑定 title
             setTextViewText(R.id.tv_main_content, title)
 
-            // 副标题：地点 + 时间
+            // 副标题：地点 + 状态
             val subInfo = if (content.isNotEmpty()) {
-                "$content • 进行中"
+                "$content • $statusText"
             } else {
-                "进行中"
+                statusText
             }
             setTextViewText(R.id.tv_sub_info, subInfo)
 

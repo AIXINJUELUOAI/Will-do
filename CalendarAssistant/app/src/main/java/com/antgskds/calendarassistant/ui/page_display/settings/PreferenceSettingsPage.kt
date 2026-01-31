@@ -7,6 +7,11 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
+import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -40,6 +46,19 @@ fun PreferenceSettingsPage(
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    // Toast 辅助函数
+    fun showToast(message: String, type: ToastType = ToastType.INFO) {
+        currentToastType = type
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    // 获取 events 用于检测重复提醒
+    val repository = remember { AppRepository.getInstance(context) }
+    val events by repository.events.collectAsState()
 
     // --- 字体样式优化 ---
     // 板块标题：Primary + ExtraBold
@@ -93,14 +112,6 @@ fun PreferenceSettingsPage(
                     }
                 }
             }
-        }
-    }
-
-    fun showToast(message: String, type: ToastType = ToastType.INFO) {
-        currentToastType = type
-        scope.launch {
-            snackbarHostState.currentSnackbarData?.dismiss()
-            snackbarHostState.showSnackbar(message)
         }
     }
 
@@ -186,23 +197,64 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    if (settings.isLiveCapsuleEnabled) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                        SwitchSettingItem(
-                            title = "取件码聚合 (Beta)",
-                            subtitle = "当有多个取件码时合并显示为一个胶囊",
-                            checked = settings.isPickupAggregationEnabled,
-                            onCheckedChange = { isChecked ->
-                                viewModel.updatePreference(pickupAggregation = isChecked)
-                            },
-                            cardTitleStyle = cardTitleStyle,
-                            cardSubtitleStyle = cardSubtitleStyle
-                        )
+                    AnimatedVisibility(
+                        visible = settings.isLiveCapsuleEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            SwitchSettingItem(
+                                title = "取件码聚合 (Beta)",
+                                subtitle = "当有多个取件码时合并显示为一个胶囊",
+                                checked = settings.isPickupAggregationEnabled,
+                                onCheckedChange = { isChecked ->
+                                    viewModel.updatePreference(pickupAggregation = isChecked)
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle
+                            )
+                        }
                     }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    // 日程提前提醒设置项
+                    AdvanceReminderSettingItem(
+                        title = "日程提前提醒",
+                        subtitle = if (settings.isAdvanceReminderEnabled)
+                            "提前 ${settings.advanceReminderMinutes} 分钟"
+                        else
+                            "日程开始时",
+                        checked = settings.isAdvanceReminderEnabled,
+                        minutes = settings.advanceReminderMinutes,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(advanceReminderEnabled = isChecked)
+                            // 只在打开开关时检测重复提醒
+                            if (isChecked && settings.advanceReminderMinutes > 0) {
+                                val hasDuplicate = events.any { event ->
+                                    event.eventType != "temp" &&
+                                    event.reminders.any { it <= settings.advanceReminderMinutes }
+                                }
+                                if (hasDuplicate) {
+                                    showToast("检测到可能存在的重复提醒", ToastType.INFO)
+                                }
+                            }
+                        },
+                        onMinutesChange = { minutes ->
+                            viewModel.updatePreference(advanceReminderMinutes = minutes)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
                 }
             }
 
@@ -332,5 +384,63 @@ fun SliderSettingItem(
             valueRange = valueRange,
             steps = steps
         )
+    }
+}
+
+@Composable
+fun AdvanceReminderSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    minutes: Int,
+    onCheckedChange: (Boolean) -> Unit,
+    onMinutesChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        // 主行：开关 + 标题 + 副标题
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = cardTitleStyle)
+                Text(subtitle, style = cardSubtitleStyle)
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+
+        // 展开区：三档滑块（10/20/30分钟）
+        AnimatedVisibility(
+            visible = checked,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            ) {
+                // 标签行 - 添加与滑块轨道相同的 padding 以对齐节点
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp), // 与滑块轨道 padding 匹配
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "10分钟", style = cardSubtitleStyle)
+                    Text(text = "20分钟", style = cardSubtitleStyle)
+                    Text(text = "30分钟", style = cardSubtitleStyle)
+                }
+                Slider(
+                    value = minutes.toFloat(),
+                    onValueChange = { onMinutesChange(it.toInt()) },
+                    valueRange = 10f..30f,
+                    steps = 1 // 10, 20, 30 三个离散值
+                )
+            }
+        }
     }
 }
