@@ -221,7 +221,16 @@ fun SwipeableEventItem(
                                     }
                                 }
 
-                                // 2. 时间信息
+                                // 2. 日期范围（仅多日事件显示）
+                                if (event.startDate != event.endDate) {
+                                    Text(
+                                        text = "${event.startDate.monthValue}/${event.startDate.dayOfMonth} - ${event.endDate.monthValue}/${event.endDate.dayOfMonth}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                // 3. 时间信息
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "${event.startTime} - ${event.endTime}",

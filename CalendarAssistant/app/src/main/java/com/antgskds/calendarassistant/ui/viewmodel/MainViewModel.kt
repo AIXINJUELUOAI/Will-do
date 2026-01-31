@@ -41,18 +41,25 @@ class MainViewModel(
         repository.settings
     ) { date, revealedId, events, courses, settings ->
 
-        val todayNormal = events.filter { it.startDate == date }
+        val todayNormal = events.filter { event ->
+            date >= event.startDate && date <= event.endDate
+        }.distinctBy { it.id }
         val todayCourses = CourseManager.getDailyCourses(date, courses, settings)
         val todayMerged = (todayNormal + todayCourses).sortedWith(compareBy(
-            // 优先级排序：未过期重要 > 未过期 > 已过期重要 > 已过期
+            // 8级优先级：过期状态 > 重要性 > 单多日
             { event ->
                 val isExpired = DateCalculator.isEventExpired(event)
                 val isImportant = event.isImportant
+                val isMultiDay = event.startDate != event.endDate
                 when {
-                    !isExpired && isImportant -> 0
-                    !isExpired && !isImportant -> 1
-                    isExpired && isImportant -> 2
-                    else -> 3
+                    !isExpired && isImportant && isMultiDay -> 0
+                    !isExpired && isImportant && !isMultiDay -> 1
+                    !isExpired && !isImportant && isMultiDay -> 2
+                    !isExpired && !isImportant && !isMultiDay -> 3
+                    isExpired && isImportant && isMultiDay -> 4
+                    isExpired && isImportant && !isMultiDay -> 5
+                    isExpired && !isImportant && isMultiDay -> 6
+                    else -> 7
                 }
             },
             // 同优先级内按开始时间排序
@@ -61,17 +68,25 @@ class MainViewModel(
 
         val tomorrowMerged = if (settings.showTomorrowEvents) {
             val tomorrow = date.plusDays(1)
-            val tomorrowNormal = events.filter { it.startDate == tomorrow }
+            val tomorrowNormal = events.filter { event ->
+                tomorrow >= event.startDate && tomorrow <= event.endDate
+            }.distinctBy { it.id }
             val tomorrowCourses = CourseManager.getDailyCourses(tomorrow, courses, settings)
             (tomorrowNormal + tomorrowCourses).sortedWith(compareBy(
+                // 8级优先级：过期状态 > 重要性 > 单多日
                 { event ->
                     val isExpired = DateCalculator.isEventExpired(event)
                     val isImportant = event.isImportant
+                    val isMultiDay = event.startDate != event.endDate
                     when {
-                        !isExpired && isImportant -> 0
-                        !isExpired && !isImportant -> 1
-                        isExpired && isImportant -> 2
-                        else -> 3
+                        !isExpired && isImportant && isMultiDay -> 0
+                        !isExpired && isImportant && !isMultiDay -> 1
+                        !isExpired && !isImportant && isMultiDay -> 2
+                        !isExpired && !isImportant && !isMultiDay -> 3
+                        isExpired && isImportant && isMultiDay -> 4
+                        isExpired && isImportant && !isMultiDay -> 5
+                        isExpired && !isImportant && isMultiDay -> 6
+                        else -> 7
                     }
                 },
                 { it.startTime }
