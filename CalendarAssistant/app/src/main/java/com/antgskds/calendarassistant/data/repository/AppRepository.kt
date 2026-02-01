@@ -5,6 +5,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.source.ArchiveJsonDataSource
 import com.antgskds.calendarassistant.data.source.CourseJsonDataSource
 import com.antgskds.calendarassistant.data.source.EventJsonDataSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
@@ -36,6 +37,7 @@ class AppRepository private constructor(private val context: Context) {
     private val eventSource = EventJsonDataSource(context)
     private val courseSource = CourseJsonDataSource(context)
     private val settingsSource = SettingsDataSource(context)
+    private val archiveSource = ArchiveJsonDataSource(context)
 
     // StateFlows
     private val _events = MutableStateFlow<List<MyEvent>>(emptyList())
@@ -47,6 +49,9 @@ class AppRepository private constructor(private val context: Context) {
     private val _settings = MutableStateFlow(MySettings())
     val settings: StateFlow<MySettings> = _settings.asStateFlow()
 
+    private val _archivedEvents = MutableStateFlow<List<MyEvent>>(emptyList())
+    val archivedEvents: StateFlow<List<MyEvent>> = _archivedEvents.asStateFlow()
+
     // 【新增】胶囊状态管理器 - ✅ 直接初始化，避免 lazy 死锁
     val capsuleStateManager: CapsuleStateManager = CapsuleStateManager(this, scope, context.applicationContext)
 
@@ -55,6 +60,7 @@ class AppRepository private constructor(private val context: Context) {
 
     private val eventMutex = Mutex()
     private val courseMutex = Mutex()
+    private val archiveMutex = Mutex()
 
     init {
         refreshData()
@@ -69,13 +75,34 @@ class AppRepository private constructor(private val context: Context) {
             val loadedEvents = eventSource.loadEvents()
             val loadedCourses = courseSource.loadCourses()
             val loadedSettings = settingsSource.loadSettings()
+            // 🔥 修复：移除归档加载，改为懒加载（冷启动性能优化）
+            // val loadedArchives = archiveSource.loadArchivedEvents()
 
             _events.value = loadedEvents
             _courses.value = loadedCourses
             _settings.value = loadedSettings
+            // _archivedEvents 保持初始为空，直到用户查看时加载
 
             loadedEvents.forEach { event ->
                 NotificationScheduler.scheduleReminders(context, event)
+            }
+
+            // 启动后尝试自动归档（建议延迟执行，不阻塞启动）
+            launch {
+                autoArchiveExpiredEvents()
+            }
+        }
+    }
+
+    /**
+     * 🔥 修复：懒加载归档数据
+     * 仅在进入归档页面时调用
+     */
+    fun fetchArchivedEvents() {
+        scope.launch {
+            archiveMutex.withLock {
+                val loaded = archiveSource.loadArchivedEvents()
+                _archivedEvents.value = loaded
             }
         }
     }
@@ -593,6 +620,162 @@ class AppRepository private constructor(private val context: Context) {
                 deleteEvent(eventId, triggerSync = false)
             }
         )
+    }
+
+    // ==================== 归档操作 ====================
+
+    /**
+     * 🔥 修复：归档单个事件（原子操作修正版）
+     * 1. 先写入归档（持有 archiveMutex）
+     * 2. 后删除原日程（复用 deleteEvent，它持有 eventMutex）
+     * 3. 类型检查：课程和临时事件不可归档
+     */
+    suspend fun archiveEvent(eventId: String) {
+        // 1. 类型安全检查与获取对象
+        val event = _events.value.find { it.id == eventId } ?: return
+
+        // 🛡️ 拦截规则：课程和临时事件不可归档
+        if (event.eventType == "course" || event.eventType == "temp") {
+            Log.w("AppRepository", "Attempted to archive special event type: ${event.eventType}")
+            return
+        }
+
+        // 2. 先写入归档 (持有 archiveMutex)
+        val archivedEvent = event.copy(archivedAt = System.currentTimeMillis())
+
+        try {
+            archiveMutex.withLock {
+                // 如果内存中还没有加载归档数据，先加载（防止覆盖）
+                val currentArchived = if (_archivedEvents.value.isEmpty()) {
+                    archiveSource.loadArchivedEvents().toMutableList()
+                } else {
+                    _archivedEvents.value.toMutableList()
+                }
+
+                currentArchived.add(archivedEvent)
+                // 这一步可能会抛出 IO 异常
+                updateArchivedEvents(currentArchived)
+            }
+        } catch (e: Exception) {
+            Log.e("AppRepository", "归档失败: 写入归档文件错误", e)
+            return // 归档写入失败，终止操作，原日程保留
+        }
+
+        // 3. 后删除原日程 (复用 deleteEvent，它持有 eventMutex，线程安全)
+        // triggerSync = false 因为归档本质上是"移动"，不应视为系统日历的"删除"
+        // 如果希望系统日历里的也删掉，可以设为 true
+        deleteEvent(eventId, triggerSync = false)
+
+        Log.d("AppRepository", "Event archived: ${event.title}")
+    }
+
+    /**
+     * 🔥 修复：还原归档事件（逻辑完善版）
+     * 1. 获取归档对象（持有 archiveMutex）
+     * 2. 恢复到活跃列表（复用 addEvent，持有 eventMutex）
+     * 3. 从归档中移除（持有 archiveMutex）
+     */
+    suspend fun restoreEvent(archivedEventId: String) {
+        // 1. 获取归档对象 (持有 archiveMutex)
+        val archivedEvent: MyEvent?
+
+        archiveMutex.withLock {
+            archivedEvent = _archivedEvents.value.find { it.id == archivedEventId }
+        }
+
+        if (archivedEvent == null) return
+
+        // 2. 恢复到活跃列表 (复用 addEvent，持有 eventMutex)
+        val activeEvent = archivedEvent.copy(archivedAt = null)
+
+        // 检查是否已过期，如果过期太久，可能不需要 triggerSync
+        addEvent(activeEvent, triggerSync = true)
+
+        // 3. 从归档中移除 (持有 archiveMutex)
+        archiveMutex.withLock {
+            val currentArchived = _archivedEvents.value.toMutableList()
+            currentArchived.remove(archivedEvent)
+            updateArchivedEvents(currentArchived)
+        }
+
+        Log.d("AppRepository", "Event restored: ${activeEvent.title}")
+    }
+
+    /**
+     * 永久删除归档事件
+     */
+    suspend fun deleteArchivedEvent(archivedEventId: String) = archiveMutex.withLock {
+        val currentArchived = _archivedEvents.value.toMutableList()
+        val event = currentArchived.find { it.id == archivedEventId }
+        if (event != null) {
+            currentArchived.remove(event)
+            updateArchivedEvents(currentArchived)
+        }
+    }
+
+    /**
+     * 清空所有归档
+     */
+    suspend fun clearAllArchives() = archiveMutex.withLock {
+        updateArchivedEvents(emptyList())
+    }
+
+    private suspend fun updateArchivedEvents(newList: List<MyEvent>) {
+        _archivedEvents.value = newList
+        archiveSource.saveArchivedEvents(newList)
+    }
+
+    /**
+     * 🔥 修复：自动归档过期事件（批量操作优化版）
+     * 条件：endDate < (now - threshold) 且 eventType != "course"
+     * @return 归档的事件数量
+     */
+    suspend fun autoArchiveExpiredEvents(): Int {
+        val settings = _settings.value
+        if (!settings.autoArchiveEnabled) return 0
+
+        val cutoffDate = LocalDate.now().minusDays(settings.archiveDaysThreshold.toLong())
+
+        // 1. 筛选需要归档的事件
+        val eventsSnapshot = _events.value // 获取快照
+        val toArchiveEvents = eventsSnapshot.filter { event ->
+            event.eventType != "course" &&
+            event.eventType != "temp" && // 临时事件也不归档
+            event.endDate.isBefore(cutoffDate)
+        }
+
+        if (toArchiveEvents.isEmpty()) return 0
+
+        Log.d("AppRepository", "Auto-archiving ${toArchiveEvents.size} events...")
+
+        // 2. 批量处理 - 归档部分
+        archiveMutex.withLock {
+            val currentArchived = if (_archivedEvents.value.isEmpty()) {
+                archiveSource.loadArchivedEvents().toMutableList()
+            } else {
+                _archivedEvents.value.toMutableList()
+            }
+
+            val newArchivedItems = toArchiveEvents.map {
+                it.copy(archivedAt = System.currentTimeMillis())
+            }
+            currentArchived.addAll(newArchivedItems)
+            updateArchivedEvents(currentArchived)
+        }
+
+        // 3. 批量处理 - 删除部分 (使用 eventMutex)
+        eventMutex.withLock {
+            val currentEvents = _events.value.toMutableList()
+            // 取消通知
+            toArchiveEvents.forEach { NotificationScheduler.cancelReminders(context, it) }
+            // 移除
+            currentEvents.removeAll { event -> toArchiveEvents.any { it.id == event.id } }
+            updateEvents(currentEvents)
+            // 触发一次同步即可
+            triggerAutoSync()
+        }
+
+        return toArchiveEvents.size
     }
 }
 
