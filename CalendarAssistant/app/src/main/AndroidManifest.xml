@@ -132,5 +132,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- 事件动作接收器（取件码已取/延长） -->
+        <receiver
+            android:name=".service.receiver.EventActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.antgskds.calendarassistant.action.COMPLETE" />
+                <action android:name="com.antgskds.calendarassistant.action.EXTEND" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>

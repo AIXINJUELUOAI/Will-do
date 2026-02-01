@@ -27,6 +27,7 @@ import java.time.LocalDate
 fun HomeScreen(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
+    pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     // 从 settings 读取主题状态
@@ -47,8 +48,17 @@ fun HomeScreen(
 
     // 状态管理
     var isSidebarOpen by remember { mutableStateOf(false) }
+    // 【修改 2】初始 Tab 状态不需要依赖参数了，默认为 0 即可，依靠 LaunchedEffect 来跳转
     var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=All
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
+
+    // 【修改 3】新增：监听时间戳变化
+    // 只要 timestamp 变化且大于 0，就强制切到"全部"Tab
+    LaunchedEffect(pickupTimestamp) {
+        if (pickupTimestamp > 0) {
+            selectedTab = 1
+        }
+    }
 
     // 弹窗状态管理 (❌ 已移除 showCourseManager、showTimeTableEditor 和 AI 输入)
     var showAddEventDialog by remember { mutableStateOf(false) }
@@ -98,6 +108,8 @@ fun HomeScreen(
                     viewModel = mainViewModel,
                     currentTab = selectedTab,
                     uiSize = settings.uiSize,
+                    // 【修改 4】将时间戳传给 HomePage
+                    pickupTimestamp = pickupTimestamp,
                     onSettingsClick = { isSidebarOpen = !isSidebarOpen },
                     onCourseClick = { _, _ -> },
                     onAddEventClick = { showAddEventDialog = true },
