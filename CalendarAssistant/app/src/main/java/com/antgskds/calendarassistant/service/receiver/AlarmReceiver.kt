@@ -40,6 +40,26 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // ✅ 1. 获取 PendingResult，告诉系统"我还有异步任务要做，别杀我"
+        val pendingResult = goAsync()
+
+        // ✅ 2. 在协程中处理业务
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                handleReceiveAsync(context, intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "AlarmReceiver error", e)
+            } finally {
+                // ✅ 3. 必须在 finally 中调用 finish()，否则会导致 ANR
+                pendingResult.finish()
+            }
+        }
+    }
+
+    /**
+     * 将原来的逻辑封装到 suspend 函数中
+     */
+    private suspend fun handleReceiveAsync(context: Context, intent: Intent) {
         val action = intent.action
         val eventId = intent.getStringExtra("EVENT_ID")
 
@@ -67,6 +87,27 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             NotificationScheduler.ACTION_REFRESH_CAPSULE -> {
                 handleCapsuleRefresh(context, eventId, eventTitle)
+            }
+            NotificationScheduler.ACTION_PICKUP_EXPIRE_SWITCH -> {
+                // 【修复问题1 - 完善逻辑】取件码已过期
+                Log.d(TAG, "取件码已过期，准备切换按钮状态: $eventTitle")
+
+                // ✅ 获取 Repository 以检查设置
+                val repository = (context.applicationContext as App).repository
+                val settings = repository.settings.value
+
+                // 如果胶囊模式开启，刷新胶囊状态（胶囊会显示延长按钮并弹出）
+                if (settings.isLiveCapsuleEnabled) {
+                    Log.i(TAG, "胶囊模式开启 -> 刷新胶囊以显示延长按钮")
+                    Log.i(TAG, ">>> 调用 forceRefresh()")
+                    repository.capsuleStateManager.forceRefresh()
+                    Log.i(TAG, ">>> forceRefresh() 调用完成")
+                    handleCapsuleRefresh(context, eventId, eventTitle)
+                } else {
+                    // 胶囊模式关闭时，弹出普通延长通知
+                    Log.i(TAG, "胶囊模式关闭 -> 弹出普通延长通知")
+                    NotificationScheduler.showPickupExtendNotification(context, eventId, eventTitle)
+                }
             }
             NotificationScheduler.ACTION_REMINDER, null -> {
                 // 处理普通提醒（action 可能为 null 的情况作为兜底）
@@ -156,6 +197,18 @@ class AlarmReceiver : BroadcastReceiver() {
 
         } else {
             // 【降级逻辑】
+
+            // 🔴 修复：检查是否是取件码
+            // 既然已经在 handleCapsuleStart，说明 eventId 已经通过了 isEventStillValid 检查
+            // 直接从内存中获取事件对象来判断类型
+            val event = repository.events.value.find { it.id == eventId }
+            val isTemp = event?.eventType == "temp"
+
+            if (isTemp) {
+                Log.d(TAG, "普通模式下跳过取件码的'日程开始'通知，因为已有常驻通知")
+                return
+            }
+
             Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled, OCR服务:$isServiceRunning) -> 降级为普通通知")
             showStandardNotification(context, eventId, title, "日程开始")
         }

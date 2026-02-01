@@ -24,5 +24,6 @@ data class MyEvent(
     val isImportant: Boolean = false,
     val sourceImagePath: String? = null,
     val reminders: List<Int> = emptyList(),
-    val eventType: String = "event" // "event", "temp", "course"
+    val eventType: String = "event", // "event", "temp", "course"
+    val archivedAt: Long? = null // 归档时间戳，null = 未归档
 )

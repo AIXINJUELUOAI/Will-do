@@ -31,6 +31,12 @@ fun SettingsDetailScreen(
         null
     }
 
+    // ArchivesPage 有自己的完整 Scaffold，直接返回
+    if (destination == SettingsDestination.Archives) {
+        ArchivesPage(mainViewModel, onBack)
+        return
+    }
+
     val titleText = when {
         destinationStr == "course_manager" -> "课程管理"
         destinationStr == "timetable_editor" -> "作息时间"
@@ -42,6 +48,7 @@ fun SettingsDetailScreen(
         destination == SettingsDestination.Preference -> "偏好设置"
         destination == SettingsDestination.Backup -> "数据备份"
         destination == SettingsDestination.About -> "关于应用"
+        destination == SettingsDestination.Laboratory -> "实验室"
         else -> "设置"
     }
 
@@ -91,6 +98,7 @@ fun SettingsDetailScreen(
                 destination == SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
                 destination == SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, uiSize)
                 destination == SettingsDestination.About -> AboutPage(uiSize)
+                destination == SettingsDestination.Laboratory -> LaboratoryPage(uiSize)
             }
         }
     }

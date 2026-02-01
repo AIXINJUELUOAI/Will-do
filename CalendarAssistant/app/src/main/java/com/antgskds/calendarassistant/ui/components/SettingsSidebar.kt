@@ -39,7 +39,10 @@ enum class SettingsDestination {
     // 操作类（不导航，直接执行）
     ThemeToggle,       // 深色/浅色模式切换
     Logout,            // 退出登录
-    About              // 关于软件
+    About,             // 关于软件
+
+    // 实验室
+    Laboratory         // 实验室功能
 }
 
 @Composable
@@ -72,7 +75,10 @@ fun SettingsSidebar(
         // 第三块：其他设置卡片
         SidebarOtherSettingsCard(onNavigate)
 
-        // 第四块：数据管理卡片（日程归档、数据备份）
+        // 第四块：实验室卡片
+        SidebarLaboratoryCard(onNavigate)
+
+        // 第五块：数据管理卡片（日程归档、数据备份）
         SidebarDataManagementCard(onNavigate)
 
         Spacer(modifier = Modifier.weight(1f))
@@ -221,7 +227,27 @@ private fun SidebarOtherSettingsCard(onNavigate: (SettingsDestination) -> Unit) 
     }
 }
 
-// 第四块：数据管理卡片
+// 第四块：实验室卡片
+@Composable
+private fun SidebarLaboratoryCard(onNavigate: (SettingsDestination) -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            // 实验室
+            SidebarActionItem(
+                icon = Icons.Default.Science,
+                title = "实验室",
+                subtitle = "实验性功能",
+                onClick = { onNavigate(SettingsDestination.Laboratory) }
+            )
+        }
+    }
+}
+
+// 第五块：数据管理卡片
 @Composable
 private fun SidebarDataManagementCard(onNavigate: (SettingsDestination) -> Unit) {
     Card(

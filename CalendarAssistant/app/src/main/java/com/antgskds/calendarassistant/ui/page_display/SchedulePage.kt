@@ -131,7 +131,7 @@ fun ScheduleView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(dynamicNodeHeight * maxNodes)
+                    .height(dynamicNodeHeight * maxNodes + 32.dp)  // 增加底部缓冲空间
                     .verticalScroll(rememberScrollState())
             ) {
                 // 左侧节次
@@ -139,9 +139,12 @@ fun ScheduleView(
 
                 // 右侧绝对定位网格
                 Box(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(dynamicNodeHeight * maxNodes + 32.dp)  // 明确设置高度
                 ) {
-                    val colWidth = this@BoxWithConstraints.maxWidth / 7
+                    // 修正：先减去 SidebarWidth (35.dp)，再除以7
+                    val colWidth = (this@BoxWithConstraints.maxWidth - SidebarWidth) / 7
 
                     // 绘制背景参考线 (可选)
                     // ...
