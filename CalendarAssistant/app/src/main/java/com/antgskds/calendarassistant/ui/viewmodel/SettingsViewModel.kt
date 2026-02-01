@@ -68,14 +68,15 @@ class SettingsViewModel(
     }
 
     // 更新偏好设置（支持单独更新某一项）
-    // 【修改】增加了 pickupAggregation 和 advanceReminder 参数
+    // 【修改】增加了 pickupAggregation、advanceReminder 和 autoArchive 参数
     fun updatePreference(
         showTomorrow: Boolean? = null,
         dailySummary: Boolean? = null,
         liveCapsule: Boolean? = null,
         pickupAggregation: Boolean? = null,
         advanceReminderEnabled: Boolean? = null,
-        advanceReminderMinutes: Int? = null
+        advanceReminderMinutes: Int? = null,
+        autoArchive: Boolean? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -85,6 +86,7 @@ class SettingsViewModel(
             if (pickupAggregation != null) current = current.copy(isPickupAggregationEnabled = pickupAggregation)
             if (advanceReminderEnabled != null) current = current.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
             if (advanceReminderMinutes != null) current = current.copy(advanceReminderMinutes = advanceReminderMinutes)
+            if (autoArchive != null) current = current.copy(autoArchiveEnabled = autoArchive)
 
             repository.updateSettings(current)
         }
