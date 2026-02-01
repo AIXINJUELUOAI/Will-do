@@ -11,6 +11,7 @@ import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow // ✅ 改用 StateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -24,16 +25,6 @@ import androidx.compose.ui.graphics.toArgb
 
 /**
  * 胶囊状态管理器 - 主动唤醒模式
- *
- * 职责：
- * 1. 统一计算胶囊状态（合并日程、课程、取件码）
- * 2. 监听时间变化（每分钟）实现过期检测
- * 3. 主动唤醒：当计算出 Active 状态时，启动 CapsuleService
- *
- * 依赖：
- * - AppRepository: 获取 events、courses、settings
- * - CoroutineScope: App Scope
- * - Context: 启动 Service
  */
 class CapsuleStateManager(
     private val repository: AppRepository,
@@ -44,26 +35,31 @@ class CapsuleStateManager(
         private const val TAG = "CapsuleStateManager"
         private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 
-        // 聚合胶囊常量
-        private const val AGGREGATE_PICKUP_ID = "AGGREGATE_PICKUP"
-        private const val AGGREGATE_NOTIF_ID = 99999
+        const val AGGREGATE_PICKUP_ID = "AGGREGATE_PICKUP"
+        const val AGGREGATE_NOTIF_ID = 99999
+
+        // ✅ 核心修复 1：改用 MutableStateFlow(0)
+        // StateFlow 总是持有最新值，保证 combine 永远不会因为等待信号而卡死或丢状态
+        private val forceRefreshTrigger = MutableStateFlow(0)
     }
 
     /**
-     * 胶囊UI状态 - StateFlow
-     * 自动合并 events、settings 和时间ticker
+     * 【修复问题3】强制刷新胶囊状态
+     * ✅ 改为同步执行，确保调用后立即生效
      */
+    fun forceRefresh() {
+        // ✅ 直接在调用线程更新值，不使用协程
+        val newValue = forceRefreshTrigger.value + 1
+        forceRefreshTrigger.value = newValue
+        Log.d(TAG, "forceRefresh: 主动触发胶囊状态刷新 (Counter: $newValue)")
+    }
+
     val uiState: StateFlow<CapsuleUiState> = createCapsuleStateFlow()
 
     init {
-        // ✅ 主动唤醒机制：监听 uiState，当变为 Active 时启动 Service
         startServiceWakeup()
     }
 
-    /**
-     * 主动唤醒 Service
-     * 当状态变为 Active 时，确保 CapsuleService 正在运行
-     */
     private fun startServiceWakeup() {
         appScope.launch {
             uiState.collect { state ->
@@ -85,17 +81,15 @@ class CapsuleStateManager(
         }
     }
 
-    /**
-     * 创建胶囊状态流
-     * 合并：events + settings + ticker(每分钟)
-     */
     private fun createCapsuleStateFlow(): StateFlow<CapsuleUiState> {
-        // 时间ticker流 - 每分钟发射一次
-        val tickerFlow = kotlinx.coroutines.flow.flow {
-            emit(System.currentTimeMillis()) // ✅ 立即发射第一个值，确保初始化时计算一次
+        // ✅ 改用 MutableStateFlow，确保立即有值且 combine 能正常工作
+        val tickerTrigger = MutableStateFlow(System.currentTimeMillis())
+
+        // 启动定时器，每 10 秒更新一次（快速检测过期）
+        appScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(60_000) // 每分钟
-                emit(System.currentTimeMillis())
+                kotlinx.coroutines.delay(10_000)
+                tickerTrigger.value = System.currentTimeMillis()
                 Log.d(TAG, "Ticker fired: 检查过期状态")
             }
         }
@@ -104,8 +98,11 @@ class CapsuleStateManager(
             repository.events,
             repository.courses,
             repository.settings,
-            tickerFlow
-        ) { events, courses, settings, _ ->
+            tickerTrigger,  // ✅ 改用 StateFlow
+            forceRefreshTrigger
+        ) { events, courses, settings, _, _ ->
+            // 注意：Lambda 参数数量必须匹配流的数量 (5个)
+            Log.d(TAG, "=== computeCapsuleState 被调用 ===")
             computeCapsuleState(events, courses, settings)
         }.stateIn(
             scope = appScope,
@@ -114,60 +111,52 @@ class CapsuleStateManager(
         )
     }
 
-    /**
-     * 核心计算逻辑：根据当前状态计算应该显示的胶囊
-     *
-     * 关键约束：
-     * 1. 必须包含虚拟课程（CourseManager.getDailyCourses）
-     * 2. 必须包含分钟级ticker（否则过期不会自动刷新）
-     * 3. 严禁修改 MyEvent 或 Course 数据结构
-     */
     private fun computeCapsuleState(
         events: List<MyEvent>,
         courses: List<com.antgskds.calendarassistant.data.model.Course>,
         settings: MySettings
     ): CapsuleUiState {
-        // 1. 检查实况胶囊开关
+        Log.d(TAG, ">>> computeCapsuleState 开始执行")
+
         if (!settings.isLiveCapsuleEnabled) {
-            Log.d(TAG, "实况胶囊未开启")
             return CapsuleUiState.None
         }
 
         val now = LocalDateTime.now()
         val today = LocalDate.now()
 
-        // 2. 获取今日虚拟课程（关键！不能只读events.json）
         val todayCourses = CourseManager.getDailyCourses(today, courses, settings)
-        Log.d(TAG, "今日课程数量: ${todayCourses.size}")
-
-        // 3. 合并日程和课程
         val allEvents = (events + todayCourses)
-        Log.d(TAG, "合并后事件总数: ${allEvents.size}")
 
-        // 4. 过滤活跃事件（未过期且已开始）
+        // 4. 过滤活跃事件
         val activeEvents = allEvents.filter { event ->
             try {
+                // ⚠️ 注意：如果你在测试时创建的时间已经过去了（哪怕只过去1秒），
+                // 这里的 now.isBefore(endDateTime) 就会返回 false，胶囊就会消失。
+                // 建议测试时，将结束时间设置在未来 5-10 分钟。
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
                 val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
 
-                // 计算有效开始时间（考虑全局提前提醒）
-                // 如果启用了全局提前提醒，胶囊会提前显示，所以判断"已开始"时也要提前
                 val effectiveStartTime = if (settings.isAdvanceReminderEnabled &&
                                                settings.advanceReminderMinutes > 0 &&
                                                event.eventType != "temp") {
-                    // 非取件码事件：提前显示
                     startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
                 } else {
-                    // 取件码或未启用提前提醒：使用原始开始时间
-                    startDateTime.minusMinutes(1)  // 保留1分钟宽容度
+                    startDateTime.minusMinutes(1)
                 }
 
-                // 检查：未过期 且 已开始
-                val isActive = now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
-
-                if (isActive) {
-                    Log.d(TAG, "活跃事件: ${event.title} (${event.eventType}) ${event.startTime}-${event.endTime}")
+                val isActive = if (event.eventType == "temp") {
+                    val isStarted = !now.isBefore(effectiveStartTime)
+                    val endPlusGrace = endDateTime.plusMinutes(30)
+                    val isWithinGracePeriod = now.isBefore(endPlusGrace)
+                    isStarted && isWithinGracePeriod
+                } else {
+                    // 日程胶囊逻辑：必须 未结束 且 已开始
+                    now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
                 }
+
+                // 调试日志：如果胶囊消失，请检查 Logcat 中这一行的 isActive 是 true 还是 false
+                // Log.d(TAG, "Event: ${event.title}, End: $endDateTime, Now: $now, IsActive: $isActive")
 
                 isActive
             } catch (e: Exception) {
@@ -177,78 +166,107 @@ class CapsuleStateManager(
         }
 
         if (activeEvents.isEmpty()) {
-            Log.d(TAG, "无活跃事件")
+            Log.d(TAG, "无活跃事件 (Active list empty)")
             return CapsuleUiState.None
         }
 
-        // 5. 分区：日程 vs 取件码
+        // ... 后续构建胶囊逻辑保持不变 ...
         val (pickupEvents, scheduleEvents) = activeEvents.partition { it.eventType == "temp" }
-        Log.d(TAG, "取件码: ${pickupEvents.size}, 日程: ${scheduleEvents.size}")
-
-        // 6. 构建胶囊列表
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
-        // 6a. 添加日程胶囊
         scheduleEvents.forEach { event ->
-            val startMillis = toMillis(event, event.startTime)
-            val endMillis = toMillis(event, event.endTime)
-
             capsules.add(CapsuleUiState.Active.CapsuleItem(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
-                eventType = event.eventType,  // 新增: 传递 eventType
+                eventType = event.eventType,
                 title = event.title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
-                color = event.color.toArgb(), // ✅ 修复：使用 toArgb() 正确转换 Compose Color
-                startMillis = startMillis,
-                endMillis = endMillis
+                color = event.color.toArgb(),
+                startMillis = toMillis(event, event.startTime),
+                endMillis = toMillis(event, event.endTime)
             ))
         }
 
-        // 6b. 处理取件码（聚合 vs 单体）
         val aggregateMode = settings.isPickupAggregationEnabled && pickupEvents.size > 1
 
         if (aggregateMode) {
-            // 聚合模式
+            // ==================== 聚合模式修改 ====================
+            // 检查是否有任意一个已过期，如果有，改变标题或内容以触发更新
+            val anyExpired = pickupEvents.any {
+                 val endDt = LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, TIME_FORMATTER))
+                 now.isAfter(endDt)
+            }
+
+            // 如果有过期项，在标题增加标记，强制打破 StateFlow 去重
+            val titleText = if (anyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项"
+
             Log.d(TAG, "聚合模式: ${pickupEvents.size} 个取件码")
             val contentText = pickupEvents.take(5).mapIndexed { i, e ->
                 val line = "${i + 1}. ${e.title}"
                 if (i == 4 && pickupEvents.size > 5) "$line ..." else line
             }.joinToString("\n")
 
-            // 取最晚的结束时间
             val latestEndMillis = pickupEvents.mapNotNull {
                 try {
                     LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, TIME_FORMATTER))
                         .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 } catch (e: Exception) { null }
-            }.maxOrNull() ?: (System.currentTimeMillis() + 2 * 60 * 60 * 1000) // 默认2小时
+            }.maxOrNull() ?: (System.currentTimeMillis() + 2 * 60 * 60 * 1000)
 
             capsules.add(CapsuleUiState.Active.CapsuleItem(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = CapsuleService.TYPE_PICKUP,
-                eventType = "temp",  // 新增: 取件码类型
-                title = "${pickupEvents.size} 个待取事项",
+                eventType = "temp",
+                title = titleText, // ✅ 使用动态标题
                 content = contentText,
                 color = android.graphics.Color.GREEN,
                 startMillis = System.currentTimeMillis(),
                 endMillis = latestEndMillis
             ))
         } else {
-            // 单体模式
+            // ==================== 单体模式修改 (核心修复) ====================
             Log.d(TAG, "单体模式: ${pickupEvents.size} 个取件码")
             pickupEvents.forEach { event ->
+                // 1. 计算过期状态
+                val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
+                val isExpired = now.isAfter(endDateTime)
+
+                // ✅ 详细日志：输出每个取件码的状态
+                Log.d(TAG, "取件码: ${event.title}, 结束时间: $endDateTime, 当前: $now, 过期: $isExpired")
+
+                // 2. 动态生成 Content (打破 StateFlow 去重)
+                val dynamicContent = if (isExpired) {
+                    "[已过期] 备注: ${event.description}"
+                } else {
+                    "备注: ${event.description}"
+                }
+
+                // 3. ✅ 关键：根据过期状态决定胶囊类型
+                // 如果过期，直接传 TYPE_PICKUP_EXPIRED (3)，不让 Provider 瞎猜
+                val capsuleType = if (isExpired) {
+                    CapsuleService.TYPE_PICKUP_EXPIRED
+                } else {
+                    CapsuleService.TYPE_PICKUP
+                }
+
+                // 4. ✅ 回退：ID 保持稳定，不再 +1
+                // 我们改用 CapsuleService 里的暴力刷新策略来解决弹窗问题
+                val dynamicNotifId = event.id.hashCode()
+
+                // ✅ 详细日志：输出生成的胶囊信息
+                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId")
+
                 capsules.add(CapsuleUiState.Active.CapsuleItem(
                     id = event.id,
-                    notifId = event.id.hashCode(),
-                    type = CapsuleService.TYPE_PICKUP,
-                    eventType = event.eventType,  // 新增: 传递 eventType
+                    notifId = dynamicNotifId, // ID 保持不变
+                    type = capsuleType,
+                    eventType = event.eventType,
                     title = event.title,
-                    content = "备注: ${event.description}",
+                    content = dynamicContent, // 内容变化依然保留
                     color = android.graphics.Color.GREEN,
-                    startMillis = System.currentTimeMillis(),
+                    startMillis = toMillis(event, event.startTime),
                     endMillis = toMillis(event, event.endTime)
                 ))
             }
@@ -258,9 +276,6 @@ class CapsuleStateManager(
         return CapsuleUiState.Active(capsules)
     }
 
-    /**
-     * 辅助函数：将事件的时间字符串转换为毫秒时间戳
-     */
     private fun toMillis(event: MyEvent, timeStr: String): Long {
         return try {
             val localDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(timeStr, TIME_FORMATTER))

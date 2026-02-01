@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
@@ -30,6 +31,30 @@ class MainViewModel(
     private val repository: AppRepository
 ) : ViewModel() {
 
+    // ✅ 时间触发器：每 10 秒触发一次，确保过期状态能及时更新
+    private val _timeTrigger = MutableStateFlow(System.currentTimeMillis())
+
+    init {
+        // 启动定时器
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(10_000)  // 10 秒
+                _timeTrigger.value = System.currentTimeMillis()
+            }
+        }
+
+        // 自动归档过期事件
+        viewModelScope.launch {
+            val archivedCount = repository.autoArchiveExpiredEvents()
+            if (archivedCount > 0) {
+                Log.d("Archive", "自动归档了 $archivedCount 条事件")
+            }
+        }
+    }
+
+    // 归档事件（公开访问）
+    val archivedEvents = repository.archivedEvents
+
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _revealedEventId = MutableStateFlow<String?>(null)
 
@@ -38,8 +63,15 @@ class MainViewModel(
         _revealedEventId,
         repository.events,
         repository.courses,
-        repository.settings
-    ) { date, revealedId, events, courses, settings ->
+        repository.settings,
+        _timeTrigger  // ✅ 添加时间触发器
+    ) { values ->
+        val date = values[0] as LocalDate
+        val revealedId = values[1] as String?
+        val events = values[2] as List<MyEvent>
+        val courses = values[3] as List<Course>
+        val settings = values[4] as MySettings
+        // values[5] 是 _timeTrigger，不需要使用
 
         val todayNormal = events.filter { event ->
             date >= event.startDate && date <= event.endDate
@@ -104,7 +136,7 @@ class MainViewModel(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,  // ✅ 改为 Eagerly，确保 init 中的归档操作能被捕获
         initialValue = MainUiState()
     )
 
@@ -249,6 +281,69 @@ class MainViewModel(
                 )
                 repository.addCourse(shadowCourse)
             }
+        }
+    }
+
+    // --- 归档操作 ---
+
+    /**
+     * 🔥 修复：懒加载归档数据
+     * 仅在进入归档页面时调用
+     */
+    fun fetchArchivedEvents() {
+        repository.fetchArchivedEvents()
+    }
+
+    /**
+     * 归档事件
+     */
+    fun archiveEvent(eventId: String) {
+        viewModelScope.launch {
+            repository.archiveEvent(eventId)
+            _revealedEventId.value = null
+        }
+    }
+
+    /**
+     * 还原归档事件
+     */
+    fun restoreEvent(archivedEventId: String) {
+        viewModelScope.launch {
+            repository.restoreEvent(archivedEventId)
+        }
+    }
+
+    /**
+     * 删除归档事件
+     */
+    fun deleteArchivedEvent(archivedEventId: String) {
+        viewModelScope.launch {
+            repository.deleteArchivedEvent(archivedEventId)
+        }
+    }
+
+    /**
+     * 清空所有归档
+     */
+    fun clearAllArchives() {
+        viewModelScope.launch {
+            repository.clearAllArchives()
+        }
+    }
+
+    /**
+     * 刷新数据
+     * 每次回到前台时调用，确保 UI 显示最新状态
+     */
+    fun refreshData() {
+        viewModelScope.launch {
+            // 1. 触发自动归档，删除过期事件
+            val archivedCount = repository.autoArchiveExpiredEvents()
+            if (archivedCount > 0) {
+                Log.d("Refresh", "自动归档了 $archivedCount 条事件")
+            }
+            // 2. 强制触发 UI 重组
+            _timeTrigger.value = System.currentTimeMillis()
         }
     }
 }

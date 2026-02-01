@@ -1,7 +1,9 @@
 package com.antgskds.calendarassistant.data.repository
 
+import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -163,6 +165,8 @@ class AppRepository private constructor(private val context: Context) {
             NotificationScheduler.cancelReminders(context, eventToDelete)
             currentList.remove(eventToDelete)
             updateEvents(currentList)
+            // ✅ 触发胶囊状态刷新，确保胶囊通知被注销
+            capsuleStateManager.forceRefresh()
             if (triggerSync) {
                 triggerAutoSync()
             }
@@ -172,6 +176,33 @@ class AppRepository private constructor(private val context: Context) {
     private suspend fun updateEvents(newList: List<MyEvent>) {
         _events.value = newList
         eventSource.saveEvents(newList)
+    }
+
+    /**
+     * 完成取件码（直接删除事件）
+     * 取件码用完即弃，点击"已取"后直接删除，不保留历史记录
+     */
+    suspend fun completePickupEvent(id: String) {
+        val event = _events.value.find { it.id == id }
+        if (event != null && event.eventType == "temp") {
+            // 取消相关通知（同时取消胶囊通知和初始通知）
+            val nm = NotificationManagerCompat.from(context)
+            nm.cancel(id.hashCode())  // 取消胶囊通知
+            nm.cancel(id.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF)  // 取消初始通知
+
+            // 直接删除事件
+            deleteEvent(id, triggerSync = false)
+
+            // 主动触发胶囊状态刷新
+            capsuleStateManager.forceRefresh()
+        }
+    }
+
+    /**
+     * 根据 ID 获取事件
+     */
+    suspend fun getEventById(id: String): MyEvent? {
+        return _events.value.find { it.id == id }
     }
 
     // --- Courses 操作 ---
@@ -726,22 +757,21 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     /**
-     * 🔥 修复：自动归档过期事件（批量操作优化版）
-     * 条件：endDate < (now - threshold) 且 eventType != "course"
+     * 🔥 修复：自动归档过期事件（使用正确的过期判断逻辑）
+     * 条件：使用 DateCalculator.isEventExpired() 判断是否过期（考虑日期+时间）
+     * 排除：课程和临时事件不归档
      * @return 归档的事件数量
      */
     suspend fun autoArchiveExpiredEvents(): Int {
         val settings = _settings.value
         if (!settings.autoArchiveEnabled) return 0
 
-        val cutoffDate = LocalDate.now().minusDays(settings.archiveDaysThreshold.toLong())
-
-        // 1. 筛选需要归档的事件
+        // 1. 筛选需要归档的事件（使用正确的过期判断）
         val eventsSnapshot = _events.value // 获取快照
         val toArchiveEvents = eventsSnapshot.filter { event ->
             event.eventType != "course" &&
             event.eventType != "temp" && // 临时事件也不归档
-            event.endDate.isBefore(cutoffDate)
+            com.antgskds.calendarassistant.core.util.DateCalculator.isEventExpired(event)
         }
 
         if (toArchiveEvents.isEmpty()) return 0
@@ -756,7 +786,11 @@ class AppRepository private constructor(private val context: Context) {
                 _archivedEvents.value.toMutableList()
             }
 
-            val newArchivedItems = toArchiveEvents.map {
+            // ✅ 修复：只添加不在归档列表中的事件，避免重复
+            val existingIds = currentArchived.map { it.id }.toSet()
+            val newItems = toArchiveEvents.filter { it.id !in existingIds }
+
+            val newArchivedItems = newItems.map {
                 it.copy(archivedAt = System.currentTimeMillis())
             }
             currentArchived.addAll(newArchivedItems)

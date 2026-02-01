@@ -24,6 +24,10 @@ data class MySettings(
     // 【新增】取件码聚合开关 (Beta)
     val isPickupAggregationEnabled: Boolean = false,
 
+    // 【新增】归档配置
+    val autoArchiveEnabled: Boolean = false, // 自动归档总开关
+    val archiveDaysThreshold: Int = 0, // 归档阈值天数（过期多少天后归档，0=立即归档）
+
     // 课表设置
     val semesterStartDate: String = "",
     val totalWeeks: Int = 20, // 旧版默认为 20

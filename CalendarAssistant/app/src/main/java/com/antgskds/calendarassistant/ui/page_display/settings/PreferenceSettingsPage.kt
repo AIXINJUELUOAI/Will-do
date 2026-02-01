@@ -255,6 +255,23 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    SwitchSettingItem(
+                        title = "自动归档",
+                        subtitle = "日程过期后立即自动归档",
+                        checked = settings.autoArchiveEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(autoArchive = isChecked)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
                 }
             }
 

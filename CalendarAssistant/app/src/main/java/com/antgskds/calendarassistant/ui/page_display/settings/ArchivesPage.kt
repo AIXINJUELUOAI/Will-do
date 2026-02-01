@@ -18,12 +18,13 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import java.time.YearMonth
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.LaunchedEffect
 
 /**
  * 归档页面
- * 按月分组显示已归档的事件
+ * 按日期分组显示已归档的事件
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -38,15 +39,18 @@ fun ArchivesPage(
         viewModel.fetchArchivedEvents()
     }
 
-    // 按月分组并排序（最新月份在前）
+    // 按具体日期分组并排序（最新日期在前）
     val groupedEvents = remember(archivedEvents) {
+        // ✅ 去重：防止重复 ID 导致崩溃
         archivedEvents
+            .distinctBy { it.id }
             .sortedByDescending { it.endDate }
-            .groupBy {
-                YearMonth.from(it.endDate)
-            }
+            .groupBy { it.endDate }
             .toSortedMap(reverseOrder())
     }
+
+    // 日期格式化器
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年M月d日") }
 
     Scaffold(
         topBar = {
@@ -86,18 +90,27 @@ fun ArchivesPage(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = padding
             ) {
-                groupedEvents.forEach { (yearMonth, events) ->
-                    // 粘性月份标题
+                groupedEvents.forEach { (date, events) ->
+                    // 粘性日期标题
                     stickyHeader {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.background)
                         ) {
+                            // 连续横线
+                            HorizontalDivider(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                thickness = 1.dp
+                            )
+                            // 日期文本
                             Text(
-                                text = "${yearMonth.year}年 ${yearMonth.monthValue}月",
-                                modifier = Modifier.padding(16.dp, 8.dp),
+                                text = "—— ${date.format(dateFormatter)}",
+                                modifier = Modifier.padding(16.dp, 12.dp),
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
