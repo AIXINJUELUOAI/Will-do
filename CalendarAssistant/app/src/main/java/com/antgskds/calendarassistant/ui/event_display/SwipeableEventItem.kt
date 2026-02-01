@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,7 +42,11 @@ fun SwipeableEventItem(
     onDelete: (MyEvent) -> Unit,
     onImportant: (MyEvent) -> Unit,
     onEdit: (MyEvent) -> Unit,
-    uiSize: Int = 2 // 1=小, 2=中, 3=大
+    uiSize: Int = 2, // 1=小, 2=中, 3=大
+    // 归档相关参数
+    isArchivePage: Boolean = false, // 是否为归档页模式
+    onArchive: (MyEvent) -> Unit = {}, // 归档回调（主页用）
+    onRestore: (MyEvent) -> Unit = {}  // 还原回调（归档页用）
 ) {
     // 根据 uiSize 计算按钮大小和菜单宽度
     val actionButtonSize = when (uiSize) {
@@ -50,10 +56,11 @@ fun SwipeableEventItem(
     }
 
     // 根据 uiSize 计算菜单宽度 (3个按钮 + 间距 + 右侧内边距)
+    // 归档页模式只有2个按钮，宽度稍小
     val actionMenuWidth = when (uiSize) {
-        1 -> 170.dp  // 小
-        2 -> 185.dp  // 中
-        else -> 200.dp // 大
+        1 -> if (isArchivePage) 130.dp else 170.dp  // 小
+        2 -> if (isArchivePage) 140.dp else 185.dp  // 中
+        else -> if (isArchivePage) 150.dp else 200.dp // 大
     }
     val density = LocalDensity.current
     val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
@@ -62,7 +69,9 @@ fun SwipeableEventItem(
     val scope = rememberCoroutineScope()
 
     // 调用 DateCalculator 中的工具函数
-    val isExpired = remember(event) { DateCalculator.isEventExpired(event) }
+    // 移除 remember 缓存，让 isExpired 每次重组时重新计算
+    // 这样 _timeTrigger 触发重组时，过期状态能实时更新
+    val isExpired = DateCalculator.isEventExpired(event)
 
     LaunchedEffect(isRevealed) {
         if (isRevealed) {
@@ -85,21 +94,42 @@ fun SwipeableEventItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) {
-                onCollapse()
-                onEdit(event)
-            }
-            SwipeActionIcon(
-                if (event.isImportant) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                Color(0xFFFFC107),
-                actionButtonSize
-            ) {
-                onCollapse()
-                onImportant(event)
-            }
-            SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
-                onCollapse()
-                onDelete(event)
+            // 归档页模式：显示还原和删除按钮
+            if (isArchivePage) {
+                SwipeActionIcon(Icons.Outlined.Restore, Color(0xFF4CAF50), actionButtonSize) {
+                    onCollapse()
+                    onRestore(event)
+                }
+                SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
+                    onCollapse()
+                    onDelete(event)
+                }
+            } else {
+                // 正常模式：显示编辑、星标、归档/删除按钮
+                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) {
+                    onCollapse()
+                    onEdit(event)
+                }
+                SwipeActionIcon(
+                    if (event.isImportant) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                    Color(0xFFFFC107),
+                    actionButtonSize
+                ) {
+                    onCollapse()
+                    onImportant(event)
+                }
+                // 🔥 修复：课程(course) 和 临时取件码(temp) 显示删除按钮，普通日程(event) 显示归档按钮
+                if (event.eventType == "course" || event.eventType == "temp") {
+                    SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
+                        onCollapse()
+                        onDelete(event)
+                    }
+                } else {
+                    SwipeActionIcon(Icons.Outlined.Archive, Color(0xFF2196F3), actionButtonSize) {
+                        onCollapse()
+                        onArchive(event)
+                    }
+                }
             }
         }
 
