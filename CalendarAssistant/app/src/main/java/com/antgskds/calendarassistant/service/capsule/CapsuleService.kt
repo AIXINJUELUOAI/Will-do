@@ -42,6 +42,8 @@ class CapsuleService : Service() {
         const val TAG = "CapsuleService"
         const val TYPE_SCHEDULE = 1
         const val TYPE_PICKUP = 2
+        // ✅ 新增：明确的过期取件码类型
+        const val TYPE_PICKUP_EXPIRED = 3
 
         @Volatile
         var isServiceRunning = false
@@ -83,7 +85,8 @@ class CapsuleService : Service() {
             android.graphics.Color.BLUE,
             TYPE_SCHEDULE,
             "event",
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            System.currentTimeMillis() + 2 * 60 * 60 * 1000  // 默认2小时后结束
         )
 
         val placeholderId = 1 // 占位通知 ID
@@ -110,7 +113,8 @@ class CapsuleService : Service() {
                 android.graphics.Color.BLUE,
                 TYPE_SCHEDULE,
                 "event",
-                System.currentTimeMillis()
+                System.currentTimeMillis(),
+                System.currentTimeMillis() + 2 * 60 * 60 * 1000  // 默认2小时后结束
             )
 
             val placeholderId = 1
@@ -260,6 +264,9 @@ class CapsuleService : Service() {
      * 添加或更新单个胶囊
      */
     private fun upsertCapsule(item: CapsuleUiState.Active.CapsuleItem) {
+        // ✅ 详细日志：收到的胶囊信息
+        Log.d(TAG, ">>> upsertCapsule 被调用: title=${item.title}, type=${item.type}, id=${item.id}, notifId=${item.notifId}")
+
         val notification = provider.buildNotification(
             this,
             item.id,
@@ -268,9 +275,53 @@ class CapsuleService : Service() {
             item.color,
             item.type,  // 传入 CapsuleItem 的 type 字段 (1=日程, 2=取件码)
             item.eventType,  // 新增: 传入 eventType 字段
-            item.startMillis  // 传入实际开始时间，用于计算"还有x分钟开始"
+            item.startMillis,  // 传入实际开始时间，用于计算"还有x分钟开始"
+            item.endMillis  // 传入实际结束时间，用于判断取件码是否过期
         )
 
+        // ✅ 暴力刷新策略：如果是过期胶囊，强制"先删-后建"
+        if (item.type == TYPE_PICKUP_EXPIRED) {
+            Log.d(TAG, ">>> 检测到 TYPE_PICKUP_EXPIRED，执行暴力刷新")
+            // 如果这是一个更新操作（内存里已有该ID），先移除旧的
+            if (activeCapsules.containsKey(item.notifId)) {
+                Log.d(TAG, "检测到过期胶囊更新，执行暴力刷新: ${item.title}")
+
+                // 显式取消旧通知
+                notificationManager.cancel(item.notifId)
+
+                // 立即重建（配合 setOnlyAlertOnce(false) 实现弹窗）
+                // 这里不需要延迟，cancel + notify 同步执行就足以欺骗系统
+
+                // 更新元数据
+                val metadata = CapsuleMetadata(
+                    notificationId = item.notifId,
+                    originalId = item.id,
+                    notification = notification,
+                    type = item.type,
+                    startTime = item.startMillis,
+                    endTime = item.endMillis
+                )
+                activeCapsules[item.notifId] = metadata
+
+                // ✅ 关键修复：如果是前台通知，需要用 startForeground 更新
+                // 否则通知不会显示
+                Log.d(TAG, ">>> currentForegroundId=$currentForegroundId, item.notifId=${item.notifId}")
+                if (item.notifId == currentForegroundId) {
+                    Log.d(TAG, ">>> 调用 promoteToForeground 更新前台通知")
+                    promoteToForeground(item.notifId, notification)
+                } else {
+                    Log.d(TAG, ">>> 调用 notify 更新普通通知")
+                    notificationManager.notify(item.notifId, notification)
+                }
+
+                Log.d(TAG, "过期胶囊暴力刷新完成: ${item.title}")
+                return
+            } else {
+                Log.d(TAG, ">>> activeCapsules 中不存在该 notifId，首次创建过期胶囊")
+            }
+        }
+
+        // === 普通逻辑 (非过期胶囊，或首次创建) ===
         val metadata = CapsuleMetadata(
             notificationId = item.notifId,
             originalId = item.id,
@@ -285,6 +336,8 @@ class CapsuleService : Service() {
         // 立即显示通知（用于非前台通知）
         if (item.notifId != currentForegroundId) {
             notificationManager.notify(item.notifId, notification)
+        } else {
+            Log.d(TAG, ">>> 跳过 notify：notifId == currentForegroundId")
         }
 
         Log.d(TAG, "胶囊已更新: ${item.title} (${item.id})")
@@ -312,8 +365,18 @@ class CapsuleService : Service() {
         }
 
         val now = System.currentTimeMillis()
-        // 筛选未过期的胶囊
-        val candidates = activeCapsules.values.filter { now < it.endTime }
+        // ✅ 筛选未过期的胶囊（取件码有 30 分钟宽限期）
+        val candidates = activeCapsules.values.filter { capsule ->
+            val isPickup = capsule.type == TYPE_PICKUP || capsule.type == TYPE_PICKUP_EXPIRED
+            if (isPickup) {
+                // 取件码：允许 30 分钟宽限期
+                val graceEnd = capsule.endTime + (30 * 60 * 1000)  // endTime + 30分钟
+                now < graceEnd
+            } else {
+                // 普通日程：严格按 endTime
+                now < capsule.endTime
+            }
+        }
 
         if (candidates.isEmpty()) {
             // 所有胶囊都过期了 → 停止服务
@@ -376,8 +439,14 @@ class CapsuleService : Service() {
                 notificationManager.cancel(oldForegroundId)
                 Log.d(TAG, "已取消旧前台通知: $oldForegroundId")
             } else {
-                // 更新当前前台通知的内容
-                notificationManager.notify(id, notification)
+                // ✅ 关键修复：更新当前前台通知的内容
+                // 当 currentForegroundId == id 时，需要重新调用 startForeground 更新前台通知
+                Log.d(TAG, "更新当前前台通知内容: id=$id")
+                if (Build.VERSION.SDK_INT >= 34) {
+                    startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    startForeground(id, notification)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "promoteToForeground failed", e)

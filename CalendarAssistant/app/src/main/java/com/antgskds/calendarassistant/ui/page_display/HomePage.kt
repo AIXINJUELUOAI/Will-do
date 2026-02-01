@@ -66,6 +66,7 @@ fun HomePage(
     viewModel: MainViewModel,
     currentTab: Int, // 外部传入 Tab 状态
     uiSize: Int = 2, // 1=小, 2=中, 3=大
+    pickupTimestamp: Long = 0L, // 【修改 1】接收时间戳
     onSettingsClick: () -> Unit,
     onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
@@ -476,7 +477,9 @@ fun HomePage(
                                         onDelete = { viewModel.deleteEvent(event) },
                                         onImportant = { viewModel.toggleImportant(event) },
                                         onEdit = { onEditEvent(event) },
-                                        uiSize = uiSize
+                                        uiSize = uiSize,
+                                        isArchivePage = false,
+                                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
                                     )
                                 }
                             }
@@ -492,7 +495,9 @@ fun HomePage(
                                         onDelete = { viewModel.deleteEvent(event) },
                                         onImportant = { viewModel.toggleImportant(event) },
                                         onEdit = { onEditEvent(event) },
-                                        uiSize = uiSize
+                                        uiSize = uiSize,
+                                        isArchivePage = false,
+                                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
                                     )
                                 }
                             }
@@ -501,7 +506,9 @@ fun HomePage(
                         AllEventsPage(
                             viewModel = viewModel,
                             onEditEvent = { onEditEvent(it) },
-                            uiSize = uiSize
+                            uiSize = uiSize,
+                            // 【修改 2】透传给 AllEventsPage
+                            pickupTimestamp = pickupTimestamp
                         )
                     }
                 }

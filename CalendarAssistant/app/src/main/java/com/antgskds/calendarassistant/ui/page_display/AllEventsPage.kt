@@ -28,13 +28,23 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 fun AllEventsPage(
     viewModel: MainViewModel,
     onEditEvent: (MyEvent) -> Unit,
-    uiSize: Int = 2 // 1=小, 2=中, 3=大
+    uiSize: Int = 2, // 1=小, 2=中, 3=大
+    pickupTimestamp: Long = 0L // 【修改 1】接收时间戳，移除 initialCategory
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     // 1. 本地 UI 状态
     var searchQuery by remember { mutableStateOf("") }
+    // 【修改 2】默认选中 0 (日程)
     var selectedCategory by remember { mutableIntStateOf(0) } // 0=日程, 1=临时
+
+    // 【修改 3】关键：监听时间戳。
+    // 只要时间戳变化（说明用户刚点了一次胶囊），强制切到 1 (临时)
+    LaunchedEffect(pickupTimestamp) {
+        if (pickupTimestamp > 0) {
+            selectedCategory = 1
+        }
+    }
 
     // 2. 核心过滤逻辑
     val filteredEvents by remember(uiState.allEvents, searchQuery, selectedCategory) {
