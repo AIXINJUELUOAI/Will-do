@@ -131,6 +131,7 @@ fun AllEventsPage(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(400.dp)
                             .padding(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -173,7 +174,9 @@ fun AllEventsPage(
                         onDelete = { viewModel.deleteEvent(event) },
                         onImportant = { viewModel.toggleImportant(event) }, // 修正参数名
                         onEdit = { onEditEvent(event) }, // 移除 onClick，仅保留 onEdit
-                        uiSize = uiSize
+                        uiSize = uiSize,
+                        isArchivePage = false,
+                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
                     )
                 }
             }
