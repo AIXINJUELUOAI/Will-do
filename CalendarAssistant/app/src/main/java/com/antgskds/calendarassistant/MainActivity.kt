@@ -14,9 +14,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -54,8 +57,19 @@ private fun getFontScaleForUiSize(uiSize: Int): Float {
 }
 
 class MainActivity : ComponentActivity() {
+    // 【修改 1】将 Boolean 改为 Long，默认值为 0L
+    private var pickupEventTimestamp = mutableStateOf(0L)
+
+    // ViewModel 实例，供 onResume 使用
+    private lateinit var mainViewModel: MainViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 【修改 2】检查启动 Intent，如果是取件码，设置当前时间戳
+        if (intent.getBooleanExtra("openPickupList", false)) {
+            pickupEventTimestamp.value = System.currentTimeMillis()
+        }
 
         // 强制使用固定的 DPI，确保在不同设备上 UI 尺寸一致
         // 首次创建使用默认 UI 大小（中），后续会根据用户设置调整
@@ -79,6 +93,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // 初始化 MainViewModel 供 onResume 使用
+        mainViewModel = ViewModelProvider(this, viewModelFactory)[MainViewModel::class.java]
 
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
@@ -107,7 +124,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val mainViewModel: MainViewModel = viewModel(factory = viewModelFactory)
+                // 使用外部初始化的 mainViewModel，避免创建多个实例
                 val navController = rememberNavController()
 
                 NavHost(
@@ -155,6 +172,8 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
+                            // 【修改 3】传入时间戳，而不是 Boolean
+                            pickupTimestamp = pickupEventTimestamp.value,
                             onNavigateToSettings = { destination ->
                                 // 处理退出登录操作
                                 if (destination == SettingsDestination.Logout) {
@@ -211,6 +230,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 每次回到前台时刷新数据
+     * 确保归档后的状态能及时更新到 UI
+     */
+    override fun onResume() {
+        super.onResume()
+        // 刷新数据：触发自动归档 + 强制 UI 重组
+        if (::mainViewModel.isInitialized) {
+            mainViewModel.refreshData()
+        }
+    }
+
+    /**
+     * 处理从通知/胶囊点击进入时的新 Intent
+     */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        // 【修改 4】每次收到新 Intent，如果是取件码，更新时间戳（这保证了值一定会变）
+        if (intent.getBooleanExtra("openPickupList", false)) {
+            pickupEventTimestamp.value = System.currentTimeMillis()
         }
     }
 
