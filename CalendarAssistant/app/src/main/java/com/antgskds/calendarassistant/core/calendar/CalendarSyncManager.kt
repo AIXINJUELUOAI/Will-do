@@ -7,6 +7,7 @@ import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.SyncData
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
+import com.antgskds.calendarassistant.core.util.EventDeduplicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -251,11 +252,20 @@ class CalendarSyncManager(private val context: Context) {
      * 1. 使用 queryEventsByIds 准确追踪已映射事件的更新和删除
      * 2. 扩大 queryEventsInRange 的时间窗口，防止漏掉正在进行或近期的事件
      * 3. 增加 onEventDeleted 回调处理
+     * 4. 检查归档事件，防止"僵尸事件"复活
+     *
+     * @param onEventAdded 新增事件回调
+     * @param onEventUpdated 更新事件回调
+     * @param onEventDeleted 删除事件回调
+     * @param activeEvents 当前活跃事件列表（用于去重检查）
+     * @param archivedEvents 当前归档事件列表（用于去重检查）
      */
     suspend fun syncFromCalendar(
         onEventAdded: suspend (MyEvent) -> Unit,
         onEventUpdated: suspend (MyEvent) -> Unit,
-        onEventDeleted: suspend (String) -> Unit // 新增删除回调
+        onEventDeleted: suspend (String) -> Unit, // 新增删除回调
+        activeEvents: List<MyEvent> = emptyList(), // 新增：活跃事件列表
+        archivedEvents: List<MyEvent> = emptyList() // 新增：归档事件列表
     ): Result<Int> = withContext(Dispatchers.IO) {
         // 防止并发同步
         if (_isSyncing.get()) return@withContext Result.success(0)
@@ -333,13 +343,24 @@ class CalendarSyncManager(private val context: Context) {
 
                 // 如果这个 ID 不在映射表中，且不是 App 自己托管的(防止映射丢失后重复导入)
                 if (!systemToAppMap.containsKey(sysIdStr) && !systemEvent.isManaged) {
-                    Log.d(TAG, "检测到新事件: $sysIdStr")
-                    val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent)
-                    if (myEvent != null) {
-                        onEventAdded(myEvent)
-                        mapping[myEvent.id] = sysIdStr
-                        hasChanges = true
-                        addedCount++
+                    // 🔥 新增：检查内容是否与活跃或归档事件重复
+                    // 防止已归档事件在反向同步时被重新添加
+                    val allExistingEvents = activeEvents + archivedEvents
+                    val isDuplicate = EventDeduplicator.isContentDuplicate(systemEvent, allExistingEvents)
+
+                    if (!isDuplicate) {
+                        // 真正的新事件，添加到 APP
+                        Log.d(TAG, "检测到新事件: $sysIdStr")
+                        val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent)
+                        if (myEvent != null) {
+                            onEventAdded(myEvent)
+                            mapping[myEvent.id] = sysIdStr
+                            hasChanges = true
+                            addedCount++
+                        }
+                    } else {
+                        // 内容重复，跳过（防止归档事件复活）
+                        Log.d(TAG, "跳过重复事件（可能已归档）: ${systemEvent.title}")
                     }
                 }
             }
