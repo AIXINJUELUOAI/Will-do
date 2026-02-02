@@ -25,6 +25,7 @@ import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
+import com.antgskds.calendarassistant.data.model.ImportResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
@@ -145,7 +146,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
                 try {
                     val jsonData = viewModel.exportEventsData()
                     context.contentResolver.openOutputStream(uri)?.use { output -> output.write(jsonData.toByteArray()) }
-                    withContext(Dispatchers.Main) { showToast("日程数据导出成功，共 ${viewModel.getEventsCount()} 条日程", ToastType.SUCCESS) }
+                    withContext(Dispatchers.Main) { showToast("日程数据导出成功，共 ${viewModel.getTotalEventsCount()} 条日程", ToastType.SUCCESS) }
                 } catch (e: Exception) { withContext(Dispatchers.Main) { showToast("导出失败: ${e.message}", ToastType.ERROR) } }
             }
         }
@@ -160,8 +161,22 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
                     if (jsonString != null) {
                         val result = viewModel.importEventsData(jsonString)
                         withContext(Dispatchers.Main) {
-                            if (result.isSuccess) showToast("日程数据导入成功，共 ${viewModel.getEventsCount()} 条日程", ToastType.SUCCESS)
-                            else showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
+                            if (result.isSuccess) {
+                                val importResult = result.getOrNull()
+                                val message = buildString {
+                                    append("日程数据导入成功\n")
+                                    append("新增: ${importResult?.successCount ?: 0} 条")
+                                    if ((importResult?.skippedCount ?: 0) > 0) {
+                                        append("\n跳过: ${importResult?.skippedCount} 条（重复）")
+                                    }
+                                    if ((importResult?.archiveStatusUpdateCount ?: 0) > 0) {
+                                        append("\n归档状态更新: ${importResult?.archiveStatusUpdateCount} 条")
+                                    }
+                                }
+                                showToast(message, ToastType.SUCCESS)
+                            } else {
+                                showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
+                            }
                         }
                     }
                 } catch (e: Exception) { withContext(Dispatchers.Main) { showToast("导入失败: ${e.message}", ToastType.ERROR) } }
