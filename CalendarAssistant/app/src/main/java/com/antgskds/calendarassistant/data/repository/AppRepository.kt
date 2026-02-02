@@ -12,6 +12,8 @@ import com.antgskds.calendarassistant.data.source.CourseJsonDataSource
 import com.antgskds.calendarassistant.data.source.EventJsonDataSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.core.util.EventDeduplicator
+import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
 import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
@@ -105,6 +107,24 @@ class AppRepository private constructor(private val context: Context) {
             archiveMutex.withLock {
                 val loaded = archiveSource.loadArchivedEvents()
                 _archivedEvents.value = loaded
+            }
+        }
+    }
+
+    /**
+     * ✅ 核心修复：内部使用的确保归档已加载方法
+     * 防止在导入或同步时因归档未加载导致去重失效
+     */
+    private suspend fun ensureArchivesLoaded() {
+        // 如果内存中为空，则尝试加载
+        if (_archivedEvents.value.isEmpty()) {
+            archiveMutex.withLock {
+                // 双重检查，防止并发加载
+                if (_archivedEvents.value.isEmpty()) {
+                    Log.d("AppRepository", "触发归档数据懒加载...")
+                    val loaded = archiveSource.loadArchivedEvents()
+                    _archivedEvents.value = loaded
+                }
             }
         }
     }
@@ -480,36 +500,125 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     /**
-     * 导出日程数据
+     * 导出日程数据（包含活跃事件和归档事件）
      */
     suspend fun exportEventsData(): String {
         val eventsData = EventsBackupData(
-            events = _events.value
+            events = _events.value,
+            archivedEvents = _archivedEvents.value
         )
         return json.encodeToString(eventsData)
     }
 
     /**
-     * 导入日程数据
+     * 导入日程数据（包含活跃事件和归档事件）
+     *
+     * 使用内容指纹去重策略：
+     * - 指纹组成：title + startDate + endDate + startTime + endTime + location
+     * - 重复则跳过，不重复则追加
+     * - 保留导入文件的 archivedAt 字段状态
+     *
+     * @param jsonString 导入的 JSON 字符串
+     * @param preserveArchivedStatus 是否保留归档状态（默认 true）
+     * @return 导入结果（成功数、跳过数、归档状态更新数）
      */
-    suspend fun importEventsData(jsonString: String): Result<Unit> {
+    suspend fun importEventsData(
+        jsonString: String,
+        preserveArchivedStatus: Boolean = true
+    ): Result<ImportResult> {
         return try {
+            // ✅ 修复第一步：强制加载归档数据，确保去重有效
+            ensureArchivesLoaded()
+
             val data = json.decodeFromString<EventsBackupData>(jsonString)
 
-            // 清空旧日程并导入新日程
-            val newEvents = data.events.map { event ->
-                // 生成新ID以避免冲突
-                event.copy(id = java.util.UUID.randomUUID().toString())
+            // 1. 合并导入的活跃事件和归档事件
+            val allImportEvents = data.events + data.archivedEvents
+
+            // 2. 确保 archivedAt 字段正确性
+            val normalizedImportEvents = allImportEvents.map { event ->
+                when {
+                    data.archivedEvents.any { it.id == event.id } -> {
+                        if (event.archivedAt == null) {
+                            Log.d("AppRepository", "修正归档事件缺少 archivedAt 字段: ${event.title}")
+                            event.copy(archivedAt = System.currentTimeMillis())
+                        } else {
+                            event
+                        }
+                    }
+                    data.events.any { it.id == event.id } -> {
+                        event.copy(archivedAt = null)
+                    }
+                    else -> event
+                }
             }
 
-            updateEvents(newEvents)
+            // 3. 执行去重
+            val deduplicationResult = EventDeduplicator.deduplicateForImport(
+                importEvents = normalizedImportEvents,
+                existingActiveEvents = _events.value,
+                existingArchivedEvents = _archivedEvents.value,
+                preserveArchivedStatus = preserveArchivedStatus
+            )
 
-            // 重新设置提醒
-            newEvents.forEach { event ->
-                NotificationScheduler.scheduleReminders(context, event)
+            // 4. 处理需要新增的事件
+            val eventsToAdd = deduplicationResult.toAdd
+            if (eventsToAdd.isNotEmpty()) {
+                // 分离活跃和归档事件
+                val newActiveEvents = eventsToAdd.filter { it.archivedAt == null }
+                val newArchivedEvents = eventsToAdd.filter { it.archivedAt != null }
+
+                // 添加活跃事件
+                if (newActiveEvents.isNotEmpty()) {
+                    val currentActive = _events.value.toMutableList()
+                    currentActive.addAll(newActiveEvents)
+                    updateEvents(currentActive)
+
+                    // 重新设置提醒
+                    newActiveEvents.forEach { event ->
+                        NotificationScheduler.scheduleReminders(context, event)
+                    }
+                }
+
+                // 添加归档事件
+                if (newArchivedEvents.isNotEmpty()) {
+                    val currentArchived = _archivedEvents.value.toMutableList()
+                    currentArchived.addAll(newArchivedEvents)
+                    updateArchivedEvents(currentArchived)
+                }
             }
 
-            Result.success(Unit)
+            // 5. 处理需要更新归档状态的事件
+            val archiveStatusUpdates = deduplicationResult.toUpdateArchiveStatus
+            if (archiveStatusUpdates.isNotEmpty()) {
+                for ((event, shouldBeArchived) in archiveStatusUpdates) {
+                    if (shouldBeArchived) {
+                        // 需要归档：调用归档逻辑
+                        Log.d("AppRepository", "归档状态更新：归档事件 - ${event.title}")
+                        archiveEvent(event.id)
+                    } else {
+                        // 需要还原：调用还原逻辑
+                        Log.d("AppRepository", "归档状态更新：还原事件 - ${event.title}")
+                        restoreEvent(event.id)
+                    }
+                }
+            }
+
+            // 6. 触发同步（如果有新增）
+            if (eventsToAdd.isNotEmpty()) {
+                triggerAutoSync()
+            }
+
+            // 7. 返回结果
+            val importResult = ImportResult(
+                successCount = deduplicationResult.toAdd.size,
+                skippedCount = deduplicationResult.toSkip.size,
+                archiveStatusUpdateCount = deduplicationResult.toUpdateArchiveStatus.size
+            )
+
+            Log.d("AppRepository", "导入完成: 新增 ${importResult.successCount}, 跳过 ${importResult.skippedCount}, 归档状态更新 ${importResult.archiveStatusUpdateCount}")
+
+            Result.success(importResult)
         } catch (e: Exception) {
             Log.e("AppRepository", "导入日程数据失败", e)
             Result.failure(e)
@@ -520,6 +629,11 @@ class AppRepository private constructor(private val context: Context) {
      * 获取当前事件列表（用于导出前检查）
      */
     fun getEventsCount(): Int = _events.value.size
+
+    /**
+     * 获取总事件数量（包含活跃事件和归档事件）
+     */
+    fun getTotalEventsCount(): Int = _events.value.size + _archivedEvents.value.size
 
     /**
      * 获取当前课程列表（用于导出前检查）
@@ -610,8 +724,17 @@ class AppRepository private constructor(private val context: Context) {
      * - 新增事件：随机分配一个 APP 内的颜色，避免统一的青灰色
      * - 更新事件：保留本地原有的颜色、提醒、重要性设置（作为 UI 防火墙）
      * - 删除事件：正常删除
+     *
+     * 🔥 新增：检查归档事件，防止"僵尸事件"复活
      */
     suspend fun syncFromCalendar(): Result<Int> {
+        // ✅ 修复第一步：强制加载归档数据，防止"僵尸事件"复活
+        ensureArchivesLoaded()
+
+        // 获取活跃和归档事件快照 (此时 archivedEventsSnapshot 一定有数据了)
+        val activeEventsSnapshot = _events.value
+        val archivedEventsSnapshot = _archivedEvents.value
+
         return syncManager.syncFromCalendar(
             onEventAdded = { newEvent ->
                 // 【场景：新增事件】
@@ -649,7 +772,9 @@ class AppRepository private constructor(private val context: Context) {
                 // 【场景：删除事件】
                 // 直接删除
                 deleteEvent(eventId, triggerSync = false)
-            }
+            },
+            activeEvents = activeEventsSnapshot,
+            archivedEvents = archivedEventsSnapshot
         )
     }
 
@@ -823,5 +948,6 @@ private data class CoursesBackupData(
 
 @kotlinx.serialization.Serializable
 private data class EventsBackupData(
-    val events: List<MyEvent>
+    val events: List<MyEvent>,
+    val archivedEvents: List<MyEvent> = emptyList() // 归档事件，默认为空以兼容旧版本
 )

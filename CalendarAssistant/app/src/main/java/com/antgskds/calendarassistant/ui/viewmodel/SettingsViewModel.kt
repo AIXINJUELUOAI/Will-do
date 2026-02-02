@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
+import com.antgskds.calendarassistant.data.model.ImportResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -135,12 +136,13 @@ class SettingsViewModel(
         return repository.exportEventsData()
     }
 
-    suspend fun importEventsData(jsonString: String): Result<Unit> {
+    suspend fun importEventsData(jsonString: String): Result<ImportResult> {
         return repository.importEventsData(jsonString)
     }
 
     fun getCoursesCount(): Int = repository.getCoursesCount()
     fun getEventsCount(): Int = repository.getEventsCount()
+    fun getTotalEventsCount(): Int = repository.getTotalEventsCount()
 
     /**
      * 导入外部课表文件（WakeUp 格式）
