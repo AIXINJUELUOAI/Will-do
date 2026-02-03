@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,7 +58,11 @@ fun ArchivesPage(
                 title = { Text("归档") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.ArrowBack, "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            "返回",
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
                 },
                 actions = {
@@ -67,7 +71,11 @@ fun ArchivesPage(
                         IconButton(onClick = {
                             viewModel.clearAllArchives()
                         }) {
-                            Icon(Icons.Default.DeleteSweep, "清空归档")
+                            Icon(
+                                Icons.Default.DeleteSweep,
+                                "清空归档",
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }
@@ -88,7 +96,13 @@ fun ArchivesPage(
             // 归档列表
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = padding
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = padding.calculateBottomPadding()
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 groupedEvents.forEach { (date, events) ->
                     // 粘性日期标题
@@ -96,7 +110,7 @@ fun ArchivesPage(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.background)
+                                .background(MaterialTheme.colorScheme.surface)
                         ) {
                             // 连续横线
                             HorizontalDivider(
@@ -107,7 +121,7 @@ fun ArchivesPage(
                             // 日期文本
                             Text(
                                 text = "—— ${date.format(dateFormatter)}",
-                                modifier = Modifier.padding(16.dp, 12.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface

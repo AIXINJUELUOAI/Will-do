@@ -37,5 +37,8 @@ data class MySettings(
     val isDarkMode: Boolean = false,
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
-    val uiSize: Int = 2
+    val uiSize: Int = 2,
+
+    // 【实验室】网速胶囊开关
+    val isNetworkSpeedCapsuleEnabled: Boolean = false
 )

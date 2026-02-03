@@ -6,10 +6,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
@@ -44,6 +46,11 @@ class CapsuleService : Service() {
         const val TYPE_PICKUP = 2
         // ✅ 新增：明确的过期取件码类型
         const val TYPE_PICKUP_EXPIRED = 3
+        // ✅ 新增：网速胶囊类型
+        const val TYPE_NETWORK_SPEED = 4
+
+        // 占位通知的标记 ID（不实际使用，用于标记占位状态）
+        private const val PLACEHOLDER_FOREGROUND_ID = -1
 
         @Volatile
         var isServiceRunning = false
@@ -75,59 +82,41 @@ class CapsuleService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         provider = if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
 
-        // 立即启动前台服务，防止 ANR
-        // 使用占位通知，后续会在状态监听中用真实通知替换
-        val placeholderNotification = provider.buildNotification(
-            this,
-            "placeholder",
-            "日程提醒",
-            "正在加载...",
-            android.graphics.Color.BLUE,
-            TYPE_SCHEDULE,
-            "event",
-            System.currentTimeMillis(),
-            System.currentTimeMillis() + 2 * 60 * 60 * 1000  // 默认2小时后结束
-        )
-
-        val placeholderId = 1 // 占位通知 ID
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(placeholderId, placeholderNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(placeholderId, placeholderNotification)
-        }
-        currentForegroundId = placeholderId
-        Log.d(TAG, "CapsuleService created, 立即启动前台服务 (占位通知)")
-
         // 开始监听胶囊状态
         startObservingCapsuleState()
+        Log.d(TAG, "CapsuleService created, 开始监听胶囊状态")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 确保前台服务状态（处理服务已存在但前台被停止的情况）
+        // ✅ 关键修复：立即启动前台服务（使用占位通知），避免启动超时
+        // 使用 PLACEHOLDER_FOREGROUND_ID 标记占位状态
         if (currentForegroundId == -1) {
-            val placeholderNotification = provider.buildNotification(
-                this,
-                "placeholder",
-                "日程提醒",
-                "正在加载...",
-                android.graphics.Color.BLUE,
-                TYPE_SCHEDULE,
-                "event",
-                System.currentTimeMillis(),
-                System.currentTimeMillis() + 2 * 60 * 60 * 1000  // 默认2小时后结束
-            )
-
-            val placeholderId = 1
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(placeholderId, placeholderNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(placeholderId, placeholderNotification)
-            }
-            currentForegroundId = placeholderId
-            Log.d(TAG, "onStartCommand: 重新启动前台服务")
+            Log.d(TAG, "启动前台服务（占位通知）")
+            val placeholderNotification = createPlaceholderNotification()
+            startForeground(1, placeholderNotification)
+            currentForegroundId = PLACEHOLDER_FOREGROUND_ID  // 标记为占位状态
         }
-
         return START_NOT_STICKY
+    }
+
+    /**
+     * 创建占位通知（不显示在状态栏）
+     */
+    private fun createPlaceholderNotification(): Notification {
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, App.CHANNEL_ID_LIVE)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+        val icon = Icon.createWithResource(this, R.drawable.ic_notification_small)
+        return builder.setSmallIcon(icon)
+            .setContentTitle("胶囊服务")
+            .setContentText("初始化中...")
+            .setOngoing(true)
+            .setWhen(System.currentTimeMillis())
+            .setVisibility(Notification.VISIBILITY_SECRET)  // 隐藏通知
+            .build()
     }
 
     /**
@@ -190,6 +179,7 @@ class CapsuleService : Service() {
         }
 
         // 5. 刷新前台状态
+        Log.d(TAG, ">>> updateCapsules 完成，调用 refreshForegroundState")
         refreshForegroundState()
     }
 
@@ -243,7 +233,9 @@ class CapsuleService : Service() {
                 if (isOurCapsule) {
                     matchedCount++
                     // 5. 白名单审判：只清理我们自己创建的、不在白名单中的通知
-                    if (notificationId !in validIds) {
+                    // ✅ 关键修改：如果 validIds 为空（只有网速胶囊时），清理所有胶囊
+                    val shouldClean = validIds.isEmpty() || notificationId !in validIds
+                    if (shouldClean) {
                         notificationManager.cancel(notificationId)
                         cleanedCount++
                         Log.w(TAG, "🗑️ 清除无效胶囊: id=$notificationId, channelId=[$channelId], group=[$groupName]")
@@ -266,6 +258,13 @@ class CapsuleService : Service() {
     private fun upsertCapsule(item: CapsuleUiState.Active.CapsuleItem) {
         // ✅ 详细日志：收到的胶囊信息
         Log.d(TAG, ">>> upsertCapsule 被调用: title=${item.title}, type=${item.type}, id=${item.id}, notifId=${item.notifId}")
+
+        // ✅ 关键：如果是占位通知（id="placeholder"），立即取消它
+        if (item.id == "placeholder") {
+            notificationManager.cancel(item.notifId)
+            Log.d(TAG, ">>> 取消占位通知")
+            return
+        }
 
         val notification = provider.buildNotification(
             this,
@@ -333,8 +332,17 @@ class CapsuleService : Service() {
 
         activeCapsules[item.notifId] = metadata
 
-        // 立即显示通知（用于非前台通知）
-        if (item.notifId != currentForegroundId) {
+        // ✅ 关键：如果是占位状态或第一个胶囊，调用 startForeground 正式启动
+        // 否则调用 notify
+        if (currentForegroundId == -1 || currentForegroundId == PLACEHOLDER_FOREGROUND_ID) {
+            Log.d(TAG, ">>> 首次胶囊/占位替换，调用 startForeground: ${item.title}")
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(item.notifId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(item.notifId, notification)
+            }
+            currentForegroundId = item.notifId
+        } else if (item.notifId != currentForegroundId) {
             notificationManager.notify(item.notifId, notification)
         } else {
             Log.d(TAG, ">>> 跳过 notify：notifId == currentForegroundId")
@@ -385,19 +393,18 @@ class CapsuleService : Service() {
             return
         }
 
-        // 排序：开始时间晚(新) > 类型大(Pickup > Schedule)
+        // ✅ 核心修复：只选择winner，不调用 startForeground
+        // 调用 startForeground 会导致系统重新评估整个通知组，其他胶囊可能被隐藏
         val winner = candidates.sortedWith(
             compareByDescending<CapsuleMetadata> { it.startTime }
                 .thenByDescending { it.type }
         ).first()
 
-        promoteToForeground(winner.notificationId, winner.notification)
-
-        // 其他胶囊降级显示
+        // ✅ 关键：只用 notify 更新所有胶囊，包括 winner
+        // 不要调用 startForeground，让 Android 保持当前的前台服务状态
         candidates.forEach { capsule ->
-            if (capsule.notificationId != winner.notificationId) {
-                notificationManager.notify(capsule.notificationId, capsule.notification)
-            }
+            Log.d(TAG, ">>> refreshForegroundState notify: ${capsule.originalId}")
+            notificationManager.notify(capsule.notificationId, capsule.notification)
         }
     }
 
@@ -424,20 +431,17 @@ class CapsuleService : Service() {
                 // 无缝切换前台通知
                 Log.d(TAG, "切换前台通知: $currentForegroundId -> $id")
 
-                // 关键修复：直接调用 startForeground 抢占焦点，系统会自动处理所有权转移
+                // ✅ 关键修复：直接调用 startForeground 替换前台通知，不要 cancel 旧的
+                // cancel 同一个 Group 的前台通知会导致系统重新评估 Group，所有胶囊可能被隐藏
                 if (Build.VERSION.SDK_INT >= 34) {
                     startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
                 } else {
                     startForeground(id, notification)
                 }
 
-                // 更新前台通知 ID
-                val oldForegroundId = currentForegroundId
+                // 更新前台通知 ID（不要 cancel，让系统自动处理）
                 currentForegroundId = id
-
-                // 成功抢占后，取消旧的前台通知
-                notificationManager.cancel(oldForegroundId)
-                Log.d(TAG, "已取消旧前台通知: $oldForegroundId")
+                Log.d(TAG, "前台通知已切换: $id")
             } else {
                 // ✅ 关键修复：更新当前前台通知的内容
                 // 当 currentForegroundId == id 时，需要重新调用 startForeground 更新前台通知
@@ -485,8 +489,16 @@ class CapsuleService : Service() {
                 val activeNotifications = notificationManager.activeNotifications
                 var cleanedCount = 0
 
+                // 清理占位通知（ID=1）
+                if (currentForegroundId == PLACEHOLDER_FOREGROUND_ID) {
+                    notificationManager.cancel(1)
+                    cleanedCount++
+                    Log.d(TAG, "清理占位通知: id=1")
+                }
+
                 for (sbNotification in activeNotifications) {
-                    if (sbNotification.notification.channelId == App.CHANNEL_ID_LIVE) {
+                    if (sbNotification.notification.channelId == App.CHANNEL_ID_LIVE &&
+                        sbNotification.id != 1) {  // 跳过占位通知
                         notificationManager.cancel(sbNotification.id)
                         cleanedCount++
                         Log.d(TAG, "清理胶囊通知: id=${sbNotification.id}")

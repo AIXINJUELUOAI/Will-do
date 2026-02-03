@@ -10,6 +10,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow // ✅ 改用 StateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,9 @@ class CapsuleStateManager(
         // ✅ 核心修复 1：改用 MutableStateFlow(0)
         // StateFlow 总是持有最新值，保证 combine 永远不会因为等待信号而卡死或丢状态
         private val forceRefreshTrigger = MutableStateFlow(0)
+
+        // 网速胶囊的动态状态（每次更新都触发状态重新计算）
+        private val networkSpeedState = MutableStateFlow<NetworkSpeedMonitor.NetworkSpeed?>(null)
     }
 
     /**
@@ -52,6 +56,10 @@ class CapsuleStateManager(
         val newValue = forceRefreshTrigger.value + 1
         forceRefreshTrigger.value = newValue
         Log.d(TAG, "forceRefresh: 主动触发胶囊状态刷新 (Counter: $newValue)")
+    }
+
+    fun updateNetworkSpeed(speed: NetworkSpeedMonitor.NetworkSpeed?) {
+        networkSpeedState.value = speed
     }
 
     val uiState: StateFlow<CapsuleUiState> = createCapsuleStateFlow()
@@ -94,16 +102,20 @@ class CapsuleStateManager(
             }
         }
 
-        return combine(
+        // combine 只支持最多 5 个流，需要嵌套 combine
+        val baseCombine = combine(
             repository.events,
             repository.courses,
             repository.settings,
-            tickerTrigger,  // ✅ 改用 StateFlow
+            tickerTrigger,
             forceRefreshTrigger
         ) { events, courses, settings, _, _ ->
-            // 注意：Lambda 参数数量必须匹配流的数量 (5个)
+            Triple(events, courses, settings)
+        }
+
+        return combine(baseCombine, networkSpeedState) { (events, courses, settings), networkSpeed ->
             Log.d(TAG, "=== computeCapsuleState 被调用 ===")
-            computeCapsuleState(events, courses, settings)
+            computeCapsuleState(events, courses, settings, networkSpeed)
         }.stateIn(
             scope = appScope,
             started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
@@ -114,9 +126,29 @@ class CapsuleStateManager(
     private fun computeCapsuleState(
         events: List<MyEvent>,
         courses: List<com.antgskds.calendarassistant.data.model.Course>,
-        settings: MySettings
+        settings: MySettings,
+        networkSpeed: NetworkSpeedMonitor.NetworkSpeed?
     ): CapsuleUiState {
         Log.d(TAG, ">>> computeCapsuleState 开始执行")
+
+        // 【实验室】网速胶囊优先：如果开启网速胶囊，覆盖其他所有胶囊
+        if (settings.isNetworkSpeedCapsuleEnabled && networkSpeed != null) {
+            Log.d(TAG, "网速胶囊模式: ${networkSpeed.formattedSpeed}")
+            val capsules = listOf(
+                CapsuleUiState.Active.CapsuleItem(
+                    id = "network_speed",
+                    notifId = 88888,
+                    type = CapsuleService.TYPE_NETWORK_SPEED,
+                    eventType = "network_speed",
+                    title = "↓ ${networkSpeed.formattedSpeed}",
+                    content = "下载速度",
+                    color = android.graphics.Color.parseColor("#4CAF50"),
+                    startMillis = System.currentTimeMillis(),
+                    endMillis = System.currentTimeMillis() + 60 * 60 * 1000 // 1小时有效
+                )
+            )
+            return CapsuleUiState.Active(capsules)
+        }
 
         if (!settings.isLiveCapsuleEnabled) {
             return CapsuleUiState.None
@@ -278,7 +310,10 @@ class CapsuleStateManager(
 
     private fun toMillis(event: MyEvent, timeStr: String): Long {
         return try {
-            val localDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(timeStr, TIME_FORMATTER))
+            // 修复：时间必须对应正确的日期
+            // startTime 对应 startDate，endTime 对应 endDate
+            val date = if (timeStr == event.startTime) event.startDate else event.endDate
+            val localDateTime = LocalDateTime.of(date, LocalTime.parse(timeStr, TIME_FORMATTER))
             localDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         } catch (e: Exception) {
             Log.e(TAG, "时间转换失败: $timeStr", e)

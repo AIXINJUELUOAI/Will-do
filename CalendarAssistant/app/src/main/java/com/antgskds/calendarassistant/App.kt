@@ -8,9 +8,11 @@ import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class App : Application() {
@@ -31,6 +33,9 @@ class App : Application() {
     // 日历内容观察者（可选，仅在有权限时初始化）
     private var calendarObserver: CalendarContentObserver? = null
 
+    // 网速监控协程
+    private val networkSpeedScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     override fun onCreate() {
         super.onCreate()
 
@@ -39,6 +44,9 @@ class App : Application() {
 
         // 初始化日历内容观察者（仅在已有权限时）
         initCalendarObserverIfPermissionGranted()
+
+        // 启动网速监控
+        startNetworkSpeedMonitoring()
     }
 
     private fun createNotificationChannels() {
@@ -120,5 +128,22 @@ class App : Application() {
         }
         calendarObserver?.register()
         Log.d(TAG, "日历内容观察者已初始化并注册")
+    }
+
+    /**
+     * 启动网速监控
+     * 监听设置变化，当网速胶囊开启时持续更新网速数据
+     */
+    private fun startNetworkSpeedMonitoring() {
+        networkSpeedScope.launch {
+            repository.settings.collectLatest { settings ->
+                if (settings.isNetworkSpeedCapsuleEnabled) {
+                    Log.d(TAG, "网速胶囊已开启，启动监控")
+                    NetworkSpeedMonitor.monitorDownloadSpeed().collectLatest { speed ->
+                        repository.capsuleStateManager.updateNetworkSpeed(speed)
+                    }
+                }
+            }
+        }
     }
 }
