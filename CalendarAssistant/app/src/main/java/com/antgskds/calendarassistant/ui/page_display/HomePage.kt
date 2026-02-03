@@ -50,6 +50,7 @@ import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.ui.analyzer.ScheduleRecommendationAnalyzer
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
@@ -57,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -65,18 +67,22 @@ import kotlin.math.roundToInt
 @Composable
 fun HomePage(
     viewModel: MainViewModel,
-    currentTab: Int, // 外部传入 Tab 状态
-    uiSize: Int = 2, // 1=小, 2=中, 3=大
-    pickupTimestamp: Long = 0L, // 【修改 1】接收时间戳
+    currentTab: Int,
+    uiSize: Int = 2,
+    pickupTimestamp: Long = 0L,
     onSettingsClick: () -> Unit,
     onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
     onEditEvent: (MyEvent) -> Unit = {},
-    onScheduleExpandedChange: (Boolean) -> Unit = {}
+    onScheduleExpandedChange: (Boolean) -> Unit = {},
+    onRecommendedClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    val recommendationAnalyzer = remember { ScheduleRecommendationAnalyzer() }
+    var recommendedTitle by remember { mutableStateOf<String?>(null) }
 
     val fabSize = when (uiSize) {
         1 -> 56.dp
@@ -199,6 +205,17 @@ fun HomePage(
     }
     var editingCourse by remember { mutableStateOf<Pair<Course, LocalDate>?>(null) }
     var isFabExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFabExpanded) {
+        if (isFabExpanded && uiState.settings.enableSmartRecommendation) {
+            recommendedTitle = recommendationAnalyzer.getRecommendation(
+                events = uiState.allEvents,
+                currentDateTime = LocalDateTime.now()
+            )
+        } else {
+            recommendedTitle = null
+        }
+    }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -349,6 +366,45 @@ fun HomePage(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End)
                     ) {
+                        // 推荐按钮 - 左侧展开
+                        AnimatedVisibility(
+                            visible = isFabExpanded && recommendedTitle != null,
+                            enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it } + expandHorizontally(tween(300)),
+                            exit = fadeOut(tween(300)) + slideOutHorizontally(tween(300)) { it } + shrinkHorizontally(tween(300))
+                        ) {
+                            Surface(
+                                onClick = {
+                                    isFabExpanded = false
+                                    recommendedTitle?.let { onRecommendedClick(it) }
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shadowElevation = 6.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .height(fabSize)
+                                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(fabIconSize),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = recommendedTitle ?: "",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+
+                        // 添加日程按钮
                         AnimatedVisibility(
                             visible = isFabExpanded,
                             enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
@@ -372,6 +428,7 @@ fun HomePage(
                             }
                         }
 
+                        // 主FAB按钮
                         androidx.compose.material3.FloatingActionButton(
                             onClick = { isFabExpanded = !isFabExpanded },
                             shape = CircleShape,

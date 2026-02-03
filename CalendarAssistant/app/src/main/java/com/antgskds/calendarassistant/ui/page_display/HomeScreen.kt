@@ -60,8 +60,9 @@ fun HomeScreen(
         }
     }
 
-    // 弹窗状态管理 (❌ 已移除 showCourseManager、showTimeTableEditor 和 AI 输入)
+    // 弹窗状态管理
     var showAddEventDialog by remember { mutableStateOf(false) }
+    var recommendedTitleForDialog by remember { mutableStateOf<String?>(null) }
     var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
 
@@ -110,7 +111,6 @@ fun HomeScreen(
                     viewModel = mainViewModel,
                     currentTab = selectedTab,
                     uiSize = settings.uiSize,
-                    // 【修改 4】将时间戳传给 HomePage
                     pickupTimestamp = pickupTimestamp,
                     onSettingsClick = { isSidebarOpen = !isSidebarOpen },
                     onCourseClick = { _, _ -> },
@@ -124,7 +124,11 @@ fun HomeScreen(
                             editingVirtualCourse = null
                         }
                     },
-                    onScheduleExpandedChange = { isScheduleExpanded = it }
+                    onScheduleExpandedChange = { isScheduleExpanded = it },
+                    onRecommendedClick = { title ->
+                        recommendedTitleForDialog = title
+                        showAddEventDialog = true
+                    }
                 )
             }
         )
@@ -148,16 +152,19 @@ fun HomeScreen(
         val uiState by mainViewModel.uiState.collectAsState()
         AddEventDialog(
             eventToEdit = eventToEdit,
+            recommendedTitle = recommendedTitleForDialog,
             currentEventsCount = uiState.allEvents.size,
-            settings = settings,  // 传入 settings 参数
+            settings = settings,
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
                 showAddEventDialog = false
+                recommendedTitleForDialog = null
                 eventToEdit = null
             },
             onConfirm = { newEvent ->
                 if (eventToEdit == null) mainViewModel.addEvent(newEvent) else mainViewModel.updateEvent(newEvent)
                 showAddEventDialog = false
+                recommendedTitleForDialog = null
                 eventToEdit = null
             }
         )
