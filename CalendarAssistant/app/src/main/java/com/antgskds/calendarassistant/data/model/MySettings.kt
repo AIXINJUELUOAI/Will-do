@@ -40,5 +40,8 @@ data class MySettings(
     val uiSize: Int = 2,
 
     // 【实验室】网速胶囊开关
-    val isNetworkSpeedCapsuleEnabled: Boolean = false
+    val isNetworkSpeedCapsuleEnabled: Boolean = false,
+
+    // 智能推荐开关
+    val enableSmartRecommendation: Boolean = true
 )
