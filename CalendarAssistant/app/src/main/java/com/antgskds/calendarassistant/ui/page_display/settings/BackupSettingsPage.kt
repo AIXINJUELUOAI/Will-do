@@ -222,8 +222,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
+                .padding(bottom = 16.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }

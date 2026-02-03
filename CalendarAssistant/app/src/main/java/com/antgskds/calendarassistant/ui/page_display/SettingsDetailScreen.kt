@@ -76,7 +76,7 @@ fun SettingsDetailScreen(
     ) { innerPadding ->
         Box(
             modifier = Modifier
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
                 .fillMaxSize()
         ) {
             when {
