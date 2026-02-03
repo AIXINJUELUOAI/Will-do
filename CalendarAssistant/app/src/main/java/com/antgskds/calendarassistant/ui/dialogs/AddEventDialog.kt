@@ -47,8 +47,9 @@ val REMINDER_OPTIONS = listOf(
 @Composable
 fun AddEventDialog(
     eventToEdit: MyEvent? = null,
+    recommendedTitle: String? = null,
     currentEventsCount: Int = 0,
-    settings: MySettings = MySettings(),  // 新增：接收设置参数
+    settings: MySettings = MySettings(),
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (MyEvent) -> Unit
@@ -61,15 +62,13 @@ fun AddEventDialog(
     // 计算过滤后的提醒选项
     val filteredReminderOptions = remember(settings.isAdvanceReminderEnabled, settings.advanceReminderMinutes) {
         if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
-            // 隐藏小于等于全局提前提醒时长的选项
             REMINDER_OPTIONS.filter { it.first > settings.advanceReminderMinutes }
         } else {
-            // 全局提前提醒关闭，显示所有选项
             REMINDER_OPTIONS
         }
     }
 
-    var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
+    var title by remember { mutableStateOf(eventToEdit?.title ?: recommendedTitle ?: "") }
     var startDate by remember { mutableStateOf(eventToEdit?.startDate ?: now.toLocalDate()) }
     var endDate by remember { mutableStateOf(eventToEdit?.endDate ?: defaultEnd.toLocalDate()) }
     var startTime by remember { mutableStateOf(eventToEdit?.startTime ?: now.format(timeFormatter)) }
