@@ -157,6 +157,19 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SwitchSettingItem(
+                        title = "智能推荐",
+                        subtitle = "基于历史数据在创建日程时显示推荐",
+                        checked = settings.enableSmartRecommendation,
+                        onCheckedChange = { viewModel.updateSmartRecommendation(it) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
                 }
             }
 
