@@ -21,6 +21,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -52,7 +53,6 @@ fun TimeTableEditorScreen(
     val jsonParser = Json { ignoreUnknownKeys = true; prettyPrint = true }
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     fun showToast(message: String, type: ToastType = ToastType.SUCCESS) {
         currentToastType = type
@@ -138,6 +138,8 @@ fun TimeTableEditorScreen(
         list
     }
 
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -197,8 +199,7 @@ fun TimeTableEditorScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 32.dp)
-                .navigationBarsPadding(),
+                .padding(end = 24.dp, bottom = 32.dp + bottomInset),
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -235,8 +236,7 @@ fun TimeTableEditorScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 32.dp),
+                .padding(bottom = 32.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }

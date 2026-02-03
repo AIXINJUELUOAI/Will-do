@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.dialogs.CourseEditDialog
 import com.antgskds.calendarassistant.ui.dialogs.CourseItem
@@ -26,9 +27,6 @@ fun CourseManagerScreen(
 
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
-
-    // 获取导航栏高度
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // 根据 uiSize 计算 FAB 尺寸，与主页保持一致
     val fabSize = when (uiSize) {
@@ -47,6 +45,8 @@ fun CourseManagerScreen(
         courses.filter { !it.isTemp }
     }
 
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (displayCourses.isEmpty()) {
             Box(modifier = Modifier.align(Alignment.Center)) {
@@ -55,7 +55,6 @@ fun CourseManagerScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                // 修改：contentPadding 加上导航栏高度，防止列表最后一项被 FAB 和 小白条 遮挡
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     top = 16.dp,
@@ -80,8 +79,7 @@ fun CourseManagerScreen(
             onClick = { courseToEdit = null; showEditDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .navigationBarsPadding() // 修改：避让小白条
-                .padding(24.dp)
+                .padding(end = 24.dp, bottom = 24.dp + bottomInset)
                 .size(fabSize),
             shape = CircleShape,
             containerColor = MaterialTheme.colorScheme.primary,

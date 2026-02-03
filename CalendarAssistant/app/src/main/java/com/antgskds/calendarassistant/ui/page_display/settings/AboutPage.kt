@@ -88,9 +88,6 @@ fun AboutPage(uiSize: Int = 2) {
 
         // 底部留白
         Spacer(modifier = Modifier.height(24.dp))
-
-        // 导航栏适配
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
