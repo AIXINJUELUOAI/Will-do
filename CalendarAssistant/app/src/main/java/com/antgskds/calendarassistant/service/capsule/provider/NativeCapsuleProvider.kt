@@ -11,6 +11,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 import java.time.Duration
 import java.time.Instant
@@ -48,22 +49,27 @@ class NativeCapsuleProvider : ICapsuleProvider {
 
         val collapsedTitle = if (title.length > 10) "${title.take(10)}..." else title
 
-        // 计算胶囊文案（根据是否提前开始）
-        val statusText = when {
-            actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
-                // 提前提醒阶段：显示"还有 x 分钟开始"
-                val now = System.currentTimeMillis()
-                val minutesRemaining = Duration.between(
-                    Instant.ofEpochMilli(now),
-                    Instant.ofEpochMilli(actualStartTime)
-                ).toMinutes()
-                when {
-                    minutesRemaining <= 0 -> "即将开始"
-                    minutesRemaining == 1L -> "还有 1 分钟开始"
-                    else -> "还有 ${minutesRemaining} 分钟开始"
+        // 【网速胶囊】直接使用 title 作为状态文本
+        val statusText = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            title
+        } else {
+            // 计算胶囊文案（根据是否提前开始）
+            when {
+                actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
+                    // 提前提醒阶段：显示"还有 x 分钟开始"
+                    val now = System.currentTimeMillis()
+                    val minutesRemaining = Duration.between(
+                        Instant.ofEpochMilli(now),
+                        Instant.ofEpochMilli(actualStartTime)
+                    ).toMinutes()
+                    when {
+                        minutesRemaining <= 0 -> "即将开始"
+                        minutesRemaining == 1L -> "还有 1 分钟开始"
+                        else -> "还有 ${minutesRemaining} 分钟开始"
+                    }
                 }
+                else -> "进行中"
             }
-            else -> "进行中"
         }
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -132,7 +138,10 @@ class NativeCapsuleProvider : ICapsuleProvider {
         // 这样只要 StateManager 认为是过期的，UI 就一定会显示延长按钮
         val isExpired = capsuleType == 3 || (actualEndTime > 0 && System.currentTimeMillis() >= actualEndTime)
 
-        if (capsuleType == 2 || capsuleType == 3 || eventType == "temp") {
+        if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            // 网速胶囊：直接显示内容，不需要额外按钮
+            builder.setOnlyAlertOnce(true)
+        } else if (capsuleType == 2 || capsuleType == 3 || eventType == "temp") {
             // 取件码类型：根据过期状态添加不同按钮
             if (isExpired) {
                 // 过期模式：显示"延长"按钮，提升优先级强制展开
@@ -156,10 +165,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 // ✅ 核心修复 1：提升优先级
                 builder.setPriority(Notification.PRIORITY_MAX)
                 builder.setCategory(Notification.CATEGORY_ALARM)
-
-                // ✅ 核心修复 2：允许重复提醒！
-                // 这行代码至关重要，false 表示"即使ID没变，也要再响一次"
-                builder.setOnlyAlertOnce(false)
 
                 // ✅ 核心修复 3：强制开启声音/震动/灯光
                 builder.setDefaults(Notification.DEFAULT_ALL)
