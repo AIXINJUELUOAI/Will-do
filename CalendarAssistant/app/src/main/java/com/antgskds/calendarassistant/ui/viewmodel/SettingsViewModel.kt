@@ -117,6 +117,13 @@ class SettingsViewModel(
         }
     }
 
+    // 更新智能推荐开关
+    fun updateSmartRecommendation(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateSettings(settings.value.copy(enableSmartRecommendation = enabled))
+        }
+    }
+
     // 导出数据
     fun exportData(onSuccess: () -> Unit) {
         // TODO: 实现具体的导出逻辑
