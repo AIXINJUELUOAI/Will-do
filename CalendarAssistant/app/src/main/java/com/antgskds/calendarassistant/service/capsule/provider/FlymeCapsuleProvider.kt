@@ -69,25 +69,33 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val iconObj = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
         // 3. 计算胶囊文案（根据是否提前开始）
-        val statusText = when {
-            actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
-                // 提前提醒阶段：显示"还有 x 分钟开始"
-                val now = System.currentTimeMillis()
-                val minutesRemaining = Duration.between(
-                    Instant.ofEpochMilli(now),
-                    Instant.ofEpochMilli(actualStartTime)
-                ).toMinutes()
-                when {
-                    minutesRemaining <= 0 -> "即将开始"
-                    minutesRemaining == 1L -> "还有 1 分钟开始"
-                    else -> "还有 ${minutesRemaining} 分钟开始"
+        val statusText = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            title
+        } else {
+            when {
+                actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
+                    // 提前提醒阶段：显示"还有 x 分钟开始"
+                    val now = System.currentTimeMillis()
+                    val minutesRemaining = Duration.between(
+                        Instant.ofEpochMilli(now),
+                        Instant.ofEpochMilli(actualStartTime)
+                    ).toMinutes()
+                    when {
+                        minutesRemaining <= 0 -> "即将开始"
+                        minutesRemaining == 1L -> "还有 1 分钟开始"
+                        else -> "还有 ${minutesRemaining} 分钟开始"
+                    }
                 }
+                else -> "进行中"
             }
-            else -> "进行中"
         }
 
         // 4. 创建 RemoteViews（关键修复）
-        val remoteViews = createRemoteViews(context, capsuleType, eventType, title, content, statusText)
+        val remoteViews = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            createNetworkSpeedRemoteViews(context, title)
+        } else {
+            createRemoteViews(context, capsuleType, eventType, title, content, statusText)
+        }
 
         // 5. 构建 Notification Builder
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -179,7 +187,9 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         // 这样只要 StateManager 认为是过期的，UI 就一定会显示延长按钮
         val isExpired = capsuleType == 3 || (actualEndTime > 0 && System.currentTimeMillis() >= actualEndTime)
 
-        if (capsuleType == 2 || capsuleType == 3 || eventType == "temp") {
+        if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            // 网速胶囊：不需要按钮
+        } else if (capsuleType == 2 || capsuleType == 3 || eventType == "temp") {
             // 取件码类型：根据过期状态添加不同按钮
             if (isExpired) {
                 // 过期模式：显示"延长"按钮，提升优先级强制展开
@@ -231,6 +241,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                 // 正常状态下只提醒一次
                 builder.setOnlyAlertOnce(true)
             }
+        } else if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
+            // 网速胶囊
         } else {
             // 其他类型日程默认只提醒一次
             builder.setOnlyAlertOnce(true)
@@ -272,6 +284,17 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                 else -> R.drawable.ic_capsule_event         // 默认
             }
             setImageViewResource(R.id.iv_icon, iconRes)
+        }
+    }
+
+    /**
+     * 创建网速胶囊 RemoteViews
+     */
+    private fun createNetworkSpeedRemoteViews(context: Context, speedText: String): RemoteViews {
+        return RemoteViews(context.packageName, R.layout.notification_live_network_speed).apply {
+            setTextViewText(R.id.tv_main_content, speedText)
+            setTextViewText(R.id.tv_sub_info, "下载速度")
+            setImageViewResource(R.id.iv_icon, android.R.drawable.stat_sys_download)
         }
     }
 }
