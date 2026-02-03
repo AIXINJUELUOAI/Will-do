@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -46,6 +47,7 @@ class TextAccessibilityService : AccessibilityService() {
         private const val TAG = "TextAccessibilityService"
         private const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
         @Volatile var instance: TextAccessibilityService? = null
+        private val isAnalyzing = AtomicBoolean(false)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -86,13 +88,21 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     fun startAnalysis(delayDuration: Duration = 500.milliseconds) {
+        if (!isAnalyzing.compareAndSet(false, true)) {
+            Log.d(TAG, "已有分析任务在执行中，跳过本次请求")
+            return
+        }
         analysisJob?.cancel()
         analysisJob = serviceScope.launch {
-            delay(delayDuration)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                takeScreenshotAndAnalyze()
-            } else {
-                showResultNotification("系统版本过低", "截图功能需要 Android 11+")
+            try {
+                delay(delayDuration)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    takeScreenshotAndAnalyze()
+                } else {
+                    showResultNotification("系统版本过低", "截图功能需要 Android 11+")
+                }
+            } finally {
+                isAnalyzing.set(false)
             }
         }
     }
