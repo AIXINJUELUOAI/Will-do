@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -126,8 +127,7 @@ fun AiSettingsPage(
             contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 32.dp)
-                .navigationBarsPadding()
+                .padding(end = 24.dp, bottom = 32.dp + bottomInset)
                 .size(fabSize)
         ) {
             Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(fabIconSize))
@@ -137,8 +137,7 @@ fun AiSettingsPage(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
+                .padding(bottom = 16.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS) }
         )
     }

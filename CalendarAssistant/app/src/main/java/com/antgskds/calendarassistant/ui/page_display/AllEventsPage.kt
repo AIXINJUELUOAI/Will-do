@@ -13,23 +13,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
-/**
- * 修复说明：
- * 修正了 SwipeableEventItem 的参数调用错误：
- * 1. onToggleImportant -> onImportant
- * 2. 移除了不存在的 onClick 参数
- */
 @Composable
 fun AllEventsPage(
     viewModel: MainViewModel,
     onEditEvent: (MyEvent) -> Unit,
-    uiSize: Int = 2, // 1=小, 2=中, 3=大
-    pickupTimestamp: Long = 0L // 【修改 1】接收时间戳，移除 initialCategory
+    uiSize: Int = 2,
+    pickupTimestamp: Long = 0L
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -128,11 +123,13 @@ fun AllEventsPage(
             )
         }
 
+        // 过滤后的本地数据用于显示
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
         // C. 列表内容
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // 底部留白给 FAB，顶部留一点呼吸感
-            contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
+            contentPadding = PaddingValues(bottom = 80.dp + bottomInset, top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 空状态

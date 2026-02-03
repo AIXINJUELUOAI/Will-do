@@ -314,8 +314,7 @@ fun PreferenceSettingsPage(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 32.dp),
+                .padding(bottom = 32.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }

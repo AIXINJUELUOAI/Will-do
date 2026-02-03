@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.ui.page_display
 
 import android.content.Context
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Today
@@ -64,6 +64,8 @@ fun HomeScreen(
     var showAddEventDialog by remember { mutableStateOf(false) }
     var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
+
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier = Modifier) {
         // 核心布局
@@ -132,9 +134,9 @@ fun HomeScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp),
-            snackbar = { data ->
-                UniversalToast(message = data.visuals.message, type = currentToastType)
+                .padding(bottom = 32.dp + bottomInset),
+            snackbar = { snackbarData ->
+                UniversalToast(message = snackbarData.visuals.message, type = currentToastType)
             }
         )
     }
