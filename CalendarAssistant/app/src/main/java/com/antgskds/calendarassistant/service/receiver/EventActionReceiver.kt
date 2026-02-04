@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
@@ -100,9 +101,17 @@ class EventActionReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             LocalTime.now()
         }
-        val newEndTime = currentEndTime.plusMinutes(30).format(formatter)
+        val newEndTime = currentEndTime.plusMinutes(30)
+        val newEndTimeStr = newEndTime.format(formatter)
 
-        val updatedEvent = event.copy(endTime = newEndTime)
+        // 检查是否跨越午夜，需要更新 endDate
+        val newEndDate = if (newEndTime.isBefore(currentEndTime)) {
+            event.endDate.plusDays(1)
+        } else {
+            event.endDate
+        }
+
+        val updatedEvent = event.copy(endTime = newEndTimeStr, endDate = newEndDate)
 
         // 更新数据库
         repository.updateEvent(updatedEvent)
@@ -121,7 +130,7 @@ class EventActionReceiver : BroadcastReceiver() {
             } else {
                 context.startService(serviceIntent)
             }
-            UniversalToastUtil.showSuccess(context, "已延长至 $newEndTime")
+            UniversalToastUtil.showSuccess(context, "已延长至 $newEndTimeStr")
         }
     }
 
@@ -178,32 +187,50 @@ class EventActionReceiver : BroadcastReceiver() {
     ) {
         val now = System.currentTimeMillis()
         val formatter = DateTimeFormatter.ofPattern("HH:mm")
+        val nowTimeStr = LocalTime.now().format(formatter)
+        Log.d("EventActionReceiver", "extendAllActivePickups: now=$now ($nowTimeStr)")
 
-        // 获取所有取件码类型的活跃事件
+        // 获取所有取件码类型的活跃事件（考虑30分钟宽限期）
         val activePickups = repository.events.value.filter { event ->
             event.eventType == "temp" && try {
-                // 检查是否未过期
                 val endDateTime = java.time.LocalDateTime.of(
                     event.endDate,
                     java.time.LocalTime.parse(event.endTime, formatter)
                 )
                 val endMillis = endDateTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                now < endMillis
+
+                // ✅ 修复：胶囊有5分钟宽限期，所以过了 endTime 5分钟内也算活跃
+                val graceEndMillis = endMillis + (5 * 60 * 1000)
+                now < graceEndMillis
             } catch (e: Exception) {
                 false
             }
         }
 
+        Log.d("EventActionReceiver", "extendAllActivePickups: 找到 ${activePickups.size} 个活跃取件码")
+
         // 批量延长所有活跃取件码
         activePickups.forEach { event ->
+            Log.d("EventActionReceiver", "延长取件码: ${event.title}, 当前endTime=${event.endTime}, endDate=${event.endDate}")
+
             // 计算新时间 (当前结束时间 + 30分钟)
             val currentEndTime = try {
                 LocalTime.parse(event.endTime, formatter)
             } catch (e: Exception) {
                 LocalTime.now()
             }
-            val newEndTime = currentEndTime.plusMinutes(30).format(formatter)
-            val updatedEvent = event.copy(endTime = newEndTime)
+            val newEndTime = currentEndTime.plusMinutes(30)
+            val newEndTimeStr = newEndTime.format(formatter)
+
+            // 检查是否跨越午夜，需要更新 endDate
+            val newEndDate = if (newEndTime.isBefore(currentEndTime)) {
+                event.endDate.plusDays(1)
+            } else {
+                event.endDate
+            }
+
+            val updatedEvent = event.copy(endTime = newEndTimeStr, endDate = newEndDate)
+            Log.d("EventActionReceiver", "更新取件码: 新endTime=$newEndTimeStr, 新endDate=$newEndDate")
 
             // 更新数据库
             repository.updateEvent(updatedEvent)

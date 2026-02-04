@@ -386,7 +386,7 @@ object NotificationScheduler {
      * 修改策略：
      * 1. 放弃 setAlarmClock（避免显示闹钟图标）。
      * 2. 使用 setExactAndAllowWhileIdle（在 Doze 模式下也能尽量准时，但允许系统微调）。
-     * 3. 配合 CapsuleStateManager 的 30分钟宽限期逻辑，
+      * 3. 配合 CapsuleStateManager 的 5分钟宽限期逻辑，
      *    胶囊会在过期后保持显示"已取"状态，直到此闹钟触发后无缝切换为"延长"。
      */
     private fun schedulePickupExpireSwitch(
