@@ -162,11 +162,10 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 ).build()
                 builder.addAction(extendAction)
 
-                // ✅ 核心修复 1：提升优先级
+                // ✅ 关键：过期模式下强制更新通知
+                builder.setOnlyAlertOnce(false)
                 builder.setPriority(Notification.PRIORITY_MAX)
                 builder.setCategory(Notification.CATEGORY_ALARM)
-
-                // ✅ 核心修复 3：强制开启声音/震动/灯光
                 builder.setDefaults(Notification.DEFAULT_ALL)
             } else {
                 // 正常模式：显示"已取"按钮

@@ -223,16 +223,7 @@ class CapsuleStateManager(
         val aggregateMode = settings.isPickupAggregationEnabled && pickupEvents.size > 1
 
         if (aggregateMode) {
-            // ==================== 聚合模式修改 ====================
-            // 检查是否有任意一个已过期，如果有，改变标题或内容以触发更新
-            val anyExpired = pickupEvents.any {
-                 val endDt = LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, TIME_FORMATTER))
-                 now.isAfter(endDt)
-            }
-
-            // 如果有过期项，在标题增加标记，强制打破 StateFlow 去重
-            val titleText = if (anyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项"
-
+            // ==================== 聚合模式：只创建聚合胶囊，不创建独立胶囊 ====================
             Log.d(TAG, "聚合模式: ${pickupEvents.size} 个取件码")
             val contentText = pickupEvents.take(5).mapIndexed { i, e ->
                 val line = "${i + 1}. ${e.title}"
@@ -246,20 +237,27 @@ class CapsuleStateManager(
                 } catch (e: Exception) { null }
             }.maxOrNull() ?: (System.currentTimeMillis() + 2 * 60 * 60 * 1000)
 
+            // ✅ 修复：根据过期状态决定胶囊类型
+            val isAnyExpired = pickupEvents.any { event ->
+                val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
+                now.isAfter(endDateTime)
+            }
+            val capsuleType = if (isAnyExpired) CapsuleService.TYPE_PICKUP_EXPIRED else CapsuleService.TYPE_PICKUP
+
             capsules.add(CapsuleUiState.Active.CapsuleItem(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
-                type = CapsuleService.TYPE_PICKUP,
+                type = capsuleType,
                 eventType = "temp",
-                title = titleText, // ✅ 使用动态标题
+                title = if (isAnyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项",
                 content = contentText,
                 color = android.graphics.Color.GREEN,
                 startMillis = System.currentTimeMillis(),
                 endMillis = latestEndMillis
             ))
         } else {
-            // ==================== 单体模式修改 (核心修复) ====================
-            Log.d(TAG, "单体模式: ${pickupEvents.size} 个取件码")
+            // ==================== 非聚合模式：创建独立胶囊 ====================
+            Log.d(TAG, "非聚合模式: ${pickupEvents.size} 个取件码")
             pickupEvents.forEach { event ->
                 // 1. 计算过期状态
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
