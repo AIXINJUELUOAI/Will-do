@@ -87,7 +87,7 @@ class TextAccessibilityService : AccessibilityService() {
         return performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
     }
 
-    fun startAnalysis(delayDuration: Duration = 500.milliseconds) {
+    fun startAnalysis(delayDuration: Duration = 500.milliseconds, fromShortcut: Boolean = false) {
         if (!isAnalyzing.compareAndSet(false, true)) {
             Log.d(TAG, "已有分析任务在执行中，跳过本次请求")
             return
@@ -95,6 +95,8 @@ class TextAccessibilityService : AccessibilityService() {
         analysisJob?.cancel()
         analysisJob = serviceScope.launch {
             try {
+                // 如果是通过快捷方式触发，延迟时间确保透明 Activity 完全销毁
+                // 如果不是通过快捷方式触发，保持原有延迟逻辑
                 delay(delayDuration)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     takeScreenshotAndAnalyze()

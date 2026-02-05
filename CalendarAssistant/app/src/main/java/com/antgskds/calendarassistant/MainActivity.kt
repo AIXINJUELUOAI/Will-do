@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant
 
 import android.app.Activity
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -94,6 +96,9 @@ class MainActivity : ComponentActivity() {
 
         // 初始化 MainViewModel 供 onResume 使用
         mainViewModel = ViewModelProvider(this, viewModelFactory)[MainViewModel::class.java]
+
+        // 初始化动态快捷方式
+        setupDynamicShortcuts()
 
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
@@ -263,6 +268,25 @@ class MainActivity : ComponentActivity() {
         config.densityDpi = FIXED_DENSITY_DPI
         config.fontScale = getFontScaleForUiSize(uiSize)
         resources.updateConfiguration(config, resources.displayMetrics)
+    }
+
+    /**
+     * 设置动态快捷方式
+     */
+    private fun setupDynamicShortcuts() {
+        val shortcutIntent = Intent(this, com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "quick_capture")
+            .setShortLabel(getString(R.string.shortcut_quick_recognition))
+            .setLongLabel(getString(R.string.shortcut_quick_recognition_long))
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_qs_quick_recognition))
+            .setIntent(shortcutIntent)
+            .build()
+
+        ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
     }
 
     companion object {
