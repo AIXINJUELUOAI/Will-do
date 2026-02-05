@@ -64,6 +64,15 @@
             </intent-filter>
         </activity>
 
+        <!-- 快捷方式中转 Activity (透明、独立任务栈、无动画) -->
+        <activity
+            android:name=".core.service.shortcut.ShortcutHandleActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="true" />
+
         <!-- 1. 无障碍服务 (截图用) -->
         <service
             android:name=".service.accessibility.TextAccessibilityService"
@@ -92,7 +101,7 @@
         <!-- 3. 下拉磁贴服务 -->
         <service
             android:name=".service.tile.CaptureTileService"
-            android:icon="@drawable/ic_launcher_foreground"
+            android:icon="@drawable/ic_qs_recognition"
             android:label="识别日程"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
