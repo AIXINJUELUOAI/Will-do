@@ -157,19 +157,6 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    SwitchSettingItem(
-                        title = "显示明日日程",
-                        subtitle = "在今日日程列表底部预览明日安排",
-                        checked = settings.showTomorrowEvents,
-                        onCheckedChange = { viewModel.updatePreference(showTomorrow = it) },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
-                    )
                 }
             }
 
