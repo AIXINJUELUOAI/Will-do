@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Will do</string>
+    <!-- 快捷方式 -->
+    <string name="shortcut_quick_recognition">一键识屏</string>
+    <string name="shortcut_quick_recognition_long">一键屏幕识别</string>
+    <string name="shortcut_disabled">无障碍服务未开启</string>
 </resources>
