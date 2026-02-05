@@ -365,7 +365,7 @@ object NotificationScheduler {
             .setContentText("取件码")
             .setStyle(NotificationCompat.BigTextStyle()
                 .setBigContentTitle(event.title)
-                .bigText("备注: ${event.description}")
+                .bigText("${event.description}")//删除备注：${event.description}
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_EVENT)

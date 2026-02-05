@@ -268,9 +268,9 @@ class CapsuleStateManager(
 
                 // 2. 动态生成 Content (打破 StateFlow 去重)
                 val dynamicContent = if (isExpired) {
-                    "[已过期] 备注: ${event.description}"
+                    "[已过期] ${event.description}"
                 } else {
-                    "备注: ${event.description}"
+                    "${event.description}"
                 }
 
                 // 3. ✅ 关键：根据过期状态决定胶囊类型
