@@ -195,15 +195,9 @@ class CapsuleService : Service() {
                 }
             }
 
-            // ✅ 关键修复：清除后立即刷新聚合胶囊，抢占前台
-            val aggregateCapsule = activeCapsules.values.find { it.originalId == CapsuleStateManager.AGGREGATE_PICKUP_ID }
-            if (aggregateCapsule != null) {
-                Log.d(TAG, "清除后刷新聚合胶囊前台")
-                if (Build.VERSION.SDK_INT >= 34) {
-                    startForeground(aggregateCapsule.notificationId, aggregateCapsule.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-                } else {
-                    startForeground(aggregateCapsule.notificationId, aggregateCapsule.notification)
-                }
+            // ✅ 关键修复：清除后刷新前台通知，确保剩余胶囊能正确显示
+            if (activeCapsules.isNotEmpty()) {
+                refreshForegroundForRemainingCapsules(validIds)
             }
         } catch (e: Exception) {
             Log.e(TAG, "清除过期胶囊失败", e)
@@ -229,6 +223,9 @@ class CapsuleService : Service() {
                     notificationManager.cancel(notificationId)
                 }
             }
+
+            // ✅ 修复：清理无效胶囊后刷新前台通知
+            refreshForegroundForRemainingCapsules(validIds)
         } catch (e: Exception) {
             Log.e(TAG, "清理无效通知时出错", e)
         }
@@ -329,6 +326,37 @@ class CapsuleService : Service() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "清理所有胶囊通知时出错", e)
+        }
+    }
+
+    /**
+     * 刷新前台通知，确保剩余胶囊中有一个被设置为前台
+     * 解决多胶囊场景下，删除一个胶囊后其他胶囊不显示的问题
+     */
+    private fun refreshForegroundForRemainingCapsules(validIds: Set<Int>) {
+        if (activeCapsules.isEmpty()) {
+            Log.d(TAG, "无剩余胶囊，停止服务")
+            stopServiceSafely()
+            return
+        }
+
+        // 优先使用聚合胶囊作为前台
+        val aggregateCapsule = activeCapsules.values.find { 
+            it.originalId == CapsuleStateManager.AGGREGATE_PICKUP_ID && it.notificationId in validIds 
+        }
+
+        val foregroundCapsule = aggregateCapsule ?: activeCapsules.values.firstOrNull { 
+            it.notificationId in validIds 
+        }
+
+        if (foregroundCapsule != null && foregroundCapsule.notificationId != currentForegroundId) {
+            Log.d(TAG, "刷新前台通知: ${foregroundCapsule.originalId}, id=${foregroundCapsule.notificationId}")
+            currentForegroundId = foregroundCapsule.notificationId
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(foregroundCapsule.notificationId, foregroundCapsule.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(foregroundCapsule.notificationId, foregroundCapsule.notification)
+            }
         }
     }
 

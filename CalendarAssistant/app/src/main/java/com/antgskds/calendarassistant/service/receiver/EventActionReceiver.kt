@@ -175,6 +175,9 @@ class EventActionReceiver : BroadcastReceiver() {
                 UniversalToastUtil.showSuccess(context, "已完成 ${activePickups.size} 个取件码")
             }
         }
+
+        // 主动触发胶囊状态刷新
+        repository.capsuleStateManager.forceRefresh()
     }
 
     /**
