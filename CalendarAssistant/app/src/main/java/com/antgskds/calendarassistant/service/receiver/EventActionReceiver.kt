@@ -31,6 +31,8 @@ class EventActionReceiver : BroadcastReceiver() {
         const val ACTION_COMPLETE = "com.antgskds.calendarassistant.action.COMPLETE"
         const val ACTION_EXTEND = "com.antgskds.calendarassistant.action.EXTEND"
         const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
+        const val ACTION_TRANSPORT_CHECK_IN = "com.antgskds.calendarassistant.action.TRANSPORT_CHECK_IN"
+        const val ACTION_TRANSPORT_COMPLETE_RIDE = "com.antgskds.calendarassistant.action.TRANSPORT_COMPLETE_RIDE"
         const val EXTRA_EVENT_ID = "event_id"
     }
 
@@ -93,6 +95,34 @@ class EventActionReceiver : BroadcastReceiver() {
                         repository.completeScheduleEvent(eventId)
                         withContext(Dispatchers.Main) {
                             UniversalToastUtil.showSuccess(context, "日程已完成")
+                        }
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
+            ACTION_TRANSPORT_CHECK_IN -> {
+                // 点击"已检票" - 追加已检票状态
+                val pendingResult = goAsync()
+                scope.launch {
+                    try {
+                        checkInTransport(eventId, repository)
+                        withContext(Dispatchers.Main) {
+                            UniversalToastUtil.showSuccess(context, "已标记已检票")
+                        }
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
+            ACTION_TRANSPORT_COMPLETE_RIDE -> {
+                // 点击"已用车" - 将行程设置为立即过期
+                val pendingResult = goAsync()
+                scope.launch {
+                    try {
+                        repository.completeScheduleEvent(eventId)
+                        withContext(Dispatchers.Main) {
+                            UniversalToastUtil.showSuccess(context, "行程已完成")
                         }
                     } finally {
                         pendingResult.finish()
@@ -269,6 +299,36 @@ class EventActionReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 UniversalToastUtil.showSuccess(context, "已延长 ${activePickups.size} 个取件码30分钟")
             }
+        }
+    }
+
+    /**
+     * 标记火车票已检票
+     * 在 description 末尾追加 (已检票) 标记
+     */
+    private suspend fun checkInTransport(
+        eventId: String,
+        repository: com.antgskds.calendarassistant.data.repository.AppRepository
+    ) {
+        val event = repository.getEventById(eventId) ?: return
+
+        val currentDesc = event.description
+        val checkedInSuffix = "(已检票)"
+
+        if (currentDesc.endsWith(checkedInSuffix)) {
+            return
+        }
+
+        val updatedEvent = event.copy(description = "$currentDesc $checkedInSuffix")
+        repository.updateEvent(updatedEvent)
+
+        repository.capsuleStateManager.forceRefresh()
+
+        val serviceIntent = Intent(App.instance, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            App.instance.startForegroundService(serviceIntent)
+        } else {
+            App.instance.startService(serviceIntent)
         }
     }
 }
