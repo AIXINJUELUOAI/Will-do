@@ -290,9 +290,9 @@ object NotificationScheduler {
             cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
         }
 
-        // 【修复】暴力清除所有可能的全局提醒残留（10/20/30分钟）
+        // 【修复】暴力清除所有可能的全局提醒残留（30/45/60分钟）
         // 即使这些分钟数不在 event.reminders 中，也要尝试取消
-        listOf(10, 20, 30).forEach { mins ->
+        listOf(30, 45, 60).forEach { mins ->
             if (mins !in event.reminders) {
                 cancelPendingIntent(context, event.id.hashCode() + mins, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
             }
