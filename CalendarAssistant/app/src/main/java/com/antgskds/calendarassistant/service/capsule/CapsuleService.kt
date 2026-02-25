@@ -239,7 +239,10 @@ class CapsuleService : Service() {
             item.content,
             item.color,
             item.type,
-            item.eventType
+            item.eventType,
+            item.description,
+            item.startMillis,
+            item.endMillis
         )
 
         val metadata = CapsuleMetadata(
