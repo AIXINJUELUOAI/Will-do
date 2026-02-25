@@ -14,6 +14,9 @@ import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.TransportInfo
+import com.antgskds.calendarassistant.core.util.TransportType
+import com.antgskds.calendarassistant.core.util.TransportUtils
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
@@ -39,11 +42,21 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         title: String,
         content: String,
         color: Int,
-        capsuleType: Int,  // 1=日程, 2=取件码
-        eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
-        actualStartTime: Long,  // 实际开始时间（毫秒），用于计算"还有x分钟开始"
-        actualEndTime: Long  // 实际结束时间（毫秒），用于判断取件码是否过期
+        capsuleType: Int,
+        eventType: String,
+        description: String,
+        actualStartTime: Long,
+        actualEndTime: Long
     ): Notification {
+
+        val transportInfo: TransportInfo? = if (capsuleType == CapsuleService.TYPE_SCHEDULE && description.isNotBlank()) {
+            TransportUtils.parse(description)
+        } else {
+            null
+        }
+
+        val isTransportTrain = transportInfo?.type == TransportType.TRAIN
+        val isTransportRide = transportInfo?.type == TransportType.RIDE
 
         // 1. 点击跳转
         val tapIntent = Intent(context, MainActivity::class.java).apply {
@@ -234,24 +247,67 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                 builder.setDefaults(Notification.DEFAULT_ALL)
             }
             CapsuleService.TYPE_SCHEDULE -> {
-                // 日程胶囊：未过期显示"已完成"按钮，已过期不显示按钮
-                if (!isExpired) {
-                    val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                        action = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
-                        putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                // 日程胶囊：根据交通场景或普通日程显示不同按钮
+                when {
+                    // 火车场景：未检票显示"已检票"按钮，已检票不显示
+                    isTransportTrain && !isExpired -> {
+                        if (!transportInfo.isCheckedIn) {
+                            val checkInIntent = Intent(context, EventActionReceiver::class.java).apply {
+                                action = EventActionReceiver.ACTION_TRANSPORT_CHECK_IN
+                                putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                            }
+                            val pendingCheckIn = PendingIntent.getBroadcast(
+                                context,
+                                eventId.hashCode() + 4,
+                                checkInIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            val checkInAction = Notification.Action.Builder(
+                                R.drawable.ic_notification_small,
+                                "已检票",
+                                pendingCheckIn
+                            ).build()
+                            builder.addAction(checkInAction)
+                        }
                     }
-                    val pendingComplete = PendingIntent.getBroadcast(
-                        context,
-                        eventId.hashCode() + 3,
-                        completeIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    val completeAction = Notification.Action.Builder(
-                        R.drawable.ic_notification_small,
-                        "已完成",
-                        pendingComplete
-                    ).build()
-                    builder.addAction(completeAction)
+                    // 用车场景：显示"已用车"按钮
+                    isTransportRide && !isExpired -> {
+                        val completeRideIntent = Intent(context, EventActionReceiver::class.java).apply {
+                            action = EventActionReceiver.ACTION_TRANSPORT_COMPLETE_RIDE
+                            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                        }
+                        val pendingCompleteRide = PendingIntent.getBroadcast(
+                            context,
+                            eventId.hashCode() + 5,
+                            completeRideIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        val completeRideAction = Notification.Action.Builder(
+                            R.drawable.ic_notification_small,
+                            "已用车",
+                            pendingCompleteRide
+                        ).build()
+                        builder.addAction(completeRideAction)
+                    }
+                    // 普通日程：未过期显示"已完成"按钮
+                    !isExpired -> {
+                        val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
+                            action = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                        }
+                        val pendingComplete = PendingIntent.getBroadcast(
+                            context,
+                            eventId.hashCode() + 3,
+                            completeIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        val completeAction = Notification.Action.Builder(
+                            R.drawable.ic_notification_small,
+                            "已完成",
+                            pendingComplete
+                        ).build()
+                        builder.addAction(completeAction)
+                    }
                 }
                 builder.setOnlyAlertOnce(true)
             }
