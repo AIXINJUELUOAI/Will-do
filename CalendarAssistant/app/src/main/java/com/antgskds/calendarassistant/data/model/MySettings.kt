@@ -14,7 +14,7 @@ data class MySettings(
     val showTomorrowEvents: Boolean = false,
     val isDailySummaryEnabled: Boolean = false,
     val isAdvanceReminderEnabled: Boolean = false, // 日程提前提醒总开关
-    val advanceReminderMinutes: Int = 20, // 提前分钟数（10/20/30）
+    val advanceReminderMinutes: Int = 30, // 提前分钟数（30/45/60）
 
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true, // 旧版默认为 true

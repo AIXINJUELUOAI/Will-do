@@ -439,7 +439,7 @@ fun AdvanceReminderSettingItem(
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
 
-        // 展开区：三档滑块（10/20/30分钟）
+        // 展开区：三档滑块（30/45/60分钟）
         AnimatedVisibility(
             visible = checked,
             enter = expandVertically() + fadeIn(),
@@ -457,15 +457,15 @@ fun AdvanceReminderSettingItem(
                         .padding(horizontal = 4.dp), // 与滑块轨道 padding 匹配
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "10分钟", style = cardSubtitleStyle)
-                    Text(text = "20分钟", style = cardSubtitleStyle)
                     Text(text = "30分钟", style = cardSubtitleStyle)
+                    Text(text = "45分钟", style = cardSubtitleStyle)
+                    Text(text = "60分钟", style = cardSubtitleStyle)
                 }
                 Slider(
                     value = minutes.toFloat(),
                     onValueChange = { onMinutesChange(it.toInt()) },
-                    valueRange = 10f..30f,
-                    steps = 1 // 10, 20, 30 三个离散值
+                    valueRange = 30f..60f,
+                    steps = 1 // 30, 45, 60 三个离散值
                 )
             }
         }
