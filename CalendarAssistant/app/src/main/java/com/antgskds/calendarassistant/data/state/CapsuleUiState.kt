@@ -32,6 +32,7 @@ sealed interface CapsuleUiState {
             val eventType: String,    // 事件类型：event=日程, temp=取件码, course=课程
             val title: String,        // 标题
             val content: String,      // 内容描述
+            val description: String = "", // 事件描述，用于交通场景解析
             val color: Int,           // 颜色（Android Color Int）
             val startMillis: Long,    // 开始时间（毫秒）
             val endMillis: Long       // 结束时间（毫秒）
