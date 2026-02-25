@@ -219,6 +219,29 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     /**
+     * 完成日程事件（设置为立即过期）
+     * 点击"已完成"后，将结束时间设为当前时间，事件立即过期，胶囊自然消失
+     */
+    suspend fun completeScheduleEvent(id: String) {
+        val event = _events.value.find { it.id == id }
+        if (event != null && event.eventType == "event") {
+            val now = java.time.LocalDateTime.now()
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+
+            val updatedEvent = event.copy(
+                endDate = now.toLocalDate(),
+                endTime = now.format(formatter)
+            )
+
+            // 更新事件
+            updateEvent(updatedEvent)
+
+            // 主动触发胶囊状态刷新
+            capsuleStateManager.forceRefresh()
+        }
+    }
+
+    /**
      * 根据 ID 获取事件
      */
     suspend fun getEventById(id: String): MyEvent? {
