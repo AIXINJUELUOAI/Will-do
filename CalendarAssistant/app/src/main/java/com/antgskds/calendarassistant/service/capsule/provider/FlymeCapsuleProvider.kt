@@ -180,48 +180,18 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         builder.addExtras(finalExtras)
 
         // ========================================================================
-        // 【取件码按钮逻辑】根据过期状态动态添加按钮
+        // 【按钮逻辑】根据胶囊类型和过期状态动态添加按钮
         // ========================================================================
 
-        // ✅ 修正判定逻辑：如果类型是 3 (TYPE_PICKUP_EXPIRED) 或者时间已到，都算过期
-        // 这样只要 StateManager 认为是过期的，UI 就一定会显示延长按钮
+        // 判定是否过期
         val isExpired = capsuleType == 3 || (actualEndTime > 0 && System.currentTimeMillis() >= actualEndTime)
 
-        if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
-            // 网速胶囊：不需要按钮
-        } else if (capsuleType == 2 || capsuleType == 3 || eventType == "temp") {
-            // 取件码类型：根据过期状态添加不同按钮
-            if (isExpired) {
-                // 过期模式：显示"延长"按钮，提升优先级强制展开
-                val extendIntent = Intent(context, EventActionReceiver::class.java).apply {
-                    action = EventActionReceiver.ACTION_EXTEND
-                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                }
-                val pendingExtend = PendingIntent.getBroadcast(
-                    context,
-                    eventId.hashCode() + 2,
-                    extendIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val extendAction = Notification.Action.Builder(
-                    R.drawable.ic_notification_small,
-                    "延长30分",
-                    pendingExtend
-                ).build()
-                builder.addAction(extendAction)
-
-                // ✅ 核心修复 1：提升优先级
-                builder.setPriority(Notification.PRIORITY_MAX)
-                builder.setCategory(Notification.CATEGORY_ALARM)
-
-                // ✅ 核心修复 2：允许重复提醒！
-                // 这行代码至关重要，false 表示"即使ID没变，也要再响一次"
-                builder.setOnlyAlertOnce(false)
-
-                // ✅ 核心修复 3：强制开启声音/震动/灯光
-                builder.setDefaults(Notification.DEFAULT_ALL)
-            } else {
-                // 正常模式：显示"已取"按钮
+        when (capsuleType) {
+            CapsuleService.TYPE_NETWORK_SPEED -> {
+                // 网速胶囊：不需要按钮
+            }
+            CapsuleService.TYPE_PICKUP -> {
+                // 取件码未过期：显示"已取"按钮
                 val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
                     action = EventActionReceiver.ACTION_COMPLETE
                     putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
@@ -238,14 +208,57 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                     pendingComplete
                 ).build()
                 builder.addAction(completeAction)
-                // 正常状态下只提醒一次
                 builder.setOnlyAlertOnce(true)
             }
-        } else if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
-            // 网速胶囊
-        } else {
-            // 其他类型日程默认只提醒一次
-            builder.setOnlyAlertOnce(true)
+            CapsuleService.TYPE_PICKUP_EXPIRED -> {
+                // 取件码已过期：显示"延长"按钮
+                val extendIntent = Intent(context, EventActionReceiver::class.java).apply {
+                    action = EventActionReceiver.ACTION_EXTEND
+                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                }
+                val pendingExtend = PendingIntent.getBroadcast(
+                    context,
+                    eventId.hashCode() + 2,
+                    extendIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val extendAction = Notification.Action.Builder(
+                    R.drawable.ic_notification_small,
+                    "延长30分",
+                    pendingExtend
+                ).build()
+                builder.addAction(extendAction)
+                builder.setPriority(Notification.PRIORITY_MAX)
+                builder.setCategory(Notification.CATEGORY_ALARM)
+                builder.setOnlyAlertOnce(false)
+                builder.setDefaults(Notification.DEFAULT_ALL)
+            }
+            CapsuleService.TYPE_SCHEDULE -> {
+                // 日程胶囊：未过期显示"已完成"按钮，已过期不显示按钮
+                if (!isExpired) {
+                    val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
+                        action = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                        putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                    }
+                    val pendingComplete = PendingIntent.getBroadcast(
+                        context,
+                        eventId.hashCode() + 3,
+                        completeIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    val completeAction = Notification.Action.Builder(
+                        R.drawable.ic_notification_small,
+                        "已完成",
+                        pendingComplete
+                    ).build()
+                    builder.addAction(completeAction)
+                }
+                builder.setOnlyAlertOnce(true)
+            }
+            else -> {
+                // 其他类型默认只提醒一次
+                builder.setOnlyAlertOnce(true)
+            }
         }
 
         return builder.build()

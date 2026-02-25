@@ -30,6 +30,7 @@ class EventActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_COMPLETE = "com.antgskds.calendarassistant.action.COMPLETE"
         const val ACTION_EXTEND = "com.antgskds.calendarassistant.action.EXTEND"
+        const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
         const val EXTRA_EVENT_ID = "event_id"
     }
 
@@ -78,6 +79,20 @@ class EventActionReceiver : BroadcastReceiver() {
                             val nm = NotificationManagerCompat.from(context)
                             nm.cancel(eventId.hashCode())  // 取消胶囊通知
                             nm.cancel(eventId.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF)  // 取消初始通知
+                        }
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
+            ACTION_COMPLETE_SCHEDULE -> {
+                // 点击"已完成" - 将日程设置为立即过期
+                val pendingResult = goAsync()
+                scope.launch {
+                    try {
+                        repository.completeScheduleEvent(eventId)
+                        withContext(Dispatchers.Main) {
+                            UniversalToastUtil.showSuccess(context, "日程已完成")
                         }
                     } finally {
                         pendingResult.finish()
