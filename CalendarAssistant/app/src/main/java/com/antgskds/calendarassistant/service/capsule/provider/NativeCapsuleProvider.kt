@@ -47,7 +47,11 @@ class NativeCapsuleProvider : ICapsuleProvider {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val collapsedTitle = if (title.length > 10) "${title.take(10)}..." else title
+        val collapsedTitle = when {
+            transportInfo != null && transportInfo.type != TransportType.NONE -> transportInfo.mainDisplay
+            title.length > 10 -> "${title.take(10)}..."
+            else -> title
+        }
 
         // 【网速胶囊】直接使用 title 作为状态文本
         val statusText = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
