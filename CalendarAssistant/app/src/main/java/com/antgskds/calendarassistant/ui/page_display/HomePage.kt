@@ -546,8 +546,7 @@ fun HomePage(
 
                             if (uiState.selectedDate == LocalDate.now() && uiState.tomorrowEvents.any { it.eventType != "temp" }) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
-                                val todayEventIds = uiState.currentDateEvents.map { it.id }.toSet()
-                                items(uiState.tomorrowEvents.filter { it.eventType != "temp" && it.id !in todayEventIds }, key = { it.id }) { event ->
+                                items(uiState.tomorrowEvents.filter { it.eventType != "temp" }, key = { it.id }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,
