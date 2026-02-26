@@ -118,7 +118,11 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             Notification.Builder(context)
         }
 
-        val collapsedTitle = if (title.length > 10) title.take(10) else title
+        val collapsedTitle = when {
+            transportInfo != null && transportInfo.type != TransportType.NONE -> transportInfo.mainDisplay
+            title.length > 10 -> title.take(10)
+            else -> title
+        }
         val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
 
         // 6. 设置基础属性
