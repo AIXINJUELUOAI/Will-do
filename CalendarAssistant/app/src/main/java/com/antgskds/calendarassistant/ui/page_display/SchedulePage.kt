@@ -55,27 +55,34 @@ fun ScheduleView(
     }
 
     // 2. 计算"系统今天"是第几周
-    val systemCurrentWeek = remember(semesterStart) {
+    // 修复：需要先找到 semesterStart 所在周的周一，用正确的基准计算周次
+    val semesterStartMonday = remember(semesterStart) {
+        // dayOfWeek: 1=Monday, 7=Sunday
+        val dayOfWeek = semesterStart.dayOfWeek.value // 1-7 (Mon-Sun)
+        semesterStart.minusDays((dayOfWeek - 1).toLong()) // 回到周一
+    }
+
+    val systemCurrentWeek = remember(semesterStartMonday) {
         // 修复：使用 isNullOrBlank() 安全判断
         if (semesterStartDateStr.isNullOrBlank()) {
             1 // 没设置开学日期 -> 显示第1周
         } else {
             val today = LocalDate.now() // 强制获取系统今天
-            val daysDiff = ChronoUnit.DAYS.between(semesterStart, today)
+            val daysDiff = ChronoUnit.DAYS.between(semesterStartMonday, today)
             // 计算公式：相差天数 / 7 + 1
             (daysDiff / 7).toInt() + 1
         }
     }
 
     // 3. 初始化显示周次
-    // 使用 semesterStart 作为 key：只有当开学日期改变时，才重置 viewingWeek
-    var viewingWeek by remember(semesterStart) {
+    // 使用 semesterStartMonday 作为 key：只有当开学日期改变时，才重置 viewingWeek
+    var viewingWeek by remember(semesterStartMonday) {
         mutableIntStateOf(systemCurrentWeek)
     }
 
-    // 计算查看周的周一
-    val viewingWeekMonday = remember(semesterStart, viewingWeek) {
-        semesterStart.plusWeeks((viewingWeek - 1).toLong())
+    // 计算查看周的周一 - 以 semesterStartMonday 为基准
+    val viewingWeekMonday = remember(semesterStartMonday, viewingWeek) {
+        semesterStartMonday.plusWeeks((viewingWeek - 1).toLong())
     }
 
     // 今天（用于星期表头高亮）
