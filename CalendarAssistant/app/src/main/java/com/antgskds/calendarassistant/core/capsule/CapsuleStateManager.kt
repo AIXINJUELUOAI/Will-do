@@ -5,8 +5,6 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.course.CourseManager
-import com.antgskds.calendarassistant.core.util.TransportType
-import com.antgskds.calendarassistant.core.util.TransportUtils
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.repository.AppRepository
@@ -209,21 +207,13 @@ class CapsuleStateManager(
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
         scheduleEvents.forEach { event ->
-            val transportInfo = TransportUtils.parse(event.description)
-            val title = when (transportInfo.type) {
-                TransportType.TRAIN -> transportInfo.mainDisplay
-                TransportType.RIDE -> transportInfo.mainDisplay
-                else -> event.title
-            }
-
             capsules.add(CapsuleUiState.Active.CapsuleItem(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
                 eventType = event.eventType,
-                title = title,
+                title = event.title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
-                description = event.description,
                 color = event.color.toArgb(),
                 startMillis = toMillis(event, event.startTime),
                 endMillis = toMillis(event, event.endTime)
