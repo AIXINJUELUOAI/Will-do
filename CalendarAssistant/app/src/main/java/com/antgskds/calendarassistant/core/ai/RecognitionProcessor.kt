@@ -99,6 +99,8 @@ object RecognitionProcessor {
             return emptyList()
         }
 
+        Log.d(TAG, "========== [OCR 原始文本] ==========\n$extractedText")
+
         // 并发执行两次识别请求
         return coroutineScope {
             try {
