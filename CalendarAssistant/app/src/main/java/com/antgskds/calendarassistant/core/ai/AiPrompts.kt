@@ -37,7 +37,7 @@ object AiPrompts {
               "startTime": "格式 yyyy-MM-dd HH:mm",
               "endTime": "格式 yyyy-MM-dd HH:mm",
               "location": "地点",
-              "description": "备注（特殊规则见下方）",
+              "description": "备注",
               "type": "固定填 'event'"
             }
         """.trimIndent()
