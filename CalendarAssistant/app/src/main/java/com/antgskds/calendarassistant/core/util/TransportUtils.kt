@@ -27,8 +27,8 @@ object TransportUtils {
         val isCheckedIn = description.endsWith(CHECKED_IN_SUFFIX)
         val isRideCompleted = description.endsWith(RIDE_COMPLETED_SUFFIX)
 
-        val trainPattern = Regex("""【列车|列车""")
-        val ridePattern = Regex("""【用车|用车""")
+        val trainPattern = Regex("[【\\[列车]")
+        val ridePattern = Regex("[【\\[用车]")
 
         return when {
             trainPattern.containsMatchIn(cleanDesc) -> parseTrain(cleanDesc, isCheckedIn)
