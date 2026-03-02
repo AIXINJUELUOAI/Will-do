@@ -22,6 +22,9 @@
     <!-- 🔥 新增：开机自启权限 (必须有这个，BootReceiver 才能工作) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- 悬浮窗权限 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Flyme 专用 -->
     <uses-permission android:name="flyme.permission.READ_NOTIFICATION_LIVE_STATE" />
 
@@ -109,6 +112,11 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- 4. 悬浮窗服务 -->
+        <service
+            android:name=".service.floating.FloatingScheduleService"
+            android:exported="false" />
 
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".service.receiver.AlarmReceiver" />
