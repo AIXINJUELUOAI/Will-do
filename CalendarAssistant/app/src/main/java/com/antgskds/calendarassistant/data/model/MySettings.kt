@@ -43,5 +43,8 @@ data class MySettings(
     val isNetworkSpeedCapsuleEnabled: Boolean = false,
 
     // 智能推荐开关
-    val enableSmartRecommendation: Boolean = true
+    val enableSmartRecommendation: Boolean = true,
+
+    // 悬浮窗功能开关
+    val isFloatingWindowEnabled: Boolean = false
 )
