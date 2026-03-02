@@ -6,9 +6,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.AudioManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import android.util.Log
 import android.view.Display
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
@@ -18,13 +24,12 @@ import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
@@ -38,17 +43,28 @@ class TextAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var analysisJob: Job? = null
 
+    // 用于处理音量键长按的 Job
+    private var volumeLongPressJob: Job? = null
+    // 标记是否已经触发了长按事件
+    private var isLongPressTriggered = false
+
     private val NOTIFICATION_ID_PROGRESS = 1001
     private val NOTIFICATION_ID_RESULT = 2002
 
     private val repository by lazy { (applicationContext as App).repository }
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     companion object {
         private const val TAG = "TextAccessibilityService"
         private const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
+        const val ACTION_CLOSE_FLOATING = "com.antgskds.calendarassistant.ACTION_CLOSE_FLOATING"
         @Volatile var instance: TextAccessibilityService? = null
+            private set
         private val isAnalyzing = AtomicBoolean(false)
+        private const val LONG_PRESS_THRESHOLD = 500L
     }
+
+    private var launcherPackageName: String? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
     override fun onInterrupt() {}
@@ -56,8 +72,128 @@ class TextAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        launcherPackageName = getLauncherPackageName()
         Log.d(TAG, "无障碍服务已连接")
-        // 胶囊逻辑已移至 CapsuleStateManager，不再需要在此监听事件
+    }
+
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        val currentSettings = try {
+            repository.settings.value
+        } catch (e: Exception) {
+            return super.onKeyEvent(event)
+        }
+
+        if (!currentSettings.isFloatingWindowEnabled) {
+            return super.onKeyEvent(event)
+        }
+
+        // 1. 如果悬浮窗已显示，完全放行所有按键，确保用户可以正常调节音量或进行其他操作
+        if (FloatingScheduleService.isShowing) {
+            Log.d(TAG, "悬浮窗已显示，放行按键")
+            return super.onKeyEvent(event)
+        }
+
+        // 2. 监听音量加键 (KEYCODE_VOLUME_UP)
+        // 采用“完全拦截 + 手动补偿”策略，解决长按时音量暴增的问题
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    // 如果是重复的 DOWN 事件（物理按住不放时系统会发送多个 DOWN），只处理第一次
+                    if (event.repeatCount == 0) {
+                        isLongPressTriggered = false
+                        volumeLongPressJob?.cancel()
+
+                        // 启动计时协程
+                        volumeLongPressJob = serviceScope.launch {
+                            delay(LONG_PRESS_THRESHOLD)
+                            // 延时结束，说明用户按住超过了阈值，触发长按逻辑
+                            isLongPressTriggered = true
+                            Log.d(TAG, "长按音量+ 已确认，触发悬浮窗")
+
+                            // 触发轻微震动反馈，告诉用户“功能已激活，可以松手了”
+                            performHapticFeedback()
+
+                            startFloatingService()
+                        }
+                    }
+                    // 拦截事件：告诉系统“我处理了”，系统就不会增加音量
+                    return true
+                }
+
+                KeyEvent.ACTION_UP -> {
+                    // 取消长按计时
+                    volumeLongPressJob?.cancel()
+
+                    if (isLongPressTriggered) {
+                        // 如果之前已经触发了长按逻辑（悬浮窗已打开），这里什么都不做
+                        Log.d(TAG, "音量+ 抬起 (长按处理完毕)")
+                    } else {
+                        // 如果没触发长按，说明这是一次短按
+                        // 手动补偿：调用系统 API 增加音量
+                        Log.d(TAG, "音量+ 抬起 (短按)，模拟系统音量增加")
+                        try {
+                            audioManager.adjustStreamVolume(
+                                AudioManager.STREAM_MUSIC,
+                                AudioManager.ADJUST_RAISE,
+                                AudioManager.FLAG_SHOW_UI
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "模拟调节音量失败", e)
+                        }
+                    }
+
+                    // 重置状态
+                    isLongPressTriggered = false
+                    // 拦截事件：防止系统处理 UP 事件导致意外行为
+                    return true
+                }
+            }
+        }
+
+        // 3. 音量减 (KEYCODE_VOLUME_DOWN) 及其他按键
+        // 直接放行 (return super)，恢复系统默认行为
+        // 这样可以保留“电源+音量减”截图功能，也可以保留长按音量减快速静音的功能
+        return super.onKeyEvent(event)
+    }
+
+    private fun performHapticFeedback() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                val vibrator = vibratorManager.defaultVibrator
+                vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    vibrator.vibrate(50)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "震动反馈失败", e)
+        }
+    }
+
+    private fun startFloatingService() {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "悬浮窗权限未授予，无法启动悬浮窗")
+            showResultNotification("悬浮窗权限未授予", "请在设置中开启悬浮窗权限")
+            return
+        }
+        serviceScope.launch {
+            val intent = Intent(this@TextAccessibilityService, FloatingScheduleService::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startService(intent)
+        }
+    }
+
+    private fun getLauncherPackageName(): String? {
+        val intent = Intent(Intent.ACTION_MAIN)
+        intent.addCategory(Intent.CATEGORY_HOME)
+        val resolveInfo = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        return resolveInfo?.activityInfo?.packageName
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -95,8 +231,6 @@ class TextAccessibilityService : AccessibilityService() {
         analysisJob?.cancel()
         analysisJob = serviceScope.launch {
             try {
-                // 如果是通过快捷方式触发，延迟时间确保透明 Activity 完全销毁
-                // 如果不是通过快捷方式触发，保持原有延迟逻辑
                 delay(delayDuration)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     takeScreenshotAndAnalyze()
@@ -176,7 +310,6 @@ class TextAccessibilityService : AccessibilityService() {
                 }
                 if (addedEvents.isNotEmpty()) {
                     val isAllPickup = addedEvents.all { it.eventType == "temp" }
-                    // 如果全是取件码且开启了实况，则不弹普通通知，直接看实况
                     if (!(settings.isLiveCapsuleEnabled && isAllPickup)) {
                         val count = addedEvents.size
                         val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
@@ -208,9 +341,6 @@ class TextAccessibilityService : AccessibilityService() {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-        Log.d(TAG, "saveEventsLocally: AI返回了 ${aiEvents.size} 个事件")
-        Log.d(TAG, "saveEventsLocally: 当前存储中有 ${currentEvents.size} 个事件")
-
         aiEvents.forEachIndexed { index, aiEvent ->
             try {
                 val now = LocalDateTime.now()
@@ -230,13 +360,10 @@ class TextAccessibilityService : AccessibilityService() {
                 val finalEventType = if (aiEvent.type == "pickup") "temp" else "event"
                 val newEventTitle = aiEvent.title.trim()
 
-                // 修复：使用实时的 repository.events.value 而不是过时的 currentEvents 快照
-                // 这确保了即使删除操作刚刚发生，也能获取到最新的数据
                 val currentRepositoryEvents = repository.events.value
-                Log.d(TAG, "  -> 当前仓库中有 ${currentRepositoryEvents.size} 个事件")
 
                 val isDuplicate = currentRepositoryEvents.any { existing ->
-                    val isExpired = existing.endDate.isBefore(LocalDate.now())
+                    val isExpired = existing.endDate.isBefore(java.time.LocalDate.now())
                     if (isExpired) return@any false
 
                     val matches = if (finalEventType == "event") {
@@ -244,28 +371,14 @@ class TextAccessibilityService : AccessibilityService() {
                                 existing.startTime == startDateTime.format(timeFormatter) &&
                                 existing.title.trim().equals(newEventTitle, ignoreCase = true)
                     } else {
-                        // 【修复】对于取件码，使用 title（取件码号码）作为唯一标识
-                        // 而不是 description（通常是固定的"快递取件"等文本）
                         existing.eventType == "temp" &&
                                 existing.title.trim().equals(newEventTitle, ignoreCase = true)
-                    }
-
-                    if (matches && finalEventType == "temp") {
-                        Log.d(TAG, "  -> 找到匹配: existing.id=${existing.id}, existing.title='${existing.title}', ai.title='${newEventTitle}'")
                     }
                     matches
                 }
 
-                // 添加日志以便调试
-                Log.d(TAG, "事件#$index: type=$finalEventType, title=$newEventTitle, desc='${aiEvent.description.trim()}'")
-                if (isDuplicate) {
-                    Log.d(TAG, "  -> 判定为重复（已存在于仓库中），跳过")
-                    return@forEachIndexed
-                }
+                if (isDuplicate) return@forEachIndexed
 
-                Log.d(TAG, "  -> 不重复，准备添加新事件")
-
-                // 不重复，创建新事件（先添加到列表，稍后批量提交）
                 val newEvent = MyEvent(
                     id = UUID.randomUUID().toString(),
                     title = newEventTitle,
@@ -279,9 +392,7 @@ class TextAccessibilityService : AccessibilityService() {
                     sourceImagePath = imagePath,
                     eventType = finalEventType
                 )
-                // 【修复】先收集到列表，不立即添加，避免多次触发Flow
                 actuallyAdded.add(newEvent)
-                Log.d(TAG, "  -> 准备添加新事件: id=${newEvent.id}, title='${newEvent.title}'")
 
                 if (newEvent.eventType == "temp") {
                     NotificationScheduler.scheduleExpiryWarning(this, newEvent)
@@ -293,22 +404,16 @@ class TextAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 批量添加所有事件（胶囊逻辑已移至 CapsuleStateManager，会自动响应 Flow 变化）
         if (actuallyAdded.isNotEmpty()) {
-            Log.d(TAG, "批量添加 ${actuallyAdded.size} 个事件")
             actuallyAdded.forEach { event ->
                 repository.addEvent(event)
-                // 安排提醒
                 if (event.eventType == "temp") {
                     NotificationScheduler.scheduleExpiryWarning(this, event)
                 } else {
                     NotificationScheduler.scheduleReminders(this, event)
                 }
             }
-            Log.d(TAG, "批量添加完成")
         }
-
-        Log.d(TAG, "saveEventsLocally 完成: AI返回${aiEvents.size}个, 成功添加${actuallyAdded.size}个, 跳过${aiEvents.size - actuallyAdded.size}个")
         return actuallyAdded
     }
 
