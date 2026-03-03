@@ -5,9 +5,6 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.course.CourseManager
-import com.antgskds.calendarassistant.core.util.TransportType
-import com.antgskds.calendarassistant.core.util.TransportUtils
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.repository.AppRepository
@@ -174,13 +171,21 @@ class CapsuleStateManager(
 
                 val effectiveStartTime = if (settings.isAdvanceReminderEnabled &&
                                                settings.advanceReminderMinutes > 0 &&
-                                               event.eventType != EventType.PICKUP) {
+                                               event.eventType != "temp") {
                     startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
                 } else {
                     startDateTime.minusMinutes(1)
                 }
 
-                val isActive = now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
+                val isActive = if (event.eventType == "temp") {
+                    val isStarted = !now.isBefore(effectiveStartTime)
+                    val endPlusGrace = endDateTime.plusMinutes(30)
+                    val isWithinGracePeriod = now.isBefore(endPlusGrace)
+                    isStarted && isWithinGracePeriod
+                } else {
+                    // 日程胶囊逻辑：必须 未结束 且 已开始
+                    now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
+                }
 
                 // 调试日志：如果胶囊消失，请检查 Logcat 中这一行的 isActive 是 true 还是 false
                 // Log.d(TAG, "Event: ${event.title}, End: $endDateTime, Now: $now, IsActive: $isActive")
@@ -198,24 +203,18 @@ class CapsuleStateManager(
         }
 
         // ... 后续构建胶囊逻辑保持不变 ...
-        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.eventType == EventType.PICKUP }
+        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.eventType == "temp" }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
         scheduleEvents.forEach { event ->
-            val transportInfo = TransportUtils.parse(event.description)
-            val title = when (transportInfo.type) {
-                TransportType.TRAIN -> transportInfo.mainDisplay
-                TransportType.RIDE -> transportInfo.mainDisplay
-                else -> event.title
-            }
-
             capsules.add(CapsuleUiState.Active.CapsuleItem(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
                 eventType = event.eventType,
-                title = title,
+                title = event.title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
+                description = event.description,
                 color = event.color.toArgb(),
                 startMillis = toMillis(event, event.startTime),
                 endMillis = toMillis(event, event.endTime)
@@ -250,7 +249,7 @@ class CapsuleStateManager(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = capsuleType,
-                eventType = EventType.PICKUP,
+                eventType = "temp",
                 title = if (isAnyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项",
                 content = contentText,
                 color = android.graphics.Color.GREEN,

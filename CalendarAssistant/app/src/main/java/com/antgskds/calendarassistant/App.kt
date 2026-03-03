@@ -23,7 +23,7 @@ class App : Application() {
         const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
 
         private const val TAG = "App"
-
+        
         lateinit var instance: App
             private set
     }
@@ -41,7 +41,6 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
         instance = this
         
         // 初始化通知渠道
