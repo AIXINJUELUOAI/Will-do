@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
@@ -87,27 +88,6 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             NotificationScheduler.ACTION_REFRESH_CAPSULE -> {
                 handleCapsuleRefresh(context, eventId, eventTitle)
-            }
-            NotificationScheduler.ACTION_PICKUP_EXPIRE_SWITCH -> {
-                // 【修复问题1 - 完善逻辑】取件码已过期
-                Log.d(TAG, "取件码已过期，准备切换按钮状态: $eventTitle")
-
-                // ✅ 获取 Repository 以检查设置
-                val repository = (context.applicationContext as App).repository
-                val settings = repository.settings.value
-
-                // 如果胶囊模式开启，刷新胶囊状态（胶囊会显示延长按钮并弹出）
-                if (settings.isLiveCapsuleEnabled) {
-                    Log.i(TAG, "胶囊模式开启 -> 刷新胶囊以显示延长按钮")
-                    Log.i(TAG, ">>> 调用 forceRefresh()")
-                    repository.capsuleStateManager.forceRefresh()
-                    Log.i(TAG, ">>> forceRefresh() 调用完成")
-                    handleCapsuleRefresh(context, eventId, eventTitle)
-                } else {
-                    // 胶囊模式关闭时，弹出普通延长通知
-                    Log.i(TAG, "胶囊模式关闭 -> 弹出普通延长通知")
-                    NotificationScheduler.showPickupExtendNotification(context, eventId, eventTitle)
-                }
             }
             NotificationScheduler.ACTION_REMINDER, null -> {
                 // 处理普通提醒（action 可能为 null 的情况作为兜底）
@@ -202,7 +182,7 @@ class AlarmReceiver : BroadcastReceiver() {
             // 既然已经在 handleCapsuleStart，说明 eventId 已经通过了 isEventStillValid 检查
             // 直接从内存中获取事件对象来判断类型
             val event = repository.events.value.find { it.id == eventId }
-            val isTemp = event?.eventType == "temp"
+            val isTemp = event?.eventType == EventType.PICKUP
 
             if (isTemp) {
                 Log.d(TAG, "普通模式下跳过取件码的'日程开始'通知，因为已有常驻通知")

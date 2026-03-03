@@ -10,8 +10,6 @@ data class CalendarEventData(
     val endTime: String = "",   // 格式: yyyy-MM-dd HH:mm
     val location: String = "",
     val description: String = "",
-    // --- 新增：用于区分事件类型 ---
-    // "event" = 普通日程 (默认)
-    // "pickup" = 取件码/取餐码等
-    val type: String = "event"
+    val type: String = EventType.EVENT,
+    val tag: String = EventTags.GENERAL
 )

@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.util
 import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.data.model.EventFingerprint
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import java.time.Instant
 import java.time.LocalDate
@@ -112,15 +113,15 @@ object EventDeduplicator {
         preserveArchivedStatus: Boolean = true
     ): DeduplicationResult {
         // 1. 过滤掉课程和临时事件（不参与去重）
-        val importRegularEvents = importEvents.filter { it.eventType == "event" }
+        val importRegularEvents = importEvents.filter { it.eventType == EventType.EVENT }
 
         // 2. 构建现有事件的指纹集合
         val existingActiveFingerprints = existingActiveEvents
-            .filter { it.eventType == "event" }
+            .filter { it.eventType == EventType.EVENT }
             .associateBy { generateFingerprint(it) }
 
         val existingArchivedFingerprints = existingArchivedEvents
-            .filter { it.eventType == "event" }
+            .filter { it.eventType == EventType.EVENT }
             .associateBy { generateFingerprint(it) }
 
         val toAdd = mutableListOf<MyEvent>()
@@ -189,9 +190,9 @@ object EventDeduplicator {
     ): Boolean {
         val systemFingerprint = generateFingerprintFromSystemEvent(systemEvent)
 
-        // 只检查 eventType == "event" 的普通事件
+        // 只检查 eventType == EventType.EVENT 的普通事件
         return existingEvents
-            .filter { it.eventType == "event" }
+            .filter { it.eventType == EventType.EVENT }
             .any { generateFingerprint(it) == systemFingerprint }
     }
 }

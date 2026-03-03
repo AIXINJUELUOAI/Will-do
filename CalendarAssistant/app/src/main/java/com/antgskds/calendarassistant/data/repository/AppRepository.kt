@@ -5,6 +5,8 @@ import android.content.Context
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.source.ArchiveJsonDataSource
@@ -68,6 +70,48 @@ class AppRepository private constructor(private val context: Context) {
 
     init {
         refreshData()
+        migrateEventTypes()
+        migrateEventTags()
+    }
+
+    private fun migrateEventTypes() {
+        scope.launch {
+            val events = eventSource.loadEvents()
+            val needMigration = events.any { it.eventType == "temp" }
+            if (needMigration) {
+                val migratedEvents = events.map {
+                    if (it.eventType == "temp") it.copy(eventType = EventType.PICKUP) else it
+                }
+                eventSource.saveEvents(migratedEvents)
+                _events.value = migratedEvents
+                Log.i("Migration", "已迁移 ${events.size} 条旧数据: temp -> pickup")
+            }
+        }
+    }
+
+    private fun migrateEventTags() {
+        scope.launch {
+            val events = eventSource.loadEvents()
+            val needMigration = events.any { it.tag.isBlank() || it.tag.isEmpty() }
+            if (needMigration) {
+                val migratedEvents = events.map { event ->
+                    if (event.tag.isBlank() || event.tag.isEmpty()) {
+                        val newTag = when {
+                            event.description.contains("【列车】") -> EventTags.TRAIN
+                            event.description.contains("【用车】") -> EventTags.TAXI
+                            event.eventType == EventType.PICKUP -> EventTags.PICKUP
+                            else -> EventTags.GENERAL
+                        }
+                        event.copy(tag = newTag)
+                    } else {
+                        event
+                    }
+                }
+                eventSource.saveEvents(migratedEvents)
+                _events.value = migratedEvents
+                Log.i("Migration", "已迁移 ${events.size} 条旧数据的 tag")
+            }
+        }
     }
 
     fun loadAndScheduleAll() {
@@ -199,46 +243,111 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     /**
-     * 完成取件码（直接删除事件）
-     * 取件码用完即弃，点击"已取"后直接删除，不保留历史记录
+     * 完成取件码（设置为已完成状态）
+     * 点击"已取"后，保存原始时间，设置已完成状态
      */
     suspend fun completePickupEvent(id: String) {
         val event = _events.value.find { it.id == id }
-        if (event != null && event.eventType == "temp") {
-            // 取消相关通知（同时取消胶囊通知和初始通知）
-            val nm = NotificationManagerCompat.from(context)
-            nm.cancel(id.hashCode())  // 取消胶囊通知
-            nm.cancel(id.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF)  // 取消初始通知
-
-            // 直接删除事件
-            deleteEvent(id, triggerSync = false)
-
-            // 主动触发胶囊状态刷新
-            capsuleStateManager.forceRefresh()
-        }
-    }
-
-    /**
-     * 完成日程事件（设置为立即过期）
-     * 点击"已完成"后，将结束时间设为当前时间，事件立即过期，胶囊自然消失
-     */
-    suspend fun completeScheduleEvent(id: String) {
-        val event = _events.value.find { it.id == id }
-        if (event != null && event.eventType == "event") {
+        if (event != null && event.eventType == EventType.PICKUP && !event.isCompleted) {
             val now = java.time.LocalDateTime.now()
             val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
 
             val updatedEvent = event.copy(
                 endDate = now.toLocalDate(),
-                endTime = now.format(formatter)
+                endTime = now.format(formatter),
+                isCompleted = true,
+                completedAt = System.currentTimeMillis(),
+                originalEndDate = event.endDate,
+                originalEndTime = event.endTime
             )
 
-            // 更新事件
             updateEvent(updatedEvent)
-
-            // 主动触发胶囊状态刷新
             capsuleStateManager.forceRefresh()
         }
+    }
+
+    /**
+     * 完成日程事件（设置为已完成状态）
+     * 点击"已完成"后，保存原始时间，设置已完成状态
+     */
+    suspend fun completeScheduleEvent(id: String) {
+        val event = _events.value.find { it.id == id }
+        if (event != null && event.eventType == EventType.EVENT && !event.isCompleted) {
+            val now = java.time.LocalDateTime.now()
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+
+            val updatedEvent = event.copy(
+                endDate = now.toLocalDate(),
+                endTime = now.format(formatter),
+                isCompleted = true,
+                completedAt = System.currentTimeMillis(),
+                originalEndDate = event.endDate,
+                originalEndTime = event.endTime
+            )
+
+            updateEvent(updatedEvent)
+            capsuleStateManager.forceRefresh()
+        }
+    }
+
+    /**
+     * 标记火车票已检票
+     */
+    suspend fun checkInTransport(id: String) {
+        val event = _events.value.find { it.id == id }
+        if (event != null && !event.isCheckedIn) {
+            val updatedEvent = event.copy(
+                isCheckedIn = true,
+                completedAt = System.currentTimeMillis()
+            )
+            updateEvent(updatedEvent)
+            capsuleStateManager.forceRefresh()
+        }
+    }
+
+    /**
+     * 撤销已完成事件（检查1分钟内）
+     */
+    suspend fun undoCompleteEvent(id: String): Boolean {
+        val event = _events.value.find { it.id == id }
+        if (event != null && event.isCompleted && event.completedAt != null) {
+            val elapsed = System.currentTimeMillis() - event.completedAt
+            if (elapsed <= 60000) { // 1分钟内
+                val restoredEvent = event.copy(
+                    endDate = event.originalEndDate ?: event.endDate,
+                    endTime = event.originalEndTime ?: event.endTime,
+                    isCompleted = false,
+                    completedAt = null,
+                    originalEndDate = null,
+                    originalEndTime = null
+                )
+                updateEvent(restoredEvent)
+                capsuleStateManager.forceRefresh()
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 撤销已检票（检查1分钟内）
+     */
+    suspend fun undoCheckInTransport(id: String): Boolean {
+        val event = _events.value.find { it.id == id }
+        if (event != null && event.isCheckedIn && event.completedAt != null) {
+            val elapsed = System.currentTimeMillis() - event.completedAt
+            if (elapsed <= 60000) { // 1分钟内
+                val restoredEvent = event.copy(
+                    isCheckedIn = false,
+                    completedAt = null,
+                    description = event.description.removeSuffix("(已检票)").trim()
+                )
+                updateEvent(restoredEvent)
+                capsuleStateManager.forceRefresh()
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -814,7 +923,7 @@ class AppRepository private constructor(private val context: Context) {
         val event = _events.value.find { it.id == eventId } ?: return
 
         // 🛡️ 拦截规则：课程和临时事件不可归档
-        if (event.eventType == "course" || event.eventType == "temp") {
+        if (event.eventType == EventType.COURSE || event.eventType == EventType.PICKUP) {
             Log.w("AppRepository", "Attempted to archive special event type: ${event.eventType}")
             return
         }
@@ -917,8 +1026,8 @@ class AppRepository private constructor(private val context: Context) {
         // 1. 筛选需要归档的事件（使用正确的过期判断）
         val eventsSnapshot = _events.value // 获取快照
         val toArchiveEvents = eventsSnapshot.filter { event ->
-            event.eventType != "course" &&
-            event.eventType != "temp" && // 临时事件也不归档
+            event.eventType != EventType.COURSE &&
+            event.eventType != EventType.PICKUP && // 临时事件也不归档
             com.antgskds.calendarassistant.core.util.DateCalculator.isEventExpired(event)
         }
 

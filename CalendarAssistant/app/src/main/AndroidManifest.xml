@@ -139,16 +139,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".service.receiver.PickupExpiryReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.antgskds.calendarassistant.action.PICKUP_WARNING" />
-                <action android:name="com.antgskds.calendarassistant.action.EXTEND_30" />
-                <action android:name="com.antgskds.calendarassistant.action.DISMISS_WARNING" />
-            </intent-filter>
-        </receiver>
-
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver
             android:name=".service.receiver.EventActionReceiver"

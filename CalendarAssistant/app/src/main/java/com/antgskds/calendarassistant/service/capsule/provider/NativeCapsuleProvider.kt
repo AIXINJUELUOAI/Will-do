@@ -11,6 +11,10 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.core.util.TransportInfo
+import com.antgskds.calendarassistant.core.util.TransportType
+import com.antgskds.calendarassistant.core.util.TransportUtils
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 import java.time.Duration
@@ -36,7 +40,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
         // 根据胶囊类型添加跳转参数：取件码胶囊跳转到临时事件列表
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (capsuleType == 2 || eventType == "temp") {
+            if (capsuleType == 2 || eventType == EventType.PICKUP) {
                 putExtra("openPickupList", true)
             }
         }
@@ -161,29 +165,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 ).build()
                 builder.addAction(completeAction)
                 builder.setOnlyAlertOnce(true)
-            }
-            CapsuleService.TYPE_PICKUP_EXPIRED -> {
-                // 取件码已过期：显示"延长"按钮
-                val extendIntent = Intent(context, EventActionReceiver::class.java).apply {
-                    action = EventActionReceiver.ACTION_EXTEND
-                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                }
-                val pendingExtend = PendingIntent.getBroadcast(
-                    context,
-                    eventId.hashCode() + 2,
-                    extendIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val extendAction = Notification.Action.Builder(
-                    R.drawable.ic_notification_small,
-                    "延长30分",
-                    pendingExtend
-                ).build()
-                builder.addAction(extendAction)
-                builder.setOnlyAlertOnce(false)
-                builder.setPriority(Notification.PRIORITY_MAX)
-                builder.setCategory(Notification.CATEGORY_ALARM)
-                builder.setDefaults(Notification.DEFAULT_ALL)
             }
             CapsuleService.TYPE_SCHEDULE -> {
                 // 日程胶囊：未过期显示"已完成"按钮，已过期不显示按钮

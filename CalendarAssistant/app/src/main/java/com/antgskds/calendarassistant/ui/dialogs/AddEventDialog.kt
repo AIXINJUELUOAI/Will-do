@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
@@ -75,7 +76,7 @@ fun AddEventDialog(
     var endTime by remember { mutableStateOf(eventToEdit?.endTime ?: defaultEnd.format(timeFormatter)) }
     var location by remember { mutableStateOf(eventToEdit?.location ?: "") }
     var desc by remember { mutableStateOf(eventToEdit?.description ?: "") }
-    var eventType by remember { mutableStateOf(eventToEdit?.eventType ?: "event") }
+    var eventType by remember { mutableStateOf(eventToEdit?.eventType ?: EventType.EVENT) }
     val reminders = remember { mutableStateListOf<Int>().apply { addAll(eventToEdit?.reminders ?: emptyList()) } }
 
     var sourceBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -116,12 +117,12 @@ fun AddEventDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("类型:", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = eventType == "event", onClick = { eventType = "event" }, label = { Text("日程") })
+                    FilterChip(selected = eventType == EventType.EVENT, onClick = { eventType = EventType.EVENT }, label = { Text("日程") })
                     Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = eventType == "temp", onClick = { eventType = "temp" }, label = { Text("取件/取餐") })
+                    FilterChip(selected = eventType == EventType.PICKUP, onClick = { eventType = EventType.PICKUP }, label = { Text("取件/取餐") })
                 }
 
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(if (eventType == "temp") "取件码/取餐码" else "标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(if (eventType == EventType.PICKUP) "取件码/取餐码" else "标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("始", style = MaterialTheme.typography.bodyMedium)
