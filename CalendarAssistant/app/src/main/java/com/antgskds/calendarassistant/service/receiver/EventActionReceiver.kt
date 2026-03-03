@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +30,6 @@ import java.time.format.DateTimeFormatter
 class EventActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_COMPLETE = "com.antgskds.calendarassistant.action.COMPLETE"
-        const val ACTION_EXTEND = "com.antgskds.calendarassistant.action.EXTEND"
         const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
         const val EXTRA_EVENT_ID = "event_id"
     }
@@ -41,44 +41,13 @@ class EventActionReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             ACTION_COMPLETE -> {
-                // 点击"已取" - 直接删除取件码事件
+                // 点击"已取" - 设置为立即过期
                 val pendingResult = goAsync()
                 scope.launch {
                     try {
-                        // 检查是否是聚合胶囊
-                        if (eventId == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
-                            // 聚合胶囊：批量删除所有活跃的取件码
-                            completeAllActivePickups(repository, context)
-                        } else {
-                            // 单体取件码：直接删除
-                            repository.completePickupEvent(eventId)
-                        }
+                        repository.completePickupEvent(eventId)
                         withContext(Dispatchers.Main) {
                             UniversalToastUtil.showSuccess(context, "取件码已完成")
-                        }
-                    } finally {
-                        pendingResult.finish()
-                    }
-                }
-            }
-            ACTION_EXTEND -> {
-                // 点击"延长" - 复用 PickupExpiryReceiver 的延长逻辑
-                val pendingResult = goAsync()
-                scope.launch {
-                    try {
-                        // 检查是否是聚合胶囊
-                        if (eventId == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
-                            // 聚合胶囊：批量延长所有活跃取件码
-                            extendAllActivePickups(repository, context)
-                        } else {
-                            // 单体取件码：延长单个
-                            extendEventDuration(context, eventId, repository)
-                        }
-                        withContext(Dispatchers.Main) {
-                            // 取消通知栏对应的通知（同时取消胶囊通知和初始通知）
-                            val nm = NotificationManagerCompat.from(context)
-                            nm.cancel(eventId.hashCode())  // 取消胶囊通知
-                            nm.cancel(eventId.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF)  // 取消初始通知
                         }
                     } finally {
                         pendingResult.finish()
@@ -269,6 +238,36 @@ class EventActionReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 UniversalToastUtil.showSuccess(context, "已延长 ${activePickups.size} 个取件码30分钟")
             }
+=======
+     * 标记火车票已检票
+     * 在 description 末尾追加 (已检票) 标记
+     */
+    private suspend fun checkInTransport(
+        eventId: String,
+        repository: com.antgskds.calendarassistant.data.repository.AppRepository
+    ) {
+        val event = repository.getEventById(eventId) ?: return
+
+        val currentDesc = event.description
+        val checkedInSuffix = "(已检票)"
+
+        if (currentDesc.endsWith(checkedInSuffix)) {
+            return
+        }
+
+        val updatedEvent = event.copy(
+            description = "$currentDesc $checkedInSuffix",
+            isCheckedIn = true
+        )
+        repository.updateEvent(updatedEvent)
+
+        repository.capsuleStateManager.forceRefresh()
+
+        val serviceIntent = Intent(App.instance, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            App.instance.startForegroundService(serviceIntent)
+        } else {
+            App.instance.startService(serviceIntent)
         }
     }
 }

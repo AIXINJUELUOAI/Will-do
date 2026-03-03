@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.analyzer.ScheduleRecommendationAnalyzer
@@ -524,7 +525,7 @@ fun HomePage(
 
                             item { SectionHeader(if (uiState.selectedDate == LocalDate.now()) "今日安排" else "${uiState.selectedDate.monthValue}月${uiState.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
 
-                            val events = uiState.currentDateEvents.filter { it.eventType != "temp" }
+                            val events = uiState.currentDateEvents
                             if (events.isEmpty()) {
                                 item { Text("下滑以打开课表", modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
                             } else {
@@ -544,9 +545,9 @@ fun HomePage(
                                 }
                             }
 
-                            if (uiState.selectedDate == LocalDate.now() && uiState.tomorrowEvents.any { it.eventType != "temp" }) {
+                            if (uiState.selectedDate == LocalDate.now() && uiState.tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
-                                items(uiState.tomorrowEvents.filter { it.eventType != "temp" }, key = { it.id }) { event ->
+                                items(uiState.tomorrowEvents, key = { it.id }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,

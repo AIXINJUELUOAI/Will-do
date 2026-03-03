@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.util.DateCalculator
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -119,7 +120,7 @@ fun SwipeableEventItem(
                     onImportant(event)
                 }
                 // 🔥 修复：课程(course) 和 临时取件码(temp) 显示删除按钮，普通日程(event) 显示归档按钮
-                if (event.eventType == "course" || event.eventType == "temp") {
+                if (event.eventType == EventType.COURSE || event.eventType == EventType.PICKUP) {
                     SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
                         onCollapse()
                         onDelete(event)
@@ -182,59 +183,12 @@ fun SwipeableEventItem(
                     )
                     Spacer(Modifier.width(16.dp))
 
-                    // 右侧内容区域：使用 when 进行布局分流
+                    // 右侧内容区域
                     Column(Modifier.weight(1f)) {
 
-                        when (event.eventType) {
-                            // =================================================
-                            // case 1: 临时取件码模式 (倒序排列：平台 -> 码 -> 地点)
-                            // =================================================
-                            "temp" -> {
-                                // 1. 顶部：平台名称 (Description)
-                                if (event.description.isNotBlank()) {
-                                    Text(
-                                        text = event.description, // 例如 "菜鸟驿站"
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // 2. 中间：取件码 (Title) - 视觉重心
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = event.title, // 例如 "A-1-9915"
-                                        style = MaterialTheme.typography.headlineSmall, // 更大更醒目
-                                        fontWeight = FontWeight.Black,
-                                        textDecoration = if (isExpired) TextDecoration.LineThrough else null
-                                    )
-                                    // 星标紧跟大标题
-                                    if (event.isImportant) {
-                                        Icon(
-                                            Icons.Default.Star,
-                                            null,
-                                            Modifier.size(18.dp).padding(start = 4.dp), // 稍微大一点
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    }
-                                }
-
-                                // 3. 底部：地点
-                                if (event.location.isNotBlank()) {
-                                    Text(
-                                        text = event.location,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.Gray
-                                    )
-                                }
-                            }
-
-                            // =================================================
-                            // case 2 (Default): 普通日程模式 (标准顺序)
-                            // =================================================
-                            else -> {
-                                // 1. 顶部：标题 (Title)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 统一渲染：标题 + 时间 + 描述 + 地点
+                        // 1. 顶部：标题 (Title)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = event.title,
                                         style = MaterialTheme.typography.titleMedium,
@@ -296,8 +250,6 @@ fun SwipeableEventItem(
                                         color = Color.Gray
                                     )
                                 }
-                            }
-                        } // End when
                     }
                 }
             }

@@ -30,35 +30,18 @@ fun AllEventsPage(
 
     // 1. 本地 UI 状态
     var searchQuery by remember { mutableStateOf("") }
-    // 【修改 2】默认选中 0 (日程)
-    var selectedCategory by remember { mutableIntStateOf(0) } // 0=日程, 1=临时
 
-    // 【修改 3】关键：监听时间戳。
-    // 只要时间戳变化（说明用户刚点了一次胶囊），强制切到 1 (临时)
-    LaunchedEffect(pickupTimestamp) {
-        if (pickupTimestamp > 0) {
-            selectedCategory = 1
-        }
-    }
-
-    // 2. 核心过滤逻辑
-    val filteredEvents by remember(uiState.allEvents, searchQuery, selectedCategory) {
+    // 核心过滤逻辑
+    val filteredEvents by remember(uiState.allEvents, searchQuery) {
         derivedStateOf {
             uiState.allEvents.filter { event ->
-                // 分类匹配
-                val categoryMatch = if (selectedCategory == 0) {
-                    event.eventType != "temp" // 日程事件
-                } else {
-                    event.eventType == "temp" // 临时事件
-                }
-
                 // 搜索匹配
                 val searchMatch = if (searchQuery.isBlank()) true else {
                     event.title.contains(searchQuery, ignoreCase = true) ||
                             event.description.contains(searchQuery, ignoreCase = true) ||
                             event.location.contains(searchQuery, ignoreCase = true)
                 }
-                categoryMatch && searchMatch
+                searchMatch
             }.sortedWith(compareBy(
                 // 8级优先级：过期状态 > 重要性 > 单多日
                 { event ->
@@ -109,24 +92,10 @@ fun AllEventsPage(
             )
         )
 
-        // B. 顶部 Tab (日程 vs 临时)
-        TabRow(selectedTabIndex = selectedCategory) {
-            Tab(
-                selected = selectedCategory == 0,
-                onClick = { selectedCategory = 0 },
-                text = { Text("日程事件") }
-            )
-            Tab(
-                selected = selectedCategory == 1,
-                onClick = { selectedCategory = 1 },
-                text = { Text("临时事件") }
-            )
-        }
-
         // 过滤后的本地数据用于显示
         val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-        // C. 列表内容
+        // 列表内容
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp + bottomInset, top = 8.dp),
@@ -143,7 +112,7 @@ fun AllEventsPage(
                         contentAlignment = Alignment.Center
                     ) {
                         val emptyText = if (searchQuery.isBlank()) {
-                            if (selectedCategory == 0) "暂无日程记录" else "暂无临时取件码"
+                            "暂无日程记录"
                         } else {
                             "未找到相关日程"
                         }
@@ -156,21 +125,12 @@ fun AllEventsPage(
             items(filteredEvents, key = { it.id }) { event ->
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     // 头部日期信息
-                    if (selectedCategory == 0) {
-                        Text(
-                            text = "${event.startDate} ~ ${event.endDate}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
-                        )
-                    } else {
-                        Text(
-                            text = "创建于: ${event.startDate}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
-                        )
-                    }
+                    Text(
+                        text = "${event.startDate} ~ ${event.endDate}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
+                    )
 
                     // 滑动组件
                     SwipeableEventItem(
