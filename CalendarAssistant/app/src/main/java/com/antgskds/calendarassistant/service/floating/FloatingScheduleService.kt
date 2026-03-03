@@ -27,6 +27,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
@@ -179,7 +180,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     FloatingScheduleScreen(
                         events = events,
                         onClose = { stopSelf() },
-                        onManualInput = { text -> handleManualInput(text) }
+                        onManualInput = { text -> handleManualInput(text) },
+                        onEventAction = { eventId, actionType ->
+                            handleEventAction(eventId, actionType)
+                        },
+                        onUndo = { eventId ->
+                            handleUndo(eventId)
+                        }
                     )
                 }
             }
@@ -215,6 +222,39 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
     }
 
+    private fun handleEventAction(eventId: String, actionType: String) {
+        serviceScope.launch {
+            try {
+                when (actionType) {
+                    "checkIn" -> repository.checkInTransport(eventId)
+                    "complete" -> {
+                        val event = repository.events.value.find { it.id == eventId }
+                        when (event?.eventType) {
+                            com.antgskds.calendarassistant.data.model.EventType.PICKUP -> repository.completePickupEvent(eventId)
+                            else -> repository.completeScheduleEvent(eventId)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to handle event action", e)
+            }
+        }
+    }
+
+    private fun handleUndo(eventId: String) {
+        serviceScope.launch {
+            try {
+                val event = repository.events.value.find { it.id == eventId }
+                when {
+                    event?.isCheckedIn == true -> repository.undoCheckInTransport(eventId)
+                    event?.isCompleted == true -> repository.undoCompleteEvent(eventId)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to handle undo", e)
+            }
+        }
+    }
+
     private fun convertToMyEvent(eventData: CalendarEventData): MyEvent {
         val now = LocalDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -225,7 +265,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         var endDateTime = try {
             if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
         } catch (e: Exception) { startDateTime.plusHours(1) }
-        val eventType = if (eventData.type == "pickup") "temp" else "event"
+        val eventType = if (eventData.type == EventType.PICKUP) EventType.PICKUP else EventType.EVENT
         return MyEvent(
             id = UUID.randomUUID().toString(),
             title = eventData.title.trim(),
@@ -236,7 +276,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             location = eventData.location,
             description = eventData.description,
             color = EventColors[repository.events.value.size % EventColors.size],
-            eventType = eventType
+            eventType = eventType,
+            tag = eventData.tag
         )
     }
 
