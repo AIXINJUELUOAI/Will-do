@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.calendar
 import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarManager.CourseEventInstance
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.TimeNode
 import java.time.Instant
@@ -160,7 +161,7 @@ object CalendarEventMapper {
                 description = systemEvent.description,
                 color = androidx.compose.ui.graphics.Color(colorInt),
                 isImportant = false,
-                eventType = "event"
+                eventType = EventType.EVENT
             )
         } catch (e: Exception) {
             Log.e(TAG, "转换系统事件失败: eventId=${systemEvent.eventId}", e)

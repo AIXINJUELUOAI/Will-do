@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.calendar
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.SyncData
 import com.antgskds.calendarassistant.data.model.TimeNode
@@ -178,7 +179,7 @@ class CalendarSyncManager(private val context: Context) {
     /**
      * 同步普通事件（双向同步）
      * 策略：遍历本地事件，有映射则更新，无映射则创建
-     * 严格过滤：不同步 eventType == "temp" 的临时事件（取件码等）
+     * 严格过滤：不同步 eventType == EventType.PICKUP 的临时事件（取件码等）
      */
     private suspend fun syncEvents(
         events: List<MyEvent>,
@@ -188,8 +189,8 @@ class CalendarSyncManager(private val context: Context) {
         var updatedSyncData = syncData
         val currentMapping = updatedSyncData.mapping.toMutableMap()
 
-        // 过滤：只同步 eventType == "event" 的普通事件
-        val eventsToSync = events.filter { it.eventType == "event" }
+        // 过滤：只同步 eventType == EventType.EVENT 的普通事件
+        val eventsToSync = events.filter { it.eventType == EventType.EVENT }
 
         Log.d(TAG, "普通事件: ${events.size} 个，过滤后: ${eventsToSync.size} 个")
 
