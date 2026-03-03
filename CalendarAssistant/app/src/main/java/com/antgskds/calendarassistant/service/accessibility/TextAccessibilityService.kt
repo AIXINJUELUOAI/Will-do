@@ -22,8 +22,6 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
@@ -311,13 +309,13 @@ class TextAccessibilityService : AccessibilityService() {
                     return@withContext
                 }
                 if (addedEvents.isNotEmpty()) {
-                    val isAllPickup = addedEvents.all { it.eventType == EventType.PICKUP }
+                    val isAllPickup = addedEvents.all { it.eventType == "temp" }
                     if (!(settings.isLiveCapsuleEnabled && isAllPickup)) {
                         val count = addedEvents.size
                         val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
                         val content = if (count == 1) {
                             val e = addedEvents.first()
-                            if (e.eventType == EventType.PICKUP) "取件码: ${e.title}" else " ${e.description}(${e.startTime})"
+                            if (e.eventType == "temp") "取件码: ${e.title}" else " ${e.description}(${e.startTime})"
                         } else {
                             addedEvents.joinToString("，") { it.title }
                         }
@@ -359,7 +357,7 @@ class TextAccessibilityService : AccessibilityService() {
                     endDateTime = now.plusHours(2)
                 }
 
-                val finalEventType = if (aiEvent.type == EventType.PICKUP) EventType.PICKUP else EventType.EVENT
+                val finalEventType = if (aiEvent.type == "pickup") "temp" else "event"
                 val newEventTitle = aiEvent.title.trim()
 
                 val currentRepositoryEvents = repository.events.value
@@ -368,12 +366,12 @@ class TextAccessibilityService : AccessibilityService() {
                     val isExpired = existing.endDate.isBefore(java.time.LocalDate.now())
                     if (isExpired) return@any false
 
-                    val matches = if (finalEventType == EventType.EVENT) {
+                    val matches = if (finalEventType == "event") {
                         existing.startDate == startDateTime.toLocalDate() &&
                                 existing.startTime == startDateTime.format(timeFormatter) &&
                                 existing.title.trim().equals(newEventTitle, ignoreCase = true)
                     } else {
-                        existing.eventType == EventType.PICKUP &&
+                        existing.eventType == "temp" &&
                                 existing.title.trim().equals(newEventTitle, ignoreCase = true)
                     }
                     matches
@@ -392,12 +390,15 @@ class TextAccessibilityService : AccessibilityService() {
                     description = aiEvent.description,
                     color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.EventColors.size],
                     sourceImagePath = imagePath,
-                    eventType = finalEventType,
-                    tag = aiEvent.tag.ifBlank { EventTags.GENERAL }
+                    eventType = finalEventType
                 )
                 actuallyAdded.add(newEvent)
 
-                NotificationScheduler.scheduleReminders(this, newEvent)
+                if (newEvent.eventType == "temp") {
+                    NotificationScheduler.scheduleExpiryWarning(this, newEvent)
+                } else {
+                    NotificationScheduler.scheduleReminders(this, newEvent)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "保存单个事件失败", e)
             }
@@ -406,7 +407,11 @@ class TextAccessibilityService : AccessibilityService() {
         if (actuallyAdded.isNotEmpty()) {
             actuallyAdded.forEach { event ->
                 repository.addEvent(event)
-                NotificationScheduler.scheduleReminders(this, event)
+                if (event.eventType == "temp") {
+                    NotificationScheduler.scheduleExpiryWarning(this, event)
+                } else {
+                    NotificationScheduler.scheduleReminders(this, event)
+                }
             }
         }
         return actuallyAdded
