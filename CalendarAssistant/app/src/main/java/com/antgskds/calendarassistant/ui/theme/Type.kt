@@ -6,6 +6,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+// 自定义板块标题字号（介于 titleMedium 和 titleLarge 之间）
+val SectionTitleTextStyle = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.ExtraBold,
+    fontSize = 18.sp,
+    lineHeight = 24.sp,
+    letterSpacing = 0.sp
+)
+
 // Set of Material typography styles to start with
 val Typography = Typography(
     bodyLarge = TextStyle(

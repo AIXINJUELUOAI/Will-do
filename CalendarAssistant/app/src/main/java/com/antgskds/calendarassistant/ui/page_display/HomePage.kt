@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
@@ -462,7 +463,7 @@ fun HomePage(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                            item { Spacer(modifier = Modifier.height(0.dp)) }
 
                             // 日期卡片
                             item {
@@ -514,7 +515,7 @@ fun HomePage(
                                                     indication = null
                                                 ) { viewModel.updateSelectedDate(LocalDate.now()) }
                                             )
-                                            Text("${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                                            Text("${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
                                         }
                                     }
                                 }
@@ -584,7 +585,7 @@ private fun PermissionWarningCard(icon: androidx.compose.ui.graphics.vector.Imag
         Row(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.error)
             Spacer(Modifier.width(12.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -594,6 +595,6 @@ private fun SectionHeader(title: String, color: Color) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(6.dp).background(color, CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+        Text(text = title, style = SectionTitleTextStyle.copy(color = MaterialTheme.colorScheme.onSurface))
     }
 }
