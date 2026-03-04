@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -44,12 +45,15 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.LocalTaxi
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -97,11 +101,13 @@ import kotlin.math.roundToInt
 fun FloatingScheduleScreen(
     events: List<MyEvent>,
     onClose: () -> Unit,
-    onManualInput: (String) -> Unit,
+    onManualInput: (String, () -> Unit) -> Unit,
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String) -> Unit = { _ -> }
+    onUndo: (String) -> Unit = { _ -> },
+    onLoadingChange: (Boolean) -> Unit = {}
 ) {
     var manualInputText by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -145,11 +151,17 @@ fun FloatingScheduleScreen(
             onTextChange = { manualInputText = it },
             onManualSubmit = { text ->
                 if (text.isNotBlank()) {
-                    onManualInput(text)
+                    isLoading = true
+                    onLoadingChange(true)
+                    onManualInput(text) {
+                        isLoading = false
+                        onLoadingChange(false)
+                    }
                     manualInputText = ""
                 }
             },
-            onSwipeUpClose = onClose
+            onSwipeUpClose = onClose,
+            isLoading = isLoading
         )
     }
 }
@@ -160,7 +172,8 @@ fun BottomInteractionArea(
     text: String,
     onTextChange: (String) -> Unit,
     onManualSubmit: (String) -> Unit,
-    onSwipeUpClose: () -> Unit
+    onSwipeUpClose: () -> Unit,
+    isLoading: Boolean = false
 ) {
     Column(
         modifier = modifier
@@ -182,32 +195,53 @@ fun BottomInteractionArea(
                 )
             }
     ) {
-        Row(
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(text = "输入日程...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                shape = RoundedCornerShape(28.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onManualSubmit(text) }),
-                singleLine = true
-            )
-        }
+            placeholder = { Text(text = "输入日程...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            shape = RoundedCornerShape(28.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledBorderColor = Color.Transparent,
+                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onManualSubmit(text) }),
+            singleLine = true,
+            enabled = !isLoading,
+            trailingIcon = {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .padding(end = 8.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    IconButton(
+                        onClick = { onManualSubmit(text) },
+                        enabled = text.isNotBlank()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Send,
+                            contentDescription = "发送",
+                            tint = if (text.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        )
     }
 }
 

@@ -207,9 +207,7 @@ class CalendarSyncManager(private val context: Context) {
                         calendarId = calendarId
                     )
                     if (!success) {
-                        // 更新失败，可能事件被删除，移除映射
-                        currentMapping.remove(appId)
-                        Log.w(TAG, "更新事件失败，移除映射: $appId")
+                        Log.w(TAG, "更新事件失败，保留映射留待重试: $appId")
                     }
                 } else {
                     // 无映射：创建新事件
@@ -290,6 +288,8 @@ class CalendarSyncManager(private val context: Context) {
             val systemToAppMap = mapping.entries.associate { (k, v) -> v to k }
             val mappedSystemIds = mapping.values.mapNotNull { it.toLongOrNull() }.toSet()
 
+            Log.d(TAG, "反向同步开始: 映射数量=${mapping.size}, 系统事件ID数量=${mappedSystemIds.size}")
+
             var addedCount = 0
             var updatedCount = 0
             var deletedCount = 0
@@ -327,11 +327,10 @@ class CalendarSyncManager(private val context: Context) {
             }
 
             // ==================== 阶段二：扫描新事件 (新增) ====================
-            // 🔥 关键修复：扩大时间窗口。从过去 30 天到未来 180 天。
-            // 之前的 `now` 会导致修改 "今天稍早开始的事件" 被忽略。
+            // 扩大时间窗口：从过去 1 年到未来 1 年，避免遗漏用户修改的旧事件
             val now = System.currentTimeMillis()
-            val startMillis = now - 30L * 24 * 60 * 60 * 1000 // 过去 30 天
-            val endMillis = now + 180L * 24 * 60 * 60 * 1000 // 未来 6 个月
+            val startMillis = now - 365L * 24 * 60 * 60 * 1000 // 过去 1 年
+            val endMillis = now + 365L * 24 * 60 * 60 * 1000  // 未来 1 年
 
             val rangeEvents = calendarManager.queryEventsInRange(
                 calendarId = calendarId,
@@ -344,14 +343,15 @@ class CalendarSyncManager(private val context: Context) {
 
                 // 如果这个 ID 不在映射表中，且不是 App 自己托管的(防止映射丢失后重复导入)
                 if (!systemToAppMap.containsKey(sysIdStr) && !systemEvent.isManaged) {
-                    // 🔥 新增：检查内容是否与活跃或归档事件重复
+                    // 检查内容是否与活跃或归档事件重复
                     // 防止已归档事件在反向同步时被重新添加
                     val allExistingEvents = activeEvents + archivedEvents
                     val isDuplicate = EventDeduplicator.isContentDuplicate(systemEvent, allExistingEvents)
 
                     if (!isDuplicate) {
                         // 真正的新事件，添加到 APP
-                        Log.d(TAG, "检测到新事件: $sysIdStr")
+                        val fingerprint = EventDeduplicator.generateFingerprintFromSystemEvent(systemEvent)
+                        Log.d(TAG, "检测到新事件: ID=$sysIdStr, title=${systemEvent.title}, fingerprint=$fingerprint")
                         val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent)
                         if (myEvent != null) {
                             onEventAdded(myEvent)
@@ -361,7 +361,7 @@ class CalendarSyncManager(private val context: Context) {
                         }
                     } else {
                         // 内容重复，跳过（防止归档事件复活）
-                        Log.d(TAG, "跳过重复事件（可能已归档）: ${systemEvent.title}")
+                        Log.d(TAG, "跳过重复事件: ${systemEvent.title}")
                     }
                 }
             }
@@ -400,9 +400,12 @@ class CalendarSyncManager(private val context: Context) {
                 return@withContext Result.failure(Exception("无法获取日历 ID"))
             }
 
+            // 加载原有的 syncData，保留 mapping 避免重新开启同步后事件被复制
+            val existingSyncData = syncDataSource.loadSyncData()
             val syncData = SyncData(
                 isSyncEnabled = true,
                 targetCalendarId = calendarId,
+                mapping = existingSyncData.mapping,
                 lastSyncTime = System.currentTimeMillis()
             )
 

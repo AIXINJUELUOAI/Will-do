@@ -181,12 +181,17 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     FloatingScheduleScreen(
                         events = events,
                         onClose = { stopSelf() },
-                        onManualInput = { text -> handleManualInput(text) },
+                        onManualInput = { text, onComplete -> 
+                            handleManualInput(text, onComplete)
+                        },
                         onEventAction = { eventId, actionType ->
                             handleEventAction(eventId, actionType)
                         },
                         onUndo = { eventId ->
                             handleUndo(eventId)
+                        },
+                        onLoadingChange = { loading -> 
+                            // 状态由 FloatingScheduleScreen 管理，这里可以留空或用于其他同步
                         }
                     )
                 }
@@ -204,8 +209,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     // ... 下面的业务逻辑部分保持不变 ...
 
-    private fun handleManualInput(text: String) {
-        if (text.isBlank()) return
+    private fun handleManualInput(text: String, onComplete: () -> Unit = {}) {
+        if (text.isBlank()) {
+            onComplete()
+            return
+        }
         serviceScope.launch {
             try {
                 val settings = repository.settings.value
@@ -216,9 +224,25 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     val event = convertToMyEvent(eventData)
                     repository.addEvent(event)
                 }
+                // 收起输入法
+                hideInputMethod()
+                onComplete()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse manual input", e)
+                hideInputMethod()
+                onComplete()
             }
+        }
+    }
+
+    private fun hideInputMethod() {
+        try {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            composeView?.let { view ->
+                imm.hideSoftInputFromWindow(view.windowToken, 0)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hide input method", e)
         }
     }
 
