@@ -60,7 +60,7 @@ fun ArchivesPage(
                             Icon(
                                 Icons.Default.DeleteSweep,
                                 "清空归档",
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }

@@ -21,6 +21,31 @@ object EventDeduplicator {
     private const val TAG = "EventDeduplicator"
 
     /**
+     * 归一化时间格式，只保留 HH:mm，去掉秒和毫秒
+     * "14:30:45.123456" -> "14:30"
+     * "14:30" -> "14:30"
+     */
+    private fun normalizeTimeFormat(timeStr: String): String {
+        return try {
+            if (timeStr.contains(".")) {
+                // 包含毫秒，先去掉
+                timeStr.substringBefore(".")
+            } else {
+                timeStr
+            }.let { trimmed ->
+                val parts = trimmed.split(":")
+                if (parts.size >= 2) {
+                    parts[0].padStart(2, '0') + ":" + parts[1].padStart(2, '0')
+                } else {
+                    trimmed
+                }
+            }
+        } catch (e: Exception) {
+            timeStr
+        }
+    }
+
+    /**
      * 生成事件的内容指纹
      * 修复：增加空安全处理和统一小写，确保指纹稳定性
      */
@@ -29,8 +54,8 @@ object EventDeduplicator {
             title = event.title.trim().lowercase(), // 统一小写
             startDate = event.startDate,
             endDate = event.endDate,
-            startTime = event.startTime,
-            endTime = event.endTime,
+            startTime = normalizeTimeFormat(event.startTime),
+            endTime = normalizeTimeFormat(event.endTime),
             // 修复：处理 location 可能为 null 的情况，并统一小写
             location = (event.location ?: "").trim().lowercase()
         )
@@ -63,8 +88,8 @@ object EventDeduplicator {
 
             startDate = startDateTime.toLocalDate()
             endDate = endDateTime.toLocalDate()
-            startTimeStr = startDateTime.toLocalTime().toString()
-            endTimeStr = endDateTime.toLocalTime().toString()
+            startTimeStr = normalizeTimeFormat(startDateTime.toLocalTime().toString())
+            endTimeStr = normalizeTimeFormat(endDateTime.toLocalTime().toString())
         }
 
         return EventFingerprint(
