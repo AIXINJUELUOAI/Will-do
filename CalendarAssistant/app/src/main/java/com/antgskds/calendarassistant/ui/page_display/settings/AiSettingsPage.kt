@@ -58,7 +58,7 @@ fun AiSettingsPage(
 
     // --- 样式定义优化 (Material 3) ---
     // 板块标题：加粗 + 主色
-    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )

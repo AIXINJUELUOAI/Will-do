@@ -75,7 +75,7 @@ fun LaboratoryPage(uiSize: Int = 2) {
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface
     )
-    val cardSubtitleStyle = MaterialTheme.typography.bodySmall.copy(
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 
@@ -85,12 +85,6 @@ fun LaboratoryPage(uiSize: Int = 2) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "实验室",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
 
         Card(
             modifier = Modifier.fillMaxWidth(),

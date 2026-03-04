@@ -23,7 +23,7 @@ fun AboutPage(uiSize: Int = 2) {
     val contentBodyStyle = MaterialTheme.typography.bodyMedium
 
     // 作者/版本号等次要信息：灰色 + Transparent
-    val metaInfoStyle = MaterialTheme.typography.bodySmall.copy(
+    val metaInfoStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 
@@ -119,7 +119,7 @@ fun ContributorLine(name: String, contribution: String, textStyle: androidx.comp
             // 4. 贡献内容样式：灰色，稍微小一点
             withStyle(
                 style = SpanStyle(
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {

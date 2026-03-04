@@ -59,7 +59,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
 
     // --- 字体样式优化 ---
     // 板块标题：Primary + ExtraBold
-    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )

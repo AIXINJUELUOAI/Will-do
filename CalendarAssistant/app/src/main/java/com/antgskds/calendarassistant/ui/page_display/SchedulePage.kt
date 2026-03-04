@@ -311,7 +311,7 @@ private fun CourseCard(
         ) {
             Text(
                 text = course.name,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = Color.White,
                 fontSize = 11.sp,
                 lineHeight = 13.sp,
