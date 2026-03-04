@@ -46,7 +46,7 @@ fun ScheduleSettingsPage(
 
     // --- 字体样式优化 ---
     // 板块标题：Primary + ExtraBold
-    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )
@@ -61,7 +61,7 @@ fun ScheduleSettingsPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     // 副标题/提示：Grey + Transparent
-    val cardSubtitleStyle = MaterialTheme.typography.bodySmall.copy(
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 

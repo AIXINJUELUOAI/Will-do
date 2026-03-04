@@ -210,7 +210,7 @@ fun SwipeableEventItem(
                                 if (event.startDate != event.endDate) {
                                     Text(
                                         text = "${event.startDate.monthValue}/${event.startDate.dayOfMonth} - ${event.endDate.monthValue}/${event.endDate.dayOfMonth}",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -219,7 +219,7 @@ fun SwipeableEventItem(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "${event.startTime} - ${event.endTime}",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = if (isExpired) Color.Gray else MaterialTheme.colorScheme.primary
                                     )
                                     if (isExpired) {
@@ -247,7 +247,7 @@ fun SwipeableEventItem(
                                 if (event.location.isNotBlank()) {
                                     Text(
                                         text = event.location,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = Color.Gray
                                     )
                                 }

@@ -125,19 +125,19 @@ fun AddEventDialog(
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("始", style = MaterialTheme.typography.bodyMedium)
+                    Text("始", style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.width(8.dp))
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showStartDatePicker = true }, modifier = Modifier.weight(1.5f)) { Text(startDate.toString(), fontSize = 13.sp) }
-                        OutlinedButton(onClick = { showStartTimePicker = true }, modifier = Modifier.weight(1f)) { Text(startTime, fontSize = 13.sp) }
+                        OutlinedButton(onClick = { showStartDatePicker = true }, modifier = Modifier.weight(1.5f)) { Text(startDate.toString(), style = MaterialTheme.typography.bodyMedium) }
+                        OutlinedButton(onClick = { showStartTimePicker = true }, modifier = Modifier.weight(1f)) { Text(startTime, style = MaterialTheme.typography.bodyMedium) }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("终", style = MaterialTheme.typography.bodyMedium)
+                    Text("终", style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.width(8.dp))
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showEndDatePicker = true }, modifier = Modifier.weight(1.5f)) { Text(endDate.toString(), fontSize = 13.sp) }
-                        OutlinedButton(onClick = { showEndTimePicker = true }, modifier = Modifier.weight(1f)) { Text(endTime, fontSize = 13.sp) }
+                        OutlinedButton(onClick = { showEndDatePicker = true }, modifier = Modifier.weight(1.5f)) { Text(endDate.toString(), style = MaterialTheme.typography.bodyMedium) }
+                        OutlinedButton(onClick = { showEndTimePicker = true }, modifier = Modifier.weight(1f)) { Text(endTime, style = MaterialTheme.typography.bodyMedium) }
                     }
                 }
 
