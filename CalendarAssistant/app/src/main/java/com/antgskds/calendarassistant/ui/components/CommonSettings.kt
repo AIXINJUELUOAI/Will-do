@@ -89,7 +89,7 @@ fun WheelPicker(items: List<String>, initialIndex: Int, modifier: Modifier = Mod
             val pageOffset = (listState.currentPage - page) + listState.currentPageOffsetFraction
             val alpha = (1f - (Math.abs(pageOffset) * 0.6f)).coerceAtLeast(0.2f)
             Box(Modifier.height(35.dp), contentAlignment = Alignment.Center) {
-                Text(text = items[page], fontSize = 18.sp, fontWeight = if (Math.abs(pageOffset) < 0.5) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth().alpha(alpha))
+                Text(text = items[page], style = MaterialTheme.typography.bodyLarge, fontWeight = if (Math.abs(pageOffset) < 0.5) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth().alpha(alpha))
             }
         }
     }
@@ -152,7 +152,7 @@ fun WheelTimePicker(initialHour: Int, initialMinute: Int, onTimeChanged: (Int, I
     LaunchedEffect(cH, cM) { onTimeChanged(cH, cM) }
     Row(Modifier.fillMaxWidth().padding(horizontal=16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
         WheelPicker(hours.map{String.format("%02d",it)}, initialHour, Modifier.weight(1f)) { cH = hours[it] }
-        Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterVertically))
+        Text(":", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterVertically))
         WheelPicker(minutes.map{String.format("%02d",it)}, initialMinute, Modifier.weight(1f)) { cM = minutes[it] }
     }
 }
