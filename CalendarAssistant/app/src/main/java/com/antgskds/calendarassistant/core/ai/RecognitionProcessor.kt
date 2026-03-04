@@ -13,6 +13,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.DayOfWeek
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
@@ -34,11 +35,18 @@ object RecognitionProcessor {
     // --- 自然语言输入 ---
     suspend fun parseUserText(text: String, settings: MySettings): CalendarEventData? {
         val now = LocalDateTime.now()
-        val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
+        val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
         val timeStr = now.format(dtfFull)
+        val dateToday = now.format(dtfDate)
+        val dayOfWeek = getDayOfWeek(now)
 
         // ✅ 使用 AiPrompts
-        val prompt = AiPrompts.getUserTextPrompt(timeStr)
+        val prompt = AiPrompts.getUserTextPrompt(
+            timeStr = timeStr,
+            dateToday = dateToday,
+            dayOfWeek = dayOfWeek
+        )
 
         Log.d(TAG, "========== [AI 自然语言输入] ==========")
         Log.d(TAG, "用户输入: $text")
@@ -111,6 +119,7 @@ object RecognitionProcessor {
         val dateBeforeYesterday = now.minusDays(2).format(dtfDate)
         val nowTime = now.format(dtfTime)
         val nowPlusHourTime = now.plusHours(1).format(dtfTime)
+        val dayOfWeek = getDayOfWeek(now)
 
         val unifiedPrompt = AiPrompts.getUnifiedPrompt(
             timeStr = timeStr,
@@ -118,7 +127,8 @@ object RecognitionProcessor {
             dateYesterday = dateYesterday,
             dateBeforeYesterday = dateBeforeYesterday,
             nowTime = nowTime,
-            nowPlusHourTime = nowPlusHourTime
+            nowPlusHourTime = nowPlusHourTime,
+            dayOfWeek = dayOfWeek
         )
 
         val userPrompt = "[OCR文本开始]\n$extractedText\n[OCR文本结束]"
@@ -196,6 +206,18 @@ object RecognitionProcessor {
                 .addOnFailureListener { continuation.resumeWithException(it) }
         } catch (e: Exception) {
             continuation.resumeWithException(e)
+        }
+    }
+
+    private fun getDayOfWeek(now: LocalDateTime): String {
+        return when(now.dayOfWeek) {
+            DayOfWeek.MONDAY -> "星期一"
+            DayOfWeek.TUESDAY -> "星期二"
+            DayOfWeek.WEDNESDAY -> "星期三"
+            DayOfWeek.THURSDAY -> "星期四"
+            DayOfWeek.FRIDAY -> "星期五"
+            DayOfWeek.SATURDAY -> "星期六"
+            DayOfWeek.SUNDAY -> "星期日"
         }
     }
 }
