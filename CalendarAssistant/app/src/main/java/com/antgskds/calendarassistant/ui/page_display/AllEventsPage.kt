@@ -127,7 +127,7 @@ fun AllEventsPage(
                     // 头部日期信息
                     Text(
                         text = "${event.startDate} ~ ${event.endDate}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
                     )

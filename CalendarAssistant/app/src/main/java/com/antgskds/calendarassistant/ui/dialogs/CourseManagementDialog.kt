@@ -223,7 +223,7 @@ fun CourseSingleEditDialog(
                 ) {
                 Text(
                     "注意：此修改仅对本次生效，并在课表中作为独立块显示。\n(生成影子课程)",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray
                 )
 
@@ -467,7 +467,7 @@ private fun SwipeableCourseItem(
                     )
                     Text(
                         text = "周${course.dayOfWeek} 第${course.startNode}-${course.endNode}节",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     val weekInfo = "第${course.startWeek}-${course.endWeek}周" + if(course.weekType == 1) " (单)" else if(course.weekType == 2) " (双)" else ""
@@ -475,7 +475,7 @@ private fun SwipeableCourseItem(
                     if (weekInfo.isNotEmpty() || locInfo.isNotEmpty()) {
                         Text(
                             text = "$weekInfo$locInfo",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = Color.Gray
                         )
                     }
@@ -504,6 +504,6 @@ private fun SwipeActionIcon(icon: ImageVector, tint: Color, size: androidx.compo
 @Composable
 fun ButtonSelector(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-        Text(text, fontSize = 13.sp)
+        Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }
