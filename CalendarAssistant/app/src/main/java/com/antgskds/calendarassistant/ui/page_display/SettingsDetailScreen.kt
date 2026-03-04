@@ -49,6 +49,7 @@ fun SettingsDetailScreen(
         destination == SettingsDestination.Backup -> "数据备份"
         destination == SettingsDestination.About -> "关于应用"
         destination == SettingsDestination.Laboratory -> "实验室"
+        destination == SettingsDestination.Theme -> "主题设置"
         else -> "设置"
     }
 
@@ -99,6 +100,7 @@ fun SettingsDetailScreen(
                 destination == SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, uiSize)
                 destination == SettingsDestination.About -> AboutPage(uiSize)
                 destination == SettingsDestination.Laboratory -> LaboratoryPage(uiSize)
+                destination == SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
             }
         }
     }
