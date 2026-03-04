@@ -103,10 +103,27 @@ class SettingsViewModel(
         }
     }
 
-    // 更新主题模式
+    // 更新主题模式（1=跟随系统, 2=浅色, 3=深色）
+    fun updateThemeMode(mode: Int) {
+        viewModelScope.launch {
+            repository.updateSettings(settings.value.copy(themeMode = mode))
+        }
+    }
+
+    // 更新主题配色方案
+    fun updateThemeColorScheme(scheme: String) {
+        viewModelScope.launch {
+            repository.updateSettings(settings.value.copy(themeColorScheme = scheme))
+        }
+    }
+
+    // 更新深色模式（兼容旧接口）
     fun updateDarkMode(isDark: Boolean) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(isDarkMode = isDark))
+            repository.updateSettings(settings.value.copy(
+                isDarkMode = isDark,
+                themeMode = if (isDark) 3 else 2
+            ))
         }
     }
 

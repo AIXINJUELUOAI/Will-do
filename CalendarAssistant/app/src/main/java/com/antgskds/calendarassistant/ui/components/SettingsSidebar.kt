@@ -37,7 +37,7 @@ enum class SettingsDestination {
     Backup,            // 数据备份
 
     // 操作类（不导航，直接执行）
-    ThemeToggle,       // 深色/浅色模式切换
+    Theme,             // 主题设置
     Logout,            // 退出登录
     About,             // 关于软件
 
@@ -64,7 +64,7 @@ fun SettingsSidebar(
         // 第一块：顶部操作卡片（退出、主题切换、关于）
         SidebarTopActionsCard(
             isDarkMode = isDarkMode,
-            onThemeToggle = onThemeToggle,
+            onThemeNavigate = { onNavigate(SettingsDestination.Theme) },
             onAbout = { onNavigate(SettingsDestination.About) },
             onLogout = { onNavigate(SettingsDestination.Logout) }
         )
@@ -89,7 +89,7 @@ fun SettingsSidebar(
 @Composable
 private fun SidebarTopActionsCard(
     isDarkMode: Boolean,
-    onThemeToggle: (Boolean) -> Unit,
+    onThemeNavigate: () -> Unit,
     onAbout: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -99,13 +99,12 @@ private fun SidebarTopActionsCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            // 深色/浅色模式切换
+            // 主题设置
             SidebarActionItem(
                 icon = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                title = if (isDarkMode) "浅色模式" else "深色模式",
-                subtitle = "切换主题外观",
-                onClick = { onThemeToggle(!isDarkMode) },
-                showChevron = false
+                title = "主题设置",
+                subtitle = "深色模式与主题颜色",
+                onClick = onThemeNavigate
             )
             // 关于软件
             SidebarActionItem(

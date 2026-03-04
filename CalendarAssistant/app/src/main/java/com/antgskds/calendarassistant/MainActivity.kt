@@ -43,6 +43,7 @@ import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
+import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
@@ -133,17 +134,41 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            CalendarAssistantTheme(darkTheme = settings.isDarkMode) {
-                val view = LocalView.current
-                if (!view.isInEditMode) {
-                    SideEffect {
-                        val window = (view.context as Activity).window
-                        window.statusBarColor = Color.Transparent.toArgb()
-                        window.navigationBarColor = Color.Transparent.toArgb()
-                        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !settings.isDarkMode
-                        WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !settings.isDarkMode
-                    }
+            // 监听主题模式变化，如果变化则重启 Activity 应用新设置
+            LaunchedEffect(settings.themeMode, settings.themeColorScheme) {
+                if (currentThemeMode != settings.themeMode || currentThemeColorScheme != settings.themeColorScheme) {
+                    currentThemeMode = settings.themeMode
+                    currentThemeColorScheme = settings.themeColorScheme
+                    recreate()
                 }
+            }
+
+            // 计算深色主题：根据 themeMode 决定
+            val isDarkTheme = when (settings.themeMode) {
+                1 -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                2 -> false
+                3 -> true
+                else -> false
+            }
+
+            // 获取主题配色方案
+            val themeColorSchemeEnum = ThemeColorScheme.fromName(settings.themeColorScheme)
+
+                CalendarAssistantTheme(
+                    darkTheme = isDarkTheme,
+                    dynamicColor = themeColorSchemeEnum == ThemeColorScheme.DEFAULT,
+                    themeColorScheme = themeColorSchemeEnum
+                ) {
+                    val view = LocalView.current
+                    if (!view.isInEditMode) {
+                        SideEffect {
+                            val window = (view.context as Activity).window
+                            window.statusBarColor = Color.Transparent.toArgb()
+                            window.navigationBarColor = Color.Transparent.toArgb()
+                            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
+                            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !isDarkTheme
+                        }
+                    }
 
                 // 使用外部初始化的 mainViewModel，避免创建多个实例
                 val navController = rememberNavController()
@@ -299,5 +324,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         // 用于追踪当前应用的 UI 大小，避免不必要的重启
         private var currentUiSize: Int = -1
+        // 用于追踪当前的主题模式，避免不必要的重启
+        private var currentThemeMode: Int = -1
+        // 用于追踪当前的主题配色方案，避免不必要的重启
+        private var currentThemeColorScheme: String = ""
     }
 }
