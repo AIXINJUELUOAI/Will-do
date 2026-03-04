@@ -81,7 +81,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.util.PickupUtils
 import com.antgskds.calendarassistant.core.util.TransportUtils
 import com.antgskds.calendarassistant.core.util.TransportType
 import kotlinx.coroutines.launch
@@ -283,22 +285,44 @@ fun ScheduleCard(
     val contentColor = if (isExpired) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation = if (isInProgress) 6.dp else 2.dp
 
-    // === 智能标题逻辑 (Smart Title) ===
-    // 使用 TransportUtils 解析交通信息
+    // === 1. 解析交通/状态信息 ===
     val transportInfo = remember(event.description) {
         TransportUtils.parse(event.description)
     }
 
-    // 智能标题：过期或完成显示原标题；否则根据 tag 显示检票口/座位/车牌等关键信息
+    // === 2. 核心交互逻辑判断 (Core Logic) ===
+    // 规则：只要日程"没过期"，或者"处于已完成/已检票状态(可撤销)"，就允许操作。
+    // 反之：如果"已过期"且"未完成/未检票"，则禁止操作(无图标、无震动)。
+    val hasAction = remember(isExpired, event.isCompleted, transportInfo.isCheckedIn) {
+        !isExpired || (event.isCompleted || transportInfo.isCheckedIn)
+    }
+
+    // === 3. 智能标题显示 ===
+    // 火车：检票前=检票口(无则待检票)，检票后=车号+座位号，过期=默认title
+    // 打车：用车前=车牌号，用车后/过期=默认title
+    // 取件：已取前=取件码，已取后/过期=默认title
+    // 日程：始终显示默认title
     val displayTitle = remember(event, transportInfo, isExpired) {
-        if (isExpired || event.isCompleted) {
-            event.title // 历史状态：回退到原始标题
-        } else {
-            when (transportInfo.type) {
-                TransportType.TRAIN -> transportInfo.mainDisplay // 自动切换 检票口/座位
-                TransportType.RIDE -> transportInfo.mainDisplay  // 车牌号
-                else -> event.title
+        when {
+            event.tag == "train" -> {
+                if (transportInfo.isCheckedIn) {
+                    // 检票后：车号 + 座位号
+                    "${transportInfo.subDisplay} ${transportInfo.mainDisplay}".trim()
+                } else if (isExpired) {
+                    // 过期后：默认title
+                    event.title
+                } else {
+                    // 检票前：检票口 或 "待检票"
+                    transportInfo.mainDisplay.ifBlank { "待检票" }
+                }
             }
+            event.tag == "taxi" -> {
+                if (event.isCompleted || isExpired) event.title else transportInfo.mainDisplay
+            }
+            event.tag == EventTags.PICKUP -> {
+                if (event.isCompleted || isExpired) event.title else PickupUtils.parsePickupInfo(event).code
+            }
+            else -> event.title
         }
     }
 
@@ -310,10 +334,10 @@ fun ScheduleCard(
     val isPastThreshold by remember { derivedStateOf { offsetX.value < actionThresholdPx } }
     var hasVibrated by remember { mutableStateOf(false) }
 
-    // 震动触发逻辑
-    LaunchedEffect(isPastThreshold) {
-        if (isPastThreshold && !hasVibrated) {
-            // 使用 LongPress 类型震动（类似 iOS 的 Taptic Engine 确认感）
+    // === 5. 震动反馈逻辑 ===
+    // 仅当 hasAction 为 true 时，过线才震动
+    LaunchedEffect(isPastThreshold, hasAction) {
+        if (hasAction && isPastThreshold && !hasVibrated) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             hasVibrated = true
         } else if (!isPastThreshold) {
@@ -323,13 +347,13 @@ fun ScheduleCard(
 
     val actionInfo = remember(event.isCompleted, event.tag, event.eventType, transportInfo) {
         if (event.isCompleted || transportInfo.isCheckedIn) {
-            Triple(Icons.Rounded.Undo, "撤销", Color(0xFFFFA726))
+            Pair(Icons.Rounded.Undo, Color(0xFFFFA726))
         } else {
-            when {
-                event.tag == "train" -> Triple(Icons.Rounded.ConfirmationNumber, "已检票", Color(0xFF4CAF50))
-                event.tag == "taxi" -> Triple(Icons.Rounded.LocalTaxi, "已用车", Color(0xFFFF9800))
-                event.eventType == "pickup" || event.tag == "package" -> Triple(Icons.Rounded.ShoppingBag, "已取件", Color(0xFF2196F3))
-                else -> Triple(Icons.Rounded.CheckCircle, "已完成", Color(0xFF4CAF50))
+            when (event.tag) {
+                "train" -> Pair(Icons.Rounded.ConfirmationNumber, Color(0xFF4CAF50))
+                "taxi" -> Pair(Icons.Rounded.LocalTaxi, Color(0xFFFF9800))
+                EventTags.PICKUP, "package" -> Pair(Icons.Rounded.ShoppingBag, Color(0xFF2196F3))
+                else -> Pair(Icons.Rounded.CheckCircle, Color(0xFF4CAF50))
             }
         }
     }
@@ -337,10 +361,10 @@ fun ScheduleCard(
     Box(modifier = modifier) {
 
         // === 背景层 (图标) ===
-        // 计算拖拽进度 0.0 ~ 1.0 (达到阈值) ~ 1.5 (拉满)
-        val dragProgress = (offsetX.value / actionThresholdPx).coerceIn(0f, 1.5f)
-
-        if (offsetX.value < 0) {
+        // 仅当 hasAction 为 true 且正在左滑时显示
+        if (hasAction && offsetX.value < 0) {
+            // 计算拖拽进度 0.0 ~ 1.0 (达到阈值) ~ 1.5 (拉满)
+            val dragProgress = (offsetX.value / actionThresholdPx).coerceIn(0f, 1.5f)
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -353,7 +377,7 @@ fun ScheduleCard(
                         .alpha(dragProgress.coerceIn(0f, 1f))
                         .size(48.dp)
                         .background(
-                            color = if (isPastThreshold) actionInfo.third else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (isPastThreshold) actionInfo.second else MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -373,27 +397,22 @@ fun ScheduleCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .pointerInput(event.id, event.isCompleted) {
+                .pointerInput(event.id, hasAction, event.isCompleted) {
                     detectHorizontalDragGestures(
                         onDragStart = { scope.launch { offsetX.stop() } },
                         onDragEnd = {
                             val thresholdMet = offsetX.value < actionThresholdPx
                             scope.launch {
-                                if (thresholdMet) {
-                                    // 触发操作
+                                // 触发条件：有操作权限 && 超过阈值
+                                if (hasAction && thresholdMet) {
                                     if (event.isCompleted || transportInfo.isCheckedIn) {
                                         onUndo(event.id)
                                     } else {
-                                        val actionType = when {
-                                            event.tag == "train" -> "checkIn"
-                                            event.eventType == "pickup" -> "complete"
-                                            event.tag == "taxi" -> "complete"
-                                            else -> "complete"
-                                        }
+                                        val actionType = if (event.tag == "train") "checkIn" else "complete"
                                         onEventAction(event.id, actionType)
                                     }
                                 }
-                                // 回弹动画
+                                // 无论是否触发，始终回弹
                                 offsetX.animateTo(
                                     targetValue = 0f,
                                     animationSpec = spring(
@@ -452,7 +471,7 @@ fun ScheduleCard(
                             transportInfo.isCheckedIn -> StatusLabel("已检票", Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.2f))
                             event.isCompleted -> {
                                 val completedText = when {
-                                    event.eventType == "pickup" -> "已取件"
+                                    event.tag == EventTags.PICKUP -> "已取件"
                                     event.tag == "taxi" -> "已用车"
                                     else -> "已完成"
                                 }

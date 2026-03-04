@@ -11,6 +11,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.core.util.TransportInfo
 import com.antgskds.calendarassistant.core.util.TransportType
@@ -40,7 +41,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
         // 根据胶囊类型添加跳转参数：取件码胶囊跳转到临时事件列表
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (capsuleType == 2 || eventType == EventType.PICKUP) {
+            if (capsuleType == 2 || eventType == EventTags.PICKUP) {
                 putExtra("openPickupList", true)
             }
         }
@@ -135,7 +136,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
         builder.addExtras(extras)
 
         // ========================================================================
-        // 【按钮逻辑】根据胶囊类型和过期状态动态添加按钮
+        // 【按钮逻辑】根据 eventType 动态设置按钮文字和 Action
         // ========================================================================
 
         // 判定是否过期
@@ -146,31 +147,21 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 // 网速胶囊：不需要额外按钮
                 builder.setOnlyAlertOnce(true)
             }
-            CapsuleService.TYPE_PICKUP -> {
-                // 取件码未过期：显示"已取"按钮
-                val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                    action = EventActionReceiver.ACTION_COMPLETE
-                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                }
-                val pendingComplete = PendingIntent.getBroadcast(
-                    context,
-                    eventId.hashCode() + 1,
-                    completeIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val completeAction = Notification.Action.Builder(
-                    R.drawable.ic_notification_small,
-                    "已取",
-                    pendingComplete
-                ).build()
-                builder.addAction(completeAction)
-                builder.setOnlyAlertOnce(true)
-            }
-            CapsuleService.TYPE_SCHEDULE -> {
-                // 日程胶囊：未过期显示"已完成"按钮，已过期不显示按钮
+            CapsuleService.TYPE_PICKUP, CapsuleService.TYPE_PICKUP_EXPIRED, CapsuleService.TYPE_SCHEDULE -> {
+                // 日程/取件码/火车/打车：未过期显示操作按钮，已过期不显示
                 if (!isExpired) {
+                    val buttonText = when (eventType) {
+                        EventTags.PICKUP -> "已取"
+                        EventTags.TAXI -> "已用车"
+                        EventTags.TRAIN -> "已检票"
+                        else -> "已完成"
+                    }
+                    val intentAction = when (eventType) {
+                        EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                        else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                    }
                     val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                        action = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                        action = intentAction
                         putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
                     }
                     val pendingComplete = PendingIntent.getBroadcast(
@@ -180,8 +171,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
                     val completeAction = Notification.Action.Builder(
-                        R.drawable.ic_notification_small,
-                        "已完成",
+                        null,
+                        buttonText,
                         pendingComplete
                     ).build()
                     builder.addAction(completeAction)

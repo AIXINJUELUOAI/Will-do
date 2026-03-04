@@ -8,8 +8,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 object EventType {
-    const val EVENT = "event"   // 普通日程
-    const val PICKUP = "pickup" // 取件、取餐
+    const val EVENT = "event"   // 普通日程（含取件码、火车、打车）
     const val COURSE = "course" // 课程
 }
 

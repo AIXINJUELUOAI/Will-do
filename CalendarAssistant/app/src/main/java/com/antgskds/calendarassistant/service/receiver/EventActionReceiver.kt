@@ -31,6 +31,7 @@ class EventActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_COMPLETE = "com.antgskds.calendarassistant.action.COMPLETE"
         const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
+        const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
         const val EXTRA_EVENT_ID = "event_id"
     }
 
@@ -41,13 +42,13 @@ class EventActionReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             ACTION_COMPLETE -> {
-                // 点击"已取" - 设置为立即过期
+                // 点击"已完成" - 将日程设置为立即过期
                 val pendingResult = goAsync()
                 scope.launch {
                     try {
-                        repository.completePickupEvent(eventId)
+                        repository.completeScheduleEvent(eventId)
                         withContext(Dispatchers.Main) {
-                            UniversalToastUtil.showSuccess(context, "取件码已完成")
+                            UniversalToastUtil.showSuccess(context, "已完成")
                         }
                     } finally {
                         pendingResult.finish()
@@ -62,6 +63,20 @@ class EventActionReceiver : BroadcastReceiver() {
                         repository.completeScheduleEvent(eventId)
                         withContext(Dispatchers.Main) {
                             UniversalToastUtil.showSuccess(context, "日程已完成")
+                        }
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
+            ACTION_CHECKIN -> {
+                // 点击"已检票" - 标记火车票已检票
+                val pendingResult = goAsync()
+                scope.launch {
+                    try {
+                        repository.checkInTransport(eventId)
+                        withContext(Dispatchers.Main) {
+                            UniversalToastUtil.showSuccess(context, "已检票")
                         }
                     } finally {
                         pendingResult.finish()
@@ -99,9 +114,6 @@ class EventActionReceiver : BroadcastReceiver() {
 
         // 更新数据库
         repository.updateEvent(updatedEvent)
-
-        // 重新设置预警闹钟
-        NotificationScheduler.scheduleExpiryWarning(context, updatedEvent)
 
         // 【修复问题3】主动触发胶囊状态刷新，无需等待 ticker
         repository.capsuleStateManager.forceRefresh()
@@ -146,7 +158,7 @@ class EventActionReceiver : BroadcastReceiver() {
 
         // 批量删除所有活跃取件码
         activePickups.forEach { event ->
-            repository.completePickupEvent(event.id)
+            repository.completeScheduleEvent(event.id)
         }
 
         // 取消聚合胶囊的通知
@@ -221,9 +233,6 @@ class EventActionReceiver : BroadcastReceiver() {
 
             // 更新数据库
             repository.updateEvent(updatedEvent)
-
-            // 重新设置预警闹钟
-            NotificationScheduler.scheduleExpiryWarning(context, updatedEvent)
         }
 
         // 主动触发胶囊状态刷新
@@ -238,7 +247,10 @@ class EventActionReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 UniversalToastUtil.showSuccess(context, "已延长 ${activePickups.size} 个取件码30分钟")
             }
-=======
+        }
+    }
+
+    /**
      * 标记火车票已检票
      * 在 description 末尾追加 (已检票) 标记
      */

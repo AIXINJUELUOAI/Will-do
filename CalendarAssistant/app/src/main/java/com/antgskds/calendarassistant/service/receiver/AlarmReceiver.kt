@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
@@ -177,18 +178,6 @@ class AlarmReceiver : BroadcastReceiver() {
 
         } else {
             // 【降级逻辑】
-
-            // 🔴 修复：检查是否是取件码
-            // 既然已经在 handleCapsuleStart，说明 eventId 已经通过了 isEventStillValid 检查
-            // 直接从内存中获取事件对象来判断类型
-            val event = repository.events.value.find { it.id == eventId }
-            val isTemp = event?.eventType == EventType.PICKUP
-
-            if (isTemp) {
-                Log.d(TAG, "普通模式下跳过取件码的'日程开始'通知，因为已有常驻通知")
-                return
-            }
-
             Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled, OCR服务:$isServiceRunning) -> 降级为普通通知")
             showStandardNotification(context, eventId, title, "日程开始")
         }
