@@ -36,6 +36,12 @@ data class MySettings(
     // 主题设置
     val isDarkMode: Boolean = false,
 
+    // 主题模式：1=跟随系统, 2=浅色, 3=深色
+    val themeMode: Int = 1,
+
+    // 主题配色方案：DEFAULT/PURPLE/BLUE/GREEN/PINK/ORANGE/TEAL/NEUTRAL=固定配色
+    val themeColorScheme: String = "DEFAULT",
+
     // UI 大小设置：1=小, 2=中(默认), 3=大
     val uiSize: Int = 2,
 
