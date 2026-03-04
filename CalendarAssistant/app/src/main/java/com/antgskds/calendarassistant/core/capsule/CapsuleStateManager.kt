@@ -203,15 +203,15 @@ class CapsuleStateManager(
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
         scheduleEvents.forEach { event ->
-            val transportInfo = TransportUtils.parse(event.description)
+            val transportInfo = TransportUtils.parse(event.description, event.isCheckedIn)
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
 
             val title = when {
                 event.tag == "train" -> {
                     if (transportInfo.isCheckedIn) {
-                        // 检票后：车号 + 座位号
-                        "${transportInfo.subDisplay} ${transportInfo.mainDisplay}".trim()
+                        // 检票后：只显示座位号
+                        transportInfo.mainDisplay
                     } else if (isExpired) {
                         // 过期后：默认title
                         event.title

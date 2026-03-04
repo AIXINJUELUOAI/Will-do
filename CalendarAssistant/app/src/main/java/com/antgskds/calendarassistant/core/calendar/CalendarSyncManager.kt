@@ -267,7 +267,12 @@ class CalendarSyncManager(private val context: Context) {
         archivedEvents: List<MyEvent> = emptyList() // 新增：归档事件列表
     ): Result<Int> = withContext(Dispatchers.IO) {
         // 防止并发同步
-        if (_isSyncing.get()) return@withContext Result.success(0)
+        if (_isSyncing.get()) {
+            Log.d(TAG, "正在同步中，跳过")
+            return@withContext Result.success(0)
+        }
+        _isSyncing.set(true)
+        Log.d(TAG, "开始执行反向同步")
 
         try {
             // 1. 检查权限
@@ -277,10 +282,17 @@ class CalendarSyncManager(private val context: Context) {
 
             // 2. 读取同步配置
             val syncData = syncDataSource.loadSyncData()
-            if (!syncData.isSyncEnabled) return@withContext Result.success(0)
+            Log.d(TAG, "syncData.isSyncEnabled=${syncData.isSyncEnabled}, targetCalendarId=${syncData.targetCalendarId}")
+            if (!syncData.isSyncEnabled) {
+                Log.d(TAG, "同步未启用，跳过")
+                return@withContext Result.success(0)
+            }
 
             val calendarId = syncData.targetCalendarId
-            if (calendarId == -1L) return@withContext Result.failure(Exception("未配置目标日历"))
+            if (calendarId == -1L) {
+                Log.d(TAG, "未配置目标日历")
+                return@withContext Result.failure(Exception("未配置目标日历"))
+            }
 
             // 3. 准备映射数据
             val mapping = syncData.mapping.toMutableMap()
@@ -288,28 +300,93 @@ class CalendarSyncManager(private val context: Context) {
             val systemToAppMap = mapping.entries.associate { (k, v) -> v to k }
             val mappedSystemIds = mapping.values.mapNotNull { it.toLongOrNull() }.toSet()
 
-            Log.d(TAG, "反向同步开始: 映射数量=${mapping.size}, 系统事件ID数量=${mappedSystemIds.size}")
+            Log.d(TAG, "反向同步开始: 映射数量=${mapping.size}, 系统事件ID数量=${mappedSystemIds.size}, calendarId=$calendarId")
 
             var addedCount = 0
             var updatedCount = 0
             var deletedCount = 0
             var hasChanges = false
+            val now = System.currentTimeMillis()
 
             // ==================== 阶段一：处理已映射的事件 (更新 & 删除) ====================
             // 直接查询这些 ID，无视时间范围，确保能捕捉到修改和删除
-            val existingSystemEvents = calendarManager.queryEventsByIds(mappedSystemIds)
+            val existingSystemEvents = calendarManager.queryEventsByIds(mappedSystemIds, calendarId)
             val foundSystemIds = existingSystemEvents.map { it.eventId.toString() }.toSet()
 
             // 1.1 检测删除：在映射中但系统日历查不到的 ID
+            // 修复：先检查系统日历中是否有相同内容的事件（标题+时间+地点+备注）
+            // 如果有，说明是同一个事件（只是 ID 变了），不应该删除
+            
+            // 关键修复：如果所有映射的事件都查不到，先检查是否需要正向同步
+            // 这可能发生在第一次同步时（系统日历中还没有事件）
+            if (foundSystemIds.isEmpty() && mappedSystemIds.isNotEmpty()) {
+                Log.d(TAG, "所有映射事件都查不到，检查是否需要正向同步...")
+                // 先查询系统日历中有没有任何事件
+                val rangeEventsForCheck = calendarManager.queryEventsInRange(
+                    calendarId = calendarId,
+                    startMillis = now - 365L * 24 * 60 * 60 * 1000,
+                    endMillis = now + 365L * 24 * 60 * 60 * 1000
+                )
+                if (rangeEventsForCheck.isEmpty()) {
+                    // 系统日历中完全没有事件，这是第一次同步，跳过反向同步
+                    Log.d(TAG, "系统日历为空，跳过反向同步，等待正向同步")
+                    return@withContext Result.success(0)
+                }
+            }
+            
             val deletedSystemIds = mapping.values.toSet() - foundSystemIds
+            val rangeEventsForDedup = calendarManager.queryEventsInRange(
+                calendarId = calendarId,
+                startMillis = now - 365L * 24 * 60 * 60 * 1000,
+                endMillis = now + 365L * 24 * 60 * 60 * 1000
+            )
+            
+            // 构建系统事件的指纹集合（用于判断是否是同一个事件）
+            val systemEventFingerprints = rangeEventsForDedup.map { event ->
+                "${event.title}|${event.description}|${event.location}|${event.startMillis}|${event.endMillis}"
+            }.toSet()
+            
             deletedSystemIds.forEach { sysIdStr ->
                 val appId = systemToAppMap[sysIdStr]
                 if (appId != null) {
-                    Log.d(TAG, "检测到事件删除: System ID $sysIdStr -> App ID $appId")
-                    onEventDeleted(appId)
-                    mapping.remove(appId)
-                    hasChanges = true
-                    deletedCount++
+                    // 查找本地事件
+                    val localEvent = activeEvents.find { it.id == appId } ?: archivedEvents.find { it.id == appId }
+                    if (localEvent != null) {
+                        // 构建本地事件的指纹
+                        val localFingerprint = "${localEvent.title}|${localEvent.description}|${localEvent.location}"
+                        // 检查系统日历中是否有相同内容的事件
+                        if (systemEventFingerprints.any { it.startsWith(localFingerprint) }) {
+                            Log.d(TAG, "检测到事件内容相同但ID变化: System ID $sysIdStr -> App ID $appId，不删除，更新映射")
+                            // 更新映射：将旧的系统ID替换为新的系统ID
+                            // 需要在 rangeEvents 中找到对应的系统事件
+                            val newSystemEvent = rangeEventsForDedup.find { 
+                                "${it.title}|${it.description}|${it.location}".startsWith(localFingerprint)
+                            }
+                            if (newSystemEvent != null) {
+                                mapping[appId] = newSystemEvent.eventId.toString()
+                                hasChanges = true
+                                // 同时更新本地事件的 lastModified
+                                val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(newSystemEvent, fixedId = appId)
+                                if (myEvent != null) {
+                                    onEventUpdated(myEvent)
+                                    updatedCount++
+                                }
+                            }
+                        } else {
+                            Log.d(TAG, "检测到事件删除: System ID $sysIdStr -> App ID $appId")
+                            onEventDeleted(appId)
+                            mapping.remove(appId)
+                            hasChanges = true
+                            deletedCount++
+                        }
+                    } else {
+                        // 本地找不到对应事件，直接删除
+                        Log.d(TAG, "检测到事件删除: System ID $sysIdStr -> App ID $appId (本地未找到)")
+                        onEventDeleted(appId)
+                        mapping.remove(appId)
+                        hasChanges = true
+                        deletedCount++
+                    }
                 }
             }
 
@@ -317,9 +394,12 @@ class CalendarSyncManager(private val context: Context) {
             existingSystemEvents.forEach { systemEvent ->
                 val appId = systemToAppMap[systemEvent.eventId.toString()]
                 if (appId != null) {
+                    Log.d(TAG, "检测到系统日历事件更新: appId=$appId, title=${systemEvent.title}, startMillis=${systemEvent.startMillis}, lastModified=${systemEvent.lastModified}")
                     // 这里无论 isManaged 是什么都更新，允许用户修改由 App 创建的日程
                     val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent, fixedId = appId)
+                    Log.d(TAG, "mapSystemEventToMyEvent result: $myEvent")
                     if (myEvent != null) {
+                        Log.d(TAG, "准备调用 onEventUpdated: id=${myEvent.id}, title=${myEvent.title}")
                         onEventUpdated(myEvent)
                         updatedCount++
                     }
@@ -328,7 +408,6 @@ class CalendarSyncManager(private val context: Context) {
 
             // ==================== 阶段二：扫描新事件 (新增) ====================
             // 扩大时间窗口：从过去 1 年到未来 1 年，避免遗漏用户修改的旧事件
-            val now = System.currentTimeMillis()
             val startMillis = now - 365L * 24 * 60 * 60 * 1000 // 过去 1 年
             val endMillis = now + 365L * 24 * 60 * 60 * 1000  // 未来 1 年
 
@@ -381,6 +460,8 @@ class CalendarSyncManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "从系统日历同步失败", e)
             Result.failure(e)
+        } finally {
+            _isSyncing.set(false)
         }
     }
 

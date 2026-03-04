@@ -52,7 +52,7 @@ fun AboutPage(uiSize: Int = 2) {
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Version 1.2.0 Beta",
+            text = "Version 1.2.0",
             style = metaInfoStyle
         )
         Spacer(modifier = Modifier.height(16.dp))

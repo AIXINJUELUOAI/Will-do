@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.floating
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -103,7 +104,7 @@ fun FloatingScheduleScreen(
     onClose: () -> Unit,
     onManualInput: (String, () -> Unit) -> Unit,
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String) -> Unit = { _ -> },
+    onUndo: (String, String) -> Unit = { _, _ -> }, // 改为接受 (eventId, tag)
     onLoadingChange: (Boolean) -> Unit = {}
 ) {
     var manualInputText by remember { mutableStateOf("") }
@@ -124,7 +125,7 @@ fun FloatingScheduleScreen(
                 .fillMaxHeight()
                 .fillMaxWidth(),
             onEventAction = onEventAction,
-            onUndo = onUndo
+            onUndo = { id, tag -> onUndo(id, tag) }
         )
 
         // 顶部遮罩
@@ -250,11 +251,12 @@ fun TimeWheelList(
     events: List<MyEvent>,
     modifier: Modifier = Modifier,
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String) -> Unit = { _ -> }
+    onUndo: (String, String) -> Unit = { _, _ -> } // 改为接受 (eventId, tag)
 ) {
     val now = LocalDateTime.now()
     val sortedEvents = remember(events, now) {
-        events.sortedByDescending { event ->
+        events
+            .sortedByDescending { event ->
             try {
                 LocalDateTime.parse("${event.startDate} ${event.startTime}", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
             } catch (e: Exception) { LocalDateTime.MIN }
@@ -279,7 +281,7 @@ fun TimeWheelList(
                         event = event,
                         modifier = Modifier.width(260.dp).padding(end = 8.dp),
                         onEventAction = onEventAction,
-                        onUndo = onUndo
+                        onUndo = { id, tag -> onUndo(id, tag) }
                     )
                 }
             }
@@ -292,7 +294,7 @@ fun ScheduleCard(
     event: MyEvent,
     modifier: Modifier = Modifier,
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String) -> Unit = { _ -> }
+    onUndo: (String, String) -> Unit = { _, _ -> } // 改为接受 (eventId, tag)
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -320,15 +322,15 @@ fun ScheduleCard(
     val elevation = if (isInProgress) 6.dp else 2.dp
 
     // === 1. 解析交通/状态信息 ===
-    val transportInfo = remember(event.description) {
-        TransportUtils.parse(event.description)
+    val transportInfo = remember(event.description, event.isCheckedIn) {
+        TransportUtils.parse(event.description, event.isCheckedIn)
     }
 
     // === 2. 核心交互逻辑判断 (Core Logic) ===
     // 规则：只要日程"没过期"，或者"处于已完成/已检票状态(可撤销)"，就允许操作。
     // 反之：如果"已过期"且"未完成/未检票"，则禁止操作(无图标、无震动)。
-    val hasAction = remember(isExpired, event.isCompleted, transportInfo.isCheckedIn) {
-        !isExpired || (event.isCompleted || transportInfo.isCheckedIn)
+    val hasAction = remember(isExpired, event.isCompleted, event.isCheckedIn) {
+        !isExpired || (event.isCompleted || event.isCheckedIn)
     }
 
     // === 3. 智能标题显示 ===
@@ -339,9 +341,9 @@ fun ScheduleCard(
     val displayTitle = remember(event, transportInfo, isExpired) {
         when {
             event.tag == "train" -> {
-                if (transportInfo.isCheckedIn) {
-                    // 检票后：车号 + 座位号
-                    "${transportInfo.subDisplay} ${transportInfo.mainDisplay}".trim()
+                if (event.isCheckedIn) {
+                    // 检票后：只显示座位号
+                    transportInfo.mainDisplay
                 } else if (isExpired) {
                     // 过期后：默认title
                     event.title
@@ -379,8 +381,8 @@ fun ScheduleCard(
         }
     }
 
-    val actionInfo = remember(event.isCompleted, event.tag, event.eventType, transportInfo) {
-        if (event.isCompleted || transportInfo.isCheckedIn) {
+    val actionInfo = remember(event.isCompleted, event.tag, event.eventType, event.isCheckedIn) {
+        if (event.isCompleted || event.isCheckedIn) {
             Pair(Icons.Rounded.Undo, Color(0xFFFFA726))
         } else {
             when (event.tag) {
@@ -439,12 +441,9 @@ fun ScheduleCard(
                             scope.launch {
                                 // 触发条件：有操作权限 && 超过阈值
                                 if (hasAction && thresholdMet) {
-                                    if (event.isCompleted || transportInfo.isCheckedIn) {
-                                        onUndo(event.id)
-                                    } else {
-                                        val actionType = if (event.tag == "train") "checkIn" else "complete"
-                                        onEventAction(event.id, actionType)
-                                    }
+                                    // 直接调用 onUndo，让 handleUndo 内部判断是检票还是撤销
+                                    // 不在这里判断 event.isCheckedIn，因为可能是旧状态
+                                    onUndo(event.id, event.tag)
                                 }
                                 // 无论是否触发，始终回弹
                                 offsetX.animateTo(
@@ -502,7 +501,7 @@ fun ScheduleCard(
                             modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
                         when {
-                            transportInfo.isCheckedIn -> StatusLabel("已检票", Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.2f))
+                            event.isCheckedIn -> StatusLabel("已检票", Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.2f))
                             event.isCompleted -> {
                                 val completedText = when {
                                     event.tag == EventTags.PICKUP -> "已取件"

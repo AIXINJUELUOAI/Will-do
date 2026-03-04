@@ -161,7 +161,8 @@ object CalendarEventMapper {
                 description = systemEvent.description,
                 color = androidx.compose.ui.graphics.Color(colorInt),
                 isImportant = false,
-                eventType = EventType.EVENT
+                eventType = EventType.EVENT,
+                lastModified = systemEvent.lastModified ?: System.currentTimeMillis()
             )
         } catch (e: Exception) {
             Log.e(TAG, "转换系统事件失败: eventId=${systemEvent.eventId}", e)
