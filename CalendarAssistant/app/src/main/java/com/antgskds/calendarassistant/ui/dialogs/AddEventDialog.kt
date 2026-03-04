@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -77,6 +78,7 @@ fun AddEventDialog(
     var location by remember { mutableStateOf(eventToEdit?.location ?: "") }
     var desc by remember { mutableStateOf(eventToEdit?.description ?: "") }
     var eventType by remember { mutableStateOf(eventToEdit?.eventType ?: EventType.EVENT) }
+    var eventTag by remember { mutableStateOf(eventToEdit?.tag ?: EventTags.GENERAL) }
     val reminders = remember { mutableStateListOf<Int>().apply { addAll(eventToEdit?.reminders ?: emptyList()) } }
 
     var sourceBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -117,12 +119,10 @@ fun AddEventDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("类型:", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = eventType == EventType.EVENT, onClick = { eventType = EventType.EVENT }, label = { Text("日程") })
-                    Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = eventType == EventType.PICKUP, onClick = { eventType = EventType.PICKUP }, label = { Text("取件/取餐") })
+                    FilterChip(selected = eventTag == EventTags.GENERAL, onClick = { eventTag = EventTags.GENERAL }, label = { Text("日程") })
                 }
 
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(if (eventType == EventType.PICKUP) "取件码/取餐码" else "标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("始", style = MaterialTheme.typography.bodyMedium)
@@ -178,7 +178,7 @@ fun AddEventDialog(
                                 title = title, startDate = startDate, endDate = endDate, startTime = startTime, endTime = endTime,
                                 location = location, description = desc, color = eventToEdit?.color ?: nextColor,
                                 isImportant = eventToEdit?.isImportant ?: false, sourceImagePath = eventToEdit?.sourceImagePath,
-                                reminders = reminders.toList(), eventType = eventType
+                                reminders = reminders.toList(), eventType = eventType, tag = eventTag
                             )
                             onConfirm(newEvent)
                         }

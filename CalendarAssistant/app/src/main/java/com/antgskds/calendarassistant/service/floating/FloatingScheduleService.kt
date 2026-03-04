@@ -27,6 +27,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.repository.AppRepository
@@ -227,13 +228,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             try {
                 when (actionType) {
                     "checkIn" -> repository.checkInTransport(eventId)
-                    "complete" -> {
-                        val event = repository.events.value.find { it.id == eventId }
-                        when (event?.eventType) {
-                            com.antgskds.calendarassistant.data.model.EventType.PICKUP -> repository.completePickupEvent(eventId)
-                            else -> repository.completeScheduleEvent(eventId)
-                        }
-                    }
+                    "complete" -> repository.completeScheduleEvent(eventId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)
@@ -265,7 +260,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         var endDateTime = try {
             if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
         } catch (e: Exception) { startDateTime.plusHours(1) }
-        val eventType = if (eventData.type == EventType.PICKUP) EventType.PICKUP else EventType.EVENT
         return MyEvent(
             id = UUID.randomUUID().toString(),
             title = eventData.title.trim(),
@@ -276,7 +270,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             location = eventData.location,
             description = eventData.description,
             color = EventColors[repository.events.value.size % EventColors.size],
-            eventType = eventType,
+            eventType = EventType.EVENT,
             tag = eventData.tag
         )
     }

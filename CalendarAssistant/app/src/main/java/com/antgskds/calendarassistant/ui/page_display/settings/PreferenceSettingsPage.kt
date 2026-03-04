@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
@@ -242,7 +243,6 @@ fun PreferenceSettingsPage(
                             // 只在打开开关时检测重复提醒
                             if (isChecked && settings.advanceReminderMinutes > 0) {
                                 val hasDuplicate = events.any { event ->
-                                    event.eventType != EventType.PICKUP &&
                                     event.reminders.any { it <= settings.advanceReminderMinutes }
                                 }
                                 if (hasDuplicate) {

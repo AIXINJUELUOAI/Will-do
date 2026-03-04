@@ -77,14 +77,20 @@ class AppRepository private constructor(private val context: Context) {
     private fun migrateEventTypes() {
         scope.launch {
             val events = eventSource.loadEvents()
-            val needMigration = events.any { it.eventType == "temp" }
+            val needMigration = events.any { it.eventType == "temp" || it.eventType == "pickup" }
             if (needMigration) {
                 val migratedEvents = events.map {
-                    if (it.eventType == "temp") it.copy(eventType = EventType.PICKUP) else it
+                    when (it.eventType) {
+                        "temp", "pickup" -> it.copy(
+                            eventType = EventType.EVENT,
+                            tag = EventTags.PICKUP
+                        )
+                        else -> it
+                    }
                 }
                 eventSource.saveEvents(migratedEvents)
                 _events.value = migratedEvents
-                Log.i("Migration", "已迁移 ${events.size} 条旧数据: temp -> pickup")
+                Log.i("Migration", "已迁移 ${events.size} 条旧数据: temp/pickup -> event + tag=pickup")
             }
         }
     }
@@ -99,7 +105,7 @@ class AppRepository private constructor(private val context: Context) {
                         val newTag = when {
                             event.description.contains("【列车】") -> EventTags.TRAIN
                             event.description.contains("【用车】") -> EventTags.TAXI
-                            event.eventType == EventType.PICKUP -> EventTags.PICKUP
+                            event.description.contains("【取件】") -> EventTags.PICKUP
                             else -> EventTags.GENERAL
                         }
                         event.copy(tag = newTag)
@@ -240,30 +246,6 @@ class AppRepository private constructor(private val context: Context) {
     private suspend fun updateEvents(newList: List<MyEvent>) {
         _events.value = newList
         eventSource.saveEvents(newList)
-    }
-
-    /**
-     * 完成取件码（设置为已完成状态）
-     * 点击"已取"后，保存原始时间，设置已完成状态
-     */
-    suspend fun completePickupEvent(id: String) {
-        val event = _events.value.find { it.id == id }
-        if (event != null && event.eventType == EventType.PICKUP && !event.isCompleted) {
-            val now = java.time.LocalDateTime.now()
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
-
-            val updatedEvent = event.copy(
-                endDate = now.toLocalDate(),
-                endTime = now.format(formatter),
-                isCompleted = true,
-                completedAt = System.currentTimeMillis(),
-                originalEndDate = event.endDate,
-                originalEndTime = event.endTime
-            )
-
-            updateEvent(updatedEvent)
-            capsuleStateManager.forceRefresh()
-        }
     }
 
     /**
@@ -885,12 +867,13 @@ class AppRepository private constructor(private val context: Context) {
                 val eventToSave = if (oldEvent != null) {
                     // 如果是老朋友：
                     // 1. 接受系统传来的 内容变更 (标题、时间、地点、描述)
-                    // 2. 拒绝系统传来的 样式变更 (强制保留 App 原有的颜色、提醒、重要性)
+                    // 2. 拒绝系统传来的 样式变更 (强制保留 App 原有的颜色、提醒、重要性、tag)
                     // 这作为"UI 防火墙"，防止外部同步源的颜色污染我们的 UI
                     incomingEvent.copy(
                         color = oldEvent.color,
                         reminders = oldEvent.reminders,
-                        isImportant = oldEvent.isImportant
+                        isImportant = oldEvent.isImportant,
+                        tag = oldEvent.tag
                     )
                 } else {
                     // 理论上只有映射存在的才会走到 onEventUpdated
@@ -916,15 +899,15 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：归档单个事件（原子操作修正版）
      * 1. 先写入归档（持有 archiveMutex）
      * 2. 后删除原日程（复用 deleteEvent，它持有 eventMutex）
-     * 3. 类型检查：课程和临时事件不可归档
+     * 3. 类型检查：课程不可归档
      */
     suspend fun archiveEvent(eventId: String) {
         // 1. 类型安全检查与获取对象
         val event = _events.value.find { it.id == eventId } ?: return
 
-        // 🛡️ 拦截规则：课程和临时事件不可归档
-        if (event.eventType == EventType.COURSE || event.eventType == EventType.PICKUP) {
-            Log.w("AppRepository", "Attempted to archive special event type: ${event.eventType}")
+        // 🛡️ 拦截规则：课程不可归档
+        if (event.eventType == EventType.COURSE) {
+            Log.w("AppRepository", "Attempted to archive course event: ${event.eventType}")
             return
         }
 
@@ -1016,7 +999,7 @@ class AppRepository private constructor(private val context: Context) {
     /**
      * 🔥 修复：自动归档过期事件（使用正确的过期判断逻辑）
      * 条件：使用 DateCalculator.isEventExpired() 判断是否过期（考虑日期+时间）
-     * 排除：课程和临时事件不归档
+     * 排除：课程不归档
      * @return 归档的事件数量
      */
     suspend fun autoArchiveExpiredEvents(): Int {
@@ -1027,7 +1010,6 @@ class AppRepository private constructor(private val context: Context) {
         val eventsSnapshot = _events.value // 获取快照
         val toArchiveEvents = eventsSnapshot.filter { event ->
             event.eventType != EventType.COURSE &&
-            event.eventType != EventType.PICKUP && // 临时事件也不归档
             com.antgskds.calendarassistant.core.util.DateCalculator.isEventExpired(event)
         }
 
