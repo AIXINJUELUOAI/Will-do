@@ -219,7 +219,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse manual input", e)
             }
-            stopSelf()
         }
     }
 
