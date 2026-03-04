@@ -187,8 +187,29 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onEventAction = { eventId, actionType ->
                             handleEventAction(eventId, actionType)
                         },
-                        onUndo = { eventId ->
-                            handleUndo(eventId)
+                        onUndo = { eventId, tag ->
+                            // 直接从 repository 获取最新状态
+                            serviceScope.launch {
+                                kotlinx.coroutines.delay(100)
+                                val latestEvent = repository.events.value.find { it.id == eventId }
+                                Log.d(TAG, "onUndo直接获取: eventId=$eventId, isCheckedIn=${latestEvent?.isCheckedIn}, isCompleted=${latestEvent?.isCompleted}")
+                                when {
+                                    latestEvent?.isCheckedIn == true -> {
+                                        Log.d(TAG, "调用undoCheckInTransport")
+                                        repository.undoCheckInTransport(eventId)
+                                    }
+                                    latestEvent?.isCompleted == true -> repository.undoCompleteEvent(eventId)
+                                    else -> {
+                                        // 如果既不是已检票也不是已完成，则执行操作（检票或完成）
+                                        Log.d(TAG, "执行操作: tag=$tag")
+                                        if (tag == "train") {
+                                            repository.checkInTransport(eventId)
+                                        } else {
+                                            repository.completeScheduleEvent(eventId)
+                                        }
+                                    }
+                                }
+                            }
                         },
                         onLoadingChange = { loading -> 
                             // 状态由 FloatingScheduleScreen 管理，这里可以留空或用于其他同步
@@ -255,20 +276,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)
-            }
-        }
-    }
-
-    private fun handleUndo(eventId: String) {
-        serviceScope.launch {
-            try {
-                val event = repository.events.value.find { it.id == eventId }
-                when {
-                    event?.isCheckedIn == true -> repository.undoCheckInTransport(eventId)
-                    event?.isCompleted == true -> repository.undoCompleteEvent(eventId)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to handle undo", e)
             }
         }
     }

@@ -67,7 +67,7 @@ class CalendarContentObserver(
 
     override fun onChange(selfChange: Boolean, uri: Uri?) {
         super.onChange(selfChange, uri)
-        Log.d(TAG, "检测到日历变化: $uri")
+        Log.d(TAG, "检测到日历变化: selfChange=$selfChange, uri=$uri")
 
         // 🔥 修复：取消之前的防抖任务，确保只有最后一次变更会触发回调
         debounceJob?.cancel()

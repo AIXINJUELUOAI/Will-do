@@ -18,13 +18,14 @@ object TransportUtils {
     private const val CHECKED_IN_SUFFIX = "(已检票)"
     private const val RIDE_COMPLETED_SUFFIX = "(已用车)"
 
-    fun parse(description: String): TransportInfo {
+    fun parse(description: String, eventCheckedIn: Boolean? = null): TransportInfo {
         if (description.isBlank()) {
             return TransportInfo(TransportType.NONE, "", "", false, description)
         }
 
         val cleanDesc = description.removeSuffix(CHECKED_IN_SUFFIX).removeSuffix(RIDE_COMPLETED_SUFFIX)
-        val isCheckedIn = description.endsWith(CHECKED_IN_SUFFIX)
+        val isCheckedInFromDesc = description.endsWith(CHECKED_IN_SUFFIX)
+        val isCheckedIn = eventCheckedIn ?: isCheckedInFromDesc
         val isRideCompleted = description.endsWith(RIDE_COMPLETED_SUFFIX)
 
         val trainPattern = Regex("""【列车|列车""")

@@ -139,6 +139,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- 日历定期同步接收器 -->
+        <receiver
+            android:name=".App$CalendarSyncReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver
             android:name=".service.receiver.EventActionReceiver"

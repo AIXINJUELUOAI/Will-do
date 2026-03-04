@@ -1,8 +1,13 @@
 package com.antgskds.calendarassistant
 
+import android.app.AlarmManager
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
@@ -48,6 +53,9 @@ class App : Application() {
 
         // 初始化日历内容观察者（仅在已有权限时）
         initCalendarObserverIfPermissionGranted()
+
+        // 启动定期日历同步（每1分钟）
+        startPeriodicSync()
 
         // 启动网速监控
         startNetworkSpeedMonitoring()
@@ -147,6 +155,65 @@ class App : Application() {
                         repository.capsuleStateManager.updateNetworkSpeed(speed)
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * 启动定期日历同步
+     * 使用 AlarmManager 每隔一段时间触发一次同步
+     */
+    private fun startPeriodicSync() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, CalendarSyncReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // 每 1 分钟同步一次
+        val intervalMillis = 60 * 1000L // 1 分钟
+
+        alarmManager.setRepeating(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + intervalMillis,
+            intervalMillis,
+            pendingIntent
+        )
+        Log.d(TAG, "定期日历同步已启动，间隔: 1 分钟")
+    }
+}
+
+/**
+ * 日历同步 BroadcastReceiver
+ * 由 AlarmManager 定期触发，执行反向同步
+ */
+class CalendarSyncReceiver : BroadcastReceiver() {
+    companion object {
+        private const val TAG = "CalendarSyncReceiver"
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        Log.d(TAG, "收到定期同步广播")
+
+        val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val repository = AppRepository.getInstance(context)
+
+        syncScope.launch {
+            try {
+                val result = repository.syncFromCalendar()
+                if (result.isSuccess) {
+                    val count = result.getOrNull() ?: 0
+                    if (count > 0) {
+                        Log.d(TAG, "定期反向同步成功：从系统日历同步了 $count 个事件")
+                    }
+                } else {
+                    Log.w(TAG, "定期反向同步失败：${result.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "定期反向同步异常", e)
             }
         }
     }

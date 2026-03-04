@@ -13,9 +13,11 @@ import com.antgskds.calendarassistant.data.source.ArchiveJsonDataSource
 import com.antgskds.calendarassistant.data.source.CourseJsonDataSource
 import com.antgskds.calendarassistant.data.source.EventJsonDataSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
+import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.core.util.EventDeduplicator
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
 import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
@@ -44,6 +46,7 @@ class AppRepository private constructor(private val context: Context) {
     private val courseSource = CourseJsonDataSource(context)
     private val settingsSource = SettingsDataSource(context)
     private val archiveSource = ArchiveJsonDataSource(context)
+    private val syncDataSource = SyncJsonDataSource.getInstance(context)
 
     // StateFlows
     private val _events = MutableStateFlow<List<MyEvent>>(emptyList())
@@ -99,8 +102,10 @@ class AppRepository private constructor(private val context: Context) {
         scope.launch {
             val events = eventSource.loadEvents()
             val needMigration = events.any { it.tag.isBlank() || it.tag.isEmpty() }
-            if (needMigration) {
-                val migratedEvents = events.map { event ->
+
+            // 第一步：只对 tag 为空的事件进行迁移
+            val migratedEvents = if (needMigration) {
+                events.map { event ->
                     if (event.tag.isBlank() || event.tag.isEmpty()) {
                         val newTag = when {
                             event.description.contains("【列车】") -> EventTags.TRAIN
@@ -113,8 +118,31 @@ class AppRepository private constructor(private val context: Context) {
                         event
                     }
                 }
-                eventSource.saveEvents(migratedEvents)
-                _events.value = migratedEvents
+            } else {
+                events
+            }
+
+            // 第二步：校准所有事件的 tag（根据 description 更正错误的 tag）
+            val calibratedEvents = migratedEvents.map { event ->
+                val correctTag = when {
+                    event.description.contains("【列车】") -> EventTags.TRAIN
+                    event.description.contains("【用车】") -> EventTags.TAXI
+                    event.description.contains("【取件】") -> EventTags.PICKUP
+                    else -> null
+                }
+                if (correctTag != null && correctTag != event.tag) {
+                    Log.d("Calibration", "校准事件 tag: ${event.title}, ${event.tag} -> $correctTag")
+                    event.copy(tag = correctTag)
+                } else {
+                    event
+                }
+            }
+
+            // 保存并更新
+            eventSource.saveEvents(calibratedEvents)
+            _events.value = calibratedEvents
+
+            if (needMigration) {
                 Log.i("Migration", "已迁移 ${events.size} 条旧数据的 tag")
             }
         }
@@ -213,6 +241,7 @@ class AppRepository private constructor(private val context: Context) {
             NotificationScheduler.cancelReminders(context, oldEvent)
             currentList[index] = event
             updateEvents(currentList)
+            Log.d("Undo", "updateEvent后: id=${event.id}, isCheckedIn=${event.isCheckedIn}")
             NotificationScheduler.scheduleReminders(context, event)
             if (triggerSync) {
                 triggerAutoSync()
@@ -244,6 +273,9 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     private suspend fun updateEvents(newList: List<MyEvent>) {
+        Log.d("Undo", "updateEvents: 设置events, 其中id=5122f165-f4ea-4b1a-9064-12feeecbc6b5的isCheckedIn=${newList.find { it.id == "5122f165-f4ea-4b1a-9064-12feeecbc6b5" }?.isCheckedIn}")
+        val stackTrace = Thread.currentThread().stackTrace.joinToString("\n") { "  ${it}" }
+        Log.d("Undo", "updateEvents调用栈:\n$stackTrace")
         _events.value = newList
         eventSource.saveEvents(newList)
     }
@@ -267,7 +299,7 @@ class AppRepository private constructor(private val context: Context) {
                 originalEndTime = event.endTime
             )
 
-            updateEvent(updatedEvent)
+            updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
         }
     }
@@ -276,13 +308,22 @@ class AppRepository private constructor(private val context: Context) {
      * 标记火车票已检票
      */
     suspend fun checkInTransport(id: String) {
+        Log.d("Undo", "checkInTransport: id=$id")
         val event = _events.value.find { it.id == id }
+        Log.d("Undo", "checkInTransport: event=$event, isCheckedIn=${event?.isCheckedIn}")
         if (event != null && !event.isCheckedIn) {
+            val checkedInSuffix = "(已检票)"
+            val newDescription = if (event.description.endsWith(checkedInSuffix)) {
+                event.description
+            } else {
+                "${event.description} $checkedInSuffix"
+            }
             val updatedEvent = event.copy(
                 isCheckedIn = true,
-                completedAt = System.currentTimeMillis()
+                completedAt = System.currentTimeMillis(),
+                description = newDescription
             )
-            updateEvent(updatedEvent)
+            updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
         }
     }
@@ -315,16 +356,19 @@ class AppRepository private constructor(private val context: Context) {
      * 撤销已检票（检查1分钟内）
      */
     suspend fun undoCheckInTransport(id: String): Boolean {
+        Log.d("Undo", "undoCheckInTransport: id=$id")
         val event = _events.value.find { it.id == id }
+        Log.d("Undo", "event=$event, isCheckedIn=${event?.isCheckedIn}, completedAt=${event?.completedAt}")
         if (event != null && event.isCheckedIn && event.completedAt != null) {
             val elapsed = System.currentTimeMillis() - event.completedAt
+            Log.d("Undo", "elapsed=$elapsed, 1分钟内=${elapsed <= 60000}")
             if (elapsed <= 60000) { // 1分钟内
                 val restoredEvent = event.copy(
                     isCheckedIn = false,
                     completedAt = null,
-                    description = event.description.removeSuffix("(已检票)").trim()
+                    description = event.description.replace("(已检票)", "").trim().replace("  ", " ")
                 )
-                updateEvent(restoredEvent)
+                updateEvent(restoredEvent, triggerSync = false)
                 capsuleStateManager.forceRefresh()
                 return true
             }
@@ -682,22 +726,34 @@ class AppRepository private constructor(private val context: Context) {
                 val newActiveEvents = eventsToAdd.filter { it.archivedAt == null }
                 val newArchivedEvents = eventsToAdd.filter { it.archivedAt != null }
 
-                // 添加活跃事件
+                // 添加活跃事件（防止 ID 重复）
                 if (newActiveEvents.isNotEmpty()) {
                     val currentActive = _events.value.toMutableList()
-                    currentActive.addAll(newActiveEvents)
+                    // 过滤掉已存在的 ID，防止重复添加
+                    val existingIds = currentActive.map { it.id }.toSet()
+                    val uniqueNewActive = newActiveEvents.filter { it.id !in existingIds }
+                    if (uniqueNewActive.size < newActiveEvents.size) {
+                        Log.w("Import", "跳过 ${newActiveEvents.size - uniqueNewActive.size} 个重复 ID 的活跃事件")
+                    }
+                    currentActive.addAll(uniqueNewActive)
                     updateEvents(currentActive)
 
                     // 重新设置提醒
-                    newActiveEvents.forEach { event ->
+                    uniqueNewActive.forEach { event ->
                         NotificationScheduler.scheduleReminders(context, event)
                     }
                 }
 
-                // 添加归档事件
+                // 添加归档事件（防止 ID 重复）
                 if (newArchivedEvents.isNotEmpty()) {
                     val currentArchived = _archivedEvents.value.toMutableList()
-                    currentArchived.addAll(newArchivedEvents)
+                    // 过滤掉已存在的 ID，防止重复添加
+                    val existingIds = currentArchived.map { it.id }.toSet()
+                    val uniqueNewArchived = newArchivedEvents.filter { it.id !in existingIds }
+                    if (uniqueNewArchived.size < newArchivedEvents.size) {
+                        Log.w("Import", "跳过 ${newArchivedEvents.size - uniqueNewArchived.size} 个重复 ID 的归档事件")
+                    }
+                    currentArchived.addAll(uniqueNewArchived)
                     updateArchivedEvents(currentArchived)
                 }
             }
@@ -842,55 +898,106 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 新增：检查归档事件，防止"僵尸事件"复活
      */
     suspend fun syncFromCalendar(): Result<Int> {
-        // ✅ 修复第一步：强制加载归档数据，防止"僵尸事件"复活
-        ensureArchivesLoaded()
+        return try {
+            // ✅ 修复第一步：强制加载归档数据，防止"僵尸事件"复活
+            ensureArchivesLoaded()
 
-        // 获取活跃和归档事件快照 (此时 archivedEventsSnapshot 一定有数据了)
-        val activeEventsSnapshot = _events.value
-        val archivedEventsSnapshot = _archivedEvents.value
+            // 获取活跃和归档事件快照 (此时 archivedEventsSnapshot 一定有数据了)
+            val activeEventsSnapshot = _events.value
+            val archivedEventsSnapshot = _archivedEvents.value
 
-        return syncManager.syncFromCalendar(
-            onEventAdded = { newEvent ->
+            syncManager.syncFromCalendar(
+            onEventAdded = { incomingEvent ->
                 // 【场景：新增事件】
-                // 策略：不信任系统传来的颜色（可能是被同步源污染的颜色）
-                // 随机分配一个 APP 自己的颜色，让界面色彩更丰富
-                val eventWithRandomColor = newEvent.copy(
-                    color = getRandomEventColor()
-                )
-                addEvent(eventWithRandomColor, triggerSync = false)
+                // 策略：
+                // 1. 先检查本地是否已存在（根据 ID 匹配）
+                // 2. ID 不存在时，用标题+时间+地点+备注判断是否重复
+                val existingById = activeEventsSnapshot.find { it.id == incomingEvent.id }
+                
+                if (existingById != null) {
+                    // ID 存在：以系统日历为准
+                    // 系统日历更新：以系统为准，保留APP内部状态
+                    val finalEvent = existingById.copy(
+                        title = incomingEvent.title,
+                        description = incomingEvent.description,
+                        location = incomingEvent.location,
+                        startDate = incomingEvent.startDate,
+                        endDate = incomingEvent.endDate,
+                        startTime = incomingEvent.startTime,
+                        endTime = incomingEvent.endTime,
+                        lastModified = System.currentTimeMillis()
+                        // isCompleted, isCheckedIn, completedAt 等自动保留
+                    )
+                    updateEvent(finalEvent, triggerSync = false)
+                } else {
+                    // ID 不存在：判断是否重复（根据标题+时间+地点+备注）
+                    val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
+                    if (!isDup) {
+                        // 不重复：新增事件
+                        val eventWithRandomColor = incomingEvent.copy(
+                            color = getRandomEventColor()
+                        )
+                        addEvent(eventWithRandomColor, triggerSync = false)
+                    }
+                }
             },
             onEventUpdated = { incomingEvent ->
                 // 【场景：更新事件】
-                // 策略：先在本地查找这个事件
-                val oldEvent = _events.value.find { it.id == incomingEvent.id }
+                // 策略：以 ID 为主，比较时间戳
+                val oldEvent = activeEventsSnapshot.find { it.id == incomingEvent.id }
 
-                val eventToSave = if (oldEvent != null) {
-                    // 如果是老朋友：
-                    // 1. 接受系统传来的 内容变更 (标题、时间、地点、描述)
-                    // 2. 拒绝系统传来的 样式变更 (强制保留 App 原有的颜色、提醒、重要性、tag)
-                    // 这作为"UI 防火墙"，防止外部同步源的颜色污染我们的 UI
-                    incomingEvent.copy(
-                        color = oldEvent.color,
-                        reminders = oldEvent.reminders,
-                        isImportant = oldEvent.isImportant,
-                        tag = oldEvent.tag
+                if (oldEvent != null) {
+                    // ID 存在：以系统日历为准
+                    // 系统日历更新：以系统为准，保留APP内部状态
+                    val finalEvent = oldEvent.copy(
+                        title = incomingEvent.title,
+                        description = incomingEvent.description,
+                        location = incomingEvent.location,
+                        startDate = incomingEvent.startDate,
+                        endDate = incomingEvent.endDate,
+                        startTime = incomingEvent.startTime,
+                        endTime = incomingEvent.endTime,
+                        lastModified = System.currentTimeMillis()
+                        // isCompleted, isCheckedIn, completedAt 等自动保留
                     )
+                    updateEvent(finalEvent, triggerSync = false)  // 不触发正向同步
                 } else {
-                    // 理论上只有映射存在的才会走到 onEventUpdated
-                    // 但防守性编程：如果没找到旧对象，就当做新的处理，给个随机色
-                    incomingEvent.copy(color = getRandomEventColor())
+                    // ID 不存在：可能是之前没映射到，现在发现重复
+                    val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
+                    if (!isDup) {
+                        // 不重复：新增事件
+                        val eventWithRandomColor = incomingEvent.copy(
+                            color = getRandomEventColor()
+                        )
+                        addEvent(eventWithRandomColor)
+                    }
                 }
-
-                updateEvent(eventToSave, triggerSync = false)
             },
             onEventDeleted = { eventId ->
                 // 【场景：删除事件】
                 // 直接删除
-                deleteEvent(eventId, triggerSync = false)
+                deleteEvent(eventId)
             },
             activeEvents = activeEventsSnapshot,
             archivedEvents = archivedEventsSnapshot
         )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun isDuplicateEvent(
+        event: MyEvent,
+        activeEvents: List<MyEvent>,
+        archivedEvents: List<MyEvent>
+    ): Boolean {
+        val fingerprint = "${event.title}|${event.startDate}|${event.startTime}|${event.endTime}|${event.location}|${event.description}"
+        
+        val allEvents = activeEvents + archivedEvents
+        return allEvents.any { existing ->
+            val existingFingerprint = "${existing.title}|${existing.startDate}|${existing.startTime}|${existing.endTime}|${existing.location}|${existing.description}"
+            existingFingerprint == fingerprint
+        }
     }
 
     // ==================== 归档操作 ====================
@@ -974,6 +1081,7 @@ class AppRepository private constructor(private val context: Context) {
 
     /**
      * 永久删除归档事件
+     * 同时删除系统日历中的对应事件
      */
     suspend fun deleteArchivedEvent(archivedEventId: String) = archiveMutex.withLock {
         val currentArchived = _archivedEvents.value.toMutableList()
@@ -981,13 +1089,67 @@ class AppRepository private constructor(private val context: Context) {
         if (event != null) {
             currentArchived.remove(event)
             updateArchivedEvents(currentArchived)
+
+            // 同步删除系统日历中的事件
+            try {
+                Log.d("AppRepository", "deleteArchivedEvent: 开始同步删除, event.id=${event.id}")
+                val syncData = syncDataSource.loadSyncData()
+                Log.d("AppRepository", "deleteArchivedEvent: syncData.mapping=${syncData.mapping}")
+                val calendarEventIdStr = syncData.mapping[event.id]
+                Log.d("AppRepository", "deleteArchivedEvent: calendarEventIdStr=$calendarEventIdStr for event.id=${event.id}")
+                if (calendarEventIdStr != null) {
+                    val calendarEventId = calendarEventIdStr.toLongOrNull()
+                    Log.d("AppRepository", "deleteArchivedEvent: calendarEventId=$calendarEventId")
+                    if (calendarEventId != null) {
+                        val calendarManager = CalendarManager(context)
+                        val success = calendarManager.deleteEvent(calendarEventId)
+                        Log.d("AppRepository", "deleteArchivedEvent: deleteEvent result=$success")
+                        // 更新映射
+                        val updatedMapping = syncData.mapping.toMutableMap()
+                        updatedMapping.remove(event.id)
+                        syncDataSource.saveSyncData(syncData.copy(mapping = updatedMapping))
+                        Log.d("AppRepository", "已同步删除系统日历事件: ${event.id} -> $calendarEventId")
+                    }
+                } else {
+                    Log.d("AppRepository", "deleteArchivedEvent: 未找到映射，event.id=${event.id}")
+                }
+            } catch (e: Exception) {
+                Log.e("AppRepository", "同步删除系统日历事件失败", e)
+            }
         }
     }
 
     /**
      * 清空所有归档
+     * 同时删除系统日历中的对应事件
      */
     suspend fun clearAllArchives() = archiveMutex.withLock {
+        val currentArchived = _archivedEvents.value
+        if (currentArchived.isEmpty()) return@withLock
+
+        // 同步删除系统日历中的所有归档事件
+        try {
+            val syncData = syncDataSource.loadSyncData()
+            val calendarManager = CalendarManager(context)
+            val updatedMapping = syncData.mapping.toMutableMap()
+
+            currentArchived.forEach { event ->
+                val calendarEventIdStr = syncData.mapping[event.id]
+                if (calendarEventIdStr != null) {
+                    val calendarEventId = calendarEventIdStr.toLongOrNull()
+                    if (calendarEventId != null) {
+                        calendarManager.deleteEvent(calendarEventId)
+                        updatedMapping.remove(event.id)
+                        Log.d("AppRepository", "清空归档: 已删除系统日历事件 ${event.id} -> $calendarEventId")
+                    }
+                }
+            }
+
+            syncDataSource.saveSyncData(syncData.copy(mapping = updatedMapping))
+        } catch (e: Exception) {
+            Log.e("AppRepository", "清空归档: 同步删除系统日历事件失败", e)
+        }
+
         updateArchivedEvents(emptyList())
     }
 

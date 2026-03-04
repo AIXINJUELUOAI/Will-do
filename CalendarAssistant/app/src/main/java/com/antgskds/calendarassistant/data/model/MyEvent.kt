@@ -44,5 +44,6 @@ data class MyEvent(
     val originalEndDate: LocalDate? = null,
     val originalEndTime: String? = null,
     val isCheckedIn: Boolean = false,
-    val archivedAt: Long? = null
+    val archivedAt: Long? = null,
+    val lastModified: Long = System.currentTimeMillis()  // 最后修改时间戳
 )

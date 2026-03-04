@@ -34,7 +34,8 @@ fun AllEventsPage(
     // 核心过滤逻辑
     val filteredEvents by remember(uiState.allEvents, searchQuery) {
         derivedStateOf {
-            uiState.allEvents.filter { event ->
+            uiState.allEvents
+                .filter { event ->
                 // 搜索匹配
                 val searchMatch = if (searchQuery.isBlank()) true else {
                     event.title.contains(searchQuery, ignoreCase = true) ||

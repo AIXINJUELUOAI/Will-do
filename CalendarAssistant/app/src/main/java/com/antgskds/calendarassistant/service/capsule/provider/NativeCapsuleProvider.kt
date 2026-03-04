@@ -148,34 +148,51 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 builder.setOnlyAlertOnce(true)
             }
             CapsuleService.TYPE_PICKUP, CapsuleService.TYPE_PICKUP_EXPIRED, CapsuleService.TYPE_SCHEDULE -> {
-                // 日程/取件码/火车/打车：未过期显示操作按钮，已过期不显示
+                // 日程/取件码/火车/打车：未过期且未完成/未检票显示操作按钮
                 if (!isExpired) {
-                    val buttonText = when (eventType) {
-                        EventTags.PICKUP -> "已取"
-                        EventTags.TAXI -> "已用车"
-                        EventTags.TRAIN -> "已检票"
-                        else -> "已完成"
+                    // 检查事件是否已完成/已检票
+                    val event = try {
+                        com.antgskds.calendarassistant.data.repository.AppRepository.getInstance(context)
+                            .events.value.find { it.id == eventId }
+                    } catch (e: Exception) { null }
+                    val isCompleted = event?.isCompleted ?: false
+                    val isCheckedIn = event?.isCheckedIn ?: false
+
+                    // 火车事件：检票后不显示按钮
+                    // 其他事件：完成后不显示按钮
+                    val shouldShowButton = when (eventType) {
+                        EventTags.TRAIN -> !isCheckedIn
+                        else -> !isCompleted
                     }
-                    val intentAction = when (eventType) {
-                        EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
-                        else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+
+                    if (shouldShowButton) {
+                        val buttonText = when (eventType) {
+                            EventTags.PICKUP -> "已取"
+                            EventTags.TAXI -> "已用车"
+                            EventTags.TRAIN -> "已检票"
+                            else -> "已完成"
+                        }
+                        val intentAction = when (eventType) {
+                            EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                            else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                        }
+                        val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
+                            action = intentAction
+                            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                        }
+                        val pendingComplete = PendingIntent.getBroadcast(
+                            context,
+                            eventId.hashCode() + 3,
+                            completeIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        val completeAction = Notification.Action.Builder(
+                            null,
+                            buttonText,
+                            pendingComplete
+                        ).build()
+                        builder.addAction(completeAction)
                     }
-                    val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                        action = intentAction
-                        putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                    }
-                    val pendingComplete = PendingIntent.getBroadcast(
-                        context,
-                        eventId.hashCode() + 3,
-                        completeIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    val completeAction = Notification.Action.Builder(
-                        null,
-                        buttonText,
-                        pendingComplete
-                    ).build()
-                    builder.addAction(completeAction)
                 }
                 builder.setOnlyAlertOnce(true)
             }

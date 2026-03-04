@@ -384,15 +384,17 @@ class CalendarManager(private val context: Context) {
      * 根据 ID 列表批量查询事件
      */
     suspend fun queryEventsByIds(
-        eventIds: Collection<Long>
+        eventIds: Collection<Long>,
+        calendarId: Long
     ): List<SystemEventInfo> = withContext(Dispatchers.IO) {
         if (eventIds.isEmpty()) return@withContext emptyList()
         val result = mutableListOf<SystemEventInfo>()
 
         eventIds.chunked(500).forEach { batchIds ->
             val idListString = batchIds.joinToString(",")
-            val selection = "${Events._ID} IN ($idListString) AND ${Events.DELETED} = 0"
-            result.addAll(executeEventQuery(selection, null, null))
+            val selection = "${Events._ID} IN ($idListString) AND ${Events.CALENDAR_ID} = ? AND ${Events.DELETED} = 0"
+            val selectionArgs = arrayOf(calendarId.toString())
+            result.addAll(executeEventQuery(selection, selectionArgs, null))
         }
         result
     }
@@ -437,20 +439,21 @@ class CalendarManager(private val context: Context) {
                 val allDayIndex = cursor.getColumnIndex(Events.ALL_DAY)
 
                 while (cursor.moveToNext()) {
-                    val description = if (descIndex >= 0) cursor.getString(descIndex) else ""
+                    val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
 
                     events.add(
                         SystemEventInfo(
                             eventId = cursor.getLong(idIndex),
                             title = cursor.getString(titleIndex) ?: "",
-                            location = if (locationIndex >= 0) cursor.getString(locationIndex) else "",
+                            location = if (locationIndex >= 0) cursor.getString(locationIndex) ?: "" else "",
                             description = description.removeSuffix(MANAGED_EVENT_MARKER).trim(),
                             startMillis = cursor.getLong(startIndex),
                             endMillis = cursor.getLong(endIndex),
                             color = if (colorIndex >= 0) cursor.getInt(colorIndex) else null,
-                            allDay = cursor.getInt(allDayIndex) == 1,
-                            isManaged = isManaged
+                            allDay = allDayIndex >= 0 && cursor.getInt(allDayIndex) == 1,
+                            isManaged = isManaged,
+                            lastModified = null
                         )
                     )
                 }
@@ -604,6 +607,7 @@ class CalendarManager(private val context: Context) {
         val endMillis: Long,
         val color: Int?,
         val allDay: Boolean,
-        val isManaged: Boolean
+        val isManaged: Boolean,
+        val lastModified: Long? = null  // 最后修改时间戳
     )
 }
