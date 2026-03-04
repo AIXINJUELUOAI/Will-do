@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.repository.AppRepository
@@ -51,18 +52,6 @@ object NotificationScheduler {
     const val OFFSET_PICKUP_INITIAL_NOTIF = 1000000 // 取件码初始通知的偏移量，避免与胶囊通知冲突（public供AppRepository使用）
 
     fun scheduleReminders(context: Context, event: MyEvent) {
-        // ========================================================================
-        // 【取件码初始通知】创建取件码时立即弹出带"已取"按钮的通知
-        // 只有在胶囊模式关闭时才弹出普通通知，胶囊模式由 CapsuleStateManager 自动处理
-        // ========================================================================
-        if (event.eventType == EventType.PICKUP) {
-            // 检查实况胶囊是否开启，开启则不弹出普通通知（由胶囊处理）
-            val settings = AppRepository.getInstance(context).settings.value
-            if (!settings.isLiveCapsuleEnabled) {
-                showPickupInitialNotification(context, event)
-            }
-        }
-
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
@@ -82,11 +71,8 @@ object NotificationScheduler {
         val isAdvanceEnabled = settings.isAdvanceReminderEnabled
         val advanceMinutes = settings.advanceReminderMinutes
 
-        // 临时取件码不应用全局提前提醒
-        val shouldApplyAdvance = isAdvanceEnabled && event.eventType != EventType.PICKUP
-
         // 计算胶囊启动时间（可能提前）
-        val capsuleStartTime = if (shouldApplyAdvance) {
+        val capsuleStartTime = if (isAdvanceEnabled) {
             startMillis - (advanceMinutes * 60 * 1000)
         } else {
             startMillis
@@ -109,7 +95,7 @@ object NotificationScheduler {
         }
 
         // 全局提前提醒（叠加模式，需去重）
-        if (shouldApplyAdvance && advanceMinutes > 0 && advanceMinutes !in scheduledMinutes) {
+        if (isAdvanceEnabled && advanceMinutes > 0 && advanceMinutes !in scheduledMinutes) {
             val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
             if (triggerTime > System.currentTimeMillis()) {
                 val label = "提前${advanceMinutes}分钟"
@@ -126,7 +112,7 @@ object NotificationScheduler {
         }
 
         // 3. 如果启用了提前提醒，额外设定准点刷新闹钟
-        if (shouldApplyAdvance && startMillis > System.currentTimeMillis()) {
+        if (isAdvanceEnabled && startMillis > System.currentTimeMillis()) {
             scheduleRefreshCapsuleAlarm(context, event, startMillis, alarmManager)
         }
 

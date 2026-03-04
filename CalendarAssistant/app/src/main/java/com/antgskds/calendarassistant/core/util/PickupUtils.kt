@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.core.util
 
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -40,7 +41,7 @@ object PickupUtils {
     }
 
     fun isPickupExpired(event: MyEvent): Boolean {
-        if (event.eventType != "pickup") return false
+        if (event.tag != EventTags.PICKUP) return false
 
         val now = LocalDateTime.now()
         val endDate = try {
@@ -59,7 +60,7 @@ object PickupUtils {
     }
 
     fun isWithinGracePeriod(event: MyEvent, graceMinutes: Long = 30): Boolean {
-        if (event.eventType != "pickup") return false
+        if (event.tag != EventTags.PICKUP) return false
 
         val now = LocalDateTime.now()
         val endDate = try {
@@ -79,7 +80,7 @@ object PickupUtils {
     }
 
     fun isPickupEvent(event: MyEvent): Boolean {
-        return event.eventType == "pickup"
+        return event.tag == EventTags.PICKUP
     }
 
     fun isActivePickup(event: MyEvent): Boolean {

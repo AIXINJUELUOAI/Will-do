@@ -5,8 +5,10 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.util.PickupUtils
 import com.antgskds.calendarassistant.core.util.TransportType
 import com.antgskds.calendarassistant.core.util.TransportUtils
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -173,8 +175,7 @@ class CapsuleStateManager(
                 val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
 
                 val effectiveStartTime = if (settings.isAdvanceReminderEnabled &&
-                                               settings.advanceReminderMinutes > 0 &&
-                                               event.eventType != EventType.PICKUP) {
+                                               settings.advanceReminderMinutes > 0) {
                     startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
                 } else {
                     startDateTime.minusMinutes(1)
@@ -198,14 +199,30 @@ class CapsuleStateManager(
         }
 
         // ... 后续构建胶囊逻辑保持不变 ...
-        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.eventType == EventType.PICKUP }
+        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.tag == EventTags.PICKUP }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
         scheduleEvents.forEach { event ->
             val transportInfo = TransportUtils.parse(event.description)
-            val title = when (transportInfo.type) {
-                TransportType.TRAIN -> transportInfo.mainDisplay
-                TransportType.RIDE -> transportInfo.mainDisplay
+            val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
+            val isExpired = now.isAfter(endDateTime)
+
+            val title = when {
+                event.tag == "train" -> {
+                    if (transportInfo.isCheckedIn) {
+                        // 检票后：车号 + 座位号
+                        "${transportInfo.subDisplay} ${transportInfo.mainDisplay}".trim()
+                    } else if (isExpired) {
+                        // 过期后：默认title
+                        event.title
+                    } else {
+                        // 检票前：检票口 或 "待检票"
+                        transportInfo.mainDisplay.ifBlank { "待检票" }
+                    }
+                }
+                event.tag == "taxi" -> {
+                    if (event.isCompleted || isExpired) event.title else transportInfo.mainDisplay
+                }
                 else -> event.title
             }
 
@@ -213,7 +230,7 @@ class CapsuleStateManager(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
-                eventType = event.eventType,
+                eventType = event.tag,
                 title = title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
                 color = event.color.toArgb(),
@@ -250,7 +267,7 @@ class CapsuleStateManager(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = capsuleType,
-                eventType = EventType.PICKUP,
+                eventType = EventTags.PICKUP,
                 title = if (isAnyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项",
                 content = contentText,
                 color = android.graphics.Color.GREEN,
@@ -287,15 +304,23 @@ class CapsuleStateManager(
                 // 我们改用 CapsuleService 里的暴力刷新策略来解决弹窗问题
                 val dynamicNotifId = event.id.hashCode()
 
+                // 3. 动态生成标题
+                // 已取前：取件码，已取后/过期：默认title
+                val title = if (event.isCompleted || isExpired) {
+                    event.title
+                } else {
+                    PickupUtils.parsePickupInfo(event).code
+                }
+
                 // ✅ 详细日志：输出生成的胶囊信息
-                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId")
+                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=$title")
 
                 capsules.add(CapsuleUiState.Active.CapsuleItem(
                     id = event.id,
                     notifId = dynamicNotifId, // ID 保持不变
                     type = capsuleType,
-                    eventType = event.eventType,
-                    title = event.title,
+                    eventType = event.tag,
+                    title = title,
                     content = dynamicContent, // 内容变化依然保留
                     color = android.graphics.Color.GREEN,
                     startMillis = toMillis(event, event.startTime),

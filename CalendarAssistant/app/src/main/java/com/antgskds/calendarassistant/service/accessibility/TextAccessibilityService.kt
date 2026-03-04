@@ -311,20 +311,15 @@ class TextAccessibilityService : AccessibilityService() {
                     return@withContext
                 }
                 if (addedEvents.isNotEmpty()) {
-                    val isAllPickup = addedEvents.all { it.eventType == EventType.PICKUP }
-                    if (!(settings.isLiveCapsuleEnabled && isAllPickup)) {
-                        val count = addedEvents.size
-                        val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
-                        val content = if (count == 1) {
-                            val e = addedEvents.first()
-                            if (e.eventType == EventType.PICKUP) "取件码: ${e.title}" else " ${e.description}(${e.startTime})"
-                        } else {
-                            addedEvents.joinToString("，") { it.title }
-                        }
-                        showResultNotification(title, content)
+                    val count = addedEvents.size
+                    val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
+                    val content = if (count == 1) {
+                        val e = addedEvents.first()
+                        "${e.description}(${e.startTime})"
+                    } else {
+                        addedEvents.joinToString("，") { it.title }
                     }
-                } else {
-                    showResultNotification("无新增内容", "所有识别的事件都已存在")
+                    showResultNotification(title, content)
                 }
             }
         } catch (e: Exception) {
@@ -354,12 +349,7 @@ class TextAccessibilityService : AccessibilityService() {
                     if (aiEvent.endTime.isNotBlank()) LocalDateTime.parse(aiEvent.endTime, formatter) else startDateTime.plusHours(1)
                 } catch (e: Exception) { startDateTime.plusHours(1) }
 
-                if (aiEvent.type == "pickup") {
-                    startDateTime = now
-                    endDateTime = now.plusHours(2)
-                }
-
-                val finalEventType = if (aiEvent.type == EventType.PICKUP) EventType.PICKUP else EventType.EVENT
+                val finalTag = aiEvent.tag.ifBlank { EventTags.GENERAL }
                 val newEventTitle = aiEvent.title.trim()
 
                 val currentRepositoryEvents = repository.events.value
@@ -368,15 +358,9 @@ class TextAccessibilityService : AccessibilityService() {
                     val isExpired = existing.endDate.isBefore(java.time.LocalDate.now())
                     if (isExpired) return@any false
 
-                    val matches = if (finalEventType == EventType.EVENT) {
-                        existing.startDate == startDateTime.toLocalDate() &&
-                                existing.startTime == startDateTime.format(timeFormatter) &&
-                                existing.title.trim().equals(newEventTitle, ignoreCase = true)
-                    } else {
-                        existing.eventType == EventType.PICKUP &&
-                                existing.title.trim().equals(newEventTitle, ignoreCase = true)
-                    }
-                    matches
+                    existing.startDate == startDateTime.toLocalDate() &&
+                            existing.startTime == startDateTime.format(timeFormatter) &&
+                            existing.title.trim().equals(newEventTitle, ignoreCase = true)
                 }
 
                 if (isDuplicate) return@forEachIndexed
@@ -392,8 +376,8 @@ class TextAccessibilityService : AccessibilityService() {
                     description = aiEvent.description,
                     color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.EventColors.size],
                     sourceImagePath = imagePath,
-                    eventType = finalEventType,
-                    tag = aiEvent.tag.ifBlank { EventTags.GENERAL }
+                    eventType = EventType.EVENT,
+                    tag = finalTag.ifBlank { EventTags.GENERAL }
                 )
                 actuallyAdded.add(newEvent)
 
