@@ -19,7 +19,10 @@ class SettingsDataSource(context: Context) {
         coerceInputValues = true // 容错处理
     }
 
-    private val KEY_JSON = "settings_json"
+    companion object {
+        const val KEY_JSON = "settings_json"
+        private const val KEY_UI_SIZE_INDEPENDENT = "key_ui_size_independent"
+    }
 
     /**
      * 读取设置（含自动迁移逻辑）
@@ -55,7 +58,10 @@ class SettingsDataSource(context: Context) {
     fun saveSettings(settings: MySettings) {
         try {
             val jsonString = json.encodeToString(settings)
-            prefs.edit().putString(KEY_JSON, jsonString).apply()
+            prefs.edit()
+                .putString(KEY_JSON, jsonString)
+                .putInt(KEY_UI_SIZE_INDEPENDENT, settings.uiSize)
+                .apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }

@@ -137,7 +137,7 @@ fun PreferenceSettingsPage(
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     SliderSettingItem(
                         title = "界面大小",
-                        subtitle = "调整字体大小",
+                        subtitle = "调整界面缩放（相对于设备原生大小）",
                         value = settings.uiSize.toFloat(),
                         onValueChange = { viewModel.updateUiSize(it.toInt()) },
                         valueRange = 1f..3f,
