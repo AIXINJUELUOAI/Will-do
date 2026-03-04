@@ -1,8 +1,10 @@
 package com.antgskds.calendarassistant
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
+import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
@@ -43,40 +46,57 @@ import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
-// 固定 UI 密度（常量）
-private const val FIXED_DENSITY_DPI = 380  // 默认密度
-
-// UI 大小对应的 fontScale
-private fun getFontScaleForUiSize(uiSize: Int): Float {
-    return when (uiSize) {
-        1 -> 1.0f   // 小
-        2 -> 1.15f  // 中（默认）
-        3 -> 1.32f  // 大
-        else -> 1.15f
-    }
-}
-
 class MainActivity : ComponentActivity() {
-    // 【修改 1】将 Boolean 改为 Long，默认值为 0L
+    // 取件码时间戳
     private var pickupEventTimestamp = mutableStateOf(0L)
 
     // ViewModel 实例，供 onResume 使用
     private lateinit var mainViewModel: MainViewModel
 
+    /**
+     * 覆写 attachBaseContext 以应用自定义密度缩放
+     * 基于设备原生 DPI，根据用户设置的 uiSize 应用相对缩放
+     */
+    override fun attachBaseContext(newBase: Context) {
+        // 1. 获取用户设置的 uiSize (兼容老用户：优先读独立 Key，回退读 JSON)
+        val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
+
+        // 2. 获取系统原始参数
+        val systemMetrics = Resources.getSystem().displayMetrics
+        val systemConfig = Resources.getSystem().configuration
+        val scale = DensityConfigManager.getScaleFactor(uiSizeIndex)
+
+        // 3. 计算目标值
+        val targetDensity = systemMetrics.density * scale
+        val targetDpi = (systemMetrics.densityDpi * scale).toInt()
+        // 关键：保留系统字体缩放偏好
+        val targetScaledDensity = targetDensity * systemConfig.fontScale
+
+        // 4. 构建新的 Configuration
+        val config = Configuration(newBase.resources.configuration)
+        config.densityDpi = targetDpi
+        config.fontScale = systemConfig.fontScale
+
+        // 5. 生成并应用新的 Context
+        val newContext = newBase.createConfigurationContext(config)
+
+        // 6. 手动修复 DisplayMetrics (双重保险)
+        newContext.resources.displayMetrics.apply {
+            density = targetDensity
+            scaledDensity = targetScaledDensity
+            densityDpi = targetDpi
+        }
+
+        super.attachBaseContext(newContext)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 【修改 2】检查启动 Intent，如果是取件码，设置当前时间戳
+        // 检查启动 Intent，如果是取件码，设置当前时间戳
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
-
-        // 强制使用固定的 DPI，确保在不同设备上 UI 尺寸一致
-        // 首次创建使用默认 UI 大小（中），后续会根据用户设置调整
-        if (currentUiSize == -1) {
-            currentUiSize = 2  // 默认中等大小
-        }
-        forceFixedDensity(currentUiSize)
 
         enableEdgeToEdge()
 
@@ -108,8 +128,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(settings.uiSize) {
                 if (currentUiSize != settings.uiSize) {
                     currentUiSize = settings.uiSize
-                    // 重新应用字体缩放
-                    forceFixedDensity(settings.uiSize)
                     // 重启 Activity 使设置生效
                     recreate()
                 }
@@ -175,7 +193,7 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
-                            // 【修改 3】传入时间戳，而不是 Boolean
+                            // 传入时间戳，而不是 Boolean
                             pickupTimestamp = pickupEventTimestamp.value,
                             onNavigateToSettings = { destination ->
                                 // 处理退出登录操作
@@ -253,21 +271,10 @@ class MainActivity : ComponentActivity() {
      */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        // 【修改 4】每次收到新 Intent，如果是取件码，更新时间戳（这保证了值一定会变）
+        // 每次收到新 Intent，如果是取件码，更新时间戳
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
-    }
-
-    /**
-     * 强制使用固定的 DPI 和字体缩放
-     * @param uiSize UI 大小：1=小, 2=中, 3=大
-     */
-    private fun forceFixedDensity(uiSize: Int = 2) {
-        val config = Configuration(resources.configuration)
-        config.densityDpi = FIXED_DENSITY_DPI
-        config.fontScale = getFontScaleForUiSize(uiSize)
-        resources.updateConfiguration(config, resources.displayMetrics)
     }
 
     /**
