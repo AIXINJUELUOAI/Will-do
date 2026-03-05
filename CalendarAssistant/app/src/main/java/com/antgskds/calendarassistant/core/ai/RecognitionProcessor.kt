@@ -1,25 +1,44 @@
 package com.antgskds.calendarassistant.core.ai
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.util.Log
+import com.antgskds.calendarassistant.core.util.LayoutAnalyzer
+import com.antgskds.calendarassistant.core.util.OcrElement
+import com.antgskds.calendarassistant.core.util.ScreenMetrics
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.ModelMessage
 import com.antgskds.calendarassistant.data.model.ModelRequest
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.json.JSONArray
-import org.json.JSONObject
 import java.time.DayOfWeek
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+@Serializable
+data class AiResponse(
+    val events: List<CalendarEventData> = emptyList()
+)
+
+data class OcrResult(
+    val rawText: String,
+    val reconstructedText: String,
+    val screenWidth: Int,
+    val screenHeight: Int
+)
 
 object RecognitionProcessor {
     private const val TAG = "CALENDAR_OCR_DEBUG"
@@ -28,13 +47,13 @@ object RecognitionProcessor {
         ignoreUnknownKeys = true
         isLenient = true
         coerceInputValues = true
+        encodeDefaults = true
     }
 
     private val recognizer by lazy {
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     }
 
-    // --- 自然语言输入 ---
     suspend fun parseUserText(text: String, settings: MySettings): CalendarEventData? {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -43,7 +62,6 @@ object RecognitionProcessor {
         val dateToday = now.format(dtfDate)
         val dayOfWeek = getDayOfWeek(now)
 
-        // ✅ 使用 AiPrompts
         val prompt = AiPrompts.getUserTextPrompt(
             timeStr = timeStr,
             dateToday = dateToday,
@@ -54,7 +72,6 @@ object RecognitionProcessor {
         Log.d(TAG, "用户输入: $text")
 
         val modelName = settings.modelName.ifBlank { "deepseek-chat" }
-
         val request = ModelRequest(
             model = modelName,
             messages = listOf(
@@ -77,12 +94,13 @@ object RecognitionProcessor {
                 return null
             }
 
-            var cleanJson = response.trim()
-            if (cleanJson.contains("```")) {
-                cleanJson = cleanJson.substringAfter("json").substringAfter("\n").substringBeforeLast("```")
+            val cleanJson = cleanJsonString(response)
+            try {
+                jsonParser.decodeFromString<CalendarEventData>(cleanJson)
+            } catch (e: Exception) {
+                val wrapper = jsonParser.decodeFromString<AiResponse>(cleanJson)
+                wrapper.events.firstOrNull()
             }
-
-            jsonParser.decodeFromString<CalendarEventData>(cleanJson)
 
         } catch (e: Exception) {
             Log.e(TAG, "AI 解析异常", e)
@@ -90,137 +108,137 @@ object RecognitionProcessor {
         }
     }
 
-    // --- 截图识别：并发识别日程和取件码 ---
-    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings): List<CalendarEventData> {
+    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): List<CalendarEventData> {
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
 
-        val extractedText = try {
-            extractTextFromBitmap(bitmap)
+        val ocrResult = try {
+            val visionText = processImageWithMlKit(bitmap)
+
+            withContext(Dispatchers.Default) {
+                val screenWidth = bitmap.width
+                val screenHeight = bitmap.height
+
+                val ocrElements = visionText.textBlocks
+                    .flatMap { it.lines }
+                    .flatMap { it.elements }
+                    .filter { it.text.isNotBlank() }
+                    .map { element ->
+                        OcrElement(
+                            text = element.text,
+                            boundingBox = element.boundingBox ?: Rect(),
+                            confidence = element.confidence ?: 0f
+                        )
+                    }
+
+                val filteredElements = LayoutAnalyzer.filterNoise(
+                    ocrElements,
+                    ScreenMetrics.getStatusBarHeight(context),
+                    ScreenMetrics.getNavigationBarHeight(context),
+                    screenHeight
+                )
+
+                val reconstructedText = LayoutAnalyzer.reconstructLayout(filteredElements, screenWidth)
+
+                val rawText = filteredElements
+                    .sortedBy { it.boundingBox.top }
+                    .joinToString("\n") { it.text }
+
+                OcrResult(rawText, reconstructedText, screenWidth, screenHeight)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "OCR 过程发生异常", e)
             return emptyList()
         }
 
-        if (extractedText.isBlank()) {
+        if (ocrResult.reconstructedText.isBlank()) {
             Log.w(TAG, "OCR 结果为空！")
             return emptyList()
         }
 
-        Log.d(TAG, "========== [OCR 原始文本] ==========")
-        Log.d(TAG, extractedText)
-        Log.d(TAG, "======================================")
+        Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
+        Log.d(TAG, ocrResult.reconstructedText)
+        Log.d(TAG, "============================================")
 
-        // 并发执行两个识别请求
         return coroutineScope {
             try {
-                val scheduleDeferred = async { analyzeSchedule(extractedText, settings) }
-                val pickupDeferred = async { analyzePickup(extractedText, settings) }
+                val scheduleDeferred = async { analyzeSchedule(ocrResult.reconstructedText, settings) }
+                val pickupDeferred = async { analyzePickup(ocrResult.reconstructedText, settings) }
+
                 val scheduleEvents = scheduleDeferred.await()
                 val pickupEvents = pickupDeferred.await()
 
                 Log.d(TAG, "识别结果: 日程=${scheduleEvents.size}, 取件=${pickupEvents.size}")
 
-                // 方案B：按 (title + startTime) 分组去重，优先保留 tag=pickup 的结果
-                val allEvents = scheduleEvents + pickupEvents
+                // 低信息量日程清洗：过滤被 pickup 覆盖的 general 事件
+                val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
+                if (refinedScheduleEvents.size < scheduleEvents.size) {
+                    Log.d(TAG, "已过滤 ${scheduleEvents.size - refinedScheduleEvents.size} 个冗余日程")
+                }
 
+                val allEvents = refinedScheduleEvents + pickupEvents
                 val finalEvents = allEvents
                     .groupBy { "${it.title}|${it.startTime}" }
                     .map { (_, events) ->
-                        // 每组内：优先保留 tag=pickup 的，否则保留第一个
                         events.maxByOrNull { if (it.tag == "pickup") 1 else 0 }!!
                     }
 
-                Log.d(TAG, "合并结果: 最终=${finalEvents.size}")
                 finalEvents
             } catch (e: Exception) {
-                Log.e(TAG, "AI 分析严重错误", e)
+                Log.e(TAG, "AI 分析过程出错", e)
                 emptyList()
             }
         }
     }
 
-    // --- 识别日程事件 (交通出行 + 普通日程) ---
     private suspend fun analyzeSchedule(extractedText: String, settings: MySettings): List<CalendarEventData> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-        val timeStr = now.format(dtfFull)
-        val dateToday = now.format(dtfDate)
-        val dateYesterday = now.minusDays(1).format(dtfDate)
-        val dateBeforeYesterday = now.minusDays(2).format(dtfDate)
-        val dayOfWeek = getDayOfWeek(now)
-
         val schedulePrompt = AiPrompts.getSchedulePrompt(
-            timeStr = timeStr,
-            dateToday = dateToday,
-            dateYesterday = dateYesterday,
-            dateBeforeYesterday = dateBeforeYesterday,
-            dayOfWeek = dayOfWeek
+            timeStr = now.format(dtfFull),
+            dateToday = now.format(dtfDate),
+            dateYesterday = now.minusDays(1).format(dtfDate),
+            dateBeforeYesterday = now.minusDays(2).format(dtfDate),
+            dayOfWeek = getDayOfWeek(now)
         )
 
-        val userPrompt = "[OCR文本开始]\n$extractedText\n[OCR文本结束]"
-        val modelName = settings.modelName.ifBlank { "deepseek-chat" }
-
-        return try {
-            val request = ModelRequest(
-                model = modelName,
-                temperature = 0.1,
-                messages = listOf(
-                    ModelMessage("system", schedulePrompt),
-                    ModelMessage("user", userPrompt)
-                )
-            )
-            executeAiRequest(request, "日程识别", settings)
-        } catch (e: Exception) {
-            Log.e(TAG, "日程识别错误", e)
-            emptyList()
-        }
+        return executeAiRequest(schedulePrompt, extractedText, settings, "日程识别")
     }
 
-    // --- 识别取件码事件 ---
     private suspend fun analyzePickup(extractedText: String, settings: MySettings): List<CalendarEventData> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-        val timeStr = now.format(dtfFull)
-        val nowTime = now.format(dtfTime)
-        val nowPlusHourTime = now.plusHours(1).format(dtfTime)
-
         val pickupPrompt = AiPrompts.getPickupPrompt(
-            timeStr = timeStr,
-            nowTime = nowTime,
-            nowPlusHourTime = nowPlusHourTime
+            timeStr = now.format(dtfFull),
+            nowTime = now.format(dtfTime),
+            nowPlusHourTime = now.plusHours(1).format(dtfTime)
         )
 
-        val userPrompt = "[OCR文本开始]\n$extractedText\n[OCR文本结束]"
-        val modelName = settings.modelName.ifBlank { "deepseek-chat" }
-
-        return try {
-            val request = ModelRequest(
-                model = modelName,
-                temperature = 0.1,
-                messages = listOf(
-                    ModelMessage("system", pickupPrompt),
-                    ModelMessage("user", userPrompt)
-                )
-            )
-            executeAiRequest(request, "取件码识别", settings)
-        } catch (e: Exception) {
-            Log.e(TAG, "取件码识别错误", e)
-            emptyList()
-        }
+        return executeAiRequest(pickupPrompt, extractedText, settings, "取件码识别")
     }
 
     private suspend fun executeAiRequest(
-        request: ModelRequest,
-        debugTag: String,
-        settings: MySettings
+        systemPrompt: String,
+        userText: String,
+        settings: MySettings,
+        debugTag: String
     ): List<CalendarEventData> {
-        return try {
-            val modelName = settings.modelName.ifBlank { "deepseek-chat" }
+        val modelName = settings.modelName.ifBlank { "deepseek-chat" }
+        val userPrompt = "[OCR文本开始]\n$userText\n[OCR文本结束]"
 
+        val request = ModelRequest(
+            model = modelName,
+            temperature = 0.1,
+            messages = listOf(
+                ModelMessage("system", systemPrompt),
+                ModelMessage("user", userPrompt)
+            )
+        )
+
+        return try {
             val responseText = ApiModelProvider.generate(
                 request = request,
                 apiKey = settings.modelKey,
@@ -233,40 +251,81 @@ object RecognitionProcessor {
                 return emptyList()
             }
 
-            var cleanJson = responseText.trim()
-            if (cleanJson.contains("```")) {
-                cleanJson = cleanJson.substringAfter("json").substringAfter("\n").substringBeforeLast("```")
-            }
+            val cleanJson = cleanJsonString(responseText)
+            val aiResponse = jsonParser.decodeFromString<AiResponse>(cleanJson)
 
-            Log.d(TAG, "AI 原始响应: $cleanJson")
+            Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${aiResponse.events.size} 个事件")
+            aiResponse.events
 
-            val rootObject = JSONObject(cleanJson)
-            val eventsArray = rootObject.optJSONArray("events") ?: JSONArray()
-
-            if (eventsArray.length() > 0) {
-                jsonParser.decodeFromString<List<CalendarEventData>>(eventsArray.toString())
-            } else {
-                emptyList()
-            }
         } catch (e: Exception) {
-            Log.e(TAG, "[$debugTag] JSON 解析失败", e)
+            Log.e(TAG, "[$debugTag] 解析失败", e)
             emptyList()
         }
     }
 
-    private suspend fun extractTextFromBitmap(bitmap: Bitmap): String = suspendCancellableCoroutine { continuation ->
-        try {
+    private suspend fun processImageWithMlKit(bitmap: Bitmap): Text =
+        suspendCancellableCoroutine { continuation ->
             val image = InputImage.fromBitmap(bitmap, 0)
             recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    val allLines = visionText.textBlocks.flatMap { it.lines }
-                    val sortedLines = allLines.sortedBy { it.boundingBox?.top ?: 0 }
-                    val resultText = sortedLines.joinToString("\n") { it.text }
-                    continuation.resume(resultText)
-                }
+                .addOnSuccessListener { continuation.resume(it) }
                 .addOnFailureListener { continuation.resumeWithException(it) }
-        } catch (e: Exception) {
-            continuation.resumeWithException(e)
+        }
+
+    private fun cleanJsonString(response: String): String {
+        var json = response.trim()
+        if (json.contains("```")) {
+            json = json.substringAfter("json").substringAfter("\n").substringBeforeLast("```")
+        }
+        return json
+    }
+
+    /**
+     * 低信息量日程清洗：过滤被 pickup 覆盖的 general 事件
+     * 
+     * 逻辑：
+     * 1. 如果 pickupEvents 为空，不做处理
+     * 2. 如果 general 事件的标题只包含取件关键词（如"取件"），直接删除
+     * 3. 如果 general 事件包含"取件+其他内容"，检查其他内容是否已被 pickup 覆盖
+     * 
+     * 示例：
+     * - "取件" + "取件码123" → 删除 "取件"
+     * - "蜜雪冰城取件" + "蜜雪冰城 123" → 删除 "蜜雪冰城取件"
+     * - "开会后取件" + "顺丰 123" → 保留 "开会后取件"
+     */
+    private fun filterRedundantSchedules(
+        scheduleEvents: List<CalendarEventData>,
+        pickupEvents: List<CalendarEventData>
+    ): List<CalendarEventData> {
+        if (pickupEvents.isEmpty()) return scheduleEvents
+
+        val pickupKeywordsRegex = Regex("(取|拿|收)(件|快递|餐|外卖|货)")
+
+        return scheduleEvents.filter { schedule ->
+            // 1. 如果标题不包含取件关键词，保留
+            if (!schedule.title.contains(pickupKeywordsRegex)) {
+                return@filter true
+            }
+
+            // 2. 提取"剩余信息"（去掉取件关键词）
+            val subjectInfo = schedule.title.replace(pickupKeywordsRegex, "").trim()
+
+            // 3. 如果剩余信息为空（纯动作如"取件"），删除
+            if (subjectInfo.isEmpty()) {
+                Log.d(TAG, "过滤纯取件标题: ${schedule.title}")
+                return@filter false
+            }
+
+            // 4. 检查剩余信息是否已被 pickup 覆盖
+            val isCoveredByPickup = pickupEvents.any { pickup ->
+                pickup.title.contains(subjectInfo, ignoreCase = true)
+            }
+
+            if (isCoveredByPickup) {
+                Log.d(TAG, "过滤被覆盖的日程: ${schedule.title} (被 ${pickupEvents.find { it.title.contains(subjectInfo, ignoreCase = true) }?.title} 覆盖)")
+            }
+
+            // 如果被覆盖则删除，否则保留
+            !isCoveredByPickup
         }
     }
 
