@@ -266,7 +266,7 @@ class TextAccessibilityService : AccessibilityService() {
 
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        showProgressNotification("Will do", "正在分析屏幕内容...")
+        showProgressNotification("正在分析", "正在分析屏幕内容...")
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             mainExecutor,
@@ -326,10 +326,15 @@ class TextAccessibilityService : AccessibilityService() {
             withContext(Dispatchers.Main) {
                 cancelProgressNotification()
                 if (validEvents.isEmpty()) {
+                    // 未识别到日程：显示提示，5秒后自动消失
                     showResultNotification("分析完成", "未识别到有效日程")
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cancelResultNotification()
+                    }, 5000)
                     return@withContext
                 }
                 if (addedEvents.isNotEmpty()) {
+                    // 识别成功：显示添加结果，15秒后自动消失
                     val count = addedEvents.size
                     val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
                     val content = if (count == 1) {
@@ -339,6 +344,9 @@ class TextAccessibilityService : AccessibilityService() {
                         addedEvents.joinToString("，") { it.title }
                     }
                     showResultNotification(title, content)
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cancelResultNotification()
+                    }, 15000)
                 }
             }
         } catch (e: Exception) {
@@ -424,25 +432,68 @@ class TextAccessibilityService : AccessibilityService() {
         manager.cancel(NOTIFICATION_ID_PROGRESS)
     }
 
+    private fun cancelResultNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(NOTIFICATION_ID_RESULT)
+    }
+
     private fun showResultNotification(title: String, content: String, autoLaunch: Boolean = false) {
         showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
     }
 
     private fun showBaseNotification(id: Int, title: String, content: String, isProgress: Boolean, autoLaunch: Boolean) {
+        val settings = repository.settings.value
+        val isLiveCapsuleEnabled = settings.isLiveCapsuleEnabled
+        Log.d(TAG, "showBaseNotification: isLiveCapsuleEnabled=$isLiveCapsuleEnabled, title=$title")
+        
+        // 决定是否使用胶囊通知渠道
+        val useCapsuleChannel = isLiveCapsuleEnabled
+        
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+            this, id, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val builder = NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
+
+        // 根据是否启用胶囊选择渠道
+        val channelId = if (useCapsuleChannel) App.CHANNEL_ID_LIVE else App.CHANNEL_ID_POPUP
+        
+        // 构建通知
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(content)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        // 如果启用胶囊通知，添加胶囊特殊配置
+        if (useCapsuleChannel) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            }
+            builder.setOngoing(true)
+            
+            // 尝试使用反射调用 setRequestPromotedOngoing（Android 12+）
+            try {
+                val method = NotificationCompat.Builder::class.java.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
+                method.invoke(builder, true)
+            } catch (e: Exception) {
+                Log.d(TAG, "setRequestPromotedOngoing not available")
+            }
+            
+            // 添加 android.substName 到 extras（关键：让通知显示为胶囊）
+            try {
+                val extrasField = NotificationCompat.Builder::class.java.getDeclaredField("mExtras")
+                extrasField.isAccessible = true
+                val extras = extrasField.get(builder) as android.os.Bundle
+                extras.putBoolean("android.substName", true)
+            } catch (e: Exception) {
+                Log.d(TAG, "Failed to add substName extra: ${e.message}")
+            }
+        }
 
         if (autoLaunch || !isProgress) builder.setContentIntent(pendingIntent)
         if (isProgress) {

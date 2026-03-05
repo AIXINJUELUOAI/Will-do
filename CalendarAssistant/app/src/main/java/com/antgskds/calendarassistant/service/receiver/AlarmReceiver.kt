@@ -93,12 +93,28 @@ class AlarmReceiver : BroadcastReceiver() {
             NotificationScheduler.ACTION_REMINDER, null -> {
                 // 处理普通提醒（action 可能为 null 的情况作为兜底）
                 val reminderLabel = intent.getStringExtra("REMINDER_LABEL") ?: ""
-                showStandardNotification(context, eventId, eventTitle, reminderLabel)
+                val eventLocation = intent.getStringExtra("EVENT_LOCATION") ?: ""
+                val eventStartTime = intent.getStringExtra("EVENT_START_TIME") ?: ""
+                val eventEndTime = intent.getStringExtra("EVENT_END_TIME") ?: ""
+                val eventTag = intent.getStringExtra("EVENT_TAG") ?: ""
+                val eventColor = intent.getIntExtra("EVENT_COLOR", 0)
+                showStandardNotification(
+                    context, eventId, eventTitle, reminderLabel,
+                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor
+                )
             }
             else -> {
                 Log.w(TAG, "未知的 action: $action，按普通提醒处理")
                 val reminderLabel = intent.getStringExtra("REMINDER_LABEL") ?: ""
-                showStandardNotification(context, eventId, eventTitle, reminderLabel)
+                val eventLocation = intent.getStringExtra("EVENT_LOCATION") ?: ""
+                val eventStartTime = intent.getStringExtra("EVENT_START_TIME") ?: ""
+                val eventEndTime = intent.getStringExtra("EVENT_END_TIME") ?: ""
+                val eventTag = intent.getStringExtra("EVENT_TAG") ?: ""
+                val eventColor = intent.getIntExtra("EVENT_COLOR", 0)
+                showStandardNotification(
+                    context, eventId, eventTitle, reminderLabel,
+                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor
+                )
             }
         }
     }
@@ -214,7 +230,11 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun showStandardNotification(context: Context, eventId: String, title: String, label: String) {
+    private fun showStandardNotification(
+        context: Context, eventId: String, title: String, label: String,
+        eventLocation: String = "", eventStartTime: String = "", eventEndTime: String = "",
+        eventTag: String = "", eventColor: Int = 0
+    ) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -227,17 +247,76 @@ class AlarmReceiver : BroadcastReceiver() {
         // 使用 App.kt 中定义的通知渠道 ID
         val channelId = App.CHANNEL_ID_POPUP
 
-        val notification = NotificationCompat.Builder(context, channelId)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(if(label.isNotEmpty()) "$label: $title" else "日程即将开始")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL) // 自带声音和震动
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .build()
+
+        // 设置颜色（如果有）
+        if (eventColor != 0) {
+            builder.setColor(eventColor)
+        }
+
+        // 添加操作按钮（根据事件类型）
+        // 检查事件是否已完成/已检票
+        val repository = try {
+            (context.applicationContext as App).repository
+        } catch (e: Exception) { null }
+
+        if (repository != null && eventTag.isNotEmpty()) {
+            try {
+                val event = repository.events.value.find { it.id == eventId }
+                if (event != null) {
+                    val isCompleted = event.isCompleted
+                    val isCheckedIn = event.isCheckedIn
+
+                    // 根据事件类型决定是否显示按钮
+                    val shouldShowButton = when (eventTag) {
+                        EventTags.TRAIN -> !isCheckedIn
+                        EventTags.PICKUP, EventTags.TAXI, EventTags.GENERAL -> !isCompleted
+                        else -> false
+                    }
+
+                    if (shouldShowButton) {
+                        val buttonText = when (eventTag) {
+                            EventTags.PICKUP -> "已取"
+                            EventTags.TAXI -> "已用车"
+                            EventTags.TRAIN -> "已检票"
+                            else -> "已完成"
+                        }
+                        val intentAction = when (eventTag) {
+                            EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                            else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                        }
+
+                        val actionIntent = Intent(context, EventActionReceiver::class.java).apply {
+                            action = intentAction
+                            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+                        }
+                        val pendingAction = PendingIntent.getBroadcast(
+                            context, eventId.hashCode() + 100, actionIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+
+                        builder.addAction(
+                            R.drawable.ic_notification_small,
+                            buttonText,
+                            pendingAction
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "检查事件状态失败: ${e.message}")
+            }
+        }
+
+        val notification = builder.build()
         manager.notify(eventId.hashCode(), notification)
-        Log.d(TAG, "已显示普通通知: title=$title, label=$label")
+        Log.d(TAG, "已显示普通通知: title=$title, label=$label, tag=$eventTag")
     }
 
     private fun playAlert(context: Context) {
