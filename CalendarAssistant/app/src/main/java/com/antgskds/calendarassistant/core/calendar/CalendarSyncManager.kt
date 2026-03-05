@@ -543,4 +543,53 @@ class CalendarSyncManager(private val context: Context) {
         val lastSyncTime: Long,
         val mappedEventCount: Int
     )
+
+    /**
+     * 单事件同步到系统日历
+     * 只同步指定的单个事件，避免全量同步
+     * 用于在 APP 外修改状态后立即同步到系统日历
+     */
+    suspend fun syncEventToCalendar(event: MyEvent): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (!CalendarPermissionHelper.hasAllPermissions(context)) {
+                Log.w(TAG, "单事件同步：缺少日历权限")
+                return@withContext Result.failure(SecurityException("缺少日历权限"))
+            }
+
+            val syncData = syncDataSource.loadSyncData()
+            if (!syncData.isSyncEnabled) {
+                Log.d(TAG, "单事件同步：同步未启用，跳过")
+                return@withContext Result.success(Unit)
+            }
+
+            val calendarId = syncData.targetCalendarId
+            if (calendarId == -1L) {
+                Log.w(TAG, "单事件同步：未配置目标日历")
+                return@withContext Result.success(Unit)
+            }
+
+            val calendarEventId = syncData.mapping[event.id]?.toLongOrNull()
+            if (calendarEventId == null) {
+                Log.w(TAG, "单事件同步：未找到映射，跳过 event.id=${event.id}")
+                return@withContext Result.success(Unit)
+            }
+
+            val success = calendarManager.updateEvent(
+                eventId = calendarEventId,
+                event = event,
+                calendarId = calendarId
+            )
+
+            if (success) {
+                Log.d(TAG, "单事件同步成功: event.id=${event.id}, title=${event.title}")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "单事件同步失败: event.id=${event.id}")
+                Result.failure(Exception("同步失败"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "单事件同步异常: event.id=${event.id}", e)
+            Result.failure(e)
+        }
+    }
 }

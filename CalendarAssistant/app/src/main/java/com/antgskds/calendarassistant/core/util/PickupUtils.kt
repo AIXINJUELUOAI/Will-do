@@ -17,7 +17,7 @@ data class PickupInfo(
 object PickupUtils {
     private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
     private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    private val PICKUP_PATTERN = Regex("【取件】([^|]+)\\|([^|]+)\\|(.*)")
+    private val PICKUP_PATTERN = Regex("【取件】([^|]+)\\|([^|]+)(?:\\|(.*))?")
 
     fun parsePickupInfo(event: MyEvent): PickupInfo {
         val isExpired = isPickupExpired(event)
