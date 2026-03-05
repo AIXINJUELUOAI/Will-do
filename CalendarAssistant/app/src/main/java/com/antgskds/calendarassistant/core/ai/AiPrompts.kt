@@ -2,6 +2,16 @@ package com.antgskds.calendarassistant.core.ai
 
 object AiPrompts {
 
+    private val layoutInstruction = """
+【布局标记】（已通过算法预处理）
+- ` | `: 同行分列(如: 北京南 | 上海虹桥)
+- `[L]`: 左侧气泡(对方发送)
+- `[R]`: 右侧气泡(我发送)
+- `[C]`: 居中(通常是时间戳)
+- `\t`: 显著间隙
+保留原始换行。
+"""
+
     /**
      * 处理用户直接输入的自然语言（悬浮窗输入）
      * @param timeStr 当前完整时间字符串 (yyyy-MM-dd HH:mm)
@@ -80,6 +90,8 @@ object AiPrompts {
         """.trimIndent()
 
         return """
+            $layoutInstruction
+            
             你是一个高级日程助手。
             【当前系统时间】：$timeStr
             【日期基准】：今天=$dateToday ($dayOfWeek), 昨天=$dateYesterday, 前天=$dateBeforeYesterday
@@ -159,7 +171,6 @@ object AiPrompts {
             【输出格式】
             纯 JSON 对象：
             {
-              "reasoning": "简述：判定为哪个场景？时间推断依据(时态/基准)？tag设置理由？",
               "events": [ $itemSchema ]
             }
         """.trimIndent()
@@ -189,12 +200,18 @@ object AiPrompts {
         """.trimIndent()
 
         return """
-            你是一个高级日程助手。
+            $layoutInstruction
+            
+            你是一个日程提取API。
             【当前系统时间】：$timeStr
             【日期基准】：今天=$dateToday ($dayOfWeek), 昨天=$dateYesterday, 前天=$dateBeforeYesterday
             
-            任务：从OCR文本中提取日程事件，专注处理【交通出行】和【普通日程】。
-            如果文本中同时包含取件信息，只识别其中的日程部分，tag 设为 general。
+            任务：从OCR文本中提取日程事件。
+            【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
+            
+            冲突避免原则：
+            - 如果文本是纯粹的取件提醒，请忽略日程识别。
+            - 仅当包含"非取件动作"上下文时（如"下班后去取快递"），才创建日程。
             
             ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
             **判定规则**：
@@ -243,7 +260,6 @@ object AiPrompts {
             【输出格式】
             纯 JSON 对象：
             {
-              "reasoning": "简述：判定为哪个场景？时间推断依据？tag设置理由？",
               "events": [ $itemSchema ]
             }
         """.trimIndent()
@@ -271,12 +287,15 @@ object AiPrompts {
         """.trimIndent()
 
         return """
-            你是一个取件/取餐助手。
+            $layoutInstruction
+            
+            你是一个取件提取API。
             【当前系统时间】：$timeStr
             
             任务：从OCR文本中提取【取件/取餐】信息。
-            【重要】只处理以下场景：取件码、快递、取餐、外卖、核销码。
-            如果文本中没有取件/取餐相关内容，请返回空事件列表。
+            【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
+            只处理以下场景：取件码、快递、取餐、外卖、核销码。
+            如果没有相关内容，events 返回空数组。
             
             ========== 取件/取餐场景 (【强制】tag: pickup) ==========
             **判定规则**：包含 取件码、提货码、快递单号、取餐号、外卖、菜鸟、顺丰、京东、饿了么、美团 等
@@ -303,7 +322,6 @@ object AiPrompts {
             【输出格式】
             纯 JSON 对象：
             {
-              "reasoning": "简述：判定为取件/取餐的理由？提取了哪些关键信息？",
               "events": [ $itemSchema ]
             }
         """.trimIndent()
