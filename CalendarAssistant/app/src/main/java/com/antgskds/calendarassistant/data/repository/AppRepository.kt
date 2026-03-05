@@ -301,6 +301,8 @@ class AppRepository private constructor(private val context: Context) {
 
             updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
+            // 单事件同步到系统日历（用于在 APP 外修改状态后立即同步）
+            syncManager.syncEventToCalendar(updatedEvent)
         }
     }
 
@@ -325,6 +327,8 @@ class AppRepository private constructor(private val context: Context) {
             )
             updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
+            // 单事件同步到系统日历（用于在 APP 外修改状态后立即同步）
+            syncManager.syncEventToCalendar(updatedEvent)
         }
     }
 

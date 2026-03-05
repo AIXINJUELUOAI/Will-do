@@ -164,4 +164,148 @@ object AiPrompts {
             }
         """.trimIndent()
     }
+
+    /**
+     * 处理 OCR 文本 - 专注日程（普通日程、交通出行）
+     * 不处理取件/取餐场景
+     */
+    fun getSchedulePrompt(
+        timeStr: String,
+        dateToday: String,
+        dateYesterday: String,
+        dateBeforeYesterday: String,
+        dayOfWeek: String
+    ): String {
+        val itemSchema = """
+            {
+              "title": "严格遵循【UI展示规范】生成的标题",
+              "startTime": "格式 yyyy-MM-dd HH:mm",
+              "endTime": "格式 yyyy-MM-dd HH:mm",
+              "location": "遵循【Location填充规范】提取的地址，无则留空",
+              "description": "严格遵循【微格式协议】生成的元数据",
+              "type": "event",
+              "tag": "【必须】general | train | taxi"
+            }
+        """.trimIndent()
+
+        return """
+            你是一个高级日程助手。
+            【当前系统时间】：$timeStr
+            【日期基准】：今天=$dateToday ($dayOfWeek), 昨天=$dateYesterday, 前天=$dateBeforeYesterday
+            
+            任务：从OCR文本中提取日程事件，专注处理【交通出行】和【普通日程】。
+            如果文本中同时包含取件信息，只识别其中的日程部分，tag 设为 general。
+            
+            ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
+            **判定规则**：
+            - train: 包含 车次、座位号、12306、检票口
+            - taxi: 包含 车牌号、车型、司机、行程单、滴滴/高德
+            
+            1. **UI 展示规范 (Title) - 必须包含 Emoji**：
+               - 🚄 **火车/高铁 (tag="train")**： 
+                 - 格式："🚄 车次 路线" 
+                 - 示例："🚄 G1008 深圳-武汉"
+               - 🚖 **打车/网约车 (tag="taxi")**： 
+                 - **Priority 1 (视觉优先)**：包含颜色和车型 -> "🚖 颜色·车型 车牌"
+                   - 示例："🚖 白色·零跑C10 鄂JDB7979"
+                   - 示例："🚖 银色·卡罗拉 粤B12345"
+                 - **Priority 2 (次佳)**：仅包含车型 -> "🚖 车型 车牌"
+                   - 示例："🚖 零跑C10 鄂JDB7979"
+                 - **Priority 3 (兜底)**：仅有平台信息 -> "🚖 平台 车牌"
+                   - 示例："🚖 滴滴快车 鄂A59231"
+
+            2. **Location 填充规范**：
+               - **火车**：必须填入 **出发站** (例: "深圳北站")。
+               - **打车**：必须提取 **出发地 ➔ 目的地**：
+                 - 格式要求："出发地 ➔ 目的地" (如: "科兴园 ➔ 宝安机场")。
+
+            3. **微格式 (Description)**：
+               - 火车：【列车】车次|检票口|座位号
+               - 打车：【用车】颜色|车型|车牌 (例: "【用车】白色|零跑C10|鄂JDB7979")
+               
+            4. **时间逻辑**：
+               - 必须解析文本中的出发时间。若OCR结果无日期，参考【日期基准】进行推断。
+
+            ========== 场景 2：普通日程 (【强制】tag: general) ==========
+            **判定规则**：不符合交通出行场景的所有其他日程。
+            
+            1. **时间逻辑 (含时态判断)**：
+               - **必须**寻找最近的上下文时间戳。若无日期，使用【日期基准】推断。
+               - **星期几修正**：
+                 - 若提到 "周X"，需判断动词时态（"去了"vs"去"）。
+                 - 过去式 -> 指向最近的过去日期。
+                 - 将来式 -> 指向最近的未来日期。
+            2. **UI 展示规范 (Title)**：
+               - 提炼核心事件 (例: "去吃早饭", "提交周报")。
+            3. **微格式 (Description)**：
+               - 留空或填入原文备注。
+
+            【输出格式】
+            纯 JSON 对象：
+            {
+              "reasoning": "简述：判定为哪个场景？时间推断依据？tag设置理由？",
+              "events": [ $itemSchema ]
+            }
+        """.trimIndent()
+    }
+
+    /**
+     * 处理 OCR 文本 - 专注取件/取餐
+     * 只处理取件码、取餐、快递、外卖等场景
+     */
+    fun getPickupPrompt(
+        timeStr: String,
+        nowTime: String,
+        nowPlusHourTime: String
+    ): String {
+        val itemSchema = """
+            {
+              "title": "严格遵循【UI展示规范】生成的标题",
+              "startTime": "格式 yyyy-MM-dd HH:mm",
+              "endTime": "格式 yyyy-MM-dd HH:mm",
+              "location": "遵循【Location填充规范】提取的地址，无则留空",
+              "description": "严格遵循【微格式协议】生成的元数据",
+              "type": "pickup",
+              "tag": "pickup"
+            }
+        """.trimIndent()
+
+        return """
+            你是一个取件/取餐助手。
+            【当前系统时间】：$timeStr
+            
+            任务：从OCR文本中提取【取件/取餐】信息。
+            【重要】只处理以下场景：取件码、快递、取餐、外卖、核销码。
+            如果文本中没有取件/取餐相关内容，请返回空事件列表。
+            
+            ========== 取件/取餐场景 (【强制】tag: pickup) ==========
+            **判定规则**：包含 取件码、提货码、快递单号、取餐号、外卖、菜鸟、顺丰、京东、饿了么、美团 等
+            
+            1. **时间逻辑 (强制当前)**：
+               - 除非文本有明确截止时间，否则 startTime = $nowTime, endTime = $nowPlusHourTime
+               
+            2. **UI 展示规范 (Title) - 必须包含 Emoji**：
+               - 格式：Emoji + 品牌(或兜底词) + 号码
+               - 📦 **快递类**： "📦 菜鸟驿站 114-5", "📦 快递 114"
+               - 🍔 **餐饮类**： "🍔 麦当劳 A114", "🍔 取餐 A05"
+
+            3. **Location 填充规范**：
+               - 提取门店名称、快递柜位置。若无明确位置信息，则**留空String**。
+               
+            4. **微格式 (Description) - 严格去空逻辑**：
+               - 格式：【取件】号码|品牌|位置
+               - **关键规则**：如果"位置"为空，**严禁**在字符串末尾添加 "|Unknown" 或 "|空" 或 "|"。
+               - ✅ 正确示例："【取件】6825|顺丰速运"
+               - ❌ 错误示例："【取件】6825|顺丰速运|Unknown"
+               
+            5. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
+
+            【输出格式】
+            纯 JSON 对象：
+            {
+              "reasoning": "简述：判定为取件/取餐的理由？提取了哪些关键信息？",
+              "events": [ $itemSchema ]
+            }
+        """.trimIndent()
+    }
 }
