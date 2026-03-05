@@ -8,6 +8,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -222,7 +224,24 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     fun closeNotificationPanel(): Boolean {
-        return performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        // 第1层：API 12+ 专用 API（针对 Pixel/三星/类原生）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        }
+
+        // 第2层：发送系统广播（针对老版本系统或华为/魅族）
+        try {
+            sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+        } catch (e: Exception) {
+            Log.w(TAG, "发送系统广播失败: ${e.message}")
+        }
+
+        // 第3层：模拟返回键 + 150ms 延时（针对 OPPO/vivo/小米 HyperOS 的终极杀招）
+        Handler(Looper.getMainLooper()).postDelayed({
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        }, 150)
+
+        return true
     }
 
     fun startAnalysis(delayDuration: Duration = 500.milliseconds, fromShortcut: Boolean = false) {
