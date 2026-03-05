@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.MyEvent
+import java.time.LocalDate
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
@@ -43,26 +44,27 @@ fun AllEventsPage(
                             event.location.contains(searchQuery, ignoreCase = true)
                 }
                 searchMatch
-            }.sortedWith(compareBy(
-                // 8级优先级：过期状态 > 重要性 > 单多日
-                { event ->
-                    val isExpired = DateCalculator.isEventExpired(event)
-                    val isImportant = event.isImportant
-                    val isMultiDay = event.startDate != event.endDate
-                    when {
-                        !isExpired && isImportant && isMultiDay -> 0
-                        !isExpired && isImportant && !isMultiDay -> 1
-                        !isExpired && !isImportant && isMultiDay -> 2
-                        !isExpired && !isImportant && !isMultiDay -> 3
-                        isExpired && isImportant && isMultiDay -> 4
-                        isExpired && isImportant && !isMultiDay -> 5
-                        isExpired && !isImportant && isMultiDay -> 6
-                        else -> 7
+            }.sortedWith(
+                compareBy(
+                    // 1. 过期状态（未过期在前）
+                    { event -> DateCalculator.isEventExpired(event) },
+                    // 2. 重要性（重要在前）
+                    { event -> !event.isImportant },
+                    // 3. 折中方案：事件未开始按开始日，已开始按结束日
+                    { event ->
+                        val isExpired = DateCalculator.isEventExpired(event)
+                        val today = LocalDate.now()
+                        val isStarted = event.startDate.isBefore(today) || event.startDate == today
+                        if (isExpired) {
+                            -event.endDate.toEpochDay() // 已过期，按结束日倒序（最近过期的在前）
+                        } else if (isStarted) {
+                            event.endDate.toEpochDay() // 未过期且已开始，按结束日正序（快结束的在前）
+                        } else {
+                            -event.startDate.toEpochDay() // 未开始，按开始日倒序（最近开始的在前）
+                        }
                     }
-                },
-                // 同优先级内按开始日期降序（最近的在前）
-                { event -> -event.startDate.toEpochDay() }
-            ))
+                )
+            )
         }
     }
 
