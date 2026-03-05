@@ -18,7 +18,7 @@ data class MySettings(
 
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true, // 旧版默认为 true
-    val screenshotDelayMs: Long = 500L,
+    val screenshotDelayMs: Long = 700L,
     val isLiveCapsuleEnabled: Boolean = false,
 
     // 【新增】取件码聚合开关 (Beta)

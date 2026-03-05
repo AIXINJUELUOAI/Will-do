@@ -82,7 +82,7 @@ class SettingsDataSource(context: Context) {
             isDailySummaryEnabled = prefs.getBoolean("daily_summary_enabled", false),
 
             tempEventsUseRecognitionTime = prefs.getBoolean("temp_events_use_rec_time", true),
-            screenshotDelayMs = prefs.getLong("screenshot_delay_ms", 500L),
+            screenshotDelayMs = prefs.getLong("screenshot_delay_ms", 700L),
             isLiveCapsuleEnabled = prefs.getBoolean("live_capsule_enabled", false),
 
             // 新字段，旧数据中不存在，使用默认值

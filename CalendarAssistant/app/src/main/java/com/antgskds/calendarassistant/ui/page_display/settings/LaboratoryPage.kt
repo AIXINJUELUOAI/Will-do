@@ -37,6 +37,9 @@ fun LaboratoryPage(uiSize: Int = 2) {
         mutableStateOf(settings.isFloatingWindowEnabled)
     }
 
+    var ocrDebugEnabled by remember { mutableStateOf(false) }
+    var reconstructedText by remember { mutableStateOf("") }
+
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
     LaunchedEffect(Unit) {
@@ -213,6 +216,59 @@ fun LaboratoryPage(uiSize: Int = 2) {
                         text = "需要悬浮窗权限才能正常使用",
                         style = cardSubtitleStyle,
                         color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "OCR 调试模式",
+                            style = cardTitleStyle
+                        )
+                        Text(
+                            text = "显示重构后的 OCR 文本",
+                            style = cardSubtitleStyle
+                        )
+                    }
+                    Switch(
+                        checked = ocrDebugEnabled,
+                        onCheckedChange = { enabled ->
+                            ocrDebugEnabled = enabled
+                        }
+                    )
+                }
+
+                if (ocrDebugEnabled) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    OutlinedTextField(
+                        value = reconstructedText,
+                        onValueChange = { reconstructedText = it },
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        label = { Text("重构后的 OCR 文本") },
+                        minLines = 3,
+                        maxLines = 10
                     )
                 }
             }
