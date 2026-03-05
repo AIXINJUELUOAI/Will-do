@@ -72,57 +72,63 @@ object NotificationScheduler {
         val advanceMinutes = settings.advanceReminderMinutes
         val isLiveCapsuleEnabled = settings.isLiveCapsuleEnabled
 
-        // 计算胶囊启动时间（可能提前）
-        val capsuleStartTime = if (isAdvanceEnabled) {
-            startMillis - (advanceMinutes * 60 * 1000)
+        // 1. 调度普通提醒
+        // 【规则】：用户自定义提醒始终走普通通知（强制）
+        event.reminders.forEach { minutesBefore ->
+            val triggerTime = startMillis - (minutesBefore * 60 * 1000)
+            if (triggerTime > System.currentTimeMillis()) {
+                val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
+                scheduleSingleAlarm(
+                    context, event, minutesBefore, triggerTime, label,
+                    ACTION_REMINDER, alarmManager
+                )
+            }
+        }
+
+        // 2. 全局提前提醒：根据胶囊开关决定走胶囊还是普通通知
+        if (isAdvanceEnabled && advanceMinutes > 0) {
+            val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
+            if (triggerTime > System.currentTimeMillis()) {
+                val label = "提前${advanceMinutes}分钟"
+                if (isLiveCapsuleEnabled) {
+                    // 胶囊开启时，全局提前提醒走胶囊
+                    scheduleCapsuleAlarm(context, event, triggerTime, startMillis, ACTION_CAPSULE_START, alarmManager)
+                } else {
+                    // 胶囊关闭时，全局提前提醒走普通通知
+                    scheduleSingleAlarm(context, event, advanceMinutes, triggerTime, label, ACTION_REMINDER, alarmManager)
+                }
+            }
+        }
+
+        // 3. 调度胶囊开始（仅当胶囊开启且不是通过全局提前提醒触发的）
+        // 如果全局提前提醒已触发胶囊，则不再重复调度
+        val capsuleTriggerTime = if (isAdvanceEnabled && isLiveCapsuleEnabled) {
+            -1L // 已通过全局提前提醒触发，不再重复
+        } else if (isLiveCapsuleEnabled) {
+            startMillis // 胶囊开启但未启用提前提醒，从日程开始时触发
         } else {
-            startMillis
+            -1L
+        }
+        if (isLiveCapsuleEnabled && !isAdvanceEnabled && capsuleTriggerTime > System.currentTimeMillis()) {
+            scheduleCapsuleAlarm(context, event, capsuleTriggerTime, startMillis, ACTION_CAPSULE_START, alarmManager)
         }
 
-        // 1. 调度普通提醒（胶���替代模式：胶囊开启时跳过）
-        val scheduledMinutes = mutableSetOf<Int>() // 用于去重
-
-        // 只有在没有开启胶囊通知时才调度普通提醒
-        if (!isLiveCapsuleEnabled) {
-            // 用户自定义的提醒
-            event.reminders.forEach { minutesBefore ->
-                val triggerTime = startMillis - (minutesBefore * 60 * 1000)
-                if (triggerTime > System.currentTimeMillis()) {
-                    val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
-                    scheduleSingleAlarm(
-                        context, event, minutesBefore, triggerTime, label,
-                        ACTION_REMINDER, alarmManager
-                    )
-                    scheduledMinutes.add(minutesBefore)
-                }
-            }
-
-            // 全局提前提醒（叠加模式，需去重）
-            if (isAdvanceEnabled && advanceMinutes > 0 && advanceMinutes !in scheduledMinutes) {
-                val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
-                if (triggerTime > System.currentTimeMillis()) {
-                    val label = "提前${advanceMinutes}分钟"
-                    scheduleSingleAlarm(
-                        context, event, advanceMinutes, triggerTime, label,
-                        ACTION_REMINDER, alarmManager
-                    )
-                }
-            }
-        }
-
-        // 2. 调度胶囊开始（胶囊开启时）
-        if (isLiveCapsuleEnabled && capsuleStartTime > System.currentTimeMillis()) {
-            scheduleCapsuleAlarm(context, event, capsuleStartTime, startMillis, ACTION_CAPSULE_START, alarmManager)
-        }
-
-        // 3. 如果启用了胶囊通知且有提前提醒，额外设定准点刷新闹钟
+        // 4. 如果启用了胶囊通知且有提前提醒，额外设定准点刷新闹钟
         if (isLiveCapsuleEnabled && isAdvanceEnabled && startMillis > System.currentTimeMillis()) {
             scheduleRefreshCapsuleAlarm(context, event, startMillis, alarmManager)
         }
 
-        // 4. 调度胶囊结束（胶囊开启时）
+        // 5. 调度胶囊结束（胶囊开启时）
         if (isLiveCapsuleEnabled && endMillis > System.currentTimeMillis()) {
             scheduleCapsuleAlarm(context, event, endMillis, -1L, ACTION_CAPSULE_END, alarmManager)
+        }
+
+        // 6. 胶囊关闭时，日程开始时发送普通通知
+        if (!isLiveCapsuleEnabled && startMillis > System.currentTimeMillis()) {
+            scheduleSingleAlarm(
+                context, event, 0, startMillis, "日程开始",
+                ACTION_REMINDER, alarmManager
+            )
         }
     }
 
@@ -134,6 +140,16 @@ object NotificationScheduler {
             putExtra("EVENT_ID", event.id)
             putExtra("EVENT_TITLE", event.title)
             putExtra("REMINDER_LABEL", label)
+            putExtra("EVENT_LOCATION", event.location)
+            putExtra("EVENT_START_TIME", event.startTime)
+            putExtra("EVENT_END_TIME", event.endTime)
+            putExtra("EVENT_TAG", event.tag)
+            putExtra("EVENT_COLOR", android.graphics.Color.argb(
+                (event.color.alpha * 255).toInt(),
+                (event.color.red * 255).toInt(),
+                (event.color.green * 255).toInt(),
+                (event.color.blue * 255).toInt()
+            ))
         }
         val requestCode = (event.id.hashCode() + minutesBefore).toInt()
         scheduleAlarmExact(context, triggerTime, intent, requestCode, alarmManager)
