@@ -317,7 +317,7 @@ class TextAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val eventsList = RecognitionProcessor.analyzeImage(softwareBitmap, settings)
+            val eventsList = RecognitionProcessor.analyzeImage(softwareBitmap, settings, this)
             softwareBitmap.recycle()
 
             val validEvents = eventsList.filter { it.title.isNotBlank() }

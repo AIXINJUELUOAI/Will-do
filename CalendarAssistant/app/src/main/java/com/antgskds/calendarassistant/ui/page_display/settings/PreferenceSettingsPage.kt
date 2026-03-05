@@ -26,8 +26,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -63,21 +61,17 @@ fun PreferenceSettingsPage(
     val events by repository.events.collectAsState()
 
     // --- 字体样式优化 ---
-    // 板块标题：Primary + ExtraBold
-val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )
-    // 列表项标题：OnSurface + Medium
     val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface
     )
-    // 副标题：Grey + Transparent
     val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
-    // 右侧数值：Grey + Normal (不抢眼)
     val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
         fontWeight = FontWeight.Normal,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -126,7 +120,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 显示板块
+            // ================== 显示板块 ==================
             Text("显示", style = sectionTitleStyle)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -141,10 +135,11 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                         value = settings.uiSize.toFloat(),
                         onValueChange = { viewModel.updateUiSize(it.toInt()) },
                         valueRange = 1f..3f,
-                        steps = 1,
+                        steps = 1, // 离散：1, 2, 3
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
-                        cardValueStyle = cardValueStyle
+                        cardValueStyle = cardValueStyle,
+                        showValueAsNumber = false // 显示文字：小/中/大
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
@@ -162,7 +157,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 }
             }
 
-            // 通知板块
+            // ================== 通知板块 ==================
             Text("通知", style = sectionTitleStyle)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -229,7 +224,6 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                    // 日程提前提醒设置项
                     AdvanceReminderSettingItem(
                         title = "日程提前提醒",
                         subtitle = if (settings.isAdvanceReminderEnabled)
@@ -240,7 +234,6 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                         minutes = settings.advanceReminderMinutes,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(advanceReminderEnabled = isChecked)
-                            // 只在打开开关时检测重复提醒
                             if (isChecked && settings.advanceReminderMinutes > 0) {
                                 val hasDuplicate = events.any { event ->
                                     event.reminders.any { it <= settings.advanceReminderMinutes }
@@ -259,7 +252,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 }
             }
 
-            // 同步板块
+            // ================== 日程板块 ==================
             Text("日程", style = sectionTitleStyle)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -322,7 +315,34 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     )
                 }
             }
-        }
+
+            // ================== 截图板块 (新) ==================
+            // 注意：现在它在 Column 内部，位于“日程”卡片之后
+            Text("截图", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SliderSettingItem(
+                        title = "截图延迟",
+                        subtitle = "截图与分析之间的等待时间",
+                        value = settings.screenshotDelayMs.toFloat(),
+                        onValueChange = { viewModel.updateScreenshotDelay(it.toLong()) },
+                        valueRange = 500f..1500f,
+                        steps = 0, // 0 = 无极调节
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle,
+                        showValueAsNumber = true, // 开启数字显示
+                        valueUnit = "ms"
+                    )
+                }
+            }
+
+        } // <--- Column 结束在这里，确保所有板块都在里面
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -356,6 +376,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
     }
 }
 
+// ... SwitchSettingItem 保持不变 ...
 @Composable
 fun SwitchSettingItem(
     title: String,
@@ -378,6 +399,7 @@ fun SwitchSettingItem(
     }
 }
 
+// ... SliderSettingItem 修复并优化 ...
 @Composable
 fun SliderSettingItem(
     title: String,
@@ -388,9 +410,19 @@ fun SliderSettingItem(
     steps: Int,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
-    cardValueStyle: TextStyle
+    cardValueStyle: TextStyle,
+    showValueAsNumber: Boolean = false, // 新增参数
+    valueUnit: String = "ms"            // 新增参数
 ) {
-    val sizeLabels = mapOf(1f to "小", 2f to "中", 3f to "大")
+    // 根据 showValueAsNumber 决定显示逻辑
+    val displayValue = if (showValueAsNumber) {
+        "${value.toInt()}$valueUnit"
+    } else {
+        // 旧逻辑：界面大小
+        val sizeLabels = mapOf(1f to "小", 2f to "中", 3f to "大")
+        sizeLabels[value] ?: ""
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -401,9 +433,10 @@ fun SliderSettingItem(
                 Text(title, style = cardTitleStyle)
                 Text(subtitle, style = cardSubtitleStyle)
             }
+            // 显示动态数值
             Text(
-                text = sizeLabels[value] ?: "",
-                style = cardValueStyle // 灰色
+                text = displayValue,
+                style = cardValueStyle
             )
         }
         Slider(
@@ -415,6 +448,7 @@ fun SliderSettingItem(
     }
 }
 
+// ... AdvanceReminderSettingItem 保持不变 ...
 @Composable
 fun AdvanceReminderSettingItem(
     title: String,
