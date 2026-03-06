@@ -378,7 +378,7 @@ class TextAccessibilityService : AccessibilityService() {
                 if (addedEvents.isNotEmpty()) {
                     // 识别成功：显示添加结果，15秒后自动消失
                     val count = addedEvents.size
-                    val title = if (count == 1) "新事项已添加" else "添加了 $count 个新事项"
+                    val title = "新增 $count 个事件"
                     val content = if (count == 1) {
                         val e = addedEvents.first()
                         "${e.description}(${e.startTime})"
