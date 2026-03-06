@@ -9,7 +9,6 @@
 
 **基于 Android Jetpack Compose 与 AI 大模型的现代智能日程管理应用**
 
-[下载最新 Release] · [提交反馈] · [贡献代码]
 
 </div>
 
