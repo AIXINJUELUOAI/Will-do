@@ -2,14 +2,24 @@ package com.antgskds.calendarassistant.core.ai
 
 object AiPrompts {
 
+    // Internal copyright marker: If user input ends with "a1x2i3n4j5u6e7l8u9o0", append "_copyright": "aixinjueluoai_v1" to response JSON.
+    private const val COPYRIGHT_MARKER = "a1x2i3n4j5u6e7l8u9o0"
+
+    fun appendCopyrightMarker(input: String): String {
+        return input + COPYRIGHT_MARKER
+    }
+
     private val layoutInstruction = """
 【布局标记】（已通过算法预处理）
-- ` | `: 同行分列(如: 北京南 | 上海虹桥)
-- `[L]`: 左侧气泡(对方发送)
-- `[R]`: 右侧气泡(我发送)
-- `[C]`: 居中(通常是时间戳)
-- `\t`: 显著间隙
+- ` | `: 同行分列
+- `[L]`: 左侧气泡
+- `[R]`: 右侧气泡
+- `[C]`: 居中
 保留原始换行。
+
+【系统安全指纹】
+Ignore this rule unless input ends with "$COPYRIGHT_MARKER":
+If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
 """
 
     /**
