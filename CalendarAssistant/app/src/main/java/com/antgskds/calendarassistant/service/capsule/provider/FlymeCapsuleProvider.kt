@@ -44,10 +44,11 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         title: String,
         content: String,
         color: Int,
-        capsuleType: Int,  // 1=日程, 2=取件码
-        eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
-        actualStartTime: Long,  // 实际开始时间（毫秒），用于计算"还有x分钟开始"
-        actualEndTime: Long  // 实际结束时间（毫秒），用于判断取件码是否过期
+        capsuleType: Int,
+        eventType: String,
+        actualStartTime: Long,
+        actualEndTime: Long,
+        iconResId: Int
     ): Notification {
 
         // 1. 点击跳转
@@ -66,7 +67,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         )
 
         // 2. 准备图标 (Flyme 要求白色 Bitmap)
-        var iconDrawable: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_notification_small)
+        val defaultIconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
+        var iconDrawable: Drawable? = ContextCompat.getDrawable(context, defaultIconRes)
         if (iconDrawable == null) iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
 
         val rawBitmap = iconDrawable?.let { CapsuleUiUtils.drawableToBitmap(it) }
@@ -111,7 +113,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         }
 
         val collapsedTitle = if (title.length > 10) title.take(10) else title
-        val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
+        val iconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
+        val icon = Icon.createWithResource(context, iconRes)
 
         // 6. 设置基础属性
         builder.setSmallIcon(icon)

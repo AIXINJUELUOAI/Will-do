@@ -147,6 +147,7 @@ class CapsuleStateManager(
                     eventType = "network_speed",
                     title = "↓ ${networkSpeed.formattedSpeed}",
                     content = "下载速度",
+                    description = "",
                     color = android.graphics.Color.parseColor("#4CAF50"),
                     startMillis = System.currentTimeMillis(),
                     endMillis = System.currentTimeMillis() + 60 * 60 * 1000 // 1小时有效
@@ -233,6 +234,7 @@ class CapsuleStateManager(
                 eventType = event.tag,
                 title = title,
                 content = "${event.startTime} - ${event.endTime}\n${event.location}",
+                description = event.description,
                 color = event.color.toArgb(),
                 startMillis = toMillis(event, event.startTime),
                 endMillis = toMillis(event, event.endTime)
@@ -270,6 +272,7 @@ class CapsuleStateManager(
                 eventType = EventTags.PICKUP,
                 title = if (isAnyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项",
                 content = contentText,
+                description = pickupEvents.firstOrNull()?.description ?: "",
                 color = android.graphics.Color.GREEN,
                 startMillis = System.currentTimeMillis(),
                 endMillis = latestEndMillis
@@ -322,6 +325,7 @@ class CapsuleStateManager(
                     eventType = event.tag,
                     title = title,
                     content = dynamicContent, // 内容变化依然保留
+                    description = event.description,
                     color = android.graphics.Color.GREEN,
                     startMillis = toMillis(event, event.startTime),
                     endMillis = toMillis(event, event.endTime)
