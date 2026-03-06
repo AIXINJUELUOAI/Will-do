@@ -26,7 +26,8 @@ object IconUtils {
                     EventTags.PICKUP -> {
                         if (isFoodPickup(capsule.description)) R.drawable.ic_stat_food else R.drawable.ic_stat_package
                     }
-                    EventType.COURSE -> R.drawable.ic_notification_small
+                    EventTags.GENERAL -> R.drawable.ic_stat_event
+                    EventType.COURSE -> R.drawable.ic_stat_course
                     else -> R.drawable.ic_notification_small
                 }
             }
@@ -41,6 +42,7 @@ object IconUtils {
             EventTags.PICKUP -> {
                 if (isFoodPickup(description)) R.drawable.ic_stat_food else R.drawable.ic_stat_package
             }
+            EventTags.GENERAL -> R.drawable.ic_stat_event
             else -> R.drawable.ic_notification_small
         }
     }

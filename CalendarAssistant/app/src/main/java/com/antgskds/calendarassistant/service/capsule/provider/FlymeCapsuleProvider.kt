@@ -267,8 +267,11 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             // 图标：根据 eventType 区分
             val iconRes = when (eventType) {
                 EventTags.PICKUP -> R.drawable.ic_capsule_pickup      // 取件/取餐
-                EventType.COURSE -> R.drawable.ic_capsule_course    // 课程
-                EventType.EVENT -> R.drawable.ic_capsule_event      // 普通日程
+                EventTags.TRAIN -> R.drawable.ic_capsule_train        // 火车/飞机
+                EventTags.TAXI -> R.drawable.ic_capsule_taxi          // 打车
+                EventType.COURSE -> R.drawable.ic_capsule_course      // 课程
+                EventTags.GENERAL -> R.drawable.ic_stat_event        // 普通日程
+                EventType.EVENT -> R.drawable.ic_capsule_event       // 普通日程
                 else -> R.drawable.ic_capsule_event         // 默认
             }
             setImageViewResource(R.id.iv_icon, iconRes)
