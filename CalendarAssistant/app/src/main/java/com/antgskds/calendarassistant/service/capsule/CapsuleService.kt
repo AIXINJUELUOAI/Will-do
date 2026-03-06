@@ -232,6 +232,7 @@ class CapsuleService : Service() {
     }
 
     private fun upsertCapsule(item: CapsuleUiState.Active.CapsuleItem) {
+        val iconResId = IconUtils.getSmallIconForCapsule(item)
         val notification = provider.buildNotification(
             this,
             item.id,
@@ -239,7 +240,10 @@ class CapsuleService : Service() {
             item.content,
             item.color,
             item.type,
-            item.eventType
+            item.eventType,
+            item.startMillis,
+            item.endMillis,
+            iconResId
         )
 
         val metadata = CapsuleMetadata(

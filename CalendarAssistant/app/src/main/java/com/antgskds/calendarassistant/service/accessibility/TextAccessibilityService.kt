@@ -27,8 +27,9 @@ import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -501,10 +502,17 @@ class TextAccessibilityService : AccessibilityService() {
 
         // 根据是否启用胶囊选择渠道
         val channelId = if (useCapsuleChannel) App.CHANNEL_ID_LIVE else App.CHANNEL_ID_POPUP
-        
+
+        // 根据通知内容选择图标
+        val smallIcon = when {
+            title.contains("分析") || title.contains("识别") -> IconUtils.getScanningIcon()
+            title.contains("已添加") || title.contains("添加了") -> IconUtils.getSuccessIcon()
+            else -> R.drawable.ic_notification_small
+        }
+
         // 构建通知
         val builder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_notification_small)
+            .setSmallIcon(smallIcon)
             .setContentTitle(title)
             .setContentText(content)
             .setAutoCancel(true)

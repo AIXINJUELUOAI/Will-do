@@ -32,10 +32,11 @@ class NativeCapsuleProvider : ICapsuleProvider {
         title: String,
         content: String,
         color: Int,
-        capsuleType: Int,  // 新增参数，但原生胶囊暂时忽略此参数
-        eventType: String,  // 新增参数：事件类型（暂时忽略）
-        actualStartTime: Long,  // 实际开始时间（毫秒），用于计算"还有x分钟开始"
-        actualEndTime: Long  // 实际结束时间（毫秒），用于判断取件码是否过期
+        capsuleType: Int,
+        eventType: String,
+        actualStartTime: Long,
+        actualEndTime: Long,
+        iconResId: Int
     ): Notification {
 
         // 根据胶囊类型添加跳转参数：取件码胶囊跳转到临时事件列表
@@ -84,7 +85,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
             Notification.Builder(context)
         }
 
-        val icon = Icon.createWithResource(context, R.drawable.ic_notification_small)
+        val iconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
+        val icon = Icon.createWithResource(context, iconRes)
 
         builder.setSmallIcon(icon)
             .setContentTitle(collapsedTitle)
