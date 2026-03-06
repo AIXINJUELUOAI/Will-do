@@ -1,14 +1,15 @@
-# Will do | AIXINJUELUOAI
-
 <div align="center">
+
+<h1>Will do | AIXINJUELUOAI</h1>
 
 ![License](https://img.shields.io/badge/license-GPLv3-red.svg)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-blue.svg)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-purple.svg)
 
-**基于 Android Jetpack Compose 与 AI 大模型的现代智能日程管理应用**
-
+<p>
+  <b>基于 Android Jetpack Compose 与 AI 大模型的现代智能日程管理应用</b>
+</p>
 
 </div>
 
@@ -102,6 +103,25 @@
 3.  连接设备或模拟器（建议 Android 11+ 以获得完整体验）。
 4.  运行 `app` 模块。
 
+## ☕ 支持开发者 / Support
+
+如果您觉得 Will do 帮助到了您，或者您喜欢这个项目，欢迎请作者喝一杯咖啡，这将鼓励我继续维护和完善项目！
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="./CalendarAssistant/docs/wechat-pay.png" width="200" /><br>
+        <b>WeChat Pay / 微信</b>
+      </td>
+      <td width="50"></td>
+      <td align="center">
+        <img src="./CalendarAssistant/docs/alipay.png" width="200" /><br>
+        <b>AliPay / 支付宝</b>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## 📜 开源协议
 
