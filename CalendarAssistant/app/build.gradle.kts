@@ -14,7 +14,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
+        versionCode = 8
         versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -22,6 +22,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        // Build fingerprint for anti-piracy verification
+        buildConfigField("String", "CODE_AUTHOR", "\"AIXINJUELUOAI\"")
+        buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
     }
 
     buildTypes {
@@ -44,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
