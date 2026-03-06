@@ -145,7 +145,7 @@ class CapsuleStateManager(
                     notifId = 88888,
                     type = CapsuleService.TYPE_NETWORK_SPEED,
                     eventType = "network_speed",
-                    title = "↓ ${networkSpeed.formattedSpeed}",
+                    title = networkSpeed.formattedSpeed,
                     content = "下载速度",
                     description = "",
                     color = android.graphics.Color.parseColor("#4CAF50"),
@@ -182,7 +182,7 @@ class CapsuleStateManager(
                     startDateTime.minusMinutes(1)
                 }
 
-                val isActive = now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
+                val isActive = !event.isCompleted && now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
 
                 // 调试日志：如果胶囊消失，请检查 Logcat 中这一行的 isActive 是 true 还是 false
                 // Log.d(TAG, "Event: ${event.title}, End: $endDateTime, Now: $now, IsActive: $isActive")

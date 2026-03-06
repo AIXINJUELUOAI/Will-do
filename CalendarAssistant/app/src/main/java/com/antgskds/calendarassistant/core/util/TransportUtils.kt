@@ -108,7 +108,20 @@ object TransportUtils {
         val parts = content.split("|").map { it.trim() }
 
         return when {
-            parts.size >= 2 -> {
+            parts.size >= 3 -> {
+                val color = parts[0].ifBlank { "" }
+                val carModel = parts[1].ifBlank { "" }
+                val licensePlate = parts[2].ifBlank { "" }
+
+                TransportInfo(
+                    type = TransportType.RIDE,
+                    mainDisplay = licensePlate,
+                    subDisplay = "$color $carModel",
+                    isCheckedIn = isRideCompleted,
+                    rawDescription = description
+                )
+            }
+            parts.size == 2 -> {
                 val carModel = parts[0].ifBlank { "" }
                 val licensePlate = parts[1].ifBlank { "" }
 
