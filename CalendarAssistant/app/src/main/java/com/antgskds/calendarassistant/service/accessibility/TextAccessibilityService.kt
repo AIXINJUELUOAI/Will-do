@@ -506,7 +506,7 @@ class TextAccessibilityService : AccessibilityService() {
         // 根据通知内容选择图标
         val smallIcon = when {
             title.contains("分析") || title.contains("识别") -> IconUtils.getScanningIcon()
-            title.contains("已添加") || title.contains("添加了") -> IconUtils.getSuccessIcon()
+            title.contains("已添加") || title.contains("添加了") || title.contains("新增") -> IconUtils.getSuccessIcon()
             else -> R.drawable.ic_notification_small
         }
 
