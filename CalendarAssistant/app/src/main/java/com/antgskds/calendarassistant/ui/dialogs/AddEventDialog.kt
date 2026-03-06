@@ -116,10 +116,50 @@ fun AddEventDialog(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
                     Text("类型:", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = eventTag == EventTags.GENERAL, onClick = { eventTag = EventTags.GENERAL }, label = { Text("日程") })
+
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("日程") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (eventTag == EventTags.GENERAL) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            labelColor = if (eventTag == EventTags.GENERAL) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = null
+                    )
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("取件") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (eventTag == EventTags.PICKUP) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            labelColor = if (eventTag == EventTags.PICKUP) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = null
+                    )
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("火车") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (eventTag == EventTags.TRAIN) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            labelColor = if (eventTag == EventTags.TRAIN) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = null
+                    )
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("打车") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (eventTag == EventTags.TAXI) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            labelColor = if (eventTag == EventTags.TAXI) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = null
+                    )
                 }
 
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
