@@ -74,22 +74,27 @@ object NotificationScheduler {
 
         // 1. 调度普通提醒
         // 【规则】：用户自定义提醒始终走普通通知（强制）
+        val now = System.currentTimeMillis()
+        val immediateThreshold = 60 * 1000L
+
         event.reminders.forEach { minutesBefore ->
             val triggerTime = startMillis - (minutesBefore * 60 * 1000)
-            if (triggerTime > System.currentTimeMillis()) {
-                val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
+            val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
+            if (triggerTime > now) {
                 scheduleSingleAlarm(
                     context, event, minutesBefore, triggerTime, label,
                     ACTION_REMINDER, alarmManager
                 )
+            } else if (now - triggerTime < immediateThreshold) {
+                AlarmReceiver.showStandardNotification(context, event, label)
             }
         }
 
         // 2. 全局提前提醒：根据胶囊开关决定走胶囊还是普通通知
         if (isAdvanceEnabled && advanceMinutes > 0) {
             val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
-            if (triggerTime > System.currentTimeMillis()) {
-                val label = "提前${advanceMinutes}分钟"
+            val label = "提前${advanceMinutes}分钟"
+            if (triggerTime > now) {
                 if (isLiveCapsuleEnabled) {
                     // 胶囊开启时，全局提前提醒走胶囊
                     scheduleCapsuleAlarm(context, event, triggerTime, startMillis, ACTION_CAPSULE_START, alarmManager)
@@ -97,6 +102,9 @@ object NotificationScheduler {
                     // 胶囊关闭时，全局提前提醒走普通通知
                     scheduleSingleAlarm(context, event, advanceMinutes, triggerTime, label, ACTION_REMINDER, alarmManager)
                 }
+            } else if (now - triggerTime < immediateThreshold) {
+                // 过去但 < 1分钟，立即通知
+                AlarmReceiver.showStandardNotification(context, event, label)
             }
         }
 
@@ -124,11 +132,16 @@ object NotificationScheduler {
         }
 
         // 6. 胶囊关闭时，日程开始时发送普通通知
-        if (!isLiveCapsuleEnabled && startMillis > System.currentTimeMillis()) {
-            scheduleSingleAlarm(
-                context, event, 0, startMillis, "日程开始",
-                ACTION_REMINDER, alarmManager
-            )
+        if (!isLiveCapsuleEnabled) {
+            if (startMillis > now) {
+                scheduleSingleAlarm(
+                    context, event, 0, startMillis, "日程开始",
+                    ACTION_REMINDER, alarmManager
+                )
+            } else if (now - startMillis < immediateThreshold) {
+                // 过去但 < 1分钟，立即通知
+                AlarmReceiver.showStandardNotification(context, event, "日程开始")
+            }
         }
     }
 

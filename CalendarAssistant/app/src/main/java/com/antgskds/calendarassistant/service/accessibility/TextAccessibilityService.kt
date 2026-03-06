@@ -223,25 +223,66 @@ class TextAccessibilityService : AccessibilityService() {
         cancelProgressNotification()
     }
 
+    /**
+     * 终极适配版：解决国产系统控制中心收起与三星/类原生回退冲突
+     */
     fun closeNotificationPanel(): Boolean {
-        // 第1层：API 12+ 专用 API（针对 Pixel/三星/类原生）
+        var syncSuccess = false
+        val tag = "PanelFixV3"
+
+        // --- 层级 1：标准 Android 12+ API ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            try {
+                // 无障碍服务自带执行权限，无需 WRITE_SECURE_SETTINGS
+                syncSuccess = performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            } catch (e: Exception) {
+                Log.w(tag, "API 12+ 指令执行异常", e)
+            }
         }
 
-        // 第2层：发送系统广播（针对老版本系统或华为/魅族）
-        try {
-            sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
-        } catch (e: Exception) {
-            Log.w(TAG, "发送系统广播失败: ${e.message}")
+        // --- 层级 2：传统广播 (仅在层级 1 明确失败或版本不支持时触发) ---
+        if (!syncSuccess) {
+            try {
+                @Suppress("DEPRECATION")
+                sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+                // 注意：广播发出不代表成功收起，仅标记指令已送达
+            } catch (e: Exception) {
+                Log.w(tag, "系统广播发送失败", e)
+            }
         }
 
-        // 第3层：模拟返回键 + 150ms 延时（针对 OPPO/vivo/小米 HyperOS 的终极杀招）
+        // --- 层级 3：智能动态"补刀"逻辑 ---
         Handler(Looper.getMainLooper()).postDelayed({
-            performGlobalAction(GLOBAL_ACTION_BACK)
-        }, 150)
+            val rootNode = rootInActiveWindow
+            val currentPackage = rootNode?.packageName?.toString() ?: ""
+            
+            // 扩展国产 ROM 包名库，支持可配置扩展
+            val systemUiPackages = mutableSetOf(
+                "com.android.systemui",    // 通用/原生/MIUI/OneUI
+                "com.coloros.systemui",   // OPPO/ColorOS
+                "com.oppo.systemui",      // OPPO 旧版
+                "com.vivo.systemui",      // vivo/OriginOS
+                "com.huawei.systemui",    // 华为/EMUI
+                "com.hihonor.systemui",   // 荣耀/MagicUI
+                "com.meizu.systemui"      // 魅族/Flyme
+            )
 
-        return true
+            // 检查当前是否仍处于系统 UI 界面（排除桌面和 App）
+            val isStillOnSystemUi = systemUiPackages.any { currentPackage.contains(it) }
+
+            if (isStillOnSystemUi) {
+                Log.d(tag, "检测到面板钉子户: $currentPackage，执行 Back 补刀")
+                // GLOBAL_ACTION_BACK 是 Android CDD 规定的交互兜底
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            } else {
+                // 面板已消失，不执行任何操作，保护三星/原生用户不回退
+                Log.d(tag, "面板已安全避让，当前包名: $currentPackage")
+            }
+            
+            rootNode?.recycle()
+        }, 180) // 微调至 180ms，避开部分设备 150ms 时的动画临界态
+
+        return syncSuccess
     }
 
     fun startAnalysis(delayDuration: Duration = 500.milliseconds, fromShortcut: Boolean = false) {
