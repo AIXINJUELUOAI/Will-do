@@ -17,6 +17,7 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
@@ -39,6 +40,126 @@ class AlarmReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AlarmReceiver"
         private const val EVENT_CHECK_TIMEOUT_MS = 1000L // 事件检查超时时间（毫秒）
+
+        @JvmStatic
+        internal fun showStandardNotification(context: Context, event: MyEvent, label: String = "日程开始") {
+            val channelId = App.CHANNEL_ID_POPUP
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val tapIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, event.id.hashCode(), tapIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            val eventLocation = event.location
+            val eventStartTime = event.startTime
+            val eventEndTime = event.endTime
+            val eventTag = event.tag
+
+            val timeText = formatTimeText(eventStartTime, eventEndTime)
+            val locationText = if (eventLocation.isNotEmpty()) "【${eventLocation}】" else ""
+            val actionText = when (eventTag) {
+                EventTags.PICKUP -> "请前往取件"
+                EventTags.TRAIN -> "请准备检票"
+                EventTags.TAXI -> "请准备上车"
+                else -> ""
+            }
+            val prefixLabel = if (label.isNotEmpty() && !label.contains("开始") && !label.contains("现在")) {
+                "[$label] "
+            } else {
+                ""
+            }
+
+            var finalContentText = "$prefixLabel$timeText $locationText $actionText".trim()
+            if (finalContentText.isEmpty()) {
+                finalContentText = if (label.isNotEmpty()) label else "点击查看详情"
+            }
+
+            val builder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(R.drawable.ic_notification_small)
+                .setContentTitle(event.title)
+                .setContentText(finalContentText)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(finalContentText))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+
+            if (event.color.hashCode() != 0) {
+                builder.setColor(event.color.hashCode())
+            }
+
+            // 添加操作按钮（根据事件类型）
+            val repository = try {
+                (context.applicationContext as App).repository
+            } catch (e: Exception) { null }
+
+            if (repository != null && eventTag.isNotEmpty()) {
+                try {
+                    val evt = repository.events.value.find { it.id == event.id }
+                    if (evt != null) {
+                        val isCompleted = evt.isCompleted
+                        val isCheckedIn = evt.isCheckedIn
+
+                        val shouldShowButton = when (eventTag) {
+                            EventTags.TRAIN -> !isCheckedIn
+                            EventTags.PICKUP, EventTags.TAXI, EventTags.GENERAL -> !isCompleted
+                            else -> false
+                        }
+
+                        if (shouldShowButton) {
+                            val buttonText = when (eventTag) {
+                                EventTags.PICKUP -> "已取"
+                                EventTags.TAXI -> "已用车"
+                                EventTags.TRAIN -> "已检票"
+                                else -> "已完成"
+                            }
+                            val intentAction = when (eventTag) {
+                                EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                                else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+                            }
+
+                            val actionIntent = Intent(context, EventActionReceiver::class.java).apply {
+                                action = intentAction
+                                putExtra(EventActionReceiver.EXTRA_EVENT_ID, event.id)
+                            }
+                            val pendingAction = PendingIntent.getBroadcast(
+                                context, event.id.hashCode() + 100, actionIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+
+                            builder.addAction(R.drawable.ic_notification_small, buttonText, pendingAction)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "检查事件状态失败: ${e.message}")
+                }
+            }
+
+            val notification = builder.build()
+            manager.notify(event.id.hashCode(), notification)
+            Log.d(TAG, "已显示普通通知: title=${event.title}, label=$label, tag=$eventTag")
+        }
+
+        private fun formatTimeText(startTime: String, endTime: String): String {
+            val extractTime = { fullTime: String ->
+                if (fullTime.contains(" ")) {
+                    fullTime.substringAfter(" ")
+                } else {
+                    fullTime
+                }
+            }
+            val start = extractTime(startTime)
+            val end = extractTime(endTime)
+
+            return if (start.isNotEmpty()) {
+                if (end.isNotEmpty()) "$start - $end" else start
+            } else {
+                ""
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -235,6 +356,7 @@ class AlarmReceiver : BroadcastReceiver() {
         eventLocation: String = "", eventStartTime: String = "", eventEndTime: String = "",
         eventTag: String = "", eventColor: Int = 0
     ) {
+        val channelId = App.CHANNEL_ID_POPUP
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -244,13 +366,31 @@ class AlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 使用 App.kt 中定义的通知渠道 ID
-        val channelId = App.CHANNEL_ID_POPUP
+        // 智能文案生成
+        val timeText = formatTimeText(eventStartTime, eventEndTime)
+        val locationText = if (eventLocation.isNotEmpty()) "【${eventLocation}】" else ""
+        val actionText = when (eventTag) {
+            EventTags.PICKUP -> "请前往取件"
+            EventTags.TRAIN -> "请准备检票"
+            EventTags.TAXI -> "请准备上车"
+            else -> ""
+        }
+        val prefixLabel = if (label.isNotEmpty() && !label.contains("开始") && !label.contains("现在")) {
+            "[$label] "
+        } else {
+            ""
+        }
+
+        var finalContentText = "$prefixLabel$timeText $locationText $actionText".trim()
+        if (finalContentText.isEmpty()) {
+            finalContentText = if (label.isNotEmpty()) label else "点击查看详情"
+        }
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
-            .setContentText(if(label.isNotEmpty()) "$label: $title" else "日程即将开始")
+            .setContentText(finalContentText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(finalContentText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
