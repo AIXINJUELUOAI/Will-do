@@ -11,15 +11,10 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
-import com.antgskds.calendarassistant.core.util.TransportInfo
-import com.antgskds.calendarassistant.core.util.TransportType
-import com.antgskds.calendarassistant.core.util.TransportUtils
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
+import com.antgskds.calendarassistant.service.capsule.CapsuleProbeFields
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import java.time.Duration
-import java.time.Instant
 
 class NativeCapsuleProvider : ICapsuleProvider {
     companion object {
@@ -28,56 +23,11 @@ class NativeCapsuleProvider : ICapsuleProvider {
 
     override fun buildNotification(
         context: Context,
-        eventId: String,
-        title: String,
-        content: String,
-        color: Int,
-        capsuleType: Int,
-        eventType: String,
-        actualStartTime: Long,
-        actualEndTime: Long,
+        item: CapsuleUiState.Active.CapsuleItem,
         iconResId: Int
     ): Notification {
-
-        // 根据胶囊类型添加跳转参数：取件码胶囊跳转到临时事件列表
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (capsuleType == 2 || eventType == EventTags.PICKUP) {
-                putExtra("openPickupList", true)
-            }
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            eventId.hashCode(),
-            tapIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val collapsedTitle = if (title.length > 10) "${title.take(10)}..." else title
-
-        // 【网速胶囊】直接使用 title 作为状态文本
-        val statusText = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
-            title
-        } else {
-            // 计算胶囊文案（根据是否提前开始）
-            when {
-                actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
-                    // 提前提醒阶段：显示"还有 x 分钟开始"
-                    val now = System.currentTimeMillis()
-                    val minutesRemaining = Duration.between(
-                        Instant.ofEpochMilli(now),
-                        Instant.ofEpochMilli(actualStartTime)
-                    ).toMinutes()
-                    when {
-                        minutesRemaining <= 0 -> "即将开始"
-                        minutesRemaining == 1L -> "还有 1 分钟开始"
-                        else -> "还有 ${minutesRemaining} 分钟开始"
-                    }
-                }
-                else -> "进行中"
-            }
-        }
-
+        val display = item.display
+        val collapsedShortText = collapseShortText(display.shortText)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -89,121 +39,135 @@ class NativeCapsuleProvider : ICapsuleProvider {
         val icon = Icon.createWithResource(context, iconRes)
 
         builder.setSmallIcon(icon)
-            .setContentTitle(collapsedTitle)
-            .setContentText(statusText)
-            .setContentIntent(pendingIntent)
+            .setContentTitle(display.primaryText)
+            .setContentIntent(createContentPendingIntent(context, item))
             .setOngoing(true)
             .setAutoCancel(false)
-            .setColor(color)
+            .setOnlyAlertOnce(true)
+            .setColor(item.color)
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setStyle(Notification.BigTextStyle()
-                .setBigContentTitle(title)
-                .bigText(content)
-            )
+            .setGroup("LIVE_CAPSULE_GROUP")
+            .setGroupSummary(false)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
 
-        // Android 12+: 立即显示，不折叠
+        builder.setContentText(display.secondaryText ?: " ")
+        display.tertiaryText?.let { builder.setSubText(it) }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
-        builder.setGroup("LIVE_CAPSULE_GROUP")
-        builder.setGroupSummary(false)
-        builder.setWhen(System.currentTimeMillis())
-        builder.setShowWhen(true)
+        val expandedText = display.expandedText ?: display.secondaryText ?: " "
+        builder.setStyle(
+            Notification.BigTextStyle()
+                .setBigContentTitle(display.primaryText)
+                .bigText(expandedText)
+        )
 
-        // Android 16 (Baklava) 适配 (反射调用)
-        try {
-            val methodSetText = Notification.Builder::class.java.getMethod("setShortCriticalText", String::class.java)
-            methodSetText.invoke(builder, collapsedTitle)
-        } catch (e: Exception) {
-            Log.d(TAG, "setShortCriticalText not available")
+        display.probeFields?.let { applyProbeFields(builder, it) }
+
+        applyShortCriticalText(builder, collapsedShortText)
+        requestPromotedOngoing(builder)
+        builder.addExtras(createPromotionExtras(collapsedShortText))
+
+        display.action?.let { addAction(builder, context, item.id, it) }
+
+        return builder.build()
+    }
+
+    private fun createContentPendingIntent(
+        context: Context,
+        item: CapsuleUiState.Active.CapsuleItem
+    ): PendingIntent {
+        val tapIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (item.display.tapOpensPickupList) {
+                putExtra("openPickupList", true)
+            }
+        }
+        return PendingIntent.getActivity(
+            context,
+            item.id.hashCode(),
+            tapIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    private fun addAction(
+        builder: Notification.Builder,
+        context: Context,
+        eventId: String,
+        action: CapsuleActionSpec
+    ) {
+        val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
+            this.action = action.receiverAction
+            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            eventId.hashCode() + 3,
+            broadcastIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notificationAction = Notification.Action.Builder(
+            null,
+            action.label,
+            pendingIntent
+        ).build()
+        builder.addAction(notificationAction)
+    }
+
+    private fun applyProbeFields(
+        builder: Notification.Builder,
+        probeFields: CapsuleProbeFields
+    ) {
+        builder.setContentInfo(probeFields.contentInfo)
+            .setStyle(
+                Notification.BigTextStyle()
+                    .setBigContentTitle(probeFields.expandedTitle)
+                    .bigText(probeFields.expandedText)
+            )
+    }
+
+    private fun applyShortCriticalText(builder: Notification.Builder, text: String) {
+        if (Build.VERSION.SDK_INT >= 36) {
+            builder.setShortCriticalText(text)
+            return
         }
 
         try {
-            val methodSetPromoted = Notification.Builder::class.java.getMethod("setRequestPromotedOngoing", Boolean::class.java)
+            val methodSetText = Notification.Builder::class.java.getMethod(
+                "setShortCriticalText",
+                String::class.java
+            )
+            methodSetText.invoke(builder, text)
+        } catch (e: Exception) {
+            Log.d(TAG, "setShortCriticalText not available")
+        }
+    }
+
+    private fun requestPromotedOngoing(builder: Notification.Builder) {
+        try {
+            val methodSetPromoted = Notification.Builder::class.java.getMethod(
+                "setRequestPromotedOngoing",
+                Boolean::class.java
+            )
             methodSetPromoted.invoke(builder, true)
         } catch (e: Exception) {
             Log.d(TAG, "setRequestPromotedOngoing not available")
         }
+    }
 
-        // ========================================================================
-        // 【关键修复】添加原生胶囊所需的 extras 配置
-        // 这些配置对所有 Android 系统都有效，是胶囊正常显示的关键
-        // ========================================================================
-        val extras = Bundle().apply {
+    private fun createPromotionExtras(title: String): Bundle {
+        return Bundle().apply {
             putBoolean("android.substName", true)
-            putString("android.title", collapsedTitle)
+            putString("android.title", title)
         }
-        builder.addExtras(extras)
+    }
 
-        // ========================================================================
-        // 【按钮逻辑】根据 eventType 动态设置按钮文字和 Action
-        // ========================================================================
-
-        // 判定是否过期
-        val isExpired = capsuleType == 3 || (actualEndTime > 0 && System.currentTimeMillis() >= actualEndTime)
-
-        when (capsuleType) {
-            CapsuleService.TYPE_NETWORK_SPEED -> {
-                // 网速胶囊：不需要额外按钮
-                builder.setOnlyAlertOnce(true)
-            }
-            CapsuleService.TYPE_PICKUP, CapsuleService.TYPE_PICKUP_EXPIRED, CapsuleService.TYPE_SCHEDULE -> {
-                // 日程/取件码/火车/打车：未过期且未完成/未检票显示操作按钮
-                if (!isExpired) {
-                    // 检查事件是否已完成/已检票
-                    val event = try {
-                        com.antgskds.calendarassistant.data.repository.AppRepository.getInstance(context)
-                            .events.value.find { it.id == eventId }
-                    } catch (e: Exception) { null }
-                    val isCompleted = event?.isCompleted ?: false
-                    val isCheckedIn = event?.isCheckedIn ?: false
-
-                    // 火车事件：检票后不显示按钮
-                    // 其他事件：完成后不显示按钮
-                    val shouldShowButton = when (eventType) {
-                        EventTags.TRAIN -> !isCheckedIn
-                        else -> !isCompleted
-                    }
-
-                    if (shouldShowButton) {
-                        val buttonText = when (eventType) {
-                            EventTags.PICKUP -> "已取"
-                            EventTags.TAXI -> "已用车"
-                            EventTags.TRAIN -> "已检票"
-                            else -> "已完成"
-                        }
-                        val intentAction = when (eventType) {
-                            EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
-                            else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
-                        }
-                        val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                            action = intentAction
-                            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                        }
-                        val pendingComplete = PendingIntent.getBroadcast(
-                            context,
-                            eventId.hashCode() + 3,
-                            completeIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        val completeAction = Notification.Action.Builder(
-                            null,
-                            buttonText,
-                            pendingComplete
-                        ).build()
-                        builder.addAction(completeAction)
-                    }
-                }
-                builder.setOnlyAlertOnce(true)
-            }
-            else -> {
-                // 其他类型默认只提醒一次
-                builder.setOnlyAlertOnce(true)
-            }
-        }
-
-        return builder.build()
+    private fun collapseShortText(text: String): String {
+        return if (text.length > 10) "${text.take(10)}..." else text
     }
 }
