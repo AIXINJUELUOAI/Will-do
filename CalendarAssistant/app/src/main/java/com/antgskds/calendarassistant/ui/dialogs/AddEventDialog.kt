@@ -35,7 +35,10 @@ import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -44,6 +47,79 @@ val REMINDER_OPTIONS = listOf(
     0 to "开始时", 5 to "5分钟前", 10 to "10分钟前", 15 to "15分钟前",
     30 to "30分钟前", 60 to "1小时前", 120 to "2小时前", 1440 to "1天前"
 )
+
+private const val DEFAULT_EVENT_DURATION_MINUTES = 60L
+private const val AUTO_ADJUST_END_MESSAGE = "结束时间已自动调整为开始时间+1小时"
+
+private data class EventDateTimeRange(
+    val start: LocalDateTime,
+    val end: LocalDateTime
+)
+
+private fun parseLocalTimeValue(
+    value: String,
+    formatter: DateTimeFormatter
+): LocalTime? {
+    return runCatching { LocalTime.parse(value, formatter) }
+        .recoverCatching { LocalTime.parse(value) }
+        .getOrNull()
+}
+
+private fun parseDateTimeValue(
+    date: LocalDate,
+    time: String,
+    formatter: DateTimeFormatter
+): LocalDateTime? {
+    val parsedTime = parseLocalTimeValue(time, formatter) ?: return null
+    return LocalDateTime.of(date, parsedTime)
+}
+
+private fun resolveInitialRange(
+    eventToEdit: MyEvent?,
+    fallbackStart: LocalDateTime,
+    formatter: DateTimeFormatter
+): EventDateTimeRange {
+    if (eventToEdit == null) {
+        return EventDateTimeRange(
+            start = fallbackStart,
+            end = fallbackStart.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES)
+        )
+    }
+
+    val parsedStart = parseDateTimeValue(eventToEdit.startDate, eventToEdit.startTime, formatter)
+        ?: fallbackStart
+    val parsedEnd = parseDateTimeValue(eventToEdit.endDate, eventToEdit.endTime, formatter)
+        ?.takeIf { it.isAfter(parsedStart) }
+        ?: parsedStart.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES)
+
+    return EventDateTimeRange(parsedStart, parsedEnd)
+}
+
+private fun resolveEndAfterStartChange(
+    newStart: LocalDateTime,
+    currentEnd: LocalDateTime,
+    isEndTimeManuallySet: Boolean,
+    followDurationMinutes: Long
+): Pair<LocalDateTime, String?> {
+    return if (!isEndTimeManuallySet) {
+        newStart.plusMinutes(followDurationMinutes.coerceAtLeast(1L)) to null
+    } else if (!currentEnd.isAfter(newStart)) {
+        newStart.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES) to AUTO_ADJUST_END_MESSAGE
+    } else {
+        currentEnd to null
+    }
+}
+
+private fun resolveManualEndChange(
+    start: LocalDateTime,
+    candidateEnd: LocalDateTime
+): Pair<LocalDateTime, String?> {
+    return if (!candidateEnd.isAfter(start)) {
+        start.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES) to AUTO_ADJUST_END_MESSAGE
+    } else {
+        candidateEnd to null
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -57,9 +133,16 @@ fun AddEventDialog(
     onConfirm: (MyEvent) -> Unit
 ) {
     val context = LocalContext.current
-    val now = LocalDateTime.now()
-    val defaultEnd = now.plusHours(1)
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val defaultStartDateTime = remember {
+        LocalDateTime.now().withSecond(0).withNano(0)
+    }
+    val initialRange = remember(eventToEdit?.id) {
+        resolveInitialRange(eventToEdit, defaultStartDateTime, timeFormatter)
+    }
+    val initialAutoDurationMinutes = remember(initialRange) {
+        Duration.between(initialRange.start, initialRange.end).toMinutes().coerceAtLeast(1L)
+    }
 
     // 计算过滤后的提醒选项
     val filteredReminderOptions = remember(settings.isAdvanceReminderEnabled, settings.advanceReminderMinutes) {
@@ -71,10 +154,10 @@ fun AddEventDialog(
     }
 
     var title by remember { mutableStateOf(eventToEdit?.title ?: recommendedTitle ?: "") }
-    var startDate by remember { mutableStateOf(eventToEdit?.startDate ?: now.toLocalDate()) }
-    var endDate by remember { mutableStateOf(eventToEdit?.endDate ?: defaultEnd.toLocalDate()) }
-    var startTime by remember { mutableStateOf(eventToEdit?.startTime ?: now.format(timeFormatter)) }
-    var endTime by remember { mutableStateOf(eventToEdit?.endTime ?: defaultEnd.format(timeFormatter)) }
+    var startDate by remember { mutableStateOf(initialRange.start.toLocalDate()) }
+    var endDate by remember { mutableStateOf(initialRange.end.toLocalDate()) }
+    var startTime by remember { mutableStateOf(initialRange.start.toLocalTime().format(timeFormatter)) }
+    var endTime by remember { mutableStateOf(initialRange.end.toLocalTime().format(timeFormatter)) }
     var location by remember { mutableStateOf(eventToEdit?.location ?: "") }
     var desc by remember { mutableStateOf(eventToEdit?.description ?: "") }
     var eventType by remember { mutableStateOf(eventToEdit?.eventType ?: EventType.EVENT) }
@@ -99,7 +182,15 @@ fun AddEventDialog(
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var showReminderPicker by remember { mutableStateOf(false) }
+    var autoDurationMinutes by remember { mutableStateOf(initialAutoDurationMinutes) }
     var isEndTimeManuallySet by remember { mutableStateOf(false) }
+
+    fun applyDateTimeRange(start: LocalDateTime, end: LocalDateTime) {
+        startDate = start.toLocalDate()
+        startTime = start.toLocalTime().format(timeFormatter)
+        endDate = end.toLocalDate()
+        endTime = end.toLocalTime().format(timeFormatter)
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(
@@ -212,10 +303,27 @@ fun AddEventDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = {
                         if (title.isNotBlank()) {
+                            val finalStart = parseDateTimeValue(startDate, startTime, timeFormatter)
+                            val finalEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
+
+                            if (finalStart == null || finalEnd == null) {
+                                onShowMessage("时间格式无效，请重新选择")
+                                return@Button
+                            }
+
+                            if (!finalEnd.isAfter(finalStart)) {
+                                onShowMessage("结束时间必须晚于开始时间")
+                                return@Button
+                            }
+
                             val nextColor = if (EventColors.isNotEmpty()) EventColors[currentEventsCount % EventColors.size] else Color.Gray
                             val newEvent = MyEvent(
                                 id = eventToEdit?.id ?: UUID.randomUUID().toString(),
-                                title = title, startDate = startDate, endDate = endDate, startTime = startTime, endTime = endTime,
+                                title = title,
+                                startDate = finalStart.toLocalDate(),
+                                endDate = finalEnd.toLocalDate(),
+                                startTime = finalStart.toLocalTime().format(timeFormatter),
+                                endTime = finalEnd.toLocalTime().format(timeFormatter),
                                 location = location, description = desc, color = eventToEdit?.color ?: nextColor,
                                 isImportant = eventToEdit?.isImportant ?: false, sourceImagePath = eventToEdit?.sourceImagePath,
                                 reminders = reminders.toList(), eventType = eventType, tag = eventTag
@@ -229,82 +337,65 @@ fun AddEventDialog(
     }
 
     if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }) {
-        startDate = it
-        // 第一优先级：合法性检查（DateTime比较）
-        val startDateTime = LocalDateTime.of(it, java.time.LocalTime.parse(startTime))
-        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(endTime))
-        if (startDateTime >= endDateTime) {
-            // 发生倒置，强制修正
-            onShowMessage("结束时间已自动调整为开始时间+1小时")
-            endDate = it
-            val startParts = startTime.split(":")
-            val startHour = startParts[0].toIntOrNull() ?: 0
-            val endHour = (startHour + 1) % 24
-            val startMinute = startParts.getOrElse(1) { "00" }
-            endTime = String.format("%02d:%s", endHour, startMinute)
-        } else if (!isEndTimeManuallySet) {
-            // 第二优先级：体验优化，同步日期
-            endDate = it
+        val newStart = parseDateTimeValue(it, startTime, timeFormatter)
+        val currentEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
+        if (newStart != null) {
+            val safeCurrentEnd = currentEnd ?: newStart.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES)
+            val (resolvedEnd, message) = resolveEndAfterStartChange(
+                newStart = newStart,
+                currentEnd = safeCurrentEnd,
+                isEndTimeManuallySet = isEndTimeManuallySet,
+                followDurationMinutes = autoDurationMinutes
+            )
+            applyDateTimeRange(newStart, resolvedEnd)
+            if (message != null) {
+                onShowMessage(message)
+            }
         }
         showStartDatePicker = false
     }
     if (showEndDatePicker) WheelDatePickerDialog(endDate, { showEndDatePicker = false }) {
-        // 第一优先级：合法性检查（DateTime比较）
-        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(startTime))
-        val endDateTime = LocalDateTime.of(it, java.time.LocalTime.parse(endTime))
-        if (startDateTime >= endDateTime) {
-            // 发生倒置，强制修正
-            onShowMessage("结束时间已自动调整为开始时间+1小时")
-            endDate = startDate
-            val startParts = startTime.split(":")
-            val startHour = startParts[0].toIntOrNull() ?: 0
-            val endHour = (startHour + 1) % 24
-            val startMinute = startParts.getOrElse(1) { "00" }
-            endTime = String.format("%02d:%s", endHour, startMinute)
-        } else {
-            endDate = it
+        val currentStart = parseDateTimeValue(startDate, startTime, timeFormatter)
+        val candidateEnd = parseDateTimeValue(it, endTime, timeFormatter)
+        if (currentStart != null && candidateEnd != null) {
+            val (resolvedEnd, message) = resolveManualEndChange(currentStart, candidateEnd)
+            endDate = resolvedEnd.toLocalDate()
+            endTime = resolvedEnd.toLocalTime().format(timeFormatter)
+            if (message != null) {
+                onShowMessage(message)
+            }
         }
         isEndTimeManuallySet = true
         showEndDatePicker = false
     }
     if (showStartTimePicker) WheelTimePickerDialog(startTime, { showStartTimePicker = false }) {
-        startTime = it
-        // 第一优先级：合法性检查（DateTime比较）
-        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(it))
-        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(endTime))
-        if (startDateTime >= endDateTime) {
-            // 发生倒置，强制修正
-            endDate = startDate
-            val startParts = it.split(":")
-            val startHour = startParts[0].toIntOrNull() ?: 0
-            val endHour = (startHour + 1) % 24
-            val startMinute = startParts.getOrElse(1) { "00" }
-            endTime = String.format("%02d:%s", endHour, startMinute)
-        } else if (!isEndTimeManuallySet) {
-            // 第二优先级：体验优化，同步时间
-            val startParts = it.split(":")
-            val startHour = startParts[0].toIntOrNull() ?: 0
-            val endHour = (startHour + 1) % 24
-            val startMinute = startParts.getOrElse(1) { "00" }
-            endTime = String.format("%02d:%s", endHour, startMinute)
+        val newStart = parseDateTimeValue(startDate, it, timeFormatter)
+        val currentEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
+        if (newStart != null) {
+            val safeCurrentEnd = currentEnd ?: newStart.plusMinutes(DEFAULT_EVENT_DURATION_MINUTES)
+            val (resolvedEnd, message) = resolveEndAfterStartChange(
+                newStart = newStart,
+                currentEnd = safeCurrentEnd,
+                isEndTimeManuallySet = isEndTimeManuallySet,
+                followDurationMinutes = autoDurationMinutes
+            )
+            applyDateTimeRange(newStart, resolvedEnd)
+            if (message != null) {
+                onShowMessage(message)
+            }
         }
         showStartTimePicker = false
     }
     if (showEndTimePicker) WheelTimePickerDialog(endTime, { showEndTimePicker = false }) {
-        // 第一优先级：合法性检查（DateTime比较）
-        val startDateTime = LocalDateTime.of(startDate, java.time.LocalTime.parse(startTime))
-        val endDateTime = LocalDateTime.of(endDate, java.time.LocalTime.parse(it))
-        if (startDateTime >= endDateTime) {
-            // 发生倒置，强制修正
-            onShowMessage("结束时间已自动调整为开始时间+1小时")
-            endDate = startDate
-            val startParts = startTime.split(":")
-            val startHour = startParts[0].toIntOrNull() ?: 0
-            val endHour = (startHour + 1) % 24
-            val startMinute = startParts.getOrElse(1) { "00" }
-            endTime = String.format("%02d:%s", endHour, startMinute)
-        } else {
-            endTime = it
+        val currentStart = parseDateTimeValue(startDate, startTime, timeFormatter)
+        val candidateEnd = parseDateTimeValue(endDate, it, timeFormatter)
+        if (currentStart != null && candidateEnd != null) {
+            val (resolvedEnd, message) = resolveManualEndChange(currentStart, candidateEnd)
+            endDate = resolvedEnd.toLocalDate()
+            endTime = resolvedEnd.toLocalTime().format(timeFormatter)
+            if (message != null) {
+                onShowMessage(message)
+            }
         }
         isEndTimeManuallySet = true
         showEndTimePicker = false
