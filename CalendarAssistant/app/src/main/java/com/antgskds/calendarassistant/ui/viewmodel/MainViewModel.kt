@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.CourseManager
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.Course
@@ -74,7 +75,8 @@ class MainViewModel(
         // values[5] 是 _timeTrigger，不需要使用
 
         val todayNormal = events.filter { event ->
-            date >= event.startDate && date <= event.endDate
+            !event.isRecurringParent &&
+            DateCalculator.overlapsDate(event, date)
         }.distinctBy { it.id }
         val todayCourses = CourseManager.getDailyCourses(date, courses, settings)
         val todayMerged = (todayNormal + todayCourses).sortedWith(compareBy(
@@ -100,11 +102,15 @@ class MainViewModel(
 
         val tomorrowMerged = if (settings.showTomorrowEvents) {
             val tomorrow = date.plusDays(1)
+            val todayEventIds = todayMerged.map { it.id }.toSet()
             val tomorrowNormal = events.filter { event ->
-                tomorrow >= event.startDate && tomorrow <= event.endDate
+                !event.isRecurringParent &&
+                DateCalculator.overlapsDate(event, tomorrow)
             }.distinctBy { it.id }
             val tomorrowCourses = CourseManager.getDailyCourses(tomorrow, courses, settings)
-            (tomorrowNormal + tomorrowCourses).sortedWith(compareBy(
+            (tomorrowNormal + tomorrowCourses)
+                .filter { it.id !in todayEventIds }
+                .sortedWith(compareBy(
                 // 8级优先级：过期状态 > 重要性 > 单多日
                 { event ->
                     val isExpired = DateCalculator.isEventExpired(event)
@@ -146,6 +152,34 @@ class MainViewModel(
     // --- 普通事件操作 ---
     fun addEvent(event: MyEvent) = viewModelScope.launch { repository.addEvent(event) }
     fun updateEvent(event: MyEvent) = viewModelScope.launch { repository.updateEvent(event) }
+
+    fun detachRecurringInstance(
+        parentEventId: String,
+        sourceInstanceId: String,
+        sourceInstanceKey: String,
+        detachedEvent: MyEvent
+    ) = viewModelScope.launch {
+        repository.detachRecurringInstance(parentEventId, sourceInstanceId, sourceInstanceKey, detachedEvent)
+    }
+
+    fun findRecurringParent(event: MyEvent): MyEvent? {
+        if (event.isRecurringParent) return event
+        val parentId = event.parentRecurringId ?: return null
+        return repository.events.value.find { it.id == parentId && it.isRecurringParent }
+    }
+
+    fun findNextRecurringInstance(parentEvent: MyEvent): MyEvent? {
+        val now = System.currentTimeMillis()
+        return repository.events.value
+            .filter { it.isRecurring && !it.isRecurringParent && it.parentRecurringId == parentEvent.id }
+            .mapNotNull { child ->
+                val startMillis = RecurringEventUtils.eventStartMillis(child) ?: return@mapNotNull null
+                child to startMillis
+            }
+            .filter { (_, startMillis) -> startMillis >= now }
+            .minByOrNull { (_, startMillis) -> startMillis }
+            ?.first
+    }
 
     fun deleteEvent(event: MyEvent) {
         viewModelScope.launch {

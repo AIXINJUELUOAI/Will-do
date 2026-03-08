@@ -34,4 +34,19 @@ object DateCalculator {
             false
         }
     }
+
+    fun overlapsDate(event: MyEvent, date: LocalDate): Boolean {
+        return try {
+            val startTime = LocalTime.parse(event.startTime)
+            val endTime = LocalTime.parse(event.endTime)
+            val eventStart = LocalDateTime.of(event.startDate, startTime)
+            val eventEnd = LocalDateTime.of(event.endDate, endTime)
+            val dayStart = date.atStartOfDay()
+            val dayEnd = date.plusDays(1).atStartOfDay()
+
+            eventEnd > dayStart && eventStart < dayEnd
+        } catch (e: Exception) {
+            date >= event.startDate && date <= event.endDate
+        }
+    }
 }

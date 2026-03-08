@@ -530,7 +530,7 @@ fun HomePage(
                             if (events.isEmpty()) {
                                 item { Text("下滑以打开课表", modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
                             } else {
-                                items(events, key = { it.id }) { event ->
+                                items(events, key = { "today_${it.id}" }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,
@@ -548,7 +548,7 @@ fun HomePage(
 
                             if (uiState.selectedDate == LocalDate.now() && uiState.tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
-                                items(uiState.tomorrowEvents, key = { it.id }) { event ->
+                                items(uiState.tomorrowEvents, key = { "tomorrow_${it.id}" }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,

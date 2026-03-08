@@ -87,6 +87,7 @@ class SettingsDataSource(context: Context) {
 
             // 新字段，旧数据中不存在，使用默认值
             isPickupAggregationEnabled = false,
+            isRecurringCalendarSyncEnabled = false,
 
             semesterStartDate = prefs.getString("semester_start_date", "") ?: "",
             totalWeeks = prefs.getInt("semester_total_weeks", 20),

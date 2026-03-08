@@ -84,11 +84,13 @@ fun PreferenceSettingsPage(
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            scope.launch {
-                viewModel.toggleCalendarSync(true)
-                viewModel.manualSync()
+            viewModel.enableCalendarSyncAndSyncNow { result ->
                 (context.applicationContext as? App)?.initCalendarObserver()
-                snackbarHostState.showSnackbar("日历同步已开启")
+                if (result.isSuccess) {
+                    snackbarHostState.showSnackbar("日历同步已开启，并已立即同步")
+                } else {
+                    snackbarHostState.showSnackbar("日历同步开启失败：${result.exceptionOrNull()?.message ?: "未知错误"}")
+                }
             }
         } else {
             scope.launch {
@@ -183,8 +185,8 @@ fun PreferenceSettingsPage(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SwitchSettingItem(
-                        title = "实况胶囊通知 (Beta)",
-                        subtitle = "日程开始前显示灵动岛/胶囊",
+                        title = "实况胶囊通知",
+                        subtitle = "日程开始时显示实况通知",
                         checked = settings.isLiveCapsuleEnabled,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(liveCapsule = isChecked)
@@ -268,11 +270,13 @@ fun PreferenceSettingsPage(
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
                                 if (CalendarPermissionHelper.hasAllPermissions(context)) {
-                                    scope.launch {
-                                        viewModel.toggleCalendarSync(true)
-                                        viewModel.manualSync()
+                                    viewModel.enableCalendarSyncAndSyncNow { result ->
                                         (context.applicationContext as? App)?.initCalendarObserver()
-                                        showToast("日历同步已开启")
+                                        if (result.isSuccess) {
+                                            showToast("日历同步已开启，并已立即同步")
+                                        } else {
+                                            showToast("日历同步开启失败", ToastType.ERROR)
+                                        }
                                     }
                                 } else {
                                     showPermissionDialog = true
@@ -285,6 +289,42 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
+                    AnimatedVisibility(
+                        visible = syncStatus.isEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            SwitchSettingItem(
+                                title = "同步重复日程 (Beta)",
+                                subtitle = "从系统日历导入重复日程，仅同步正负30天实例",
+                                checked = settings.isRecurringCalendarSyncEnabled,
+                                onCheckedChange = { isChecked ->
+                                    viewModel.toggleRecurringCalendarSync(isChecked) { result ->
+                                        if (result.isSuccess) {
+                                            if (isChecked) {
+                                                showToast("重复日程同步已开启，并已立即同步")
+                                            } else {
+                                                val removedCount = result.getOrNull() ?: 0
+                                                showToast("重复日程同步已关闭，已清理 $removedCount 条导入记录")
+                                            }
+                                        } else {
+                                            showToast("重复日程同步切换失败", ToastType.ERROR)
+                                        }
+                                    }
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle
+                            )
+                        }
+                    }
+
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
                         thickness = 0.5.dp,

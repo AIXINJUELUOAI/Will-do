@@ -168,6 +168,10 @@ class CapsuleStateManager(
         // 4. 过滤活跃事件
         val activeEvents = allEvents.filter { event ->
             try {
+                if (event.isRecurringParent || (event.isRecurring && !settings.isRecurringCalendarSyncEnabled)) {
+                    return@filter false
+                }
+
                 // ⚠️ 注意：如果你在测试时创建的时间已经过去了（哪怕只过去1秒），
                 // 这里的 now.isBefore(endDateTime) 就会返回 false，胶囊就会消失。
                 // 建议测试时，将结束时间设置在未来 5-10 分钟。

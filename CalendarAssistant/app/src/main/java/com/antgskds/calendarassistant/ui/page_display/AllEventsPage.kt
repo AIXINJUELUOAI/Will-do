@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.MyEvent
 import java.time.LocalDate
@@ -36,6 +37,8 @@ fun AllEventsPage(
     val filteredEvents by remember(uiState.allEvents, searchQuery) {
         derivedStateOf {
             uiState.allEvents
+                .filter { event -> !event.isRecurring || event.isRecurringParent }
+                .distinctBy { it.id }
                 .filter { event ->
                 // 搜索匹配
                 val searchMatch = if (searchQuery.isBlank()) true else {
@@ -129,7 +132,11 @@ fun AllEventsPage(
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     // 头部日期信息
                     Text(
-                        text = "${event.startDate} ~ ${event.endDate}",
+                        text = if (event.isRecurringParent) {
+                            "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}"
+                        } else {
+                            "${event.startDate} ~ ${event.endDate}"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)

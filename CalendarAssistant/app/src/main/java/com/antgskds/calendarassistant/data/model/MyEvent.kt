@@ -45,5 +45,13 @@ data class MyEvent(
     val originalEndTime: String? = null,
     val isCheckedIn: Boolean = false,
     val archivedAt: Long? = null,
-    val lastModified: Long = System.currentTimeMillis()  // 最后修改时间戳
+    val lastModified: Long = System.currentTimeMillis(),  // 最后修改时间戳
+    val isRecurring: Boolean = false,
+    val isRecurringParent: Boolean = false,
+    val recurringSeriesKey: String? = null,
+    val recurringInstanceKey: String? = null,
+    val parentRecurringId: String? = null,
+    val excludedRecurringInstances: List<String> = emptyList(),
+    val nextOccurrenceStartMillis: Long? = null,
+    val skipCalendarSync: Boolean = false
 )

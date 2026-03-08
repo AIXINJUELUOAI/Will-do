@@ -1,6 +1,5 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -11,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
@@ -23,6 +23,14 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
 
+private data class RecurringEditSession(
+    val parentEventId: String,
+    val sourceInstanceId: String,
+    val sourceInstanceKey: String,
+    val nextOccurrenceText: String?,
+    val editHint: String
+)
+
 @Composable
 fun HomeScreen(
     mainViewModel: MainViewModel,
@@ -32,6 +40,7 @@ fun HomeScreen(
 ) {
     // 从 settings 读取主题状态
     val settings by settingsViewModel.settings.collectAsState()
+    val uiState by mainViewModel.uiState.collectAsState()
 
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
@@ -65,6 +74,7 @@ fun HomeScreen(
     var recommendedTitleForDialog by remember { mutableStateOf<String?>(null) }
     var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
+    var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -114,18 +124,73 @@ fun HomeScreen(
                     pickupTimestamp = pickupTimestamp,
                     onSettingsClick = { isSidebarOpen = !isSidebarOpen },
                     onCourseClick = { _, _ -> },
-                    onAddEventClick = { showAddEventDialog = true },
+                    onAddEventClick = {
+                        recurringEditSession = null
+                        eventToEdit = null
+                        showAddEventDialog = true
+                    },
                     onEditEvent = { event ->
                         if (event.eventType == "course") {
                             editingVirtualCourse = event
                             eventToEdit = null
+                            recurringEditSession = null
+                        } else if (event.isRecurringParent) {
+                            val nextInstance = mainViewModel.findNextRecurringInstance(event)
+                            val previewEvent = if (nextInstance != null) {
+                                nextInstance
+                            } else if (!event.recurringInstanceKey.isNullOrBlank()) {
+                                event.copy(
+                                    id = "preview_${event.recurringInstanceKey}",
+                                    isRecurringParent = false,
+                                    parentRecurringId = event.id
+                                )
+                            } else {
+                                null
+                            }
+                            val instanceKey = previewEvent?.recurringInstanceKey
+                            if (previewEvent == null || instanceKey.isNullOrBlank()) {
+                                eventToEdit = null
+                                recurringEditSession = null
+                                showToast("未找到可编辑的下次实例")
+                            } else {
+                                eventToEdit = previewEvent
+                                editingVirtualCourse = null
+                                recurringEditSession = RecurringEditSession(
+                                    parentEventId = event.id,
+                                    sourceInstanceId = nextInstance?.id ?: "",
+                                    sourceInstanceKey = instanceKey,
+                                    nextOccurrenceText = RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis),
+                                    editHint = "本次修改将应用到下次实例，并脱离重复系列"
+                                )
+                            }
+                        } else if (event.isRecurring) {
+                            val parentEvent = mainViewModel.findRecurringParent(event)
+                            val instanceKey = event.recurringInstanceKey
+                            if (parentEvent == null || instanceKey.isNullOrBlank()) {
+                                eventToEdit = null
+                                recurringEditSession = null
+                                showToast("未找到对应的重复系列信息")
+                            } else {
+                                eventToEdit = event
+                                editingVirtualCourse = null
+                                recurringEditSession = RecurringEditSession(
+                                    parentEventId = parentEvent.id,
+                                    sourceInstanceId = event.id,
+                                    sourceInstanceKey = instanceKey,
+                                    nextOccurrenceText = RecurringEventUtils.formatMillis(parentEvent.nextOccurrenceStartMillis),
+                                    editHint = "本次修改将应用到当前实例，并脱离重复系列"
+                                )
+                            }
                         } else {
                             eventToEdit = event
                             editingVirtualCourse = null
+                            recurringEditSession = null
                         }
                     },
                     onScheduleExpandedChange = { isScheduleExpanded = it },
                     onRecommendedClick = { title ->
+                        recurringEditSession = null
+                        eventToEdit = null
                         recommendedTitleForDialog = title
                         showAddEventDialog = true
                     }
@@ -149,23 +214,39 @@ fun HomeScreen(
 
     // 1. 普通日程编辑/添加
     if (showAddEventDialog || eventToEdit != null) {
-        val uiState by mainViewModel.uiState.collectAsState()
         AddEventDialog(
             eventToEdit = eventToEdit,
             recommendedTitle = recommendedTitleForDialog,
             currentEventsCount = uiState.allEvents.size,
             settings = settings,
+            recurringNextOccurrenceText = recurringEditSession?.nextOccurrenceText,
+            recurringEditHint = recurringEditSession?.editHint,
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
                 showAddEventDialog = false
                 recommendedTitleForDialog = null
                 eventToEdit = null
+                recurringEditSession = null
             },
             onConfirm = { newEvent ->
-                if (eventToEdit == null) mainViewModel.addEvent(newEvent) else mainViewModel.updateEvent(newEvent)
+                val recurringSession = recurringEditSession
+                val editingEvent = eventToEdit
+                if (recurringSession != null && editingEvent != null) {
+                    mainViewModel.detachRecurringInstance(
+                        parentEventId = recurringSession.parentEventId,
+                        sourceInstanceId = recurringSession.sourceInstanceId,
+                        sourceInstanceKey = recurringSession.sourceInstanceKey,
+                        detachedEvent = newEvent
+                    )
+                } else if (editingEvent == null) {
+                    mainViewModel.addEvent(newEvent)
+                } else {
+                    mainViewModel.updateEvent(newEvent)
+                }
                 showAddEventDialog = false
                 recommendedTitleForDialog = null
                 eventToEdit = null
+                recurringEditSession = null
             }
         )
     }

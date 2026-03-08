@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.CalendarContract
 import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
+import android.provider.CalendarContract.Instances
 import android.util.Log
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -365,8 +366,9 @@ class CalendarManager(private val context: Context) {
     ): List<SystemEventInfo> = withContext(Dispatchers.IO) {
         val selection = """
             ${Events.CALENDAR_ID} = ?
-            AND ${Events.DTSTART} >= ?
-            AND ${Events.DTEND} <= ?
+            AND ${Events.DTEND} > ?
+            AND ${Events.DTSTART} < ?
+            AND (${Events.RRULE} IS NULL OR ${Events.RRULE} = '')
             AND ${Events.DELETED} = 0
         """.trimIndent().replace("\n", " ")
 
@@ -378,6 +380,151 @@ class CalendarManager(private val context: Context) {
 
         // 复用查询逻辑
         executeEventQuery(selection, selectionArgs, "${Events.DTSTART} ASC")
+    }
+
+    /**
+     * 查询指定时间窗口内的重复事件实例
+     * 使用 CalendarContract.Instances 展开重复规则，返回真实 occurrence
+     */
+    suspend fun queryRecurringInstancesInRange(
+        calendarId: Long,
+        startMillis: Long,
+        endMillis: Long,
+        eventId: Long? = null
+    ): List<SystemEventInfo> = withContext(Dispatchers.IO) {
+        val events = mutableListOf<SystemEventInfo>()
+        val builder = Instances.CONTENT_URI.buildUpon()
+        ContentUris.appendId(builder, startMillis)
+        ContentUris.appendId(builder, endMillis)
+        val uri = builder.build()
+
+        val projection = arrayOf(
+            Instances.EVENT_ID,
+            Instances.BEGIN,
+            Instances.END,
+            Events.TITLE,
+            Events.EVENT_LOCATION,
+            Events.DESCRIPTION,
+            Events.EVENT_COLOR,
+            Events.ALL_DAY,
+            Events.RRULE
+        )
+
+        val selection = if (eventId != null) {
+            "${Events.CALENDAR_ID} = ? AND ${Instances.EVENT_ID} = ?"
+        } else {
+            "${Events.CALENDAR_ID} = ?"
+        }
+        val selectionArgs = if (eventId != null) {
+            arrayOf(calendarId.toString(), eventId.toString())
+        } else {
+            arrayOf(calendarId.toString())
+        }
+
+        try {
+            contentResolver.query(
+                uri,
+                projection,
+                selection,
+                selectionArgs,
+                "${Instances.BEGIN} ASC"
+            )?.use { cursor ->
+                val eventIdIndex = cursor.getColumnIndexOrThrow(Instances.EVENT_ID)
+                val beginIndex = cursor.getColumnIndexOrThrow(Instances.BEGIN)
+                val endIndex = cursor.getColumnIndexOrThrow(Instances.END)
+                val titleIndex = cursor.getColumnIndex(Events.TITLE)
+                val locationIndex = cursor.getColumnIndex(Events.EVENT_LOCATION)
+                val descIndex = cursor.getColumnIndex(Events.DESCRIPTION)
+                val colorIndex = cursor.getColumnIndex(Events.EVENT_COLOR)
+                val allDayIndex = cursor.getColumnIndex(Events.ALL_DAY)
+                val rruleIndex = cursor.getColumnIndex(Events.RRULE)
+
+                while (cursor.moveToNext()) {
+                    val eventId = cursor.getLong(eventIdIndex)
+                    val start = cursor.getLong(beginIndex)
+                    val end = cursor.getLong(endIndex)
+                    val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
+                    val rrule = if (rruleIndex >= 0) cursor.getString(rruleIndex) else null
+
+                    if (rrule.isNullOrBlank()) continue
+
+                    val isManaged = description.contains(MANAGED_EVENT_MARKER)
+                    val seriesKey = RecurringEventUtils.buildSeriesKey(calendarId, eventId)
+                    val instanceKey = RecurringEventUtils.buildInstanceKey(seriesKey, start)
+
+                    events.add(
+                        SystemEventInfo(
+                            eventId = eventId,
+                            title = if (titleIndex >= 0) cursor.getString(titleIndex) ?: "" else "",
+                            location = if (locationIndex >= 0) cursor.getString(locationIndex) ?: "" else "",
+                            description = description.removeSuffix(MANAGED_EVENT_MARKER).trim(),
+                            startMillis = start,
+                            endMillis = end,
+                            color = if (colorIndex >= 0) cursor.getInt(colorIndex) else null,
+                            allDay = allDayIndex >= 0 && cursor.getInt(allDayIndex) == 1,
+                            isManaged = isManaged,
+                            lastModified = null,
+                            recurringRule = rrule,
+                            isRecurring = true,
+                            seriesKey = seriesKey,
+                            instanceKey = instanceKey
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "查询重复实例失败", e)
+        }
+
+        events
+    }
+
+    suspend fun queryRecurringSeries(calendarId: Long): List<SystemEventInfo> = withContext(Dispatchers.IO) {
+        val selection = """
+            ${Events.CALENDAR_ID} = ?
+            AND ${Events.DELETED} = 0
+            AND ${Events.RRULE} IS NOT NULL
+            AND ${Events.RRULE} != ''
+        """.trimIndent().replace("\n", " ")
+
+        executeEventQuery(selection, arrayOf(calendarId.toString()), "${Events.DTSTART} ASC")
+            .filter { it.isRecurring }
+    }
+
+    suspend fun queryNextRecurringInstance(
+        calendarId: Long,
+        eventId: Long,
+        seriesKey: String,
+        fromMillis: Long,
+        recurringRule: String?,
+        excludedInstanceKeys: Set<String>
+    ): SystemEventInfo? {
+        val primaryHorizonDays = getRecurringLookAheadDays(recurringRule)
+        val fallbackHorizonDays = max(primaryHorizonDays, 3660L)
+
+        val horizonEnds = listOf(primaryHorizonDays, fallbackHorizonDays)
+            .distinct()
+            .map { days -> fromMillis + days * 24L * 60L * 60L * 1000L }
+
+        horizonEnds.forEach { endMillis ->
+            val candidate = queryRecurringInstancesInRange(
+                calendarId = calendarId,
+                startMillis = fromMillis,
+                endMillis = endMillis,
+                eventId = eventId
+            )
+                .asSequence()
+                .filter { it.seriesKey == seriesKey }
+                .filter { it.startMillis >= fromMillis }
+                .filter { it.instanceKey !in excludedInstanceKeys }
+                .minByOrNull { it.startMillis }
+
+            if (candidate != null) {
+                return candidate
+            }
+        }
+
+        return null
     }
 
     /**
@@ -412,13 +559,15 @@ class CalendarManager(private val context: Context) {
 
         val projection = arrayOf(
             Events._ID,
+            Events.CALENDAR_ID,
             Events.TITLE,
             Events.EVENT_LOCATION,
             Events.DESCRIPTION,
             Events.DTSTART,
             Events.DTEND,
             Events.EVENT_COLOR,
-            Events.ALL_DAY
+            Events.ALL_DAY,
+            Events.RRULE
         )
 
         try {
@@ -430,6 +579,7 @@ class CalendarManager(private val context: Context) {
                 sortOrder
             )?.use { cursor ->
                 val idIndex = cursor.getColumnIndexOrThrow(Events._ID)
+                val calendarIdIndex = cursor.getColumnIndexOrThrow(Events.CALENDAR_ID)
                 val titleIndex = cursor.getColumnIndexOrThrow(Events.TITLE)
                 val locationIndex = cursor.getColumnIndex(Events.EVENT_LOCATION)
                 val descIndex = cursor.getColumnIndex(Events.DESCRIPTION)
@@ -437,10 +587,12 @@ class CalendarManager(private val context: Context) {
                 val endIndex = cursor.getColumnIndexOrThrow(Events.DTEND)
                 val colorIndex = cursor.getColumnIndex(Events.EVENT_COLOR)
                 val allDayIndex = cursor.getColumnIndex(Events.ALL_DAY)
+                val rruleIndex = cursor.getColumnIndex(Events.RRULE)
 
                 while (cursor.moveToNext()) {
                     val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
+                    val rrule = if (rruleIndex >= 0) cursor.getString(rruleIndex) else null
 
                     events.add(
                         SystemEventInfo(
@@ -453,7 +605,18 @@ class CalendarManager(private val context: Context) {
                             color = if (colorIndex >= 0) cursor.getInt(colorIndex) else null,
                             allDay = allDayIndex >= 0 && cursor.getInt(allDayIndex) == 1,
                             isManaged = isManaged,
-                            lastModified = null
+                            lastModified = null,
+                            recurringRule = rrule,
+                            isRecurring = !rrule.isNullOrBlank(),
+                            seriesKey = if (!rrule.isNullOrBlank()) {
+                                RecurringEventUtils.buildSeriesKey(
+                                    calendarId = cursor.getLong(calendarIdIndex),
+                                    eventId = cursor.getLong(idIndex)
+                                )
+                            } else {
+                                null
+                            },
+                            instanceKey = null
                         )
                     )
                 }
@@ -576,6 +739,27 @@ class CalendarManager(private val context: Context) {
         }
     }
 
+    private fun getRecurringLookAheadDays(recurringRule: String?): Long {
+        if (recurringRule.isNullOrBlank()) return 120L
+
+        val ruleMap = recurringRule
+            .split(';')
+            .mapNotNull { token ->
+                val parts = token.split('=', limit = 2)
+                if (parts.size == 2) parts[0].uppercase() to parts[1] else null
+            }
+            .toMap()
+
+        val interval = ruleMap["INTERVAL"]?.toLongOrNull()?.coerceAtLeast(1L) ?: 1L
+        return when (ruleMap["FREQ"]?.uppercase()) {
+            "DAILY" -> max(60L, interval * 3L + 7L)
+            "WEEKLY" -> max(120L, interval * 21L)
+            "MONTHLY" -> max(730L, interval * 93L)
+            "YEARLY" -> max(3660L, interval * 730L)
+            else -> 365L
+        }
+    }
+
     // ==================== 数据类 ====================
 
     /**
@@ -608,6 +792,10 @@ class CalendarManager(private val context: Context) {
         val color: Int?,
         val allDay: Boolean,
         val isManaged: Boolean,
-        val lastModified: Long? = null  // 最后修改时间戳
+        val lastModified: Long? = null,
+        val recurringRule: String? = null,
+        val isRecurring: Boolean = false,
+        val seriesKey: String? = null,
+        val instanceKey: String? = null
     )
 }

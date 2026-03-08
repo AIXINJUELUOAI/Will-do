@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -28,7 +29,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.launch
@@ -57,12 +57,29 @@ fun SwipeableEventItem(
         else -> 56.dp // 大
     }
 
-    // 根据 uiSize 计算菜单宽度 (3个按钮 + 间距 + 右侧内边距)
-    // 归档页模式只有2个按钮，宽度稍小
+    val actionButtonCount = when {
+        isArchivePage -> 2
+        event.isRecurring -> 1
+        else -> 3
+    }
+
+    // 根据 uiSize 计算菜单宽度
     val actionMenuWidth = when (uiSize) {
-        1 -> if (isArchivePage) 130.dp else 170.dp  // 小
-        2 -> if (isArchivePage) 140.dp else 185.dp  // 中
-        else -> if (isArchivePage) 150.dp else 200.dp // 大
+        1 -> when (actionButtonCount) {
+            1 -> 78.dp
+            2 -> 130.dp
+            else -> 170.dp
+        }
+        2 -> when (actionButtonCount) {
+            1 -> 86.dp
+            2 -> 140.dp
+            else -> 185.dp
+        }
+        else -> when (actionButtonCount) {
+            1 -> 94.dp
+            2 -> 150.dp
+            else -> 200.dp
+        }
     }
     val density = LocalDensity.current
     val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
@@ -105,6 +122,11 @@ fun SwipeableEventItem(
                 SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
                     onCollapse()
                     onDelete(event)
+                }
+            } else if (event.isRecurring) {
+                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) {
+                    onCollapse()
+                    onEdit(event)
                 }
             } else {
                 // 正常模式：显示编辑、星标、归档/删除按钮
@@ -168,7 +190,13 @@ fun SwipeableEventItem(
             shadowElevation = 0.dp
         ) {
             Column(
-                modifier = Modifier.alpha(if (isExpired) 0.6f else 1f)
+                modifier = Modifier.alpha(
+                    when {
+                        isExpired -> 0.6f
+                        event.isRecurring -> 0.86f
+                        else -> 1f
+                    }
+                )
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 20.dp),
@@ -190,21 +218,30 @@ fun SwipeableEventItem(
                         // 统一渲染：标题 + 时间 + 描述 + 地点
                         // 1. 顶部：标题 (Title)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = event.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        textDecoration = if (isExpired) TextDecoration.LineThrough else null
-                                    )
-                                    if (event.isImportant) {
-                                        Icon(
-                                            Icons.Default.Star,
-                                            null,
-                                            Modifier.size(16.dp).padding(start = 4.dp),
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    }
-                                }
+                            Text(
+                                text = event.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textDecoration = if (isExpired) TextDecoration.LineThrough else null,
+                                modifier = Modifier.alpha(if (event.isRecurring) 0.88f else 1f)
+                            )
+                            if (event.isRecurring) {
+                                Icon(
+                                    Icons.Outlined.Autorenew,
+                                    contentDescription = "重复日程",
+                                    modifier = Modifier.size(16.dp).padding(start = 6.dp),
+                                    tint = Color.Gray
+                                )
+                            }
+                            if (event.isImportant) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    null,
+                                    Modifier.size(16.dp).padding(start = 4.dp),
+                                    tint = Color(0xFFFFC107)
+                                )
+                            }
+                        }
 
                                 // 2. 日期范围（仅多日事件显示）
                                 if (event.startDate != event.endDate) {
@@ -220,7 +257,11 @@ fun SwipeableEventItem(
                                     Text(
                                         text = "${event.startTime} - ${event.endTime}",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isExpired) Color.Gray else MaterialTheme.colorScheme.primary
+                                        color = when {
+                                            isExpired -> Color.Gray
+                                            event.isRecurring -> Color.Gray
+                                            else -> MaterialTheme.colorScheme.primary
+                                        }
                                     )
                                     if (isExpired) {
                                         Spacer(modifier = Modifier.width(8.dp))
