@@ -52,6 +52,12 @@ object NotificationScheduler {
     const val OFFSET_PICKUP_INITIAL_NOTIF = 1000000 // 取件码初始通知的偏移量，避免与胶囊通知冲突（public供AppRepository使用）
 
     fun scheduleReminders(context: Context, event: MyEvent) {
+        val settings = AppRepository.getInstance(context).settings.value
+        if (event.isRecurringParent || (event.isRecurring && !settings.isRecurringCalendarSyncEnabled)) {
+            Log.d("NotificationScheduler", "跳过重复日程提醒: ${event.id}")
+            return
+        }
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
@@ -67,7 +73,6 @@ object NotificationScheduler {
         val endMillis = endDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
         // 获取全局设置
-        val settings = AppRepository.getInstance(context).settings.value
         val isAdvanceEnabled = settings.isAdvanceReminderEnabled
         val advanceMinutes = settings.advanceReminderMinutes
         val isLiveCapsuleEnabled = settings.isLiveCapsuleEnabled

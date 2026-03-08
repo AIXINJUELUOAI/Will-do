@@ -128,6 +128,8 @@ fun AddEventDialog(
     recommendedTitle: String? = null,
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),
+    recurringNextOccurrenceText: String? = null,
+    recurringEditHint: String? = null,
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (MyEvent) -> Unit
@@ -295,6 +297,32 @@ fun AddEventDialog(
                 if (sourceBitmap != null) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     Image(bitmap = sourceBitmap!!.asImageBitmap(), contentDescription = "Source", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.FillWidth)
+                }
+
+                if (recurringNextOccurrenceText != null || recurringEditHint != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("此日程为重复日程", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            if (recurringNextOccurrenceText != null) {
+                                Text(
+                                    "下一次提醒时间：$recurringNextOccurrenceText",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (recurringEditHint != null) {
+                                Text(
+                                    recurringEditHint,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
                 }
 

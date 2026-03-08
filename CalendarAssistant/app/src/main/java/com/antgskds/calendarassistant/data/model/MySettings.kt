@@ -55,5 +55,8 @@ data class MySettings(
     val enableSmartRecommendation: Boolean = true,
 
     // 悬浮窗功能开关
-    val isFloatingWindowEnabled: Boolean = false
+    val isFloatingWindowEnabled: Boolean = false,
+
+    // 系统日历重复日程反向同步
+    val isRecurringCalendarSyncEnabled: Boolean = false
 )

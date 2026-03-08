@@ -37,6 +37,7 @@ import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import java.util.UUID
 
 class AppRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -154,11 +155,20 @@ class AppRepository private constructor(private val context: Context) {
 
     private fun refreshData() {
         scope.launch {
-            val loadedEvents = eventSource.loadEvents()
+            val rawEvents = normalizeEventsById(eventSource.loadEvents())
             val loadedCourses = courseSource.loadCourses()
             val loadedSettings = settingsSource.loadSettings()
+            val loadedEvents = if (loadedSettings.isRecurringCalendarSyncEnabled) {
+                rawEvents
+            } else {
+                rawEvents.filter { !it.isRecurring }
+            }
             // 🔥 修复：移除归档加载，改为懒加载（冷启动性能优化）
             // val loadedArchives = archiveSource.loadArchivedEvents()
+
+            if (loadedEvents.size != rawEvents.size) {
+                eventSource.saveEvents(loadedEvents)
+            }
 
             _events.value = loadedEvents
             _courses.value = loadedCourses
@@ -166,7 +176,9 @@ class AppRepository private constructor(private val context: Context) {
             // _archivedEvents 保持初始为空，直到用户查看时加载
 
             loadedEvents.forEach { event ->
-                NotificationScheduler.scheduleReminders(context, event)
+                if (shouldScheduleReminders(event)) {
+                    NotificationScheduler.scheduleReminders(context, event)
+                }
             }
 
             // 启动后尝试自动归档（建议延迟执行，不阻塞启动）
@@ -183,7 +195,11 @@ class AppRepository private constructor(private val context: Context) {
     fun fetchArchivedEvents() {
         scope.launch {
             archiveMutex.withLock {
-                val loaded = archiveSource.loadArchivedEvents()
+                val rawLoaded = archiveSource.loadArchivedEvents()
+                val loaded = sanitizeRecurringEventsIfDisabled(rawLoaded)
+                if (loaded.size != rawLoaded.size) {
+                    archiveSource.saveArchivedEvents(loaded)
+                }
                 _archivedEvents.value = loaded
             }
         }
@@ -200,7 +216,11 @@ class AppRepository private constructor(private val context: Context) {
                 // 双重检查，防止并发加载
                 if (_archivedEvents.value.isEmpty()) {
                     Log.d("AppRepository", "触发归档数据懒加载...")
-                    val loaded = archiveSource.loadArchivedEvents()
+                    val rawLoaded = archiveSource.loadArchivedEvents()
+                    val loaded = sanitizeRecurringEventsIfDisabled(rawLoaded)
+                    if (loaded.size != rawLoaded.size) {
+                        archiveSource.saveArchivedEvents(loaded)
+                    }
                     _archivedEvents.value = loaded
                 }
             }
@@ -220,7 +240,9 @@ class AppRepository private constructor(private val context: Context) {
         val currentList = _events.value.toMutableList()
         currentList.add(event)
         updateEvents(currentList)
-        NotificationScheduler.scheduleReminders(context, event)
+        if (shouldScheduleReminders(event)) {
+            NotificationScheduler.scheduleReminders(context, event)
+        }
         if (triggerSync) {
             triggerAutoSync()
         }
@@ -242,7 +264,9 @@ class AppRepository private constructor(private val context: Context) {
             currentList[index] = event
             updateEvents(currentList)
             Log.d("Undo", "updateEvent后: id=${event.id}, isCheckedIn=${event.isCheckedIn}")
-            NotificationScheduler.scheduleReminders(context, event)
+            if (shouldScheduleReminders(event)) {
+                NotificationScheduler.scheduleReminders(context, event)
+            }
             if (triggerSync) {
                 triggerAutoSync()
             }
@@ -273,11 +297,101 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     private suspend fun updateEvents(newList: List<MyEvent>) {
-        Log.d("Undo", "updateEvents: 设置events, 其中id=5122f165-f4ea-4b1a-9064-12feeecbc6b5的isCheckedIn=${newList.find { it.id == "5122f165-f4ea-4b1a-9064-12feeecbc6b5" }?.isCheckedIn}")
+        val normalizedList = newList.asReversed().distinctBy { it.id }.asReversed()
+        if (normalizedList.size != newList.size) {
+            Log.w("AppRepository", "检测到重复事件ID，已自动去重: ${newList.size} -> ${normalizedList.size}")
+        }
+
+        Log.d("Undo", "updateEvents: 设置events, 其中id=5122f165-f4ea-4b1a-9064-12feeecbc6b5的isCheckedIn=${normalizedList.find { it.id == "5122f165-f4ea-4b1a-9064-12feeecbc6b5" }?.isCheckedIn}")
         val stackTrace = Thread.currentThread().stackTrace.joinToString("\n") { "  ${it}" }
         Log.d("Undo", "updateEvents调用栈:\n$stackTrace")
-        _events.value = newList
-        eventSource.saveEvents(newList)
+        _events.value = normalizedList
+        eventSource.saveEvents(normalizedList)
+    }
+
+    private fun shouldScheduleReminders(event: MyEvent): Boolean {
+        return !event.isRecurringParent && (_settings.value.isRecurringCalendarSyncEnabled || !event.isRecurring)
+    }
+
+    private fun normalizeEventsById(events: List<MyEvent>): List<MyEvent> {
+        return events.asReversed().distinctBy { it.id }.asReversed()
+    }
+
+    private fun sanitizeRecurringEventsIfDisabled(events: List<MyEvent>): List<MyEvent> {
+        return if (settingsSource.loadSettings().isRecurringCalendarSyncEnabled) {
+            normalizeEventsById(events)
+        } else {
+            normalizeEventsById(events).filter { !it.isRecurring }
+        }
+    }
+
+    private fun mergeIncomingCalendarEvent(existingEvent: MyEvent, incomingEvent: MyEvent): MyEvent {
+        return existingEvent.copy(
+            title = incomingEvent.title,
+            description = incomingEvent.description,
+            location = incomingEvent.location,
+            startDate = incomingEvent.startDate,
+            endDate = incomingEvent.endDate,
+            startTime = incomingEvent.startTime,
+            endTime = incomingEvent.endTime,
+            eventType = incomingEvent.eventType,
+            tag = incomingEvent.tag,
+            isRecurring = incomingEvent.isRecurring,
+            isRecurringParent = incomingEvent.isRecurringParent,
+            recurringSeriesKey = incomingEvent.recurringSeriesKey,
+            recurringInstanceKey = incomingEvent.recurringInstanceKey,
+            parentRecurringId = incomingEvent.parentRecurringId,
+            excludedRecurringInstances = if (existingEvent.isRecurringParent || incomingEvent.isRecurringParent) {
+                existingEvent.excludedRecurringInstances
+            } else {
+                incomingEvent.excludedRecurringInstances
+            },
+            nextOccurrenceStartMillis = incomingEvent.nextOccurrenceStartMillis,
+            skipCalendarSync = incomingEvent.skipCalendarSync,
+            lastModified = System.currentTimeMillis()
+        )
+    }
+
+    suspend fun detachRecurringInstance(
+        parentEventId: String,
+        sourceInstanceId: String,
+        sourceInstanceKey: String,
+        detachedEvent: MyEvent
+    ) = eventMutex.withLock {
+        val currentList = _events.value.toMutableList()
+        val parentIndex = currentList.indexOfFirst { it.id == parentEventId && it.isRecurringParent }
+        if (parentIndex == -1) return@withLock
+
+        val parentEvent = currentList[parentIndex]
+        val updatedParent = parentEvent.copy(
+            excludedRecurringInstances = (parentEvent.excludedRecurringInstances + sourceInstanceKey).distinct(),
+            lastModified = System.currentTimeMillis()
+        )
+        currentList[parentIndex] = updatedParent
+
+        val sourceInstance = currentList.find { it.id == sourceInstanceId }
+        if (sourceInstance != null) {
+            NotificationScheduler.cancelReminders(context, sourceInstance)
+            currentList.remove(sourceInstance)
+        }
+
+        val detachedLocalEvent = detachedEvent.copy(
+            id = UUID.randomUUID().toString(),
+            isRecurring = false,
+            isRecurringParent = false,
+            recurringSeriesKey = null,
+            recurringInstanceKey = null,
+            parentRecurringId = null,
+            excludedRecurringInstances = emptyList(),
+            nextOccurrenceStartMillis = null,
+            skipCalendarSync = true,
+            lastModified = System.currentTimeMillis()
+        )
+
+        currentList.add(detachedLocalEvent)
+        updateEvents(currentList)
+        NotificationScheduler.scheduleReminders(context, detachedLocalEvent)
+        capsuleStateManager.forceRefresh()
     }
 
     /**
@@ -471,11 +585,86 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     // --- Settings 操作 ---
+    private fun applySettingsNow(newSettings: MySettings) {
+        _settings.value = newSettings
+        settingsSource.saveSettings(newSettings)
+    }
+
     fun updateSettings(newSettings: MySettings) {
         scope.launch {
-            _settings.value = newSettings
-            settingsSource.saveSettings(newSettings)
+            applySettingsNow(newSettings)
         }
+    }
+
+    suspend fun setRecurringCalendarSyncEnabled(enabled: Boolean): Result<Int> {
+        return try {
+            val updatedSettings = _settings.value.copy(isRecurringCalendarSyncEnabled = enabled)
+            applySettingsNow(updatedSettings)
+
+            if (enabled) {
+                syncFromCalendar()
+            } else {
+                val removedCount = clearImportedRecurringEvents()
+                Result.success(removedCount)
+            }
+        } catch (e: Exception) {
+            Log.e("AppRepository", "切换重复日程同步失败", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun enableCalendarSyncAndSyncNow(): Result<Unit> {
+        val enableResult = enableCalendarSync()
+        if (enableResult.isFailure) {
+            return enableResult
+        }
+
+        val forwardResult = manualSync()
+        if (forwardResult.isFailure) {
+            return forwardResult
+        }
+
+        val reverseResult = syncFromCalendar()
+        if (reverseResult.isFailure) {
+            return Result.failure(reverseResult.exceptionOrNull() ?: Exception("反向同步失败"))
+        }
+
+        return Result.success(Unit)
+    }
+
+    suspend fun clearImportedRecurringEvents(): Int {
+        ensureArchivesLoaded()
+
+        val removedActive = eventMutex.withLock {
+            val currentList = _events.value.toMutableList()
+            val recurringEvents = currentList.filter { it.isRecurring }
+            if (recurringEvents.isEmpty()) {
+                0
+            } else {
+                recurringEvents.forEach { NotificationScheduler.cancelReminders(context, it) }
+                currentList.removeAll(recurringEvents.toSet())
+                updateEvents(currentList)
+                recurringEvents.size
+            }
+        }
+
+        val removedArchived = archiveMutex.withLock {
+            val currentArchived = _archivedEvents.value.toMutableList()
+            val recurringArchived = currentArchived.filter { it.isRecurring }
+            if (recurringArchived.isEmpty()) {
+                0
+            } else {
+                currentArchived.removeAll(recurringArchived.toSet())
+                updateArchivedEvents(currentArchived)
+                recurringArchived.size
+            }
+        }
+
+        if (removedActive + removedArchived > 0) {
+            capsuleStateManager.forceRefresh()
+        }
+
+        return removedActive + removedArchived
     }
 
     companion object {
@@ -744,7 +933,9 @@ class AppRepository private constructor(private val context: Context) {
 
                     // 重新设置提醒
                     uniqueNewActive.forEach { event ->
-                        NotificationScheduler.scheduleReminders(context, event)
+                        if (shouldScheduleReminders(event)) {
+                            NotificationScheduler.scheduleReminders(context, event)
+                        }
                     }
                 }
 
@@ -921,26 +1112,20 @@ class AppRepository private constructor(private val context: Context) {
                 if (existingById != null) {
                     // ID 存在：以系统日历为准
                     // 系统日历更新：以系统为准，保留APP内部状态
-                    val finalEvent = existingById.copy(
-                        title = incomingEvent.title,
-                        description = incomingEvent.description,
-                        location = incomingEvent.location,
-                        startDate = incomingEvent.startDate,
-                        endDate = incomingEvent.endDate,
-                        startTime = incomingEvent.startTime,
-                        endTime = incomingEvent.endTime,
-                        lastModified = System.currentTimeMillis()
-                        // isCompleted, isCheckedIn, completedAt 等自动保留
-                    )
+                    val finalEvent = mergeIncomingCalendarEvent(existingById, incomingEvent)
                     updateEvent(finalEvent, triggerSync = false)
+                } else if (incomingEvent.isRecurring) {
+                    addEvent(incomingEvent, triggerSync = false)
                 } else {
                     // ID 不存在：判断是否重复（根据标题+时间+地点+备注）
                     val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
                     if (!isDup) {
                         // 不重复：新增事件
-                        val eventWithRandomColor = incomingEvent.copy(
-                            color = getRandomEventColor()
-                        )
+                        val eventWithRandomColor = if (incomingEvent.isRecurring) {
+                            incomingEvent
+                        } else {
+                            incomingEvent.copy(color = getRandomEventColor())
+                        }
                         addEvent(eventWithRandomColor, triggerSync = false)
                     }
                 }
@@ -953,35 +1138,30 @@ class AppRepository private constructor(private val context: Context) {
                 if (oldEvent != null) {
                     // ID 存在：以系统日历为准
                     // 系统日历更新：以系统为准，保留APP内部状态
-                    val finalEvent = oldEvent.copy(
-                        title = incomingEvent.title,
-                        description = incomingEvent.description,
-                        location = incomingEvent.location,
-                        startDate = incomingEvent.startDate,
-                        endDate = incomingEvent.endDate,
-                        startTime = incomingEvent.startTime,
-                        endTime = incomingEvent.endTime,
-                        lastModified = System.currentTimeMillis()
-                        // isCompleted, isCheckedIn, completedAt 等自动保留
-                    )
+                    val finalEvent = mergeIncomingCalendarEvent(oldEvent, incomingEvent)
                     updateEvent(finalEvent, triggerSync = false)  // 不触发正向同步
+                } else if (incomingEvent.isRecurring) {
+                    addEvent(incomingEvent, triggerSync = false)
                 } else {
                     // ID 不存在：可能是之前没映射到，现在发现重复
                     val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
                     if (!isDup) {
                         // 不重复：新增事件
-                        val eventWithRandomColor = incomingEvent.copy(
-                            color = getRandomEventColor()
-                        )
-                        addEvent(eventWithRandomColor)
+                        val eventWithRandomColor = if (incomingEvent.isRecurring) {
+                            incomingEvent
+                        } else {
+                            incomingEvent.copy(color = getRandomEventColor())
+                        }
+                        addEvent(eventWithRandomColor, triggerSync = false)
                     }
                 }
             },
             onEventDeleted = { eventId ->
                 // 【场景：删除事件】
                 // 直接删除
-                deleteEvent(eventId)
+                deleteEvent(eventId, triggerSync = false)
             },
+            allowRecurringSync = _settings.value.isRecurringCalendarSyncEnabled,
             activeEvents = activeEventsSnapshot,
             archivedEvents = archivedEventsSnapshot
         )
@@ -1019,6 +1199,11 @@ class AppRepository private constructor(private val context: Context) {
         // 🛡️ 拦截规则：课程不可归档
         if (event.eventType == EventType.COURSE) {
             Log.w("AppRepository", "Attempted to archive course event: ${event.eventType}")
+            return
+        }
+
+        if (event.isRecurring) {
+            Log.w("AppRepository", "Attempted to archive imported recurring event: ${event.id}")
             return
         }
 
@@ -1176,6 +1361,7 @@ class AppRepository private constructor(private val context: Context) {
         val eventsSnapshot = _events.value // 获取快照
         val toArchiveEvents = eventsSnapshot.filter { event ->
             event.eventType != EventType.COURSE &&
+            !event.isRecurring &&
             com.antgskds.calendarassistant.core.util.DateCalculator.isEventExpired(event)
         }
 

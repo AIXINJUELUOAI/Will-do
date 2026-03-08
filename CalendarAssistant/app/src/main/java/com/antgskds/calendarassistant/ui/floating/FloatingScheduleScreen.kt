@@ -256,11 +256,20 @@ fun TimeWheelList(
     val now = LocalDateTime.now()
     val sortedEvents = remember(events, now) {
         events
+            .filter { event -> !event.isRecurring || event.isRecurringParent }
+            .distinctBy { it.id }
             .sortedByDescending { event ->
-            try {
-                LocalDateTime.parse("${event.startDate} ${event.startTime}", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-            } catch (e: Exception) { LocalDateTime.MIN }
-        }
+                try {
+                    if (event.isRecurringParent && event.nextOccurrenceStartMillis != null) {
+                        LocalDateTime.ofInstant(
+                            java.time.Instant.ofEpochMilli(event.nextOccurrenceStartMillis),
+                            java.time.ZoneId.systemDefault()
+                        )
+                    } else {
+                        LocalDateTime.parse("${event.startDate} ${event.startTime}", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                    }
+                } catch (e: Exception) { LocalDateTime.MIN }
+            }
     }
 
     val listState = rememberLazyListState()
@@ -329,8 +338,8 @@ fun ScheduleCard(
     // === 2. 核心交互逻辑判断 (Core Logic) ===
     // 规则：只要日程"没过期"，或者"处于已完成/已检票状态(可撤销)"，就允许操作。
     // 反之：如果"已过期"且"未完成/未检票"，则禁止操作(无图标、无震动)。
-    val hasAction = remember(isExpired, event.isCompleted, event.isCheckedIn) {
-        !isExpired || (event.isCompleted || event.isCheckedIn)
+    val hasAction = remember(event.isRecurringParent, isExpired, event.isCompleted, event.isCheckedIn) {
+        !event.isRecurringParent && (!isExpired || (event.isCompleted || event.isCheckedIn))
     }
 
     // === 3. 智能标题显示 ===
@@ -501,6 +510,7 @@ fun ScheduleCard(
                             modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
                         when {
+                            event.isRecurringParent -> StatusLabel("重复", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
                             event.isCheckedIn -> StatusLabel("已检票", Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.2f))
                             event.isCompleted -> {
                                 val completedText = when {

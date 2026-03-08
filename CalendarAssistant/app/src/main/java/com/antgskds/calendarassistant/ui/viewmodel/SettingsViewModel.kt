@@ -110,6 +110,13 @@ class SettingsViewModel(
         }
     }
 
+    fun toggleRecurringCalendarSync(enabled: Boolean, callback: suspend (Result<Int>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = repository.setRecurringCalendarSyncEnabled(enabled)
+            callback(result)
+        }
+    }
+
     // 更新主题配色方案
     fun updateThemeColorScheme(scheme: String) {
         viewModelScope.launch {
@@ -212,6 +219,14 @@ class SettingsViewModel(
             if (result.isSuccess) {
                 refreshSyncStatus()
             }
+        }
+    }
+
+    fun enableCalendarSyncAndSyncNow(callback: suspend (Result<Unit>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = repository.enableCalendarSyncAndSyncNow()
+            refreshSyncStatus()
+            callback(result)
         }
     }
 

@@ -24,6 +24,8 @@ class CalendarSyncManager(private val context: Context) {
 
     companion object {
         private const val TAG = "CalendarSyncManager"
+        private const val SYNC_LOOK_BACK_DAYS = 30L
+        private const val SYNC_LOOK_AHEAD_DAYS = 30L
 
         /**
          * 课程同步的未来周数
@@ -190,7 +192,9 @@ class CalendarSyncManager(private val context: Context) {
         val currentMapping = updatedSyncData.mapping.toMutableMap()
 
         // 过滤：只同步 eventType == EventType.EVENT 的普通事件
-        val eventsToSync = events.filter { it.eventType == EventType.EVENT }
+        val eventsToSync = events.filter {
+            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring
+        }
 
         Log.d(TAG, "普通事件: ${events.size} 个，过滤后: ${eventsToSync.size} 个")
 
@@ -263,6 +267,7 @@ class CalendarSyncManager(private val context: Context) {
         onEventAdded: suspend (MyEvent) -> Unit,
         onEventUpdated: suspend (MyEvent) -> Unit,
         onEventDeleted: suspend (String) -> Unit, // 新增删除回调
+        allowRecurringSync: Boolean = false,
         activeEvents: List<MyEvent> = emptyList(), // 新增：活跃事件列表
         archivedEvents: List<MyEvent> = emptyList() // 新增：归档事件列表
     ): Result<Int> = withContext(Dispatchers.IO) {
@@ -307,6 +312,8 @@ class CalendarSyncManager(private val context: Context) {
             var deletedCount = 0
             var hasChanges = false
             val now = System.currentTimeMillis()
+            val syncWindowStart = now - SYNC_LOOK_BACK_DAYS * 24 * 60 * 60 * 1000
+            val syncWindowEnd = now + SYNC_LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000
 
             // ==================== 阶段一：处理已映射的事件 (更新 & 删除) ====================
             // 直接查询这些 ID，无视时间范围，确保能捕捉到修改和删除
@@ -324,10 +331,15 @@ class CalendarSyncManager(private val context: Context) {
                 // 先查询系统日历中有没有任何事件
                 val rangeEventsForCheck = calendarManager.queryEventsInRange(
                     calendarId = calendarId,
-                    startMillis = now - 365L * 24 * 60 * 60 * 1000,
-                    endMillis = now + 365L * 24 * 60 * 60 * 1000
+                    startMillis = syncWindowStart,
+                    endMillis = syncWindowEnd
                 )
-                if (rangeEventsForCheck.isEmpty()) {
+                val recurringEventsForCheck = calendarManager.queryRecurringInstancesInRange(
+                    calendarId = calendarId,
+                    startMillis = syncWindowStart,
+                    endMillis = syncWindowEnd
+                )
+                if (rangeEventsForCheck.isEmpty() && recurringEventsForCheck.isEmpty()) {
                     // 系统日历中完全没有事件，这是第一次同步，跳过反向同步
                     Log.d(TAG, "系统日历为空，跳过反向同步，等待正向同步")
                     return@withContext Result.success(0)
@@ -337,8 +349,8 @@ class CalendarSyncManager(private val context: Context) {
             val deletedSystemIds = mapping.values.toSet() - foundSystemIds
             val rangeEventsForDedup = calendarManager.queryEventsInRange(
                 calendarId = calendarId,
-                startMillis = now - 365L * 24 * 60 * 60 * 1000,
-                endMillis = now + 365L * 24 * 60 * 60 * 1000
+                startMillis = syncWindowStart,
+                endMillis = syncWindowEnd
             )
             
             // 构建系统事件的指纹集合（用于判断是否是同一个事件）
@@ -394,6 +406,15 @@ class CalendarSyncManager(private val context: Context) {
             existingSystemEvents.forEach { systemEvent ->
                 val appId = systemToAppMap[systemEvent.eventId.toString()]
                 if (appId != null) {
+                    if (systemEvent.isRecurring) {
+                        Log.d(TAG, "映射事件已变为重复系列，移除旧映射并交给 Instances 同步: appId=$appId")
+                        onEventDeleted(appId)
+                        mapping.remove(appId)
+                        hasChanges = true
+                        deletedCount++
+                        return@forEach
+                    }
+
                     Log.d(TAG, "检测到系统日历事件更新: appId=$appId, title=${systemEvent.title}, startMillis=${systemEvent.startMillis}, lastModified=${systemEvent.lastModified}")
                     // 这里无论 isManaged 是什么都更新，允许用户修改由 App 创建的日程
                     val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent, fixedId = appId)
@@ -407,14 +428,10 @@ class CalendarSyncManager(private val context: Context) {
             }
 
             // ==================== 阶段二：扫描新事件 (新增) ====================
-            // 扩大时间窗口：从过去 1 年到未来 1 年，避免遗漏用户修改的旧事件
-            val startMillis = now - 365L * 24 * 60 * 60 * 1000 // 过去 1 年
-            val endMillis = now + 365L * 24 * 60 * 60 * 1000  // 未来 1 年
-
             val rangeEvents = calendarManager.queryEventsInRange(
                 calendarId = calendarId,
-                startMillis = startMillis,
-                endMillis = endMillis
+                startMillis = syncWindowStart,
+                endMillis = syncWindowEnd
             )
 
             rangeEvents.forEach { systemEvent ->
@@ -445,6 +462,65 @@ class CalendarSyncManager(private val context: Context) {
                 }
             }
 
+            // ==================== 阶段三：重复日程实例同步 ====================
+            val activeRecurringEvents = activeEvents.filter { it.isRecurring }
+
+            if (allowRecurringSync) {
+                val recurringSeries = calendarManager.queryRecurringSeries(calendarId)
+                val recurringInstances = calendarManager.queryRecurringInstancesInRange(
+                    calendarId = calendarId,
+                    startMillis = syncWindowStart,
+                    endMillis = syncWindowEnd
+                )
+
+                val recurringParents = (activeEvents + archivedEvents)
+                    .filter { it.isRecurring && it.isRecurringParent && !it.recurringSeriesKey.isNullOrBlank() }
+                    .associateBy { it.id }
+
+                val desiredRecurringEvents = buildRecurringEvents(
+                    calendarId = calendarId,
+                    recurringSeries = recurringSeries,
+                    recurringInstances = recurringInstances,
+                    existingRecurringParents = recurringParents,
+                    now = now
+                )
+
+                val activeRecurringById = activeRecurringEvents.associateBy { it.id }
+                val desiredRecurringById = desiredRecurringEvents.associateBy { it.id }
+
+                desiredRecurringEvents.forEach { incomingEvent ->
+                    val existingEvent = activeRecurringById[incomingEvent.id]
+                    if (existingEvent == null) {
+                        onEventAdded(incomingEvent)
+                        addedCount++
+                    } else {
+                        val mergedEvent = mergeRecurringEvent(existingEvent, incomingEvent)
+                        if (mergedEvent != existingEvent) {
+                            onEventUpdated(mergedEvent.copy(lastModified = System.currentTimeMillis()))
+                            updatedCount++
+                        }
+                    }
+                }
+
+                activeRecurringEvents.forEach { existingEvent ->
+                    val shouldDelete = if (existingEvent.isRecurringParent) {
+                        existingEvent.id !in desiredRecurringById
+                    } else {
+                        existingEvent.id !in desiredRecurringById && isWithinSyncWindow(existingEvent, syncWindowStart, syncWindowEnd)
+                    }
+
+                    if (shouldDelete) {
+                        onEventDeleted(existingEvent.id)
+                        deletedCount++
+                    }
+                }
+            } else {
+                activeRecurringEvents.forEach { existingEvent ->
+                    onEventDeleted(existingEvent.id)
+                    deletedCount++
+                }
+            }
+
             // 4. 保存映射变更
             if (hasChanges) {
                 val updatedSyncData = syncData.copy(
@@ -466,6 +542,117 @@ class CalendarSyncManager(private val context: Context) {
     }
 
     // ==================== 辅助方法 ====================
+
+    private suspend fun buildRecurringEvents(
+        calendarId: Long,
+        recurringSeries: List<CalendarManager.SystemEventInfo>,
+        recurringInstances: List<CalendarManager.SystemEventInfo>,
+        existingRecurringParents: Map<String, MyEvent>,
+        now: Long
+    ): List<MyEvent> {
+        val desiredEvents = mutableListOf<MyEvent>()
+        val recurringInstancesBySeries = recurringInstances
+            .filter { it.isRecurring && !it.seriesKey.isNullOrBlank() && !it.isManaged }
+            .groupBy { it.seriesKey!! }
+
+        recurringSeries
+            .filter { it.isRecurring && !it.seriesKey.isNullOrBlank() && !it.isManaged }
+            .forEach { seriesEvent ->
+                val seriesKey = seriesEvent.seriesKey ?: return@forEach
+                val instances = recurringInstancesBySeries[seriesKey].orEmpty()
+                val parentId = RecurringEventUtils.buildParentId(seriesKey)
+                val existingParent = existingRecurringParents[parentId]
+                val excludedKeys = existingParent?.excludedRecurringInstances.orEmpty().toSet()
+
+                val childEvents = instances
+                    .sortedBy { it.startMillis }
+                    .distinctBy { it.instanceKey }
+                    .filter { it.instanceKey !in excludedKeys }
+                    .mapNotNull { CalendarEventMapper.mapSystemEventToMyEvent(it) }
+
+                val nextSystemInstance = calendarManager.queryNextRecurringInstance(
+                    calendarId = calendarId,
+                    eventId = seriesEvent.eventId,
+                    seriesKey = seriesKey,
+                    fromMillis = now,
+                    recurringRule = seriesEvent.recurringRule,
+                    excludedInstanceKeys = excludedKeys
+                )
+
+                val currentFallbackEvent = childEvents
+                    .mapNotNull { child ->
+                        val startMillis = RecurringEventUtils.eventStartMillis(child) ?: return@mapNotNull null
+                        val endMillis = RecurringEventUtils.eventEndMillis(child) ?: return@mapNotNull null
+                        if (endMillis > now) child to startMillis else null
+                    }
+                    .minByOrNull { (_, startMillis) -> startMillis }
+                    ?.first
+
+                val parentSourceEvent = nextSystemInstance?.let { CalendarEventMapper.mapSystemEventToMyEvent(it) }
+                    ?: currentFallbackEvent
+                    ?: return@forEach
+
+                val parentEvent = parentSourceEvent.copy(
+                    id = parentId,
+                    reminders = emptyList(),
+                    isRecurring = true,
+                    isRecurringParent = true,
+                    recurringSeriesKey = seriesKey,
+                    recurringInstanceKey = nextSystemInstance?.instanceKey ?: parentSourceEvent.recurringInstanceKey,
+                    parentRecurringId = null,
+                    excludedRecurringInstances = existingParent?.excludedRecurringInstances ?: emptyList(),
+                    nextOccurrenceStartMillis = nextSystemInstance?.startMillis ?: RecurringEventUtils.eventStartMillis(parentSourceEvent),
+                    skipCalendarSync = true
+                )
+
+                desiredEvents.add(parentEvent)
+                desiredEvents.addAll(childEvents)
+            }
+
+        return desiredEvents
+    }
+
+    private fun mergeRecurringEvent(existingEvent: MyEvent, incomingEvent: MyEvent): MyEvent {
+        return existingEvent.copy(
+            title = incomingEvent.title,
+            startDate = incomingEvent.startDate,
+            endDate = incomingEvent.endDate,
+            startTime = incomingEvent.startTime,
+            endTime = incomingEvent.endTime,
+            location = incomingEvent.location,
+            description = incomingEvent.description,
+            eventType = incomingEvent.eventType,
+            tag = incomingEvent.tag,
+            isRecurring = incomingEvent.isRecurring,
+            isRecurringParent = incomingEvent.isRecurringParent,
+            recurringSeriesKey = incomingEvent.recurringSeriesKey,
+            recurringInstanceKey = incomingEvent.recurringInstanceKey,
+            parentRecurringId = incomingEvent.parentRecurringId,
+            nextOccurrenceStartMillis = incomingEvent.nextOccurrenceStartMillis,
+            excludedRecurringInstances = if (existingEvent.isRecurringParent) {
+                existingEvent.excludedRecurringInstances
+            } else {
+                incomingEvent.excludedRecurringInstances
+            },
+            skipCalendarSync = true
+        )
+    }
+
+    private fun isWithinSyncWindow(event: MyEvent, syncWindowStart: Long, syncWindowEnd: Long): Boolean {
+        val effectiveStart = if (event.isRecurringParent) {
+            event.nextOccurrenceStartMillis ?: RecurringEventUtils.eventStartMillis(event)
+        } else {
+            RecurringEventUtils.eventStartMillis(event)
+        }
+        val effectiveEnd = if (event.isRecurringParent) {
+            effectiveStart ?: RecurringEventUtils.eventEndMillis(event)
+        } else {
+            RecurringEventUtils.eventEndMillis(event)
+        }
+
+        if (effectiveStart == null || effectiveEnd == null) return false
+        return effectiveEnd > syncWindowStart && effectiveStart < syncWindowEnd
+    }
 
     /**
      * 启用日历同步
@@ -551,6 +738,11 @@ class CalendarSyncManager(private val context: Context) {
      */
     suspend fun syncEventToCalendar(event: MyEvent): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            if (event.skipCalendarSync || event.isRecurring) {
+                Log.d(TAG, "单事件同步：跳过本地只读/重复事件 event.id=${event.id}")
+                return@withContext Result.success(Unit)
+            }
+
             if (!CalendarPermissionHelper.hasAllPermissions(context)) {
                 Log.w(TAG, "单事件同步：缺少日历权限")
                 return@withContext Result.failure(SecurityException("缺少日历权限"))

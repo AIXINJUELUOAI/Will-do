@@ -9,6 +9,7 @@ import com.antgskds.calendarassistant.data.model.TimeNode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.min
 
 /**
@@ -18,6 +19,7 @@ import kotlin.math.min
 object CalendarEventMapper {
 
     private const val TAG = "CalendarEventMapper"
+    private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     // 定义统一的同步日程颜色：青灰色 (索引 6)
     private const val SYNCED_EVENT_COLOR = 0xFFA2B5BB.toInt()
@@ -139,8 +141,8 @@ object CalendarEventMapper {
 
                 startDate = startDateTime.toLocalDate()
                 endDate = endDateTime.toLocalDate()
-                startTimeStr = startDateTime.toLocalTime().toString()
-                endTimeStr = endDateTime.toLocalTime().toString()
+                startTimeStr = startDateTime.toLocalTime().format(TIME_FORMATTER)
+                endTimeStr = endDateTime.toLocalTime().format(TIME_FORMATTER)
             }
 
             // 2. 颜色处理：统一使用青灰色
@@ -148,7 +150,11 @@ object CalendarEventMapper {
             val colorInt = SYNCED_EVENT_COLOR
 
             // 优先使用 fixedId，否则生成新 ID
-            val eventId = fixedId ?: "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
+            val eventId = fixedId ?: if (systemEvent.isRecurring && systemEvent.instanceKey != null) {
+                RecurringEventUtils.buildInstanceId(systemEvent.instanceKey)
+            } else {
+                "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
+            }
 
             return MyEvent(
                 id = eventId,
@@ -162,7 +168,14 @@ object CalendarEventMapper {
                 color = androidx.compose.ui.graphics.Color(colorInt),
                 isImportant = false,
                 eventType = EventType.EVENT,
-                lastModified = systemEvent.lastModified ?: System.currentTimeMillis()
+                lastModified = systemEvent.lastModified ?: System.currentTimeMillis(),
+                isRecurring = systemEvent.isRecurring,
+                isRecurringParent = false,
+                recurringSeriesKey = systemEvent.seriesKey,
+                recurringInstanceKey = systemEvent.instanceKey,
+                parentRecurringId = systemEvent.seriesKey?.let { RecurringEventUtils.buildParentId(it) },
+                nextOccurrenceStartMillis = systemEvent.startMillis,
+                skipCalendarSync = systemEvent.isRecurring
             )
         } catch (e: Exception) {
             Log.e(TAG, "转换系统事件失败: eventId=${systemEvent.eventId}", e)
