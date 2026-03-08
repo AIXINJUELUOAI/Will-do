@@ -48,9 +48,6 @@ data class MySettings(
     // 【实验室】网速胶囊开关
     val isNetworkSpeedCapsuleEnabled: Boolean = false,
 
-    // 【实验室】Android 16 实况通知探针
-    val isLiveNotificationProbeEnabled: Boolean = false,
-
     // 智能推荐开关
     val enableSmartRecommendation: Boolean = true,
 

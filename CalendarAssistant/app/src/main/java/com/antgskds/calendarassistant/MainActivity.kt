@@ -9,37 +9,34 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
+import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
+import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
+import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
+import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
@@ -180,36 +177,9 @@ class MainActivity : ComponentActivity() {
                 ) {
                     composable(
                         route = "home",
-                        enterTransition = {
-                            // 进入主页时：从左滑入（较慢）
-                            slideInHorizontally(
-                                initialOffsetX = { width: Int -> -width },
-                                animationSpec = tween(
-                                    durationMillis = 450,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        },
-                        exitTransition = {
-                            // 离开主页进入详情页时：向左快速滑出（被挤出屏幕）
-                            slideOutHorizontally(
-                                targetOffsetX = { width: Int -> -width },
-                                animationSpec = tween(
-                                    durationMillis = 220,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        },
-                        popEnterTransition = {
-                            // 返回主页时：从左滑入（较慢）
-                            slideInHorizontally(
-                                initialOffsetX = { width: Int -> -width },
-                                animationSpec = tween(
-                                    durationMillis = 450,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        },
+                        enterTransition = { navBackwardEnterTransition() },
+                        exitTransition = { navForwardExitTransition() },
+                        popEnterTransition = { navBackwardEnterTransition() },
                         popExitTransition = {
                             // 主页返回到其他页面时：不需要特殊处理
                             null
@@ -234,16 +204,7 @@ class MainActivity : ComponentActivity() {
                     composable(
                         route = "settings/{type}",
                         arguments = listOf(navArgument("type") { type = NavType.StringType }),
-                        enterTransition = {
-                            // 进入详情页时：从右滑入（较慢）
-                            slideInHorizontally(
-                                initialOffsetX = { width: Int -> width },
-                                animationSpec = tween(
-                                    durationMillis = 450,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        },
+                        enterTransition = { navForwardEnterTransition() },
                         exitTransition = {
                             // 离开详情页到更深层页面时：不需要特殊处理
                             null
@@ -252,16 +213,7 @@ class MainActivity : ComponentActivity() {
                             // 从更深层页面返回详情页时：不需要特殊处理
                             null
                         },
-                        popExitTransition = {
-                            // 返回主页时：向右快速滑出（被挤出屏幕）
-                            slideOutHorizontally(
-                                targetOffsetX = { width: Int -> width },
-                                animationSpec = tween(
-                                    durationMillis = 220,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        }
+                        popExitTransition = { navBackwardExitTransition() }
                     ) { backStackEntry ->
                         val typeName = backStackEntry.arguments?.getString("type") ?: ""
 
@@ -269,8 +221,8 @@ class MainActivity : ComponentActivity() {
                             destinationStr = typeName,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
-                            onBack = { navController.popBackStack() },
-                            onNavigateTo = { route -> navController.navigate(route) },
+                            onExitSettings = { navController.popBackStack() },
+                            onLogout = { finish() },
                             uiSize = settings.uiSize
                         )
                     }

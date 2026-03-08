@@ -5,12 +5,6 @@ data class CapsuleActionSpec(
     val receiverAction: String
 )
 
-data class CapsuleProbeFields(
-    val contentInfo: String,
-    val expandedTitle: String,
-    val expandedText: String
-)
-
 data class CapsuleDisplayModel(
     val shortText: String,
     val primaryText: String,
@@ -18,6 +12,5 @@ data class CapsuleDisplayModel(
     val tertiaryText: String? = null,
     val expandedText: String? = null,
     val tapOpensPickupList: Boolean = false,
-    val action: CapsuleActionSpec? = null,
-    val probeFields: CapsuleProbeFields? = null
+    val action: CapsuleActionSpec? = null
 )

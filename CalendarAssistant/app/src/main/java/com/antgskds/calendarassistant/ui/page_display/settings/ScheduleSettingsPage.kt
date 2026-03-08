@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
@@ -25,7 +26,7 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun ScheduleSettingsPage(
     viewModel: SettingsViewModel,
-    onNavigateTo: (String) -> Unit,
+    onNavigateTo: (SettingsDestination) -> Unit,
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
@@ -131,7 +132,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "管理所有课程",
                     value = "添加、修改或删除课程",
                     icon = Icons.Default.ChevronRight,
-                    onClick = { onNavigateTo("settings/course_manager") },
+                    onClick = { onNavigateTo(SettingsDestination.CourseManage) },
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -145,7 +146,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "作息时间设置",
                     value = "设置每日节次时间段",
                     icon = Icons.Default.ChevronRight,
-                    onClick = { onNavigateTo("settings/timetable_editor") },
+                    onClick = { onNavigateTo(SettingsDestination.TimeTableManage) },
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle

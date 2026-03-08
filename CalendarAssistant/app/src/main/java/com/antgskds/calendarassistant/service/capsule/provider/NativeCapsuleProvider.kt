@@ -13,7 +13,6 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleProbeFields
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 
 class NativeCapsuleProvider : ICapsuleProvider {
@@ -66,8 +65,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 .bigText(expandedText)
         )
 
-        display.probeFields?.let { applyProbeFields(builder, it) }
-
         applyShortCriticalText(builder, collapsedShortText)
         requestPromotedOngoing(builder)
         builder.addExtras(createPromotionExtras(collapsedShortText))
@@ -117,18 +114,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
             pendingIntent
         ).build()
         builder.addAction(notificationAction)
-    }
-
-    private fun applyProbeFields(
-        builder: Notification.Builder,
-        probeFields: CapsuleProbeFields
-    ) {
-        builder.setContentInfo(probeFields.contentInfo)
-            .setStyle(
-                Notification.BigTextStyle()
-                    .setBigContentTitle(probeFields.expandedTitle)
-                    .bigText(probeFields.expandedText)
-            )
     }
 
     private fun applyShortCriticalText(builder: Notification.Builder, text: String) {

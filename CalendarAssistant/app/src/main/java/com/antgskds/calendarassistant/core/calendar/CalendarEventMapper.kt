@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.calendar
 import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarManager.CourseEventInstance
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.TimeNode
@@ -149,12 +150,27 @@ object CalendarEventMapper {
             // 不再读取 systemEvent.color，直接使用固定颜色
             val colorInt = SYNCED_EVENT_COLOR
 
-            // 优先使用 fixedId，否则生成新 ID
-            val eventId = fixedId ?: if (systemEvent.isRecurring && systemEvent.instanceKey != null) {
-                RecurringEventUtils.buildInstanceId(systemEvent.instanceKey)
-            } else {
-                "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
+            val resolvedEventType = when (systemEvent.appEventType) {
+                EventType.COURSE -> EventType.COURSE
+                else -> EventType.EVENT
             }
+
+            val resolvedTag = when {
+                !systemEvent.tag.isNullOrBlank() -> systemEvent.tag.orEmpty()
+                systemEvent.description.contains("【列车】") -> EventTags.TRAIN
+                systemEvent.description.contains("【用车】") -> EventTags.TAXI
+                systemEvent.description.contains("【取件】") || systemEvent.description.contains("【取餐】") -> EventTags.PICKUP
+                else -> EventTags.GENERAL
+            }
+
+            // 优先使用 fixedId，否则生成新 ID
+            val eventId = fixedId
+                ?: systemEvent.appId?.takeIf { it.isNotBlank() }
+                ?: if (systemEvent.isRecurring && systemEvent.instanceKey != null) {
+                    RecurringEventUtils.buildInstanceId(systemEvent.instanceKey)
+                } else {
+                    "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
+                }
 
             return MyEvent(
                 id = eventId,
@@ -167,7 +183,8 @@ object CalendarEventMapper {
                 description = systemEvent.description,
                 color = androidx.compose.ui.graphics.Color(colorInt),
                 isImportant = false,
-                eventType = EventType.EVENT,
+                eventType = resolvedEventType,
+                tag = resolvedTag,
                 lastModified = systemEvent.lastModified ?: System.currentTimeMillis(),
                 isRecurring = systemEvent.isRecurring,
                 isRecurringParent = false,

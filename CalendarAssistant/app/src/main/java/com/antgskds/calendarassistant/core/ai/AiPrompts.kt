@@ -334,6 +334,8 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
                - ❌ 错误示例："【取件】6825|顺丰速运|Unknown"
                
             5. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
+            
+            6.如果取件码长度超过12个字符则判定为快递单号，拒绝对快递单号创建取件事件
 
             【输出格式】
             纯 JSON 对象：
