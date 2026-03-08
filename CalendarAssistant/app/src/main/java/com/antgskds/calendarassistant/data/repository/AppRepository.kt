@@ -326,6 +326,16 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     private fun mergeIncomingCalendarEvent(existingEvent: MyEvent, incomingEvent: MyEvent): MyEvent {
+        val resolvedTag = if (
+            incomingEvent.tag == EventTags.GENERAL &&
+            existingEvent.tag != EventTags.GENERAL
+        ) {
+            Log.d("AppRepository", "保留本地事件 tag，避免被反向同步降级: ${existingEvent.id}, ${existingEvent.tag} <- ${incomingEvent.tag}")
+            existingEvent.tag
+        } else {
+            incomingEvent.tag
+        }
+
         return existingEvent.copy(
             title = incomingEvent.title,
             description = incomingEvent.description,
@@ -335,7 +345,7 @@ class AppRepository private constructor(private val context: Context) {
             startTime = incomingEvent.startTime,
             endTime = incomingEvent.endTime,
             eventType = incomingEvent.eventType,
-            tag = incomingEvent.tag,
+            tag = resolvedTag,
             isRecurring = incomingEvent.isRecurring,
             isRecurringParent = incomingEvent.isRecurringParent,
             recurringSeriesKey = incomingEvent.recurringSeriesKey,

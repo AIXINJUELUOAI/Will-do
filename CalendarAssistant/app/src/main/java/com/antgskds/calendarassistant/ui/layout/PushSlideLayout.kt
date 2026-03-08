@@ -16,13 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -38,7 +38,6 @@ fun PushSlideLayout(
     content: @Composable () -> Unit,
     enableGesture: Boolean = true
 ) {
-    val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -56,17 +55,35 @@ fun PushSlideLayout(
     val displayMetrics = context.resources.displayMetrics
     val screenWidthPx = displayMetrics.widthPixels.toFloat()
     val sidebarWidthDp = with(density) { (screenWidthPx / 2f).toDp() }
+    val sidebarWidthPx = with(density) { sidebarWidthDp.toPx() }
 
     // 遮罩层透明度：随进度变化
     val scrimAlpha = progress.value * 0.5f
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val dragState = rememberDraggableState { delta ->
+        val deltaProgress = delta / sidebarWidthPx
+        val newProgress = (progress.value + deltaProgress).coerceIn(0f, 1f)
+        scope.launch { progress.snapTo(newProgress) }
+    }
+
+    fun settleDrawer(velocity: Float) {
+        val targetProgress = if (velocity > 0 || progress.value > 0.5f) 1f else 0f
+        onOpenChange(targetProgress == 1f)
+        scope.launch { progress.animateTo(targetProgress, animationSpec = tween(300)) }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 上半部分：内容区域
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .clipToBounds()
             ) {
                 // 侧边栏：固定宽度50%，从左边滑入（offset从-50%到0）
                 Box(
@@ -98,20 +115,9 @@ fun PushSlideLayout(
                         .background(MaterialTheme.colorScheme.background)
                         .draggable(
                             enabled = enableGesture,
-                            state = rememberDraggableState { delta ->
-                                // 将像素转换为进度变化
-                                val sidebarWidthPx = with(density) { sidebarWidthDp.toPx() }
-                                val deltaProgress = delta / sidebarWidthPx
-                                val newProgress = (progress.value + deltaProgress).coerceIn(0f, 1f)
-                                scope.launch { progress.snapTo(newProgress) }
-                            },
+                            state = dragState,
                             orientation = Orientation.Horizontal,
-                            onDragStopped = { velocity ->
-                                // 根据速度和当前进度决定最终状态
-                                val targetProgress = if (velocity > 0 || progress.value > 0.5f) 1f else 0f
-                                onOpenChange(targetProgress == 1f)
-                                scope.launch { progress.animateTo(targetProgress, animationSpec = tween(300)) }
-                            }
+                            onDragStopped = { velocity -> settleDrawer(velocity) }
                         )
                 ) {
                     content()
@@ -136,20 +142,9 @@ fun PushSlideLayout(
                             )
                             .draggable(
                                 enabled = enableGesture,
-                                state = rememberDraggableState { delta ->
-                                    // 将像素转换为进度变化
-                                    val sidebarWidthPx = with(density) { sidebarWidthDp.toPx() }
-                                    val deltaProgress = delta / sidebarWidthPx
-                                    val newProgress = (progress.value + deltaProgress).coerceIn(0f, 1f)
-                                    scope.launch { progress.snapTo(newProgress) }
-                                },
+                                state = dragState,
                                 orientation = Orientation.Horizontal,
-                                onDragStopped = { velocity ->
-                                    // 根据速度和当前进度决定最终状态
-                                    val targetProgress = if (velocity > 0 || progress.value > 0.5f) 1f else 0f
-                                    onOpenChange(targetProgress == 1f)
-                                    scope.launch { progress.animateTo(targetProgress, animationSpec = tween(300)) }
-                                }
+                                onDragStopped = { velocity -> settleDrawer(velocity) }
                             )
                             .zIndex(1f)
                     )

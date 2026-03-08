@@ -205,12 +205,11 @@ class CapsuleStateManager(
         // ... 后续构建胶囊逻辑保持不变 ...
         val (pickupEvents, scheduleEvents) = activeEvents.partition { it.tag == EventTags.PICKUP }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
-        val probeMode = settings.isLiveNotificationProbeEnabled
 
         scheduleEvents.forEach { event ->
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
-            val display = CapsuleMessageComposer.composeSchedule(event, isExpired, probeMode)
+            val display = CapsuleMessageComposer.composeSchedule(event, isExpired)
 
             capsules.add(createCapsuleItem(
                 id = event.id,
@@ -245,8 +244,7 @@ class CapsuleStateManager(
             val capsuleType = if (isAnyExpired) CapsuleService.TYPE_PICKUP_EXPIRED else CapsuleService.TYPE_PICKUP
             val display = CapsuleMessageComposer.composeAggregatePickup(
                 pickupEvents = pickupEvents,
-                hasExpiredItems = isAnyExpired,
-                probeMode = probeMode
+                hasExpiredItems = isAnyExpired
             )
 
             capsules.add(createCapsuleItem(
@@ -282,7 +280,7 @@ class CapsuleStateManager(
                 // 4. ✅ 回退：ID 保持稳定，不再 +1
                 // 我们改用 CapsuleService 里的暴力刷新策略来解决弹窗问题
                 val dynamicNotifId = event.id.hashCode()
-                val display = CapsuleMessageComposer.composePickup(event, isExpired, probeMode)
+                val display = CapsuleMessageComposer.composePickup(event, isExpired)
 
                 // ✅ 详细日志：输出生成的胶囊信息
                 Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=${display.shortText}")

@@ -181,7 +181,7 @@ class CalendarSyncManager(private val context: Context) {
     /**
      * 同步普通事件（双向同步）
      * 策略：遍历本地事件，有映射则更新，无映射则创建
-     * 严格过滤：不同步 eventType == EventType.PICKUP 的临时事件（取件码等）
+     * 说明：eventType == EVENT 的事件都允许同步，tag 通过日历扩展属性保留
      */
     private suspend fun syncEvents(
         events: List<MyEvent>,

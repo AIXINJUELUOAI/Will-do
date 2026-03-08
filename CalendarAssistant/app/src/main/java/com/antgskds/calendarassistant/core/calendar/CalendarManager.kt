@@ -7,6 +7,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.CalendarContract
 import android.provider.CalendarContract.Calendars
+import android.provider.CalendarContract.ExtendedProperties
 import android.provider.CalendarContract.Events
 import android.provider.CalendarContract.Instances
 import android.util.Log
@@ -48,6 +49,7 @@ class CalendarManager(private val context: Context) {
          */
         private const val EXTENDED_PROPERTY_APP_ID = "com.antgskds.calendarassistant.event_id"
         private const val EXTENDED_PROPERTY_EVENT_TYPE = "com.antgskds.calendarassistant.event_type"
+        private const val EXTENDED_PROPERTY_TAG = "com.antgskds.calendarassistant.event_tag"
     }
 
     private val contentResolver: ContentResolver = context.contentResolver
@@ -147,6 +149,9 @@ class CalendarManager(private val context: Context) {
             val eventId = uri?.lastPathSegment?.toLongOrNull() ?: -1L
 
             if (eventId != -1L) {
+                if (!upsertEventMetadata(eventId, event)) {
+                    Log.w(TAG, "事件元数据保存失败: $eventId - ${event.title}")
+                }
                 Log.d(TAG, "创建事件成功: $eventId - ${event.title}")
             } else {
                 Log.e(TAG, "创建事件失败: ${event.title}")
@@ -174,6 +179,9 @@ class CalendarManager(private val context: Context) {
 
             val success = rowsUpdated > 0
             if (success) {
+                if (!upsertEventMetadata(eventId, event)) {
+                    Log.w(TAG, "事件元数据更新失败: $eventId - ${event.title}")
+                }
                 Log.d(TAG, "更新事件成功: $eventId - ${event.title}")
             } else {
                 Log.w(TAG, "更新事件失败（未找到记录）: $eventId")
@@ -476,7 +484,21 @@ class CalendarManager(private val context: Context) {
             Log.e(TAG, "查询重复实例失败", e)
         }
 
-        events
+        if (events.isEmpty()) return@withContext events
+
+        val metadataByEventId = queryEventMetadata(events.map { it.eventId })
+        events.map { event ->
+            val metadata = metadataByEventId[event.eventId]
+            if (metadata != null) {
+                event.copy(
+                    appId = metadata.appId,
+                    appEventType = metadata.eventType,
+                    tag = metadata.tag
+                )
+            } else {
+                event
+            }
+        }
     }
 
     suspend fun queryRecurringSeries(calendarId: Long): List<SystemEventInfo> = withContext(Dispatchers.IO) {
@@ -590,13 +612,15 @@ class CalendarManager(private val context: Context) {
                 val rruleIndex = cursor.getColumnIndex(Events.RRULE)
 
                 while (cursor.moveToNext()) {
+                    val eventId = cursor.getLong(idIndex)
+                    val calendarId = cursor.getLong(calendarIdIndex)
                     val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
                     val rrule = if (rruleIndex >= 0) cursor.getString(rruleIndex) else null
 
                     events.add(
                         SystemEventInfo(
-                            eventId = cursor.getLong(idIndex),
+                            eventId = eventId,
                             title = cursor.getString(titleIndex) ?: "",
                             location = if (locationIndex >= 0) cursor.getString(locationIndex) ?: "" else "",
                             description = description.removeSuffix(MANAGED_EVENT_MARKER).trim(),
@@ -610,8 +634,8 @@ class CalendarManager(private val context: Context) {
                             isRecurring = !rrule.isNullOrBlank(),
                             seriesKey = if (!rrule.isNullOrBlank()) {
                                 RecurringEventUtils.buildSeriesKey(
-                                    calendarId = cursor.getLong(calendarIdIndex),
-                                    eventId = cursor.getLong(idIndex)
+                                    calendarId = calendarId,
+                                    eventId = eventId
                                 )
                             } else {
                                 null
@@ -624,7 +648,113 @@ class CalendarManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "查询事件失败", e)
         }
-        return events
+        if (events.isEmpty()) return events
+
+        val metadataByEventId = queryEventMetadata(events.map { it.eventId })
+        return events.map { event ->
+            val metadata = metadataByEventId[event.eventId]
+            if (metadata != null) {
+                event.copy(
+                    appId = metadata.appId,
+                    appEventType = metadata.eventType,
+                    tag = metadata.tag
+                )
+            } else {
+                event
+            }
+        }
+    }
+
+    private fun upsertEventMetadata(eventId: Long, event: MyEvent): Boolean {
+        return try {
+            deleteEventMetadata(eventId)
+
+            val metadataEntries = listOf(
+                EXTENDED_PROPERTY_APP_ID to event.id,
+                EXTENDED_PROPERTY_EVENT_TYPE to event.eventType,
+                EXTENDED_PROPERTY_TAG to event.tag
+            )
+
+            metadataEntries.forEach { (name, value) ->
+                val values = android.content.ContentValues().apply {
+                    put(ExtendedProperties.EVENT_ID, eventId)
+                    put(ExtendedProperties.NAME, name)
+                    put(ExtendedProperties.VALUE, value)
+                }
+                contentResolver.insert(ExtendedProperties.CONTENT_URI, values)
+            }
+
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "写入事件元数据失败: eventId=$eventId", e)
+            false
+        }
+    }
+
+    private fun deleteEventMetadata(eventId: Long) {
+        val metadataNames = arrayOf(
+            EXTENDED_PROPERTY_APP_ID,
+            EXTENDED_PROPERTY_EVENT_TYPE,
+            EXTENDED_PROPERTY_TAG
+        )
+        val namePlaceholders = metadataNames.joinToString(",") { "?" }
+        val selection = "${ExtendedProperties.EVENT_ID} = ? AND ${ExtendedProperties.NAME} IN ($namePlaceholders)"
+        val selectionArgs = arrayOf(eventId.toString(), *metadataNames)
+        contentResolver.delete(ExtendedProperties.CONTENT_URI, selection, selectionArgs)
+    }
+
+    private fun queryEventMetadata(eventIds: Collection<Long>): Map<Long, EventMetadata> {
+        if (eventIds.isEmpty()) return emptyMap()
+
+        val metadataNames = arrayOf(
+            EXTENDED_PROPERTY_APP_ID,
+            EXTENDED_PROPERTY_EVENT_TYPE,
+            EXTENDED_PROPERTY_TAG
+        )
+        val rawMetadata = mutableMapOf<Long, MutableMap<String, String>>()
+
+        try {
+            eventIds.distinct().chunked(300).forEach { batchIds ->
+                val idPlaceholders = batchIds.joinToString(",") { "?" }
+                val namePlaceholders = metadataNames.joinToString(",") { "?" }
+                val selection = "${ExtendedProperties.EVENT_ID} IN ($idPlaceholders) AND ${ExtendedProperties.NAME} IN ($namePlaceholders)"
+                val selectionArgs = batchIds.map { it.toString() } + metadataNames
+
+                contentResolver.query(
+                    ExtendedProperties.CONTENT_URI,
+                    arrayOf(
+                        ExtendedProperties.EVENT_ID,
+                        ExtendedProperties.NAME,
+                        ExtendedProperties.VALUE
+                    ),
+                    selection,
+                    selectionArgs.toTypedArray(),
+                    null
+                )?.use { cursor ->
+                    val eventIdIndex = cursor.getColumnIndexOrThrow(ExtendedProperties.EVENT_ID)
+                    val nameIndex = cursor.getColumnIndexOrThrow(ExtendedProperties.NAME)
+                    val valueIndex = cursor.getColumnIndexOrThrow(ExtendedProperties.VALUE)
+
+                    while (cursor.moveToNext()) {
+                        val eventId = cursor.getLong(eventIdIndex)
+                        val name = cursor.getString(nameIndex) ?: continue
+                        val value = cursor.getString(valueIndex) ?: continue
+                        rawMetadata.getOrPut(eventId) { mutableMapOf() }[name] = value
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "查询事件元数据失败", e)
+            return emptyMap()
+        }
+
+        return rawMetadata.mapValues { (_, values) ->
+            EventMetadata(
+                appId = values[EXTENDED_PROPERTY_APP_ID],
+                eventType = values[EXTENDED_PROPERTY_EVENT_TYPE],
+                tag = values[EXTENDED_PROPERTY_TAG]
+            )
+        }
     }
 
     // ==================== 辅助方法 ====================
@@ -796,6 +926,15 @@ class CalendarManager(private val context: Context) {
         val recurringRule: String? = null,
         val isRecurring: Boolean = false,
         val seriesKey: String? = null,
-        val instanceKey: String? = null
+        val instanceKey: String? = null,
+        val appId: String? = null,
+        val appEventType: String? = null,
+        val tag: String? = null
+    )
+
+    private data class EventMetadata(
+        val appId: String? = null,
+        val eventType: String? = null,
+        val tag: String? = null
     )
 }

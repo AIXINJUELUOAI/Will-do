@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -54,13 +56,16 @@ fun SettingsSidebar(
     onThemeToggle: (Boolean) -> Unit = {},
     onNavigate: (SettingsDestination) -> Unit = {}
 ) {
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // 第一块：顶部操作卡片（退出、主题切换、关于）
@@ -83,7 +88,7 @@ fun SettingsSidebar(
         // 第五块：数据管理卡片（日程归档、数据备份）
         SidebarDataManagementCard(onNavigate)
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

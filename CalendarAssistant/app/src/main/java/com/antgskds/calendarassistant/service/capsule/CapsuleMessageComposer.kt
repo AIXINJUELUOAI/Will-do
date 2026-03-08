@@ -20,21 +20,18 @@ object CapsuleMessageComposer {
 
     fun composeSchedule(
         event: MyEvent,
-        isExpired: Boolean,
-        probeMode: Boolean
+        isExpired: Boolean
     ): CapsuleDisplayModel {
-        val base = when (event.tag) {
+        return when (event.tag) {
             EventTags.TRAIN -> composeTrain(event, isExpired)
             EventTags.TAXI -> composeTaxi(event, isExpired)
             else -> composeGeneral(event, isExpired)
         }
-        return attachProbe(base, probeMode)
     }
 
     fun composePickup(
         event: MyEvent,
-        isExpired: Boolean,
-        probeMode: Boolean
+        isExpired: Boolean
     ): CapsuleDisplayModel {
         val pickupInfo = PickupUtils.parsePickupInfo(event)
         val shortText = if (event.isCompleted || isExpired) {
@@ -56,23 +53,19 @@ object CapsuleMessageComposer {
             null
         }
 
-        return attachProbe(
-            CapsuleDisplayModel(
-                shortText = shortText,
-                primaryText = shortText,
-                secondaryText = secondaryText,
-                expandedText = expandedText,
-                tapOpensPickupList = true,
-                action = action
-            ),
-            probeMode
+        return CapsuleDisplayModel(
+            shortText = shortText,
+            primaryText = shortText,
+            secondaryText = secondaryText,
+            expandedText = expandedText,
+            tapOpensPickupList = true,
+            action = action
         )
     }
 
     fun composeAggregatePickup(
         pickupEvents: List<MyEvent>,
-        hasExpiredItems: Boolean,
-        probeMode: Boolean
+        hasExpiredItems: Boolean
     ): CapsuleDisplayModel {
         val primaryText = if (hasExpiredItems) {
             "${pickupEvents.size} 个待取 (含过期)"
@@ -107,15 +100,12 @@ object CapsuleMessageComposer {
             .joinToString("\n")
             .ifBlank { null }
 
-        return attachProbe(
-            CapsuleDisplayModel(
-                shortText = primaryText,
-                primaryText = primaryText,
-                secondaryText = secondaryText,
-                expandedText = expandedText,
-                tapOpensPickupList = true
-            ),
-            probeMode
+        return CapsuleDisplayModel(
+            shortText = primaryText,
+            primaryText = primaryText,
+            secondaryText = secondaryText,
+            expandedText = expandedText,
+            tapOpensPickupList = true
         )
     }
 
@@ -202,26 +192,6 @@ object CapsuleMessageComposer {
             tertiaryText = tertiaryText,
             expandedText = expandedText,
             action = action
-        )
-    }
-
-    private fun attachProbe(
-        display: CapsuleDisplayModel,
-        probeMode: Boolean
-    ): CapsuleDisplayModel {
-        if (!probeMode) return display
-
-        val probeExpandedText = joinLines(
-            display.secondaryText ?: LiveProbeSpec.CONTENT_TEXT,
-            LiveProbeSpec.BIG_TEXT
-        ) ?: LiveProbeSpec.BIG_TEXT
-
-        return display.copy(
-            probeFields = CapsuleProbeFields(
-                contentInfo = LiveProbeSpec.CONTENT_INFO,
-                expandedTitle = LiveProbeSpec.CONTENT_TITLE,
-                expandedText = probeExpandedText
-            )
         )
     }
 
