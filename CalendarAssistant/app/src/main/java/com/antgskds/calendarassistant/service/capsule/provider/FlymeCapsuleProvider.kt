@@ -16,95 +16,42 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
-import com.antgskds.calendarassistant.core.util.TransportInfo
-import com.antgskds.calendarassistant.core.util.TransportType
-import com.antgskds.calendarassistant.core.util.TransportUtils
+import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.LocalDateTime
 
 /**
  * Flyme 实况胶囊提供者
- *
- * 第二阶段修复：使用 RemoteViews 加载自定义布局，解决通知中心展开空白问题
  */
 class FlymeCapsuleProvider : ICapsuleProvider {
 
-    companion object {
-        private const val TAG = "FlymeCapsuleProvider"
-    }
-
     override fun buildNotification(
         context: Context,
-        eventId: String,
-        title: String,
-        content: String,
-        color: Int,
-        capsuleType: Int,
-        eventType: String,
-        actualStartTime: Long,
-        actualEndTime: Long,
+        item: CapsuleUiState.Active.CapsuleItem,
         iconResId: Int
     ): Notification {
+        val display = item.display
+        val subtitleText = buildFlymeSubtitle(display.secondaryText, display.tertiaryText)
+        val pendingIntent = createContentPendingIntent(context, item)
 
-        // 1. 点击跳转
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            // 取件码胶囊跳转到临时事件列表
-            if (capsuleType == 2 || eventType == EventTags.PICKUP) {
-                putExtra("openPickupList", true)
-            }
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            eventId.hashCode(),
-            tapIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        // 2. 准备图标 (Flyme 要求白色 Bitmap)
         val defaultIconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
         var iconDrawable: Drawable? = ContextCompat.getDrawable(context, defaultIconRes)
-        if (iconDrawable == null) iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+        if (iconDrawable == null) {
+            iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+        }
 
         val rawBitmap = iconDrawable?.let { CapsuleUiUtils.drawableToBitmap(it) }
-        val whiteIconBitmap = if (rawBitmap != null) CapsuleUiUtils.tintBitmap(rawBitmap, Color.WHITE) else null
-        val iconObj = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
+        val whiteIconBitmap = rawBitmap?.let { CapsuleUiUtils.tintBitmap(it, Color.WHITE) }
+        val capsuleIcon = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
-        // 3. 计算胶囊文案（根据是否提前开始）
-        val statusText = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
-            title
+        val remoteViews = if (item.type == CapsuleService.TYPE_NETWORK_SPEED) {
+            createNetworkSpeedRemoteViews(context, display.primaryText, subtitleText)
         } else {
-            when {
-                actualStartTime > 0 && System.currentTimeMillis() < actualStartTime -> {
-                    // 提前提醒阶段：显示"还有 x 分钟开始"
-                    val now = System.currentTimeMillis()
-                    val minutesRemaining = Duration.between(
-                        Instant.ofEpochMilli(now),
-                        Instant.ofEpochMilli(actualStartTime)
-                    ).toMinutes()
-                    when {
-                        minutesRemaining <= 0 -> "即将开始"
-                        minutesRemaining == 1L -> "还有 1 分钟开始"
-                        else -> "还有 ${minutesRemaining} 分钟开始"
-                    }
-                }
-                else -> "进行中"
-            }
+            createRemoteViews(context, item.eventType, display.primaryText, subtitleText)
         }
 
-        // 4. 创建 RemoteViews（关键修复）
-        val remoteViews = if (capsuleType == CapsuleService.TYPE_NETWORK_SPEED) {
-            createNetworkSpeedRemoteViews(context, title)
-        } else {
-            createRemoteViews(context, capsuleType, eventType, title, content, statusText)
-        }
-
-        // 5. 构建 Notification Builder
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -112,180 +59,194 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             Notification.Builder(context)
         }
 
-        val collapsedTitle = if (title.length > 10) title.take(10) else title
         val iconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
         val icon = Icon.createWithResource(context, iconRes)
+        val collapsedShortText = collapseShortText(display.shortText)
 
-        // 6. 设置基础属性
         builder.setSmallIcon(icon)
-            .setContentTitle(collapsedTitle)
-            .setContentText(statusText)
+            .setContentTitle(display.primaryText)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setColor(color)
+            .setOnlyAlertOnce(true)
+            .setColor(item.color)
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-
-        // 7. ✅ 关键：设置 RemoteViews（双重设置）
-        builder.setCustomContentView(remoteViews)
+            .setCustomContentView(remoteViews)
             .setCustomBigContentView(remoteViews)
+            .setGroup("LIVE_CAPSULE_GROUP")
+            .setGroupSummary(false)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(false)
 
-        // 8. ✅ 保留 BigTextStyle 作为兜底
-        builder.setStyle(Notification.BigTextStyle()
-            .setBigContentTitle(title)
-            .bigText(content)
-        )
+        subtitleText?.let { builder.setContentText(it) }
+        display.expandedText?.let {
+            builder.setStyle(
+                Notification.BigTextStyle()
+                    .setBigContentTitle(display.primaryText)
+                    .bigText(it)
+            )
+        }
 
-        // 8. Android 版本适配
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
-        builder.setGroup("LIVE_CAPSULE_GROUP")
-            .setGroupSummary(false)
-            .setWhen(System.currentTimeMillis())
-            .setShowWhen(true)
+        applyShortCriticalText(builder, collapsedShortText)
+        requestPromotedOngoing(builder)
+        builder.addExtras(
+            createFlymeExtras(
+                context = context,
+                title = display.primaryText,
+                collapsedShortText = collapsedShortText,
+                color = item.color,
+                capsuleIcon = capsuleIcon
+            )
+        )
 
-        // Android 16 (Baklava) 适配
-        try {
-            val methodSetText = Notification.Builder::class.java.getMethod("setShortCriticalText", String::class.java)
-            methodSetText.invoke(builder, collapsedTitle)
-        } catch (e: Exception) {
-            // ignore
-        }
-
-        try {
-            val methodSetPromoted = Notification.Builder::class.java.getMethod("setRequestPromotedOngoing", Boolean::class.java)
-            methodSetPromoted.invoke(builder, true)
-        } catch (e: Exception) {
-            // ignore
-        }
-
-        // 9. 构建 Flyme 专属 Bundle（胶囊信息）
-        val capsuleBundle = Bundle().apply {
-            putInt("notification.live.capsuleStatus", 1)
-            putInt("notification.live.capsuleType", 1)
-            putString("notification.live.capsuleContent", collapsedTitle)
-            putInt("notification.live.capsuleBgColor", color)
-            putInt("notification.live.capsuleContentColor", Color.WHITE)
-            if (iconObj != null) {
-                putParcelable("notification.live.capsuleIcon", iconObj)
-            }
-        }
-
-        // 10. ✅ 添加 Extras（扁平化结构 + String 类型修正）
-        val finalExtras = Bundle().apply {
-            putBoolean("is_live", true)
-            putInt("notification.live.operation", 0)
-            putInt("notification.live.type", 10)
-            putBundle("notification.live.capsule", capsuleBundle)
-            // ❌ 移除 notification.live.contentColor（让 XML 控制颜色）
-            // ✅ String 类型（防止崩溃）
-            putString("android.substName", context.getString(R.string.app_name))
-            putString("android.title", title)
-        }
-        builder.addExtras(finalExtras)
-
-        // ========================================================================
-        // 【按钮逻辑】根据 eventType 动态设置按钮文字和 Action
-        // ========================================================================
-
-        // 判定是否过期
-        val isExpired = capsuleType == 3 || (actualEndTime > 0 && System.currentTimeMillis() >= actualEndTime)
-
-        when (capsuleType) {
-            CapsuleService.TYPE_NETWORK_SPEED -> {
-                // 网速胶囊：不需要按钮
-            }
-            CapsuleService.TYPE_PICKUP, CapsuleService.TYPE_PICKUP_EXPIRED, CapsuleService.TYPE_SCHEDULE -> {
-                // 日程/取件码/火车/打车：未过期显示操作按钮，已过期不显示
-                if (!isExpired) {
-                    val buttonText = when (eventType) {
-                        EventTags.PICKUP -> "已取"
-                        EventTags.TAXI -> "已用车"
-                        EventTags.TRAIN -> "已检票"
-                        else -> "已完成"
-                    }
-                    val intentAction = when (eventType) {
-                        EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
-                        else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
-                    }
-                    val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
-                        action = intentAction
-                        putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
-                    }
-                    val pendingComplete = PendingIntent.getBroadcast(
-                        context,
-                        eventId.hashCode() + 3,
-                        completeIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    val completeAction = Notification.Action.Builder(
-                        null,
-                        buttonText,
-                        pendingComplete
-                    ).build()
-                    builder.addAction(completeAction)
-                }
-                builder.setOnlyAlertOnce(true)
-            }
-            else -> {
-                // 其他类型默认只提醒一次
-                builder.setOnlyAlertOnce(true)
-            }
-        }
+        display.action?.let { addAction(builder, context, item.id, it) }
 
         return builder.build()
     }
 
-    /**
-     * 创建 RemoteViews
-     * 封装 Flyme 实况通知的自定义布局逻辑
-     */
-    private fun createRemoteViews(
+    private fun createContentPendingIntent(
         context: Context,
-        capsuleType: Int,
-        eventType: String,  // 事件类型：event=日程, temp=取件码, course=课程
+        item: CapsuleUiState.Active.CapsuleItem
+    ): PendingIntent {
+        val tapIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (item.display.tapOpensPickupList) {
+                putExtra("openPickupList", true)
+            }
+        }
+        return PendingIntent.getActivity(
+            context,
+            item.id.hashCode(),
+            tapIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    private fun addAction(
+        builder: Notification.Builder,
+        context: Context,
+        eventId: String,
+        action: CapsuleActionSpec
+    ) {
+        val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
+            this.action = action.receiverAction
+            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            eventId.hashCode() + 3,
+            broadcastIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notificationAction = Notification.Action.Builder(
+            null,
+            action.label,
+            pendingIntent
+        ).build()
+        builder.addAction(notificationAction)
+    }
+
+    private fun createFlymeExtras(
+        context: Context,
         title: String,
-        content: String,
-        statusText: String  // 状态文本："进行中" 或 "还有 x 分钟开始"
-    ): RemoteViews {
-        return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
-
-            // 主标题：绑定 title
-            setTextViewText(R.id.tv_main_content, title)
-
-            // 副标题：地点 + 状态
-            val subInfo = if (content.isNotEmpty()) {
-                "$content • $statusText"
-            } else {
-                statusText
+        collapsedShortText: String,
+        color: Int,
+        capsuleIcon: Icon?
+    ): Bundle {
+        val capsuleBundle = Bundle().apply {
+            putInt("notification.live.capsuleStatus", 1)
+            putInt("notification.live.capsuleType", 1)
+            putString("notification.live.capsuleContent", collapsedShortText)
+            putInt("notification.live.capsuleBgColor", color)
+            putInt("notification.live.capsuleContentColor", Color.WHITE)
+            if (capsuleIcon != null) {
+                putParcelable("notification.live.capsuleIcon", capsuleIcon)
             }
-            setTextViewText(R.id.tv_sub_info, subInfo)
+        }
 
-            // 图标：根据 eventType 区分
-            val iconRes = when (eventType) {
-                EventTags.PICKUP -> R.drawable.ic_capsule_pickup      // 取件/取餐
-                EventTags.TRAIN -> R.drawable.ic_capsule_train        // 火车/飞机
-                EventTags.TAXI -> R.drawable.ic_capsule_taxi          // 打车
-                EventType.COURSE -> R.drawable.ic_capsule_course      // 课程
-                EventTags.GENERAL -> R.drawable.ic_stat_event        // 普通日程
-                EventType.EVENT -> R.drawable.ic_capsule_event       // 普通日程
-                else -> R.drawable.ic_capsule_event         // 默认
-            }
-            setImageViewResource(R.id.iv_icon, iconRes)
+        return Bundle().apply {
+            putBoolean("is_live", true)
+            putInt("notification.live.operation", 0)
+            putInt("notification.live.type", 10)
+            putBundle("notification.live.capsule", capsuleBundle)
+            putString("android.substName", context.getString(R.string.app_name))
+            putString("android.title", title)
         }
     }
 
-    /**
-     * 创建网速胶囊 RemoteViews
-     */
-    private fun createNetworkSpeedRemoteViews(context: Context, speedText: String): RemoteViews {
+    private fun applyShortCriticalText(builder: Notification.Builder, text: String) {
+        try {
+            val methodSetText = Notification.Builder::class.java.getMethod(
+                "setShortCriticalText",
+                String::class.java
+            )
+            methodSetText.invoke(builder, text)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun requestPromotedOngoing(builder: Notification.Builder) {
+        try {
+            val methodSetPromoted = Notification.Builder::class.java.getMethod(
+                "setRequestPromotedOngoing",
+                Boolean::class.java
+            )
+            methodSetPromoted.invoke(builder, true)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun createRemoteViews(
+        context: Context,
+        eventType: String,
+        primaryText: String,
+        secondaryText: String?
+    ): RemoteViews {
+        return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
+            setTextViewText(R.id.tv_main_content, primaryText)
+            setTextViewText(R.id.tv_sub_info, secondaryText ?: "")
+            setImageViewResource(R.id.iv_icon, resolveFlymeIcon(eventType))
+        }
+    }
+
+    private fun createNetworkSpeedRemoteViews(
+        context: Context,
+        primaryText: String,
+        subtitleText: String?
+    ): RemoteViews {
         return RemoteViews(context.packageName, R.layout.notification_live_network_speed).apply {
-            setTextViewText(R.id.tv_main_content, speedText)
-            setTextViewText(R.id.tv_sub_info, "下载速度")
+            setTextViewText(R.id.tv_main_content, primaryText)
+            setTextViewText(R.id.tv_sub_info, subtitleText ?: "下载速度")
             setImageViewResource(R.id.iv_icon, android.R.drawable.stat_sys_download)
         }
+    }
+
+    private fun buildFlymeSubtitle(secondaryText: String?, tertiaryText: String?): String? {
+        return listOfNotNull(secondaryText, tertiaryText)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(" · ")
+    }
+
+    private fun resolveFlymeIcon(eventType: String): Int {
+        return when (eventType) {
+            EventTags.PICKUP -> R.drawable.ic_capsule_pickup
+            EventTags.TRAIN -> R.drawable.ic_capsule_train
+            EventTags.TAXI -> R.drawable.ic_capsule_taxi
+            EventType.COURSE -> R.drawable.ic_capsule_course
+            EventTags.GENERAL -> R.drawable.ic_stat_event
+            EventType.EVENT -> R.drawable.ic_capsule_event
+            else -> R.drawable.ic_capsule_event
+        }
+    }
+
+    private fun collapseShortText(text: String): String {
+        return if (text.length > 10) text.take(10) else text
     }
 }

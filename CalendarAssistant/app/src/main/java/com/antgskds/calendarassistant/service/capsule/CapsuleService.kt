@@ -233,18 +233,7 @@ class CapsuleService : Service() {
 
     private fun upsertCapsule(item: CapsuleUiState.Active.CapsuleItem) {
         val iconResId = IconUtils.getSmallIconForCapsule(item)
-        val notification = provider.buildNotification(
-            this,
-            item.id,
-            item.title,
-            item.content,
-            item.color,
-            item.type,
-            item.eventType,
-            item.startMillis,
-            item.endMillis,
-            iconResId
-        )
+        val notification = provider.buildNotification(this, item, iconResId)
 
         val metadata = CapsuleMetadata(
             notificationId = item.notifId,
@@ -268,7 +257,7 @@ class CapsuleService : Service() {
             notificationManager.notify(item.notifId, notification)
         }
 
-        Log.d(TAG, "胶囊已更新: ${item.title}")
+        Log.d(TAG, "胶囊已更新: ${item.display.shortText}")
     }
 
     private fun refreshForegroundState(validIds: Set<Int>) {

@@ -4,16 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.core.course.CourseManager
-import com.antgskds.calendarassistant.core.util.PickupUtils
-import com.antgskds.calendarassistant.core.util.TransportType
-import com.antgskds.calendarassistant.core.util.TransportUtils
-import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +27,6 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import androidx.compose.ui.graphics.toArgb
 
 /**
  * 胶囊状态管理器 - 主动唤醒模式
@@ -139,18 +138,18 @@ class CapsuleStateManager(
         // 【实验室】网速胶囊优先：如果开启网速胶囊，覆盖其他所有胶囊
         if (settings.isNetworkSpeedCapsuleEnabled && networkSpeed != null) {
             Log.d(TAG, "网速胶囊模式: ${networkSpeed.formattedSpeed}")
+            val display = CapsuleMessageComposer.composeNetworkSpeed(networkSpeed)
             val capsules = listOf(
-                CapsuleUiState.Active.CapsuleItem(
+                createCapsuleItem(
                     id = "network_speed",
                     notifId = 88888,
                     type = CapsuleService.TYPE_NETWORK_SPEED,
                     eventType = "network_speed",
-                    title = networkSpeed.formattedSpeed,
-                    content = "下载速度",
                     description = "",
                     color = android.graphics.Color.parseColor("#4CAF50"),
                     startMillis = System.currentTimeMillis(),
-                    endMillis = System.currentTimeMillis() + 60 * 60 * 1000 // 1小时有效
+                    endMillis = System.currentTimeMillis() + 60 * 60 * 1000, // 1小时有效
+                    display = display
                 )
             )
             return CapsuleUiState.Active(capsules)
@@ -202,42 +201,23 @@ class CapsuleStateManager(
         // ... 后续构建胶囊逻辑保持不变 ...
         val (pickupEvents, scheduleEvents) = activeEvents.partition { it.tag == EventTags.PICKUP }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
+        val probeMode = settings.isLiveNotificationProbeEnabled
 
         scheduleEvents.forEach { event ->
-            val transportInfo = TransportUtils.parse(event.description, event.isCheckedIn)
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
+            val display = CapsuleMessageComposer.composeSchedule(event, isExpired, probeMode)
 
-            val title = when {
-                event.tag == "train" -> {
-                    if (transportInfo.isCheckedIn) {
-                        // 检票后：只显示座位号
-                        transportInfo.mainDisplay
-                    } else if (isExpired) {
-                        // 过期后：默认title
-                        event.title
-                    } else {
-                        // 检票前：检票口 或 "待检票"
-                        transportInfo.mainDisplay.ifBlank { "待检票" }
-                    }
-                }
-                event.tag == "taxi" -> {
-                    if (event.isCompleted || isExpired) event.title else transportInfo.mainDisplay
-                }
-                else -> event.title
-            }
-
-            capsules.add(CapsuleUiState.Active.CapsuleItem(
+            capsules.add(createCapsuleItem(
                 id = event.id,
                 notifId = event.id.hashCode(),
                 type = CapsuleService.TYPE_SCHEDULE,
-                eventType = event.tag,
-                title = title,
-                content = "${event.startTime} - ${event.endTime}\n${event.location}",
+                eventType = resolveCapsuleEventType(event),
                 description = event.description,
                 color = event.color.toArgb(),
                 startMillis = toMillis(event, event.startTime),
-                endMillis = toMillis(event, event.endTime)
+                endMillis = toMillis(event, event.endTime),
+                display = display
             ))
         }
 
@@ -246,11 +226,6 @@ class CapsuleStateManager(
         if (aggregateMode) {
             // ==================== 聚合模式：只创建聚合胶囊，不创建独立胶囊 ====================
             Log.d(TAG, "聚合模式: ${pickupEvents.size} 个取件码")
-            val contentText = pickupEvents.take(5).mapIndexed { i, e ->
-                val line = "${i + 1}. ${e.title}"
-                if (i == 4 && pickupEvents.size > 5) "$line ..." else line
-            }.joinToString("\n")
-
             val latestEndMillis = pickupEvents.mapNotNull {
                 try {
                     LocalDateTime.of(it.endDate, LocalTime.parse(it.endTime, TIME_FORMATTER))
@@ -264,18 +239,22 @@ class CapsuleStateManager(
                 now.isAfter(endDateTime)
             }
             val capsuleType = if (isAnyExpired) CapsuleService.TYPE_PICKUP_EXPIRED else CapsuleService.TYPE_PICKUP
+            val display = CapsuleMessageComposer.composeAggregatePickup(
+                pickupEvents = pickupEvents,
+                hasExpiredItems = isAnyExpired,
+                probeMode = probeMode
+            )
 
-            capsules.add(CapsuleUiState.Active.CapsuleItem(
+            capsules.add(createCapsuleItem(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = capsuleType,
                 eventType = EventTags.PICKUP,
-                title = if (isAnyExpired) "${pickupEvents.size} 个待取 (含过期)" else "${pickupEvents.size} 个待取事项",
-                content = contentText,
                 description = pickupEvents.firstOrNull()?.description ?: "",
                 color = android.graphics.Color.GREEN,
                 startMillis = System.currentTimeMillis(),
-                endMillis = latestEndMillis
+                endMillis = latestEndMillis,
+                display = display
             ))
         } else {
             // ==================== 非聚合模式：创建独立胶囊 ====================
@@ -288,13 +267,6 @@ class CapsuleStateManager(
                 // ✅ 详细日志：输出每个取件码的状态
                 Log.d(TAG, "取件码: ${event.title}, 结束时间: $endDateTime, 当前: $now, 过期: $isExpired")
 
-                // 2. 动态生成 Content (打破 StateFlow 去重)
-                val dynamicContent = if (isExpired) {
-                    "[已过期] ${event.description}"
-                } else {
-                    "${event.description}"
-                }
-
                 // 3. ✅ 关键：根据过期状态决定胶囊类型
                 // 如果过期，直接传 TYPE_PICKUP_EXPIRED (3)，不让 Provider 瞎猜
                 val capsuleType = if (isExpired) {
@@ -306,35 +278,62 @@ class CapsuleStateManager(
                 // 4. ✅ 回退：ID 保持稳定，不再 +1
                 // 我们改用 CapsuleService 里的暴力刷新策略来解决弹窗问题
                 val dynamicNotifId = event.id.hashCode()
-
-                // 3. 动态生成标题
-                // 已取前：取件码，已取后/过期：默认title
-                val title = if (event.isCompleted || isExpired) {
-                    event.title
-                } else {
-                    PickupUtils.parsePickupInfo(event).code
-                }
+                val display = CapsuleMessageComposer.composePickup(event, isExpired, probeMode)
 
                 // ✅ 详细日志：输出生成的胶囊信息
-                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=$title")
+                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=${display.shortText}")
 
-                capsules.add(CapsuleUiState.Active.CapsuleItem(
+                capsules.add(createCapsuleItem(
                     id = event.id,
                     notifId = dynamicNotifId, // ID 保持不变
                     type = capsuleType,
                     eventType = event.tag,
-                    title = title,
-                    content = dynamicContent, // 内容变化依然保留
                     description = event.description,
                     color = android.graphics.Color.GREEN,
                     startMillis = toMillis(event, event.startTime),
-                    endMillis = toMillis(event, event.endTime)
+                    endMillis = toMillis(event, event.endTime),
+                    display = display
                 ))
             }
         }
 
         Log.d(TAG, "最终胶囊数量: ${capsules.size}")
         return CapsuleUiState.Active(capsules)
+    }
+
+    private fun createCapsuleItem(
+        id: String,
+        notifId: Int,
+        type: Int,
+        eventType: String,
+        description: String,
+        color: Int,
+        startMillis: Long,
+        endMillis: Long,
+        display: CapsuleDisplayModel
+    ): CapsuleUiState.Active.CapsuleItem {
+        return CapsuleUiState.Active.CapsuleItem(
+            id = id,
+            notifId = notifId,
+            type = type,
+            eventType = eventType,
+            title = display.shortText,
+            content = display.expandedText
+                ?: listOfNotNull(display.secondaryText, display.tertiaryText).joinToString("\n"),
+            description = description,
+            color = color,
+            startMillis = startMillis,
+            endMillis = endMillis,
+            display = display
+        )
+    }
+
+    private fun resolveCapsuleEventType(event: MyEvent): String {
+        return if (event.eventType == EventType.COURSE) {
+            EventType.COURSE
+        } else {
+            event.tag
+        }
     }
 
     private fun toMillis(event: MyEvent, timeStr: String): Long {

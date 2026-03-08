@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.data.state
 
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 
 /**
  * 胶囊UI状态 - Sealed Interface
@@ -35,7 +35,8 @@ sealed interface CapsuleUiState {
             val description: String,  // 描述（用于图标判断）
             val color: Int,           // 颜色（Android Color Int）
             val startMillis: Long,    // 开始时间（毫秒）
-            val endMillis: Long       // 结束时间（毫秒）
+            val endMillis: Long,      // 结束时间（毫秒）
+            val display: CapsuleDisplayModel
         )
     }
 }
