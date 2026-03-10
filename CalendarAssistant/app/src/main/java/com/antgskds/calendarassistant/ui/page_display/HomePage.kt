@@ -2,8 +2,11 @@ package com.antgskds.calendarassistant.ui.page_display
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -46,23 +49,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
+import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.analyzer.ScheduleRecommendationAnalyzer
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
+import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +94,73 @@ fun HomePage(
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    var isImageImporting by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null || isImageImporting) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            isImageImporting = true
+            try {
+                val settings = uiState.settings
+                if (settings.modelKey.isBlank()) {
+                    Toast.makeText(context, "请先填写 API Key", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val imageFile = ImageImportUtils.createImportedImageFile(context)
+                val copied = withContext(Dispatchers.IO) {
+                    ImageImportUtils.copyUriToFile(context, uri, imageFile)
+                }
+                if (!copied) {
+                    Toast.makeText(context, "图片读取失败", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val bitmap = withContext(Dispatchers.IO) {
+                    ImageImportUtils.decodeSampledBitmapFromFile(imageFile)
+                }
+                if (bitmap == null) {
+                    Toast.makeText(context, "图片解码失败", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val ocrText = withContext(Dispatchers.IO) {
+                    RecognitionProcessor.recognizeText(bitmap)
+                }
+                bitmap.recycle()
+
+                if (ocrText.isBlank()) {
+                    Toast.makeText(context, "OCR 结果为空", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val eventData = withContext(Dispatchers.IO) {
+                    RecognitionProcessor.parseUserText(ocrText, settings)
+                }
+
+                if (eventData == null || eventData.title.isBlank()) {
+                    Toast.makeText(context, "未识别到有效日程", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val event = convertAiEventToMyEvent(
+                    eventData = eventData,
+                    currentEventsCount = uiState.allEvents.size,
+                    sourceImagePath = imageFile.absolutePath
+                )
+                viewModel.addEvent(event)
+                Toast.makeText(context, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "识别失败: ${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isImageImporting = false
+            }
+        }
+    }
 
     val recommendationAnalyzer = remember { ScheduleRecommendationAnalyzer() }
     var recommendedTitle by remember { mutableStateOf<String?>(null) }
@@ -430,6 +509,34 @@ fun HomePage(
                             }
                         }
 
+                        // 图片识别按钮
+                        AnimatedVisibility(
+                            visible = isFabExpanded,
+                            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
+                            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0f)
+                        ) {
+                            androidx.compose.material3.FloatingActionButton(
+                                onClick = {
+                                    if (isImageImporting) {
+                                        Toast.makeText(context, "正在识别中...", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isFabExpanded = false
+                                        imagePickerLauncher.launch("image/*")
+                                    }
+                                },
+                                shape = CircleShape,
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                                modifier = Modifier.size(fabSize)
+                            ) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = "识别图片",
+                                    modifier = Modifier.size(fabIconSize)
+                                )
+                            }
+                        }
+
                         // 主FAB按钮
                         androidx.compose.material3.FloatingActionButton(
                             onClick = { isFabExpanded = !isFabExpanded },
@@ -576,7 +683,67 @@ fun HomePage(
                 }
             }
         }
+
+        if (isImageImporting) {
+            AlertDialog(
+                onDismissRequest = {},
+                confirmButton = {},
+                title = { Text("正在识别") },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("OCR + AI 分析中...")
+                    }
+                }
+            )
+        }
     }
+}
+
+private fun convertAiEventToMyEvent(
+    eventData: CalendarEventData,
+    currentEventsCount: Int,
+    sourceImagePath: String?
+): MyEvent {
+    val now = LocalDateTime.now()
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+    val startDateTime = try {
+        if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
+    } catch (e: Exception) { now }
+
+    val endDateTime = try {
+        if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
+    } catch (e: Exception) { startDateTime.plusHours(1) }
+
+    val resolvedTag = when {
+        eventData.tag.isNotBlank() && eventData.tag != EventTags.GENERAL -> eventData.tag
+        eventData.type == "pickup" -> EventTags.PICKUP
+        else -> eventData.tag
+    }.ifBlank { EventTags.GENERAL }
+
+    val color = if (EventColors.isNotEmpty()) {
+        EventColors[currentEventsCount % EventColors.size]
+    } else {
+        Color.Gray
+    }
+
+    return MyEvent(
+        id = UUID.randomUUID().toString(),
+        title = eventData.title.trim(),
+        startDate = startDateTime.toLocalDate(),
+        endDate = endDateTime.toLocalDate(),
+        startTime = startDateTime.format(timeFormatter),
+        endTime = endDateTime.format(timeFormatter),
+        location = eventData.location,
+        description = eventData.description,
+        color = color,
+        sourceImagePath = sourceImagePath,
+        eventType = EventType.EVENT,
+        tag = resolvedTag
+    )
 }
 
 @Composable

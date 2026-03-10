@@ -54,6 +54,19 @@ object RecognitionProcessor {
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     }
 
+    /**
+     * Lightweight OCR helper for manual image import.
+     * Returns raw recognized text (no layout reconstruction).
+     */
+    suspend fun recognizeText(bitmap: Bitmap): String {
+        return try {
+            processImageWithMlKit(bitmap).text
+        } catch (e: Exception) {
+            Log.e(TAG, "OCR 识别失败", e)
+            ""
+        }
+    }
+
     suspend fun parseUserText(text: String, settings: MySettings): CalendarEventData? {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
