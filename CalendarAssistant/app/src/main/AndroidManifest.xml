@@ -76,6 +76,15 @@
             android:taskAffinity=""
             android:exported="true" />
 
+        <!-- 手动图片选择中转 Activity (悬浮窗用) -->
+        <activity
+            android:name=".core.service.image.ImagePickHandleActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="false" />
+
         <!-- 1. 无障碍服务 (截图用) -->
         <service
             android:name=".service.accessibility.TextAccessibilityService"

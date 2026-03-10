@@ -1,10 +1,8 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -26,6 +24,8 @@ fun ArchivesPage(
 ) {
     val archivedEvents by viewModel.archivedEvents.collectAsState()
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.fetchArchivedEvents()
@@ -56,7 +56,7 @@ fun ArchivesPage(
                 },
                 actions = {
                     if (groupedEvents.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearAllArchives() }) {
+                        IconButton(onClick = { showClearConfirmDialog = true }) {
                             Icon(
                                 Icons.Default.DeleteSweep,
                                 "清空归档",
@@ -125,5 +125,34 @@ fun ArchivesPage(
                 }
             }
         }
+    }
+
+    if (showClearConfirmDialog) {
+        val archiveCount = groupedEvents.values.sumOf { it.size }
+        AlertDialog(
+            onDismissRequest = { showClearConfirmDialog = false },
+            title = { Text("清空归档？") },
+            text = {
+                Text(
+                    "这将永久删除全部归档事件（共 $archiveCount 条），且无法恢复。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearConfirmDialog = false
+                        viewModel.clearAllArchives()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }

@@ -45,6 +45,7 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
+
     // 取件码时间戳
     private var pickupEventTimestamp = mutableStateOf(0L)
 
