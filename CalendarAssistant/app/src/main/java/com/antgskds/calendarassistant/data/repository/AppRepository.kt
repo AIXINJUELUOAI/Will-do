@@ -356,10 +356,22 @@ class AppRepository private constructor(private val context: Context) {
             } else {
                 incomingEvent.excludedRecurringInstances
             },
-            nextOccurrenceStartMillis = incomingEvent.nextOccurrenceStartMillis,
+            // nextOccurrenceStartMillis 只对“重复父节点”有业务意义（用于展示下次发生时间）。
+            // 普通单次事件即使系统侧字段变化，也不应因此触发一次无意义的 updateEvent（会连带 cancel 通知）。
+            nextOccurrenceStartMillis = if (existingEvent.isRecurringParent || incomingEvent.isRecurringParent) {
+                incomingEvent.nextOccurrenceStartMillis
+            } else {
+                existingEvent.nextOccurrenceStartMillis
+            },
             skipCalendarSync = incomingEvent.skipCalendarSync,
             lastModified = System.currentTimeMillis()
         )
+    }
+
+    private fun isNoopCalendarMerge(existingEvent: MyEvent, mergedEvent: MyEvent): Boolean {
+        // 反向同步阶段一会对已映射事件“轮询式”回调 onEventUpdated；
+        // 如果只是 lastModified 变化，不应触发 updateEvent（否则会 cancel 掉胶囊通知，且 uiState 可能不 emit）。
+        return existingEvent.copy(lastModified = 0L) == mergedEvent.copy(lastModified = 0L)
     }
 
     suspend fun detachRecurringInstance(
@@ -1123,7 +1135,9 @@ class AppRepository private constructor(private val context: Context) {
                     // ID 存在：以系统日历为准
                     // 系统日历更新：以系统为准，保留APP内部状态
                     val finalEvent = mergeIncomingCalendarEvent(existingById, incomingEvent)
-                    updateEvent(finalEvent, triggerSync = false)
+                    if (!isNoopCalendarMerge(existingById, finalEvent)) {
+                        updateEvent(finalEvent, triggerSync = false)
+                    }
                 } else if (incomingEvent.isRecurring) {
                     addEvent(incomingEvent, triggerSync = false)
                 } else {
@@ -1149,7 +1163,9 @@ class AppRepository private constructor(private val context: Context) {
                     // ID 存在：以系统日历为准
                     // 系统日历更新：以系统为准，保留APP内部状态
                     val finalEvent = mergeIncomingCalendarEvent(oldEvent, incomingEvent)
-                    updateEvent(finalEvent, triggerSync = false)  // 不触发正向同步
+                    if (!isNoopCalendarMerge(oldEvent, finalEvent)) {
+                        updateEvent(finalEvent, triggerSync = false)  // 不触发正向同步
+                    }
                 } else if (incomingEvent.isRecurring) {
                     addEvent(incomingEvent, triggerSync = false)
                 } else {
