@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -13,6 +14,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
@@ -26,6 +28,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
+import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
@@ -49,6 +53,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     companion object {
         private const val TAG = "FloatingScheduleService"
+
+        const val ACTION_IMAGE_PICKED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICKED"
+        const val ACTION_IMAGE_PICK_CANCELLED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICK_CANCELLED"
+        const val EXTRA_IMAGE_URI = "extra_image_uri"
+
         @Volatile var isShowing: Boolean = false
             private set
     }
@@ -61,6 +70,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private lateinit var windowManager: WindowManager
     private var composeView: ComposeView? = null
+    private var windowLayoutParams: WindowManager.LayoutParams? = null
+    private var isViewAttached: Boolean = false
+    private var baseWindowFlags: Int = 0
+
+    private var pendingImagePickCompletion: (() -> Unit)? = null
+
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val repository by lazy { AppRepository.getInstance(applicationContext) }
@@ -148,6 +163,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             }
         }
 
+        windowLayoutParams = params
+        baseWindowFlags = params.flags
+
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingScheduleService)
             setViewTreeSavedStateRegistryOwner(this@FloatingScheduleService)
@@ -181,8 +199,24 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     FloatingScheduleScreen(
                         events = events,
                         onClose = { stopSelf() },
-                        onManualInput = { text, onComplete -> 
-                            handleManualInput(text, onComplete)
+                        onManualInput = { text, onComplete ->
+                            handleManualInput(text = text, sourceImagePath = null, onComplete = onComplete)
+                        },
+                        onPickImageRequest = { onComplete ->
+                            startImagePickFlow(onComplete)
+                        },
+                        onUpdateEvent = { updatedEvent, onComplete ->
+                            serviceScope.launch {
+                                try {
+                                    repository.updateEvent(updatedEvent)
+                                    Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to update event", e)
+                                    Toast.makeText(applicationContext, "更新失败", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    onComplete()
+                                }
+                            }
                         },
                         onEventAction = { eventId, actionType ->
                             handleEventAction(eventId, actionType)
@@ -222,15 +256,139 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         try {
             windowManager.addView(composeView, params)
             composeView?.requestFocus()
+            isViewAttached = true
         } catch (e: Exception) {
             Log.e(TAG, "UI Init Failed", e)
+            isViewAttached = false
             stopSelf()
+        }
+    }
+
+    private fun hideFloatingWindow() {
+        val view = composeView ?: return
+        val params = windowLayoutParams ?: return
+        if (!isViewAttached || !view.isAttachedToWindow) {
+            isViewAttached = false
+            return
+        }
+
+        try {
+            params.flags = baseWindowFlags or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            windowManager.updateViewLayout(view, params)
+            view.visibility = View.GONE
+        } catch (e: Exception) {
+            Log.w(TAG, "hideFloatingWindow failed", e)
+        }
+    }
+
+    private fun showFloatingWindow() {
+        val view = composeView ?: return
+        val params = windowLayoutParams ?: return
+        if (!Settings.canDrawOverlays(this)) return
+
+        if (!isViewAttached || !view.isAttachedToWindow) {
+            try {
+                windowManager.addView(view, params)
+                isViewAttached = true
+            } catch (e: Exception) {
+                Log.e(TAG, "showFloatingWindow addView failed", e)
+                isViewAttached = false
+                return
+            }
+        }
+
+        try {
+            view.visibility = View.VISIBLE
+            view.requestLayout()
+            params.flags = baseWindowFlags
+            windowManager.updateViewLayout(view, params)
+            view.requestFocus()
+        } catch (e: Exception) {
+            Log.e(TAG, "showFloatingWindow update failed", e)
+        }
+    }
+
+    private fun finishPendingImagePick() {
+        val callback = pendingImagePickCompletion
+        pendingImagePickCompletion = null
+        callback?.invoke()
+    }
+
+    
+
+    private fun startImagePickFlow(onComplete: () -> Unit) {
+        if (pendingImagePickCompletion != null) return
+        pendingImagePickCompletion = onComplete
+        hideFloatingWindow()
+        try {
+            val intent = Intent(this, ImagePickHandleActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start image picker", e)
+            showFloatingWindow()
+            finishPendingImagePick()
+        }
+    }
+
+    private fun handlePickedImage(uri: Uri) {
+        serviceScope.launch {
+            val settings = repository.settings.value
+            if (settings.modelKey.isBlank()) {
+                Toast.makeText(applicationContext, "请先填写 API Key", Toast.LENGTH_SHORT).show()
+                finishPendingImagePick()
+                return@launch
+            }
+
+            val imageFile = ImageImportUtils.createImportedImageFile(this@FloatingScheduleService)
+            val copied = withContext(Dispatchers.IO) {
+                ImageImportUtils.copyUriToFile(this@FloatingScheduleService, uri, imageFile)
+            }
+            if (!copied) {
+                Toast.makeText(applicationContext, "图片读取失败", Toast.LENGTH_SHORT).show()
+                finishPendingImagePick()
+                return@launch
+            }
+
+            val bitmap = withContext(Dispatchers.IO) {
+                ImageImportUtils.decodeSampledBitmapFromFile(imageFile)
+            }
+            if (bitmap == null) {
+                Toast.makeText(applicationContext, "图片解码失败", Toast.LENGTH_SHORT).show()
+                finishPendingImagePick()
+                return@launch
+            }
+
+            val ocrText = withContext(Dispatchers.IO) {
+                RecognitionProcessor.recognizeText(bitmap)
+            }
+            bitmap.recycle()
+
+            if (ocrText.isBlank()) {
+                Toast.makeText(applicationContext, "OCR 结果为空", Toast.LENGTH_SHORT).show()
+                finishPendingImagePick()
+                return@launch
+            }
+
+            handleManualInput(
+                text = ocrText,
+                sourceImagePath = imageFile.absolutePath,
+                onComplete = ::finishPendingImagePick
+            )
         }
     }
 
     // ... 下面的业务逻辑部分保持不变 ...
 
-    private fun handleManualInput(text: String, onComplete: () -> Unit = {}) {
+    private fun handleManualInput(
+        text: String,
+        sourceImagePath: String? = null,
+        onComplete: () -> Unit = {}
+    ) {
         if (text.isBlank()) {
             onComplete()
             return
@@ -241,9 +399,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val eventData = withContext(Dispatchers.IO) {
                     RecognitionProcessor.parseUserText(text, settings)
                 }
-                if (eventData != null) {
-                    val event = convertToMyEvent(eventData)
+                if (eventData != null && eventData.title.isNotBlank()) {
+                    val event = convertToMyEvent(eventData, sourceImagePath)
                     repository.addEvent(event)
+                    Toast.makeText(applicationContext, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(applicationContext, "未识别到有效日程", Toast.LENGTH_SHORT).show()
                 }
                 // 收起输入法
                 hideInputMethod()
@@ -251,6 +412,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse manual input", e)
                 hideInputMethod()
+                Toast.makeText(applicationContext, "识别失败", Toast.LENGTH_SHORT).show()
                 onComplete()
             }
         }
@@ -280,7 +442,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
     }
 
-    private fun convertToMyEvent(eventData: CalendarEventData): MyEvent {
+    private fun convertToMyEvent(eventData: CalendarEventData, sourceImagePath: String?): MyEvent {
         val now = LocalDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -290,6 +452,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         var endDateTime = try {
             if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
         } catch (e: Exception) { startDateTime.plusHours(1) }
+
+        val resolvedTag = when {
+            eventData.tag.isNotBlank() && eventData.tag != EventTags.GENERAL -> eventData.tag
+            eventData.type == "pickup" -> EventTags.PICKUP
+            else -> eventData.tag
+        }.ifBlank { EventTags.GENERAL }
+
         return MyEvent(
             id = UUID.randomUUID().toString(),
             title = eventData.title.trim(),
@@ -300,12 +469,31 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             location = eventData.location,
             description = eventData.description,
             color = EventColors[repository.events.value.size % EventColors.size],
+            sourceImagePath = sourceImagePath,
             eventType = EventType.EVENT,
-            tag = eventData.tag
+            tag = resolvedTag
         )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_IMAGE_PICKED -> {
+                showFloatingWindow()
+                val uriStr = intent.getStringExtra(EXTRA_IMAGE_URI)
+                if (uriStr.isNullOrBlank()) {
+                    finishPendingImagePick()
+                    return START_NOT_STICKY
+                }
+                handlePickedImage(Uri.parse(uriStr))
+                return START_NOT_STICKY
+            }
+            ACTION_IMAGE_PICK_CANCELLED -> {
+                showFloatingWindow()
+                finishPendingImagePick()
+                return START_NOT_STICKY
+            }
+        }
+
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         return START_NOT_STICKY
     }
@@ -314,8 +502,10 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         isShowing = false
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         serviceScope.cancel()
-        composeView?.let {
-            try { windowManager.removeView(it) } catch (e: Exception) {}
+        composeView?.let { view ->
+            if (view.isAttachedToWindow) {
+                try { windowManager.removeView(view) } catch (e: Exception) {}
+            }
         }
         try {
             unregisterReceiver(closeReceiver)
