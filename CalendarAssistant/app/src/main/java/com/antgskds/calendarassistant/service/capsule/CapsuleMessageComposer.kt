@@ -100,12 +100,22 @@ object CapsuleMessageComposer {
             .joinToString("\n")
             .ifBlank { null }
 
+        val action = if (pickupEvents.any { !it.isCompleted && !PickupUtils.isPickupExpired(it) }) {
+            CapsuleActionSpec(
+                label = "已取",
+                receiverAction = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
+            )
+        } else {
+            null
+        }
+
         return CapsuleDisplayModel(
             shortText = primaryText,
             primaryText = primaryText,
             secondaryText = secondaryText,
             expandedText = expandedText,
-            tapOpensPickupList = true
+            tapOpensPickupList = true,
+            action = action
         )
     }
 

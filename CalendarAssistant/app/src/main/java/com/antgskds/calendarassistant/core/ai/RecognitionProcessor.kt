@@ -67,7 +67,8 @@ object RecognitionProcessor {
         }
     }
 
-    suspend fun parseUserText(text: String, settings: MySettings): CalendarEventData? {
+    suspend fun parseUserText(text: String, settings: MySettings, context: Context): CalendarEventData? {
+        val appContext = context.applicationContext
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -76,6 +77,7 @@ object RecognitionProcessor {
         val dayOfWeek = getDayOfWeek(now)
 
         val prompt = AiPrompts.getUserTextPrompt(
+            context = appContext,
             timeStr = timeStr,
             dateToday = dateToday,
             dayOfWeek = dayOfWeek
@@ -122,6 +124,7 @@ object RecognitionProcessor {
     }
 
     suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): List<CalendarEventData> {
+        val appContext = context.applicationContext
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
 
         val ocrResult = try {
@@ -145,8 +148,8 @@ object RecognitionProcessor {
 
                 val filteredElements = LayoutAnalyzer.filterNoise(
                     ocrElements,
-                    ScreenMetrics.getStatusBarHeight(context),
-                    ScreenMetrics.getNavigationBarHeight(context),
+                    ScreenMetrics.getStatusBarHeight(appContext),
+                    ScreenMetrics.getNavigationBarHeight(appContext),
                     screenHeight
                 )
 
@@ -174,8 +177,8 @@ object RecognitionProcessor {
 
         return coroutineScope {
             try {
-                val scheduleDeferred = async { analyzeSchedule(ocrResult.reconstructedText, settings) }
-                val pickupDeferred = async { analyzePickup(ocrResult.reconstructedText, settings) }
+                val scheduleDeferred = async { analyzeSchedule(ocrResult.reconstructedText, settings, appContext) }
+                val pickupDeferred = async { analyzePickup(ocrResult.reconstructedText, settings, appContext) }
 
                 val scheduleEvents = scheduleDeferred.await()
                 val pickupEvents = pickupDeferred.await()
@@ -203,12 +206,17 @@ object RecognitionProcessor {
         }
     }
 
-    private suspend fun analyzeSchedule(extractedText: String, settings: MySettings): List<CalendarEventData> {
+    private suspend fun analyzeSchedule(
+        extractedText: String,
+        settings: MySettings,
+        context: Context
+    ): List<CalendarEventData> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
         val schedulePrompt = AiPrompts.getSchedulePrompt(
+            context = context.applicationContext,
             timeStr = now.format(dtfFull),
             dateToday = now.format(dtfDate),
             dateYesterday = now.minusDays(1).format(dtfDate),
@@ -219,12 +227,17 @@ object RecognitionProcessor {
         return executeAiRequest(schedulePrompt, extractedText, settings, "日程识别")
     }
 
-    private suspend fun analyzePickup(extractedText: String, settings: MySettings): List<CalendarEventData> {
+    private suspend fun analyzePickup(
+        extractedText: String,
+        settings: MySettings,
+        context: Context
+    ): List<CalendarEventData> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
         val pickupPrompt = AiPrompts.getPickupPrompt(
+            context = context.applicationContext,
             timeStr = now.format(dtfFull),
             nowTime = now.format(dtfTime),
             nowPlusHourTime = now.plusHours(1).format(dtfTime)
