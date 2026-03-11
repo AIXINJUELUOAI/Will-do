@@ -35,19 +35,25 @@ import androidx.compose.foundation.layout.WindowInsets
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiSettingsPage(
     viewModel: SettingsViewModel,
+    mainViewModel: MainViewModel,
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
+    val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
+    val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
     var modelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
     var modelName by remember(settings) { mutableStateOf(settings.modelName) }
@@ -81,6 +87,20 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val focusManager = LocalFocusManager.current
 
+    fun showToast(message: String, type: ToastType) {
+        currentToastType = type
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
+
+    LaunchedEffect(mainViewModel) {
+        mainViewModel.promptCheckFeedback.collectLatest { feedback ->
+            showToast(feedback.message, feedback.type)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -112,6 +132,46 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 cardSubtitleStyle = cardSubtitleStyle,
                 contentBodyStyle = contentBodyStyle
             )
+
+            Text("云端 Prompt", style = sectionTitleStyle)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("当前本地版本 v$promptLocalVersion", style = cardTitleStyle)
+                    Text(
+                        "手动检查云端 prompt 更新；发现新版本后会先弹窗确认，再决定是否拉取到本地。",
+                        style = cardSubtitleStyle
+                    )
+
+                    FilledTonalButton(
+                        onClick = { mainViewModel.checkPromptUpdatesManually() },
+                        enabled = !promptCheckInProgress,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (promptCheckInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("检查中...")
+                        } else {
+                            Text("手动检查更新")
+                        }
+                    }
+                }
+            }
         }
 
         FloatingActionButton(
@@ -138,7 +198,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp + bottomInset),
-            snackbar = { data -> UniversalToast(message = data.visuals.message, type = ToastType.SUCCESS) }
+            snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }
 }
