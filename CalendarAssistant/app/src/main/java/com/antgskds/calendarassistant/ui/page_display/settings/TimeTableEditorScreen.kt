@@ -1,8 +1,5 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,34 +8,48 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutConfig
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.time.Duration
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import androidx.compose.material.icons.filled.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,9 +59,8 @@ fun TimeTableEditorScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val initialJson = settings.timeTableJson
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val jsonParser = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    val jsonParser = remember { Json { ignoreUnknownKeys = true; prettyPrint = true } }
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
@@ -62,80 +72,109 @@ fun TimeTableEditorScreen(
         }
     }
 
+    val defaultConfig = remember { TimeTableLayoutUtils.defaultConfig() }
+
     val fabSize = when (uiSize) { 1 -> 56.dp; 2 -> 64.dp; else -> 72.dp }
     val fabIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
 
-    // --- 字体样式优化 ---
-    // 板块标题：Primary + Bold
     val sectionHeaderStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary
     )
-    // 课间休息等辅助信息：可点击元素，颜色加深
     val contentBodyStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurface
     )
-    // 卡片内的时间段：OnSurface + Medium (稍微强调一点)
     val cardTimeStyle = MaterialTheme.typography.bodyLarge.copy(
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface
     )
-    // 卡片内的时长：Grey + Normal (不抢眼)
     val cardDurationStyle = MaterialTheme.typography.bodyMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    var totalNodes by remember { mutableIntStateOf(12) }
-    var courseDuration by remember { mutableIntStateOf(45) }
-    var morningStart by remember { mutableStateOf(LocalTime.of(8, 0)) }
-    var afternoonStart by remember { mutableStateOf(LocalTime.of(14, 0)) }
-    var nightStart by remember { mutableStateOf(LocalTime.of(19, 0)) }
+    var morningCount by remember { mutableIntStateOf(defaultConfig.morningCount) }
+    var afternoonCount by remember { mutableIntStateOf(defaultConfig.afternoonCount) }
+    var nightCount by remember { mutableIntStateOf(defaultConfig.nightCount) }
+    var morningStart by remember { mutableStateOf(defaultConfig.morningStart) }
+    var afternoonStart by remember { mutableStateOf(defaultConfig.afternoonStart) }
+    var nightStart by remember { mutableStateOf(defaultConfig.nightStart) }
     val customBreaks = remember { mutableStateMapOf<Int, Int>() }
-    var showTotalNodesPicker by remember { mutableStateOf(false) }
+    val customDurations = remember { mutableStateMapOf<Int, Int>() }
+
+    var showLayoutConfigDialog by remember { mutableStateOf(false) }
     var showBreakPickerForNode by remember { mutableStateOf<Int?>(null) }
+    var showDurationPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showTimePickerForAnchor by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (initialJson.isNotBlank()) {
-            try {
-                val nodes = jsonParser.decodeFromString<List<TimeNode>>(initialJson)
-                if (nodes.isNotEmpty()) {
-                    totalNodes = nodes.size
-                    morningStart = try { LocalTime.parse(nodes[0].startTime) } catch(e:Exception){ LocalTime.of(8,0) }
-                    if(nodes.size >= 5) afternoonStart = try { LocalTime.parse(nodes[4].startTime) } catch(e:Exception){ LocalTime.of(14,0) }
-                    if(nodes.size >= 9) nightStart = try { LocalTime.parse(nodes[8].startTime) } catch(e:Exception){ LocalTime.of(19,0) }
-
-                    for (i in 0 until nodes.size - 1) {
-                        val currentEnd = LocalTime.parse(nodes[i].endTime)
-                        val nextStart = LocalTime.parse(nodes[i + 1].startTime)
-                        if (i + 1 == 4 || i + 1 == 8) continue
-                        val diff = Duration.between(currentEnd, nextStart).toMinutes().toInt()
-                        if (diff != 10) customBreaks[i + 1] = diff
-                    }
-                }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+    LaunchedEffect(initialJson) {
+        val inferredConfig = TimeTableLayoutUtils.inferConfig(TimeTableLayoutUtils.parseNodes(initialJson))
+        morningCount = inferredConfig.morningCount
+        afternoonCount = inferredConfig.afternoonCount
+        nightCount = inferredConfig.nightCount
+        morningStart = inferredConfig.morningStart
+        afternoonStart = inferredConfig.afternoonStart
+        nightStart = inferredConfig.nightStart
+        customBreaks.clear()
+        customBreaks.putAll(inferredConfig.customBreaks)
+        customDurations.clear()
+        customDurations.putAll(inferredConfig.customDurations)
     }
 
-    val generatedNodes = remember(totalNodes, courseDuration, morningStart, afternoonStart, nightStart, customBreaks.toMap()) {
-        val list = mutableListOf<TimeNode>()
-        val fmt = DateTimeFormatter.ofPattern("HH:mm")
-        for (i in 1..totalNodes) {
-            val startTime: LocalTime = when (i) {
-                1 -> morningStart
-                5 -> afternoonStart
-                9 -> nightStart
-                else -> {
-                    val prevNode = list.last()
-                    val prevEnd = LocalTime.parse(prevNode.endTime)
-                    val breakMinutes = customBreaks[i - 1] ?: 10
-                    prevEnd.plusMinutes(breakMinutes.toLong())
-                }
+    val layoutConfig = remember(
+        morningCount,
+        afternoonCount,
+        nightCount,
+        morningStart,
+        afternoonStart,
+        nightStart,
+        customBreaks.toMap(),
+        customDurations.toMap()
+    ) {
+        val draftConfig = TimeTableLayoutConfig(
+            morningCount = morningCount,
+            afternoonCount = afternoonCount,
+            nightCount = nightCount,
+            morningStart = morningStart,
+            afternoonStart = afternoonStart,
+            nightStart = nightStart,
+            customBreaks = customBreaks.toMap(),
+            customDurations = customDurations.toMap()
+        )
+        draftConfig.copy(
+            customBreaks = TimeTableLayoutUtils.sanitizeCustomBreaks(customBreaks.toMap(), draftConfig),
+            customDurations = TimeTableLayoutUtils.sanitizeCustomDurations(customDurations.toMap(), draftConfig)
+        )
+    }
+
+    val generatedNodes = remember(layoutConfig) {
+        TimeTableLayoutUtils.generateNodes(layoutConfig)
+    }
+    val totalNodes = layoutConfig.totalNodes
+    val lunchBoundaryNode = layoutConfig.lunchBoundaryNode
+    val dinnerBoundaryNode = layoutConfig.dinnerBoundaryNode
+    val afternoonStartNode = layoutConfig.afternoonStartNode
+    val nightStartNode = layoutConfig.nightStartNode
+
+    LaunchedEffect(generatedNodes, afternoonCount, nightCount) {
+        if (afternoonCount > 0 && afternoonStartNode in 1..generatedNodes.size) {
+            val actualAfternoonStart = parseTimeOrFallback(
+                generatedNodes[afternoonStartNode - 1].startTime,
+                afternoonStart
+            )
+            if (actualAfternoonStart.isAfter(afternoonStart)) {
+                afternoonStart = actualAfternoonStart
             }
-            val endTime = startTime.plusMinutes(courseDuration.toLong())
-            list.add(TimeNode(i, startTime.format(fmt), endTime.format(fmt)))
         }
-        list
+
+        if (nightCount > 0 && nightStartNode in 1..generatedNodes.size) {
+            val actualNightStart = parseTimeOrFallback(
+                generatedNodes[nightStartNode - 1].startTime,
+                nightStart
+            )
+            if (actualNightStart.isAfter(nightStart)) {
+                nightStart = actualNightStart
+            }
+        }
     }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -151,45 +190,138 @@ fun TimeTableEditorScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            itemsIndexed(generatedNodes) { index, node ->
+            itemsIndexed(generatedNodes) { _, node ->
                 val nodeIndex = node.index
-                if (nodeIndex == 1) SectionHeader("上午课程", morningStart, sectionHeaderStyle, contentBodyStyle) { showTimePickerForAnchor = "morning" }
-                else if (nodeIndex == 5) SectionHeader("下午课程", afternoonStart, sectionHeaderStyle, contentBodyStyle) { showTimePickerForAnchor = "afternoon" }
-                else if (nodeIndex == 9) SectionHeader("晚上课程", nightStart, sectionHeaderStyle, contentBodyStyle) { showTimePickerForAnchor = "night" }
+                val nodeDuration = TimeTableLayoutUtils.durationForNode(nodeIndex, layoutConfig)
+                val nodeStartTime = parseTimeOrFallback(
+                    value = node.startTime,
+                    fallback = when {
+                        nodeIndex == 1 && morningCount > 0 -> morningStart
+                        nodeIndex == 1 && morningCount == 0 && afternoonCount > 0 -> afternoonStart
+                        else -> nightStart
+                    }
+                )
+
+                when {
+                    nodeIndex == 1 && morningCount > 0 -> SectionHeader(
+                        "上午课程",
+                        nodeStartTime,
+                        sectionHeaderStyle,
+                        contentBodyStyle
+                    ) {
+                        showTimePickerForAnchor = "morning"
+                    }
+
+                    nodeIndex == 1 && morningCount == 0 && afternoonCount > 0 -> SectionHeader(
+                        "下午课程",
+                        nodeStartTime,
+                        sectionHeaderStyle,
+                        contentBodyStyle
+                    ) {
+                        showTimePickerForAnchor = "afternoon"
+                    }
+
+                    nodeIndex == 1 && morningCount == 0 && afternoonCount == 0 && nightCount > 0 -> SectionHeader(
+                        "晚上课程",
+                        nodeStartTime,
+                        sectionHeaderStyle,
+                        contentBodyStyle
+                    ) {
+                        showTimePickerForAnchor = "night"
+                    }
+
+                    afternoonCount > 0 && nodeIndex == afternoonStartNode -> SectionHeader(
+                        "下午课程",
+                        nodeStartTime,
+                        sectionHeaderStyle,
+                        contentBodyStyle
+                    ) {
+                        showTimePickerForAnchor = "afternoon"
+                    }
+
+                    nightCount > 0 && nodeIndex == nightStartNode -> SectionHeader(
+                        "晚上课程",
+                        nodeStartTime,
+                        sectionHeaderStyle,
+                        contentBodyStyle
+                    ) {
+                        showTimePickerForAnchor = "night"
+                    }
+                }
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDurationPickerForNode = nodeIndex },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
-                        Modifier.padding(16.dp).fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(nodeIndex.toString(), modifier = Modifier.padding(4.dp)) }
+                            Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                Text(nodeIndex.toString(), modifier = Modifier.padding(4.dp))
+                            }
                             Spacer(Modifier.width(16.dp))
-                            // 左侧时间段：使用稍微强调的黑色
                             Text("${node.startTime} - ${node.endTime}", style = cardTimeStyle)
                         }
-                        // 右侧时长：使用灰色
-                        Text("${courseDuration}分", style = cardDurationStyle)
+                        Text("${nodeDuration}分", style = cardDurationStyle)
                     }
                 }
 
                 if (nodeIndex < totalNodes) {
-                    if (nodeIndex == 4 || nodeIndex == 8) {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            HorizontalDivider(modifier = Modifier.alpha(0.3f))
-                            Text(if(nodeIndex==4)"午休" else "晚饭", style = contentBodyStyle, modifier = Modifier.background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp))
+                    when (nodeIndex) {
+                        lunchBoundaryNode,
+                        dinnerBoundaryNode -> {
+                            val label = if (nodeIndex == lunchBoundaryNode) "午休" else "晚饭"
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                HorizontalDivider(modifier = Modifier.alpha(0.3f))
+                                Text(
+                                    text = label,
+                                    style = contentBodyStyle,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.background)
+                                        .padding(horizontal = 8.dp)
+                                )
+                            }
                         }
-                    } else {
-                        val breakTime = customBreaks[nodeIndex] ?: 10
-                        Box(Modifier.fillMaxWidth().height(36.dp).clickable { showBreakPickerForNode = nodeIndex }, contentAlignment = Alignment.Center) {
-                            HorizontalDivider(modifier = Modifier.fillMaxWidth(0.7f).alpha(0.2f), color = MaterialTheme.colorScheme.onSurface)
-                            Text(text = "休息 ${breakTime} 分钟", style = contentBodyStyle, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.background(MaterialTheme.colorScheme.background).padding(horizontal = 7.dp))
+
+                        else -> {
+                            val breakTime = layoutConfig.customBreaks[nodeIndex]
+                                ?: TimeTableLayoutUtils.DEFAULT_BREAK_MINUTES
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
+                                    .clickable { showBreakPickerForNode = nodeIndex },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                HorizontalDivider(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.7f)
+                                        .alpha(0.2f),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "休息 ${breakTime} 分钟",
+                                    style = contentBodyStyle,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.background)
+                                        .padding(horizontal = 7.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -204,7 +336,7 @@ fun TimeTableEditorScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             FloatingActionButton(
-                onClick = { showTotalNodesPicker = true },
+                onClick = { showLayoutConfigDialog = true },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -219,9 +351,13 @@ fun TimeTableEditorScreen(
 
             FloatingActionButton(
                 onClick = {
-                    val jsonStr = jsonParser.encodeToString(generatedNodes)
-                    viewModel.updateTimeTable(jsonStr)
-                    showToast("作息时间已保存", ToastType.SUCCESS)
+                    if (!isChronologicalTimeTable(generatedNodes)) {
+                        showToast("作息时间有重叠，请调整各时段开始时间", ToastType.ERROR)
+                    } else {
+                        val jsonStr = jsonParser.encodeToString(generatedNodes)
+                        viewModel.updateTimeTable(jsonStr)
+                        showToast("作息时间已保存", ToastType.SUCCESS)
+                    }
                 },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -241,37 +377,150 @@ fun TimeTableEditorScreen(
         )
     }
 
-    if (showTotalNodesPicker) {
-        val options = (4..16).toList()
-        AlertDialog(
-            onDismissRequest = { showTotalNodesPicker = false },
-            title = { Text("总节数") },
-            text = { WheelPicker(items = options.map { "$it 节" }, initialIndex = options.indexOf(totalNodes).coerceAtLeast(0), onSelectionChanged = { totalNodes = options[it] }) },
-            confirmButton = { TextButton(onClick = { showTotalNodesPicker = false }) { Text("确定") } }
+    if (showLayoutConfigDialog) {
+        TimeTableStructureDialog(
+            initialMorningCount = morningCount,
+            initialAfternoonCount = afternoonCount,
+            initialNightCount = nightCount,
+            onDismiss = { showLayoutConfigDialog = false },
+            onConfirm = { newMorningCount, newAfternoonCount, newNightCount ->
+                val updatedConfig = TimeTableLayoutConfig(
+                    morningCount = newMorningCount,
+                    afternoonCount = newAfternoonCount,
+                    nightCount = newNightCount,
+                    morningStart = morningStart,
+                    afternoonStart = afternoonStart,
+                    nightStart = nightStart,
+                    customBreaks = customBreaks.toMap(),
+                    customDurations = customDurations.toMap()
+                )
+                val sanitizedBreaks = TimeTableLayoutUtils.sanitizeCustomBreaks(
+                    customBreaks.toMap(),
+                    updatedConfig
+                )
+                val sanitizedDurations = TimeTableLayoutUtils.sanitizeCustomDurations(
+                    customDurations.toMap(),
+                    updatedConfig
+                )
+
+                morningCount = newMorningCount
+                afternoonCount = newAfternoonCount
+                nightCount = newNightCount
+                customBreaks.clear()
+                customBreaks.putAll(sanitizedBreaks)
+                customDurations.clear()
+                customDurations.putAll(sanitizedDurations)
+                showLayoutConfigDialog = false
+            }
         )
     }
 
     if (showBreakPickerForNode != null) {
-        val nodeIdx = showBreakPickerForNode!!
+        val nodeIndex = showBreakPickerForNode!!
         val options = listOf(5, 10, 15, 20, 25, 30, 40)
+        val initialBreak = remember(nodeIndex, layoutConfig.customBreaks[nodeIndex]) {
+            nearestOption(
+                options,
+                layoutConfig.customBreaks[nodeIndex] ?: TimeTableLayoutUtils.DEFAULT_BREAK_MINUTES
+            )
+        }
+        var selectedBreak by remember(nodeIndex, initialBreak) { mutableIntStateOf(initialBreak) }
         AlertDialog(
             onDismissRequest = { showBreakPickerForNode = null },
             title = { Text("课间时长") },
-            text = { WheelPicker(items = options.map { "$it 分钟" }, initialIndex = options.indexOf(customBreaks[nodeIdx]?:10).coerceAtLeast(0), onSelectionChanged = { customBreaks[nodeIdx] = options[it] }) },
-            confirmButton = { TextButton(onClick = { showBreakPickerForNode = null }) { Text("确定") } }
+            text = {
+                WheelPicker(
+                    items = options.map { "$it 分钟" },
+                    initialIndex = options.indexOf(initialBreak).coerceAtLeast(0),
+                    onSelectionChanged = { selectedBreak = options[it] }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (selectedBreak == TimeTableLayoutUtils.DEFAULT_BREAK_MINUTES) {
+                        customBreaks.remove(nodeIndex)
+                    } else {
+                        customBreaks[nodeIndex] = selectedBreak
+                    }
+                    showBreakPickerForNode = null
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBreakPickerForNode = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showDurationPickerForNode != null) {
+        val nodeIndex = showDurationPickerForNode!!
+        val currentDuration = TimeTableLayoutUtils.durationForNode(nodeIndex, layoutConfig)
+        val options = remember(currentDuration) {
+            val baseOptions = (TimeTableLayoutUtils.MIN_DURATION_MINUTES..
+                TimeTableLayoutUtils.MAX_DURATION_MINUTES step 5).toMutableList()
+            if (currentDuration !in baseOptions) {
+                baseOptions += currentDuration.coerceIn(
+                    TimeTableLayoutUtils.MIN_DURATION_MINUTES,
+                    TimeTableLayoutUtils.MAX_DURATION_MINUTES
+                )
+                baseOptions.sort()
+            }
+            baseOptions.toList()
+        }
+        var selectedDuration by remember(nodeIndex, currentDuration) { mutableIntStateOf(currentDuration) }
+
+        AlertDialog(
+            onDismissRequest = { showDurationPickerForNode = null },
+            title = { Text("第 $nodeIndex 节时长") },
+            text = {
+                WheelPicker(
+                    items = options.map { "$it 分钟" },
+                    initialIndex = options.indexOf(currentDuration).coerceAtLeast(0),
+                    onSelectionChanged = { selectedDuration = options[it] }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (selectedDuration == TimeTableLayoutUtils.DEFAULT_COURSE_DURATION_MINUTES) {
+                        customDurations.remove(nodeIndex)
+                    } else {
+                        customDurations[nodeIndex] = selectedDuration
+                    }
+                    showDurationPickerForNode = null
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDurationPickerForNode = null }) {
+                    Text("取消")
+                }
+            }
         )
     }
 
     if (showTimePickerForAnchor != null) {
-        val initial = when(showTimePickerForAnchor) { "morning" -> morningStart; "afternoon" -> afternoonStart; else -> nightStart }
+        val initialTime = when (showTimePickerForAnchor) {
+            "morning" -> morningStart
+            "afternoon" -> afternoonStart
+            else -> nightStart
+        }
         WheelTimePickerDialog(
-            initialTime = initial.toString(),
+            initialTime = initialTime.toString(),
             onDismiss = { showTimePickerForAnchor = null },
             onConfirm = {
                 try {
-                    val t = LocalTime.parse(it)
-                    when(showTimePickerForAnchor) { "morning" -> morningStart=t; "afternoon" -> afternoonStart=t; "night" -> nightStart=t }
-                } catch(_:Exception){}
+                    val selectedTime = LocalTime.parse(it)
+                    when (showTimePickerForAnchor) {
+                        "morning" -> morningStart = selectedTime
+                        "afternoon" -> afternoonStart = selectedTime
+                        "night" -> nightStart = selectedTime
+                    }
+                } catch (_: Exception) {
+                }
                 showTimePickerForAnchor = null
             }
         )
@@ -279,7 +528,148 @@ fun TimeTableEditorScreen(
 }
 
 @Composable
-private fun SectionHeader(title: String, time: LocalTime, sectionHeaderStyle: TextStyle, contentBodyStyle: TextStyle, onClick: () -> Unit) {
+private fun TimeTableStructureDialog(
+    initialMorningCount: Int,
+    initialAfternoonCount: Int,
+    initialNightCount: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int, Int) -> Unit
+) {
+    val daySectionOptions = remember {
+        (TimeTableLayoutUtils.MIN_SECTION_COUNT..TimeTableLayoutUtils.MAX_SECTION_COUNT).toList()
+    }
+    val nightSectionOptions = remember {
+        (TimeTableLayoutUtils.MIN_NIGHT_SECTION_COUNT..TimeTableLayoutUtils.MAX_NIGHT_SECTION_COUNT).toList()
+    }
+    val requiresLegacyConversion =
+        initialMorningCount !in TimeTableLayoutUtils.MIN_SECTION_COUNT..TimeTableLayoutUtils.MAX_SECTION_COUNT ||
+            initialAfternoonCount !in TimeTableLayoutUtils.MIN_SECTION_COUNT..TimeTableLayoutUtils.MAX_SECTION_COUNT ||
+            initialNightCount !in TimeTableLayoutUtils.MIN_NIGHT_SECTION_COUNT..TimeTableLayoutUtils.MAX_NIGHT_SECTION_COUNT
+
+    var morningCount by remember {
+        mutableIntStateOf(
+            initialMorningCount.coerceIn(
+                TimeTableLayoutUtils.MIN_SECTION_COUNT,
+                TimeTableLayoutUtils.MAX_SECTION_COUNT
+            )
+        )
+    }
+    var afternoonCount by remember {
+        mutableIntStateOf(
+            initialAfternoonCount.coerceIn(
+                TimeTableLayoutUtils.MIN_SECTION_COUNT,
+                TimeTableLayoutUtils.MAX_SECTION_COUNT
+            )
+        )
+    }
+    var nightCount by remember {
+        mutableIntStateOf(
+            initialNightCount.coerceIn(
+                TimeTableLayoutUtils.MIN_NIGHT_SECTION_COUNT,
+                TimeTableLayoutUtils.MAX_NIGHT_SECTION_COUNT
+            )
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("课程结构", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "总节数 ${morningCount + afternoonCount + nightCount} 节",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (requiresLegacyConversion) {
+                    Text(
+                        text = "当前作息表属于旧版结构，确认后会转换为新的早/中/晚三段节数。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TimeTableCountWheel(
+                        title = "上午",
+                        items = daySectionOptions,
+                        selectedValue = morningCount,
+                        modifier = Modifier.weight(1f),
+                        onValueChanged = { morningCount = it }
+                    )
+                    TimeTableCountWheel(
+                        title = "中午",
+                        items = daySectionOptions,
+                        selectedValue = afternoonCount,
+                        modifier = Modifier.weight(1f),
+                        onValueChanged = { afternoonCount = it }
+                    )
+                    TimeTableCountWheel(
+                        title = "晚上",
+                        items = nightSectionOptions,
+                        selectedValue = nightCount,
+                        modifier = Modifier.weight(1f),
+                        onValueChanged = { nightCount = it }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(morningCount, afternoonCount, nightCount) }
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}
+
+@Composable
+private fun TimeTableCountWheel(
+    title: String,
+    items: List<Int>,
+    selectedValue: Int,
+    modifier: Modifier = Modifier,
+    onValueChanged: (Int) -> Unit
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        WheelPicker(
+            items = items.map { "$it 节" },
+            initialIndex = items.indexOf(selectedValue).coerceAtLeast(0),
+            onSelectionChanged = { onValueChanged(items[it]) }
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    time: LocalTime,
+    sectionHeaderStyle: TextStyle,
+    contentBodyStyle: TextStyle,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -287,13 +677,57 @@ private fun SectionHeader(title: String, time: LocalTime, sectionHeaderStyle: Te
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = title,
-            style = sectionHeaderStyle
-        )
-        Text(
-            text = "开始: $time",
-            style = contentBodyStyle
-        )
+        Text(text = title, style = sectionHeaderStyle)
+        Text(text = "开始: $time", style = contentBodyStyle)
+    }
+}
+
+private fun isChronologicalTimeTable(nodes: List<TimeNode>): Boolean {
+    if (nodes.any { node ->
+            try {
+                val start = LocalTime.parse(node.startTime)
+                val end = LocalTime.parse(node.endTime)
+                !end.isAfter(start)
+            } catch (_: Exception) {
+                true
+            }
+        }
+    ) {
+        return false
+    }
+
+    return nodes.zipWithNext().all { (current, next) ->
+        try {
+            val currentEnd = LocalTime.parse(current.endTime)
+            val nextStart = LocalTime.parse(next.startTime)
+            !currentEnd.isAfter(nextStart)
+        } catch (_: Exception) {
+            false
+        }
+    }
+}
+
+private fun nearestOption(options: List<Int>, target: Int): Int {
+    if (options.isEmpty()) return target
+
+    var nearest = options.first()
+    var bestDistance = kotlin.math.abs(nearest - target)
+
+    for (option in options.drop(1)) {
+        val distance = kotlin.math.abs(option - target)
+        if (distance < bestDistance) {
+            nearest = option
+            bestDistance = distance
+        }
+    }
+
+    return nearest
+}
+
+private fun parseTimeOrFallback(value: String, fallback: LocalTime): LocalTime {
+    return try {
+        LocalTime.parse(value)
+    } catch (_: Exception) {
+        fallback
     }
 }

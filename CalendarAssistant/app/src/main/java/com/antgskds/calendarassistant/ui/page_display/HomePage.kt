@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
@@ -67,8 +68,6 @@ import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -139,7 +138,7 @@ fun HomePage(
                 }
 
                 val eventData = withContext(Dispatchers.IO) {
-                    RecognitionProcessor.parseUserText(ocrText, settings)
+                    RecognitionProcessor.parseUserText(ocrText, settings, context.applicationContext)
                 }
 
                 if (eventData == null || eventData.title.isBlank()) {
@@ -360,9 +359,7 @@ fun HomePage(
                 }
         ) {
             val maxNodes = remember(uiState.settings.timeTableJson) {
-                try {
-                    Json.parseToJsonElement(uiState.settings.timeTableJson).jsonArray.size
-                } catch (e: Exception) { 12 }
+                TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
             }
 
             ScheduleView(
@@ -382,6 +379,7 @@ fun HomePage(
                     initialStartNode = course.startNode,
                     initialEndNode = course.endNode,
                     initialDate = date,
+                    maxNodes = maxNodes,
                     onDismiss = { editingCourse = null },
                     onDelete = {
                         viewModel.deleteSingleCourseInstance(course, date)

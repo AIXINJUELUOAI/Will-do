@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.dialogs.CourseEditDialog
 import com.antgskds.calendarassistant.ui.dialogs.CourseItem
@@ -24,6 +25,9 @@ fun CourseManagerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val courses = uiState.courses
+    val maxNodes = remember(uiState.settings.timeTableJson) {
+        TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
+    }
 
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
@@ -97,6 +101,7 @@ fun CourseManagerScreen(
     if (showEditDialog) {
         CourseEditDialog(
             course = courseToEdit,
+            maxNodes = maxNodes,
             onDismiss = { showEditDialog = false; courseToEdit = null },
             onConfirm = { newCourse: Course ->
                 if (courseToEdit != null) {

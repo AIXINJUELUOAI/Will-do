@@ -187,7 +187,11 @@ private fun SettingsPageContent(
                     .fillMaxSize()
             ) {
                 when (destination) {
-                    SettingsDestination.AI -> AiSettingsPage(settingsViewModel, uiSize)
+                    SettingsDestination.AI -> AiSettingsPage(
+                        viewModel = settingsViewModel,
+                        mainViewModel = mainViewModel,
+                        uiSize = uiSize
+                    )
                     SettingsDestination.Schedule,
                     SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
                         viewModel = settingsViewModel,
