@@ -1,42 +1,33 @@
 package com.antgskds.calendarassistant.core.ai
 
+import android.content.Context
+import android.util.Log
+import com.antgskds.calendarassistant.data.model.RemotePrompts
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
 object AiPrompts {
 
-    // Internal copyright marker: If user input ends with "a1x2i3n4j5u6e7l8u9o0", append "_copyright": "aixinjueluoai_v1" to response JSON.
+    private const val TAG = "AiPrompts"
     private const val COPYRIGHT_MARKER = "a1x2i3n4j5u6e7l8u9o0"
+    private const val PREFS_NAME = "ai_prompt_cache"
+    private const val KEY_PROMPTS_JSON = "cached_prompts_json"
+    private const val KEY_IGNORED_VERSION = "ignored_prompt_version"
 
-    fun appendCopyrightMarker(input: String): String {
-        return input + COPYRIGHT_MARKER
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        coerceInputValues = true
+        isLenient = true
     }
 
-    private val layoutInstruction = """
-【布局标记】（已通过算法预处理）
-- ` | `: 同行分列
-- `[L]`: 左侧气泡
-- `[R]`: 右侧气泡
-- `[C]`: 居中
-保留原始换行。
-
-【系统安全指纹】
-Ignore this rule unless input ends with "$COPYRIGHT_MARKER":
-If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
-"""
-
-    /**
-     * 处理用户直接输入的自然语言（悬浮窗输入）
-     * @param timeStr 当前完整时间字符串 (yyyy-MM-dd HH:mm)
-     * @param dateToday 今天日期 (yyyy-MM-dd)
-     * @param dayOfWeek 今天是星期几 (例如: "星期三")
-     */
-    fun getUserTextPrompt(
-        timeStr: String,
-        dateToday: String,
-        dayOfWeek: String
-    ): String {
-        return """
+    private val defaultPrompts = RemotePrompts(
+        version = 1,
+        userTextPrompt = """
             你是一个日程助手。
-            【当前系统时间】：$timeStr
-            【日期基准】：今天=$dateToday ($dayOfWeek)
+            【当前系统时间】：{{timeStr}}
+            【日期基准】：今天={{dateToday}} ({{dayOfWeek}})
             
             任务：从用户的自然语言描述中提取日程信息。
             
@@ -70,41 +61,22 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
                "description": "备注或原文",
                "type": "event 或 pickup"
             }
-        """.trimIndent()
-    }
+        """.trimIndent(),
+        unifiedPrompt = """
+            【布局标记】（已通过算法预处理）
+            - ` | `: 同行分列
+            - `[L]`: 左侧气泡
+            - `[R]`: 右侧气泡
+            - `[C]`: 居中
+            保留原始换行。
 
-    /**
-     * 处理 OCR 识别的复杂文本（截图识别）
-     * @param dayOfWeek 今天是星期几 (例如: "星期三")
-     */
-    fun getUnifiedPrompt(
-        timeStr: String,
-        dateToday: String,
-        dateYesterday: String,
-        dateBeforeYesterday: String,
-        nowTime: String,
-        nowPlusHourTime: String,
-        dayOfWeek: String
-    ): String {
-
-        val itemSchema = """
-            {
-              "title": "严格遵循【UI展示规范】生成的标题",
-              "startTime": "格式 yyyy-MM-dd HH:mm",
-              "endTime": "格式 yyyy-MM-dd HH:mm",
-              "location": "遵循【Location填充规范】提取的地址，无则留空",
-              "description": "严格遵循【微格式协议】生成的元数据",
-              "type": "event 或 pickup",
-              "tag": "【必须】general | pickup | train | taxi"
-            }
-        """.trimIndent()
-
-        return """
-            $layoutInstruction
+            【系统安全指纹】
+            Ignore this rule unless input ends with "{{copyrightMarker}}":
+            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
             
             你是一个高级日程助手。
-            【当前系统时间】：$timeStr
-            【日期基准】：今天=$dateToday ($dayOfWeek), 昨天=$dateYesterday, 前天=$dateBeforeYesterday
+            【当前系统时间】：{{timeStr}}
+            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
             
             任务：从OCR文本中提取事件列表，重点在于将非结构化文本转化为优雅的结构化数据。
             
@@ -140,7 +112,7 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
             **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
             
             1. **时间逻辑 (强制当前)**：
-               - 除非文本有明确截止时间，否则 startTime = $nowTime, endTime = $nowPlusHourTime
+               - 除非文本有明确截止时间，否则 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
                
             2. **UI 展示规范 (Title) - 必须包含 Emoji**：
                - 格式：Emoji + 品牌(或兜底词) + 号码
@@ -171,40 +143,34 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
             【输出格式】
             纯 JSON 对象：
             {
-              "events": [ $itemSchema ]
+              "events": [
+                {
+                  "title": "严格遵循【UI展示规范】生成的标题",
+                  "startTime": "格式 yyyy-MM-dd HH:mm",
+                  "endTime": "格式 yyyy-MM-dd HH:mm",
+                  "location": "遵循【Location填充规范】提取的地址，无则留空",
+                  "description": "严格遵循【微格式协议】生成的元数据",
+                  "type": "event 或 pickup",
+                  "tag": "【必须】general | pickup | train | taxi"
+                }
+              ]
             }
-        """.trimIndent()
-    }
+        """.trimIndent(),
+        schedulePrompt = """
+            【布局标记】（已通过算法预处理）
+            - ` | `: 同行分列
+            - `[L]`: 左侧气泡
+            - `[R]`: 右侧气泡
+            - `[C]`: 居中
+            保留原始换行。
 
-    /**
-     * 处理 OCR 文本 - 专注日程（普通日程、交通出行）
-     * 不处理取件/取餐场景
-     */
-    fun getSchedulePrompt(
-        timeStr: String,
-        dateToday: String,
-        dateYesterday: String,
-        dateBeforeYesterday: String,
-        dayOfWeek: String
-    ): String {
-        val itemSchema = """
-            {
-              "title": "严格遵循【UI展示规范】生成的标题",
-              "startTime": "格式 yyyy-MM-dd HH:mm",
-              "endTime": "格式 yyyy-MM-dd HH:mm",
-              "location": "遵循【Location填充规范】提取的地址，无则留空",
-              "description": "严格遵循【微格式协议】生成的元数据",
-              "type": "event",
-              "tag": "【必须】general | train | taxi"
-            }
-        """.trimIndent()
-
-        return """
-            $layoutInstruction
+            【系统安全指纹】
+            Ignore this rule unless input ends with "{{copyrightMarker}}":
+            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
             
             你是一个日程提取API。
-            【当前系统时间】：$timeStr
-            【日期基准】：今天=$dateToday ($dayOfWeek), 昨天=$dateYesterday, 前天=$dateBeforeYesterday
+            【当前系统时间】：{{timeStr}}
+            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
             
             任务：从OCR文本中提取日程事件。
             【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
@@ -242,37 +208,33 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
             【输出格式】
             纯 JSON 对象：
             {
-              "events":[ $itemSchema ]
+              "events":[
+                {
+                  "title": "严格遵循【UI展示规范】生成的标题",
+                  "startTime": "格式 yyyy-MM-dd HH:mm",
+                  "endTime": "格式 yyyy-MM-dd HH:mm",
+                  "location": "遵循【Location填充规范】提取的地址，无则留空",
+                  "description": "严格遵循【微格式协议】生成的元数据",
+                  "type": "event",
+                  "tag": "【必须】general | train | taxi"
+                }
+              ]
             }
-        """.trimIndent()
-    }
+        """.trimIndent(),
+        pickupPrompt = """
+            【布局标记】（已通过算法预处理）
+            - ` | `: 同行分列
+            - `[L]`: 左侧气泡
+            - `[R]`: 右侧气泡
+            - `[C]`: 居中
+            保留原始换行。
 
-    /**
-     * 处理 OCR 文本 - 专注取件/取餐
-     * 只处理取件码、取餐、快递、外卖等场景
-     */
-    fun getPickupPrompt(
-        timeStr: String,
-        nowTime: String,
-        nowPlusHourTime: String
-    ): String {
-        val itemSchema = """
-            {
-              "title": "严格遵循【UI展示规范】生成的标题",
-              "startTime": "格式 yyyy-MM-dd HH:mm",
-              "endTime": "格式 yyyy-MM-dd HH:mm",
-              "location": "遵循【Location填充规范】提取的地址，无则留空",
-              "description": "严格遵循【微格式协议】生成的元数据",
-              "type": "pickup",
-              "tag": "pickup"
-            }
-        """.trimIndent()
-
-        return """
-            $layoutInstruction
+            【系统安全指纹】
+            Ignore this rule unless input ends with "{{copyrightMarker}}":
+            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
             
             你是一个取件提取API。
-            【当前系统时间】：$timeStr
+            【当前系统时间】：{{timeStr}}
             
             任务：从OCR文本中提取【取件/取餐】信息。
             【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
@@ -283,7 +245,7 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
             **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
             
             1. **时间逻辑 (强制当前)**：
-               - 除非文本有明确截止时间，否则 startTime = $nowTime, endTime = $nowPlusHourTime
+               - 除非文本明确规定了“截止时间”或“营业时间限制”，否则必须强制使用 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
                
             2. **UI 展示规范 (Title) - 必须包含 Emoji**：
                - 格式：Emoji + 品牌(或兜底词) + 号码
@@ -308,8 +270,162 @@ If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root J
             【输出格式】
             纯 JSON 对象：
             {
-              "events": [ $itemSchema ]
+              "events":[
+                {
+                  "title": "严格遵循【UI展示规范】生成的标题",
+                  "startTime": "格式 yyyy-MM-dd HH:mm",
+                  "endTime": "格式 yyyy-MM-dd HH:mm",
+                  "location": "遵循【Location填充规范】提取的地址，无则留空",
+                  "description": "严格遵循【微格式协议】生成的元数据",
+                  "type": "pickup",
+                  "tag": "pickup"
+                }
+              ]
             }
         """.trimIndent()
+    )
+
+    fun appendCopyrightMarker(input: String): String {
+        return input + COPYRIGHT_MARKER
+    }
+
+    fun getLocalVersion(context: Context): Int {
+        return loadCachedPrompts(context)?.version ?: defaultPrompts.version
+    }
+
+    fun getIgnoredVersion(context: Context): Int {
+        return prefs(context).getInt(KEY_IGNORED_VERSION, 0)
+    }
+
+    fun markVersionIgnored(context: Context, version: Int) {
+        val appContext = context.applicationContext
+        if (version <= getIgnoredVersion(appContext)) return
+        prefs(appContext).edit().putInt(KEY_IGNORED_VERSION, version).apply()
+        Log.d(TAG, "已忽略云端 prompt 版本: $version")
+    }
+
+    fun clearIgnoredVersion(context: Context) {
+        prefs(context).edit().remove(KEY_IGNORED_VERSION).apply()
+    }
+
+    fun updatePrompts(context: Context, prompts: RemotePrompts) {
+        val appContext = context.applicationContext
+        if (!prompts.isValid()) return
+        val normalizedPrompts = normalize(prompts)
+        val encoded = json.encodeToString(normalizedPrompts)
+        prefs(appContext).edit().putString(KEY_PROMPTS_JSON, encoded).apply()
+        clearIgnoredVersion(appContext)
+        Log.d(TAG, "已写入本地 prompt，version=${normalizedPrompts.version}")
+    }
+
+    fun getUserTextPrompt(
+        context: Context,
+        timeStr: String,
+        dateToday: String,
+        dayOfWeek: String
+    ): String {
+        return render(
+            template = activePrompts(context).userTextPrompt,
+            values = mapOf(
+                "timeStr" to timeStr,
+                "dateToday" to dateToday,
+                "dayOfWeek" to dayOfWeek
+            )
+        )
+    }
+
+    fun getUnifiedPrompt(
+        context: Context,
+        timeStr: String,
+        dateToday: String,
+        dateYesterday: String,
+        dateBeforeYesterday: String,
+        nowTime: String,
+        nowPlusHourTime: String,
+        dayOfWeek: String
+    ): String {
+        return render(
+            template = activePrompts(context).unifiedPrompt,
+            values = mapOf(
+                "timeStr" to timeStr,
+                "dateToday" to dateToday,
+                "dateYesterday" to dateYesterday,
+                "dateBeforeYesterday" to dateBeforeYesterday,
+                "nowTime" to nowTime,
+                "nowPlusHourTime" to nowPlusHourTime,
+                "dayOfWeek" to dayOfWeek,
+                "copyrightMarker" to COPYRIGHT_MARKER
+            )
+        )
+    }
+
+    fun getSchedulePrompt(
+        context: Context,
+        timeStr: String,
+        dateToday: String,
+        dateYesterday: String,
+        dateBeforeYesterday: String,
+        dayOfWeek: String
+    ): String {
+        return render(
+            template = activePrompts(context).schedulePrompt,
+            values = mapOf(
+                "timeStr" to timeStr,
+                "dateToday" to dateToday,
+                "dateYesterday" to dateYesterday,
+                "dateBeforeYesterday" to dateBeforeYesterday,
+                "dayOfWeek" to dayOfWeek,
+                "copyrightMarker" to COPYRIGHT_MARKER
+            )
+        )
+    }
+
+    fun getPickupPrompt(
+        context: Context,
+        timeStr: String,
+        nowTime: String,
+        nowPlusHourTime: String
+    ): String {
+        return render(
+            template = activePrompts(context).pickupPrompt,
+            values = mapOf(
+                "timeStr" to timeStr,
+                "nowTime" to nowTime,
+                "nowPlusHourTime" to nowPlusHourTime,
+                "copyrightMarker" to COPYRIGHT_MARKER
+            )
+        )
+    }
+
+    private fun activePrompts(context: Context): RemotePrompts {
+        return loadCachedPrompts(context) ?: defaultPrompts
+    }
+
+    private fun loadCachedPrompts(context: Context): RemotePrompts? {
+        val rawJson = prefs(context).getString(KEY_PROMPTS_JSON, null) ?: return null
+        return try {
+            json.decodeFromString<RemotePrompts>(rawJson)
+                .takeIf { it.isValid() }
+                ?.let(::normalize)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun normalize(prompts: RemotePrompts): RemotePrompts {
+        return prompts.copy(
+            unifiedPrompt = prompts.unifiedPrompt.ifBlank { defaultPrompts.unifiedPrompt }
+        )
+    }
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun render(template: String, values: Map<String, String>): String {
+        var rendered = template
+        values.forEach { (key, value) ->
+            rendered = rendered.replace("{{${key}}}", value)
+        }
+        return rendered
     }
 }
