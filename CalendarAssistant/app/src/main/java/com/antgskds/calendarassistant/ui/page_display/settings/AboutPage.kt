@@ -22,7 +22,10 @@ import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.R
 
 @Composable
-fun AboutPage(uiSize: Int = 2) {
+fun AboutPage(
+    uiSize: Int = 2,
+    onNavigateToDonate: () -> Unit = {}
+) {
 
     val context = LocalContext.current
 
@@ -89,11 +92,21 @@ fun AboutPage(uiSize: Int = 2) {
             contribution = "关于Flyme的实况通知代码"
         )
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // “感谢您的捐赠” 字体样式已和“特别致谢”统一
+        Text(
+            text = "感谢您的捐赠",
+            style = sectionTitleStyle,
+            textAlign = TextAlign.Center
+        )
+
         Spacer(modifier = Modifier.height(64.dp))
 
         // ================= 底部图标按钮 =================
+        // 使用 Arrangement.spacedBy 来确保三个按钮中间的间距绝对一致 (这里设置为 32.dp)
         Row(
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -113,8 +126,6 @@ fun AboutPage(uiSize: Int = 2) {
                 )
             }
 
-            Spacer(modifier = Modifier.width(32.dp))
-
             // 2. GPL 协议按钮
             IconButton(
                 onClick = {
@@ -126,6 +137,20 @@ fun AboutPage(uiSize: Int = 2) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_gpl),
                     contentDescription = "GPLv3 License",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            // 3. 捐赠按钮 (已替换为汽水瓶图片资源)
+            IconButton(
+                onClick = onNavigateToDonate,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Icon(
+                    // 请确保在 res/drawable/ 目录下放入了名为 ic_cola 的汽水瓶图标
+                    painter = painterResource(id = R.drawable.ic_cola),
+                    contentDescription = "捐赠开发者",
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(32.dp)
                 )
