@@ -6,5 +6,6 @@ import kotlinx.serialization.Serializable
 data class TimeNode(
     val index: Int,
     val startTime: String, // HH:mm
-    val endTime: String    // HH:mm
+    val endTime: String,   // HH:mm
+    val period: String = ""
 )

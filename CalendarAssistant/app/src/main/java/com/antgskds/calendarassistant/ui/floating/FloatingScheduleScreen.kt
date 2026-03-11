@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,11 +24,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -60,8 +61,8 @@ import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -103,11 +104,12 @@ import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.core.util.PickupUtils
 import com.antgskds.calendarassistant.core.util.TransportUtils
-import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
-import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
+import com.antgskds.calendarassistant.ui.components.WheelDatePicker
+import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -115,6 +117,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.CompositionLocalProvider // 需要确保有这个导入
+import androidx.compose.ui.unit.Density // 需要确保有这个导入
 
 @Composable
 fun FloatingScheduleScreen(
@@ -129,19 +133,22 @@ fun FloatingScheduleScreen(
 ) {
     var manualInputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var pickerRequest by remember { mutableStateOf<FloatingPickerRequest?>(null) }
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
+    val isPickerVisible = pickerRequest != null
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
-            .pointerInput(isImeVisible) {
+            .pointerInput(isImeVisible, isPickerVisible) {
                 detectTapGestures(onTap = {
+                    if (isPickerVisible) return@detectTapGestures
                     if (isImeVisible) {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
@@ -160,7 +167,13 @@ fun FloatingScheduleScreen(
             listState = listState,
             onUpdateEvent = onUpdateEvent,
             onEventAction = onEventAction,
-            onUndo = { id, tag -> onUndo(id, tag) }
+            onUndo = { id, tag -> onUndo(id, tag) },
+            onRequestDatePicker = { initialDate, onConfirm ->
+                pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
+            },
+            onRequestTimePicker = { initialTime, onConfirm ->
+                pickerRequest = FloatingPickerRequest.Time(initialTime, onConfirm)
+            }
         )
 
         // 顶部遮罩
@@ -208,6 +221,27 @@ fun FloatingScheduleScreen(
             onSwipeUpClose = onClose,
             isLoading = isLoading
         )
+
+        pickerRequest?.let { request ->
+            when (request) {
+                is FloatingPickerRequest.Date -> FloatingDatePickerOverlay(
+                    initialDate = request.initialDate,
+                    onDismiss = { pickerRequest = null },
+                    onConfirm = { date ->
+                        request.onConfirm(date)
+                        pickerRequest = null
+                    }
+                )
+                is FloatingPickerRequest.Time -> FloatingTimePickerOverlay(
+                    initialTime = request.initialTime,
+                    onDismiss = { pickerRequest = null },
+                    onConfirm = { time ->
+                        request.onConfirm(time)
+                        pickerRequest = null
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -316,7 +350,9 @@ fun TimeWheelList(
     listState: LazyListState = rememberLazyListState(),
     onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String, String) -> Unit = { _, _ -> }
+    onUndo: (String, String) -> Unit = { _, _ -> },
+    onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
+    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
     val now = LocalDateTime.now()
     val sortedEvents = remember(events, now) {
@@ -357,7 +393,9 @@ fun TimeWheelList(
                         modifier = Modifier.padding(end = 20.dp).width(260.dp),
                         onUpdateEvent = onUpdateEvent,
                         onEventAction = onEventAction,
-                        onUndo = { id, tag -> onUndo(id, tag) }
+                        onUndo = { id, tag -> onUndo(id, tag) },
+                        onRequestDatePicker = onRequestDatePicker,
+                        onRequestTimePicker = onRequestTimePicker
                     )
                 }
             }
@@ -408,6 +446,132 @@ fun CompactTextField(
     )
 }
 
+private sealed class FloatingPickerRequest {
+    data class Date(val initialDate: LocalDate, val onConfirm: (LocalDate) -> Unit) : FloatingPickerRequest()
+    data class Time(val initialTime: String, val onConfirm: (String) -> Unit) : FloatingPickerRequest()
+}
+
+@Composable
+private fun FloatingPickerOverlay(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    // 【核心魔法】：获取当前屏幕密度，并创建一个缩小到 80% 的新密度
+    val currentDensity = LocalDensity.current
+    val customDensity = remember(currentDensity) {
+        Density(
+            density = currentDensity.density * 0.8f,     // 间距、高度缩小 20%
+            fontScale = currentDensity.fontScale * 1.05f  // 字体缩小 20%
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.4f))
+            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp), // 圆角稍微收敛，显得更干练
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .padding(horizontal = 48.dp) // 左右边距加大，让弹窗变窄，像 iOS 风格的小组件
+                .fillMaxWidth()
+                .pointerInput(Unit) { detectTapGestures(onTap = { }) }
+        ) {
+            Column(
+                modifier = Modifier.padding(top = 20.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 【高度压制】：把整体高度压回 170dp
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(170.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 让里面的内容使用缩小的密度进行渲染，完美解决重叠问题！
+                    CompositionLocalProvider(LocalDensity provides customDensity) {
+                        content()
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // 底部按钮也做得稍微紧凑一点，呼应整体的精致感
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                            .height(32.dp)
+                    ) {
+                        Text("取消", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Button(
+                        onClick = onConfirm,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                            .height(32.dp)
+                    ) {
+                        Text("确定", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingDatePickerOverlay(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit
+) {
+    var selectedDate by remember(initialDate) { mutableStateOf(initialDate) }
+    FloatingPickerOverlay(
+        onDismiss = onDismiss,
+        onConfirm = { onConfirm(selectedDate) }
+    ) {
+        WheelDatePicker(initialDate) { selectedDate = it }
+    }
+}
+
+@Composable
+private fun FloatingTimePickerOverlay(
+    initialTime: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    val (initialHour, initialMinute) = remember(initialTime) {
+        val parts = initialTime.split(":")
+        val hour = parts.getOrElse(0) { "09" }.toIntOrNull()?.coerceIn(0, 23) ?: 9
+        val minute = parts.getOrElse(1) { "00" }.toIntOrNull()?.coerceIn(0, 59) ?: 0
+        hour to minute
+    }
+    var selectedHour by remember(initialTime) { mutableStateOf(initialHour) }
+    var selectedMinute by remember(initialTime) { mutableStateOf(initialMinute) }
+
+    FloatingPickerOverlay(
+        onDismiss = onDismiss,
+        onConfirm = { onConfirm(String.format("%02d:%02d", selectedHour, selectedMinute)) }
+    ) {
+        WheelTimePicker(initialHour, initialMinute) { hh, mm ->
+            selectedHour = hh
+            selectedMinute = mm
+        }
+    }
+}
+
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun ScheduleCard(
@@ -416,7 +580,9 @@ fun ScheduleCard(
     modifier: Modifier = Modifier,
     onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String, String) -> Unit = { _, _ -> }
+    onUndo: (String, String) -> Unit = { _, _ -> },
+    onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
+    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -436,11 +602,6 @@ fun ScheduleCard(
     var draftEndTime by remember { mutableStateOf(event.endTime) }
     var draftLocation by remember { mutableStateOf(event.location) }
     var draftDescription by remember { mutableStateOf(event.description) }
-
-    var showStartDatePicker by remember { mutableStateOf(false) }
-    var showEndDatePicker by remember { mutableStateOf(false) }
-    var showStartTimePicker by remember { mutableStateOf(false) }
-    var showEndTimePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(event.id, event.lastModified) {
         if (!isEditing && !isSaving) {
@@ -574,7 +735,7 @@ fun ScheduleCard(
 
                     Surface(
                         modifier = Modifier.size(actionButtonSize), shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        color = MaterialTheme.colorScheme.primary,
                         onClick = {
                             scope.launch {
                                 if (!canEdit) android.widget.Toast.makeText(context, "暂不支持在悬浮窗编辑", android.widget.Toast.LENGTH_SHORT).show()
@@ -583,15 +744,13 @@ fun ScheduleCard(
                                     draftStartDate = event.startDate; draftStartTime = event.startTime
                                     draftEndDate = event.endDate; draftEndTime = event.endTime
                                     draftLocation = event.location; draftDescription = event.description
-                                    showStartDatePicker = false; showEndDatePicker = false
-                                    showStartTimePicker = false; showEndTimePicker = false
                                     isExpanded = true; isEditing = true
                                 }
                                 offsetX.animateTo(0f, swipeSpringSpec)
                             }
                         }
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer) }
+                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary) }
                     }
                 }
             }
@@ -734,42 +893,90 @@ fun ScheduleCard(
                                         Spacer(Modifier.height(8.dp))
 
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = { showStartDatePicker = true }, enabled = !isSaving,
-                                                shape = CircleShape, // 【核心修改点】：恢复为胶囊状
-                                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                                modifier = Modifier.weight(1.4f).height(30.dp) // 高度极致压低
+                                            Surface(
+                                                onClick = {
+                                                    if (isSaving) return@Surface
+                                                    focusManager.clearFocus(force = true)
+                                                    onRequestDatePicker(draftStartDate) { draftStartDate = it }
+                                                },
+                                                enabled = !isSaving,
+                                                shape = CircleShape,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                color = if (!isSaving) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                                modifier = Modifier.weight(1.4f).height(32.dp)
                                             ) {
-                                                Text(draftStartDate.toString(), style = MaterialTheme.typography.bodySmall)
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = draftStartDate.toString(),
+                                                        fontSize = 13.sp,
+                                                        color = if (!isSaving) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                    )
+                                                }
                                             }
-                                            OutlinedButton(
-                                                onClick = { showStartTimePicker = true }, enabled = !isSaving,
-                                                shape = CircleShape, // 恢复为胶囊状
-                                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                                modifier = Modifier.weight(1f).height(30.dp)
+                                            Surface(
+                                                onClick = {
+                                                    if (isSaving) return@Surface
+                                                    focusManager.clearFocus(force = true)
+                                                    onRequestTimePicker(draftStartTime) { draftStartTime = it }
+                                                },
+                                                enabled = !isSaving,
+                                                shape = CircleShape,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                color = if (!isSaving) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                                modifier = Modifier.weight(1f).height(32.dp)
                                             ) {
-                                                Text(draftStartTime, style = MaterialTheme.typography.bodySmall)
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = draftStartTime,
+                                                        fontSize = 13.sp,
+                                                        color = if (!isSaving) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                    )
+                                                }
                                             }
                                         }
 
                                         Spacer(Modifier.height(6.dp))
 
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = { showEndDatePicker = true }, enabled = !isSaving,
-                                                shape = CircleShape, // 恢复为胶囊状
-                                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                                modifier = Modifier.weight(1.4f).height(30.dp)
+                                            Surface(
+                                                onClick = {
+                                                    if (isSaving) return@Surface
+                                                    focusManager.clearFocus(force = true)
+                                                    onRequestDatePicker(draftEndDate) { draftEndDate = it }
+                                                },
+                                                enabled = !isSaving,
+                                                shape = CircleShape,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                color = if (!isSaving) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                                modifier = Modifier.weight(1.4f).height(32.dp)
                                             ) {
-                                                Text(draftEndDate.toString(), style = MaterialTheme.typography.bodySmall)
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = draftEndDate.toString(),
+                                                        fontSize = 13.sp,
+                                                        color = if (!isSaving) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                    )
+                                                }
                                             }
-                                            OutlinedButton(
-                                                onClick = { showEndTimePicker = true }, enabled = !isSaving,
-                                                shape = CircleShape, // 恢复为胶囊状
-                                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                                modifier = Modifier.weight(1f).height(30.dp)
+                                            Surface(
+                                                onClick = {
+                                                    if (isSaving) return@Surface
+                                                    focusManager.clearFocus(force = true)
+                                                    onRequestTimePicker(draftEndTime) { draftEndTime = it }
+                                                },
+                                                enabled = !isSaving,
+                                                shape = CircleShape,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                color = if (!isSaving) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                                modifier = Modifier.weight(1f).height(32.dp)
                                             ) {
-                                                Text(draftEndTime, style = MaterialTheme.typography.bodySmall)
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = draftEndTime,
+                                                        fontSize = 13.sp,
+                                                        color = if (!isSaving) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -835,30 +1042,32 @@ fun ScheduleCard(
                                                     isEditing = false
                                                 },
                                                 enabled = !isSaving,
-                                                modifier = Modifier.heightIn(min = 44.dp),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                modifier = Modifier
+                                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                                    .height(32.dp),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                             ) {
                                                 Text("取消", fontSize = 13.sp)
                                             }
                                             Spacer(Modifier.width(8.dp))
-                                            TextButton(
+                                            Button(
                                                 onClick = {
-                                                    if (isSaving) return@TextButton
+                                                    if (isSaving) return@Button
                                                     val title = draftTitle.trim()
                                                     if (title.isBlank()) {
                                                         android.widget.Toast.makeText(context, "标题不能为空", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@TextButton
+                                                        return@Button
                                                     }
                                                     val startDt = try { LocalDateTime.of(draftStartDate, LocalTime.parse(draftStartTime)) } catch (e: Exception) { null }
                                                     val endDt = try { LocalDateTime.of(draftEndDate, LocalTime.parse(draftEndTime)) } catch (e: Exception) { null }
 
                                                     if (startDt == null || endDt == null) {
                                                         android.widget.Toast.makeText(context, "时间格式错误", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@TextButton
+                                                        return@Button
                                                     }
                                                     if (endDt.isBefore(startDt)) {
                                                         android.widget.Toast.makeText(context, "结束时间不能早于开始时间", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@TextButton
+                                                        return@Button
                                                     }
 
                                                     focusManager.clearFocus(force = true)
@@ -870,8 +1079,10 @@ fun ScheduleCard(
                                                     )) { isSaving = false; isEditing = false }
                                                 },
                                                 enabled = !isSaving,
-                                                modifier = Modifier.heightIn(min = 44.dp),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                modifier = Modifier
+                                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                                    .height(32.dp),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                             ) {
                                                 if (isSaving) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                                 else Text("保存", fontSize = 13.sp)
@@ -906,10 +1117,6 @@ fun ScheduleCard(
             }
         }
 
-        if (isEditing && showStartDatePicker) WheelDatePickerDialog(draftStartDate, { showStartDatePicker = false }, { draftStartDate = it; showStartDatePicker = false })
-        if (isEditing && showEndDatePicker) WheelDatePickerDialog(draftEndDate, { showEndDatePicker = false }, { draftEndDate = it; showEndDatePicker = false })
-        if (isEditing && showStartTimePicker) WheelTimePickerDialog(draftStartTime, { showStartTimePicker = false }, { draftStartTime = it; showStartTimePicker = false })
-        if (isEditing && showEndTimePicker) WheelTimePickerDialog(draftEndTime, { showEndTimePicker = false }, { draftEndTime = it; showEndTimePicker = false })
     }
 }
 

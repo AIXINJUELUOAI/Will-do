@@ -10,6 +10,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -20,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
@@ -30,7 +43,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.material3.MaterialTheme
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
@@ -122,6 +134,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
             val settings by settingsViewModel.settings.collectAsState()
+            val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
 
             // 监听 UI 大小变化，如果变化则重启 Activity 应用新设置
             LaunchedEffect(settings.uiSize) {
@@ -227,6 +240,59 @@ class MainActivity : ComponentActivity() {
                             uiSize = settings.uiSize
                         )
                     }
+                }
+
+                promptUpdateDialogState?.let { dialogState ->
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = {
+                            Text(
+                                text = "Prompt 更新",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "检测到云端 prompt 更新，是否拉取到本地？\n\n本地版本：v${dialogState.localVersion}\n云端版本：v${dialogState.remoteVersion}",
+                                fontSize = 15.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { mainViewModel.confirmPromptUpdate() },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                    .height(36.dp)
+                            ) {
+                                Text("更新", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { mainViewModel.dismissPromptUpdate() },
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                    .height(36.dp)
+                            ) {
+                                Text(
+                                    text = "取消",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    )
                 }
             }
         }

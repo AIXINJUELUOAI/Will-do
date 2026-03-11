@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
@@ -46,6 +47,9 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
+    val maxNodes = remember(uiState.settings.timeTableJson) {
+        TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
+    }
 
     fun showToast(message: String, type: ToastType = ToastType.INFO) {
         currentToastType = type
@@ -274,6 +278,7 @@ fun HomeScreen(
             initialStartNode = sNode,
             initialEndNode = eNode,
             initialDate = originalDate,
+            maxNodes = maxNodes,
             onDismiss = { editingVirtualCourse = null },
             onDelete = {
                 mainViewModel.deleteEvent(event)

@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
@@ -19,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -39,6 +41,7 @@ import com.antgskds.calendarassistant.service.accessibility.TextAccessibilitySer
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
 import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -194,8 +197,22 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             setContent {
                 val events by repository.events.collectAsState()
+                val settings by repository.settings.collectAsState()
+                val context = LocalContext.current
 
-                CalendarAssistantTheme {
+                val isDarkTheme = when (settings.themeMode) {
+                    1 -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                    2 -> false
+                    3 -> true
+                    else -> false
+                }
+                val themeColorSchemeEnum = ThemeColorScheme.fromName(settings.themeColorScheme)
+
+                CalendarAssistantTheme(
+                    darkTheme = isDarkTheme,
+                    dynamicColor = themeColorSchemeEnum == ThemeColorScheme.DEFAULT,
+                    themeColorScheme = themeColorSchemeEnum
+                ) {
                     FloatingScheduleScreen(
                         events = events,
                         onClose = { stopSelf() },
@@ -397,7 +414,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             try {
                 val settings = repository.settings.value
                 val eventData = withContext(Dispatchers.IO) {
-                    RecognitionProcessor.parseUserText(text, settings)
+                    RecognitionProcessor.parseUserText(text, settings, applicationContext)
                 }
                 if (eventData != null && eventData.title.isNotBlank()) {
                     val event = convertToMyEvent(eventData, sourceImagePath)

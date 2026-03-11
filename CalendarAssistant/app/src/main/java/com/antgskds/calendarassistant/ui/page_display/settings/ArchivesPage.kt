@@ -1,6 +1,8 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -12,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.format.DateTimeFormatter
@@ -131,26 +134,56 @@ fun ArchivesPage(
         val archiveCount = groupedEvents.values.sumOf { it.size }
         AlertDialog(
             onDismissRequest = { showClearConfirmDialog = false },
-            title = { Text("清空归档？") },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = {
+                Text(
+                    text = "确认清空",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             text = {
                 Text(
-                    "这将永久删除全部归档事件（共 $archiveCount 条），且无法恢复。"
+                    text = "此操作将永久删除 $archiveCount 条归档事件。\n删除后将无法恢复。",
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         showClearConfirmDialog = false
                         viewModel.clearAllArchives()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                        .height(36.dp)
                 ) {
-                    Text("删除")
+                    Text("删除", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirmDialog = false }) {
-                    Text("取消")
+                TextButton(
+                    onClick = { showClearConfirmDialog = false },
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                        .height(36.dp)
+                ) {
+                    Text(
+                        text = "取消",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         )

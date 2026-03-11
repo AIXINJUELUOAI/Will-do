@@ -50,15 +50,19 @@ import kotlin.math.roundToInt
 @Composable
 fun CourseEditDialog(
     course: Course?,
+    maxNodes: Int = 12,
     onDismiss: () -> Unit,
     onConfirm: (Course) -> Unit
 ) {
+    val safeMaxNodes = maxNodes.coerceAtLeast(1)
     var name by remember { mutableStateOf(course?.name ?: "") }
     var location by remember { mutableStateOf(course?.location ?: "") }
     var teacher by remember { mutableStateOf(course?.teacher ?: "") }
     var dayOfWeek by remember { mutableIntStateOf(course?.dayOfWeek ?: 1) }
-    var startNode by remember { mutableIntStateOf(course?.startNode ?: 1) }
-    var endNode by remember { mutableIntStateOf(course?.endNode ?: 2) }
+    var startNode by remember { mutableIntStateOf((course?.startNode ?: 1).coerceIn(1, safeMaxNodes)) }
+    var endNode by remember {
+        mutableIntStateOf((course?.endNode ?: minOf(2, safeMaxNodes)).coerceIn(1, safeMaxNodes))
+    }
     var startWeek by remember { mutableIntStateOf(course?.startWeek ?: 1) }
     var endWeek by remember { mutableIntStateOf(course?.endWeek ?: 18) }
     var weekType by remember { mutableIntStateOf(course?.weekType ?: 0) }
@@ -70,6 +74,11 @@ fun CourseEditDialog(
     var showWeekTypePicker by remember { mutableStateOf(false) }
 
     val weekTypeOptions = listOf("每周", "单周", "双周")
+
+    LaunchedEffect(safeMaxNodes) {
+        startNode = startNode.coerceIn(1, safeMaxNodes)
+        endNode = endNode.coerceIn(startNode, safeMaxNodes)
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(
@@ -139,7 +148,15 @@ fun CourseEditDialog(
     }
 
     if (showNodeRangePicker) {
-        WheelRangePickerDialog("选择节次范围", 1..12, startNode, endNode, { showNodeRangePicker = false }, { s, e -> startNode = s; endNode = e }, { "第 $it 节" })
+        WheelRangePickerDialog(
+            "选择节次范围",
+            1..safeMaxNodes,
+            startNode.coerceAtMost(safeMaxNodes),
+            endNode.coerceAtMost(safeMaxNodes),
+            { showNodeRangePicker = false },
+            { s, e -> startNode = s; endNode = e },
+            { "第 $it 节" }
+        )
     }
 
     if (showWeekRangePicker) {
@@ -169,17 +186,24 @@ fun CourseSingleEditDialog(
     initialStartNode: Int,
     initialEndNode: Int,
     initialDate: LocalDate,
+    maxNodes: Int = 12,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
     onConfirm: (String, String, Int, Int, LocalDate) -> Unit
 ) {
+    val safeMaxNodes = maxNodes.coerceAtLeast(1)
     var name by remember { mutableStateOf(initialName) }
     var location by remember { mutableStateOf(initialLocation) }
-    var startNode by remember { mutableIntStateOf(initialStartNode) }
-    var endNode by remember { mutableIntStateOf(initialEndNode) }
+    var startNode by remember { mutableIntStateOf(initialStartNode.coerceIn(1, safeMaxNodes)) }
+    var endNode by remember { mutableIntStateOf(initialEndNode.coerceIn(1, safeMaxNodes)) }
     var date by remember { mutableStateOf(initialDate) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showNodeRangePicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(safeMaxNodes) {
+        startNode = startNode.coerceIn(1, safeMaxNodes)
+        endNode = endNode.coerceIn(startNode, safeMaxNodes)
+    }
 
     // 日期选择器
     if (showDatePicker) {
@@ -193,9 +217,9 @@ fun CourseSingleEditDialog(
     if (showNodeRangePicker) {
         WheelRangePickerDialog(
             title = "调整节次范围",
-            range = 1..12,
-            initialStart = startNode,
-            initialEnd = endNode,
+            range = 1..safeMaxNodes,
+            initialStart = startNode.coerceAtMost(safeMaxNodes),
+            initialEnd = endNode.coerceAtMost(safeMaxNodes),
             onDismiss = { showNodeRangePicker = false },
             onConfirm = { s, e ->
                 startNode = s
