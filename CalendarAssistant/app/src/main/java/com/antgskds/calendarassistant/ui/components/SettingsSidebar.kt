@@ -44,6 +44,7 @@ enum class SettingsDestination {
     Theme,             // 主题设置
     Logout,            // 退出登录
     About,             // 关于软件
+    Donate,            // 捐赠开发者
 
     // 实验室
     Laboratory         // 实验室功能

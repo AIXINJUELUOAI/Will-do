@@ -40,6 +40,7 @@ import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage
 import com.antgskds.calendarassistant.ui.page_display.settings.BackupSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.CourseManagerScreen
+import com.antgskds.calendarassistant.ui.page_display.settings.DonatePage
 import com.antgskds.calendarassistant.ui.page_display.settings.LaboratoryPage
 import com.antgskds.calendarassistant.ui.page_display.settings.PreferenceSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleSettingsPage
@@ -61,6 +62,7 @@ private object SettingsRoutes {
     const val Backup = "settings_backup"
     const val Theme = "settings_theme"
     const val About = "settings_about"
+    const val Donate = "settings_donate"
     const val Laboratory = "settings_laboratory"
 }
 
@@ -84,6 +86,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.Backup -> SettingsRoutes.Backup
         SettingsDestination.Theme -> SettingsRoutes.Theme
         SettingsDestination.About -> SettingsRoutes.About
+        SettingsDestination.Donate -> SettingsRoutes.Donate
         SettingsDestination.Laboratory -> SettingsRoutes.Laboratory
         SettingsDestination.Logout -> null
     }
@@ -101,6 +104,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.Backup -> SettingsDestination.Backup
         SettingsRoutes.Theme -> SettingsDestination.Theme
         SettingsRoutes.About -> SettingsDestination.About
+        SettingsRoutes.Donate -> SettingsDestination.Donate
         SettingsRoutes.Laboratory -> SettingsDestination.Laboratory
         else -> SettingsDestination.Preference
     }
@@ -118,6 +122,7 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.Backup -> "数据备份"
         SettingsDestination.Theme -> "主题设置"
         SettingsDestination.About -> "关于应用"
+        SettingsDestination.Donate -> "捐赠开发者"
         SettingsDestination.Laboratory -> "实验室"
         SettingsDestination.Logout -> "退出应用"
     }
@@ -193,7 +198,11 @@ private fun SettingsPageContent(
                     SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
                     SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, uiSize)
-                    SettingsDestination.About -> AboutPage(uiSize)
+                    SettingsDestination.About -> AboutPage(
+                        uiSize = uiSize,
+                        onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) }
+                    )
+                    SettingsDestination.Donate -> DonatePage(uiSize)
                     SettingsDestination.Laboratory -> LaboratoryPage(uiSize)
                     SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Archives,
@@ -383,6 +392,16 @@ fun SettingsDetailScreen(
                     settingsPageComposable(SettingsRoutes.About) {
                         SettingsPageContent(
                             destination = SettingsDestination.About,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.Donate) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.Donate,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,
