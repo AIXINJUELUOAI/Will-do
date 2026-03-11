@@ -1,9 +1,28 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     // 🔥 启用序列化插件
     kotlin("plugin.serialization")
+}
+
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        localFile.inputStream().use { load(it) }
+    }
+}
+
+fun localProperty(name: String): String {
+    return (localProperties.getProperty(name) ?: "")
+        .trim()
+        .removeSurrounding("\"")
+}
+
+fun escapeBuildConfigString(value: String): String {
+    return value.replace("\\", "\\\\").replace("\"", "\\\"")
 }
 
 android {
@@ -26,6 +45,11 @@ android {
         // Build fingerprint for anti-piracy verification
         buildConfigField("String", "CODE_AUTHOR", "\"AIXINJUELUOAI\"")
         buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
+        buildConfigField(
+            "String",
+            "PROMPT_UPDATE_URL",
+            "\"${escapeBuildConfigString(localProperty("PROMPT_UPDATE_URL"))}\""
+        )
     }
 
     buildTypes {

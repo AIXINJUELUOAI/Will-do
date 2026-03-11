@@ -41,6 +41,7 @@ import java.util.UUID
 
 class AppRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    val appContext: Context = context.applicationContext
 
     // 数据源
     private val eventSource = EventJsonDataSource(context)

@@ -76,9 +76,6 @@ object CourseManager {
     }
 
     private fun getDefaultTimeNodes(): List<TimeNode> {
-        // 兜底数据
-        return (1..12).map {
-            TimeNode(it, String.format("%02d:00", 8+it), String.format("%02d:45", 8+it))
-        }
+        return TimeTableLayoutUtils.generateNodes(TimeTableLayoutUtils.defaultConfig())
     }
 }
