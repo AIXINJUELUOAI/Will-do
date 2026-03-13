@@ -16,6 +16,7 @@ import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow // ✅ 改用 StateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +44,16 @@ class CapsuleStateManager(
         const val AGGREGATE_PICKUP_ID = "AGGREGATE_PICKUP"
         const val AGGREGATE_NOTIF_ID = 99999
 
+        private const val OCR_PROGRESS_ID = "OCR_PROGRESS"
+        private const val OCR_RESULT_ID = "OCR_RESULT"
+        private const val OCR_PROGRESS_NOTIF_ID = 88886
+        private const val OCR_RESULT_NOTIF_ID = 88887
+        private const val OCR_PROGRESS_TIMEOUT_MS = 2 * 60 * 1000L
+        private const val OCR_RESULT_TIMEOUT_MS = 8000L
+        private const val OCR_UPDATE_THROTTLE_MS = 600L
+        private const val EVENT_TYPE_OCR_PROGRESS = "ocr_progress"
+        private const val EVENT_TYPE_OCR_RESULT = "ocr_result"
+
         // ✅ 核心修复 1：改用 MutableStateFlow(0)
         // StateFlow 总是持有最新值，保证 combine 永远不会因为等待信号而卡死或丢状态
         private val forceRefreshTrigger = MutableStateFlow(0)
@@ -50,6 +61,25 @@ class CapsuleStateManager(
         // 网速胶囊的动态状态（每次更新都触发状态重新计算）
         private val networkSpeedState = MutableStateFlow<NetworkSpeedMonitor.NetworkSpeed?>(null)
     }
+
+    private data class OcrCapsuleState(
+        val id: String,
+        val notifId: Int,
+        val type: Int,
+        val eventType: String,
+        val title: String,
+        val content: String,
+        val description: String,
+        val color: Int,
+        val startMillis: Long,
+        val endMillis: Long,
+        val display: CapsuleDisplayModel,
+        val expiresAt: Long?
+    )
+
+    private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private var ocrAutoClearJob: Job? = null
+    private var lastOcrUpdateAt = 0L
 
     /**
      * 【修复问题3】强制刷新胶囊状态
@@ -64,6 +94,79 @@ class CapsuleStateManager(
 
     fun updateNetworkSpeed(speed: NetworkSpeedMonitor.NetworkSpeed?) {
         networkSpeedState.value = speed
+    }
+
+    fun showOcrProgress(title: String, content: String) {
+        val now = System.currentTimeMillis()
+        val display = CapsuleMessageComposer.composeOcrProgress(title, content)
+        updateOcrCapsule(
+            OcrCapsuleState(
+                id = OCR_PROGRESS_ID,
+                notifId = OCR_PROGRESS_NOTIF_ID,
+                type = CapsuleService.TYPE_OCR_PROGRESS,
+                eventType = EVENT_TYPE_OCR_PROGRESS,
+                title = display.shortText,
+                content = display.secondaryText ?: content,
+                description = "",
+                color = android.graphics.Color.parseColor("#2979FF"),
+                startMillis = now,
+                endMillis = now + OCR_PROGRESS_TIMEOUT_MS,
+                display = display,
+                expiresAt = now + OCR_PROGRESS_TIMEOUT_MS
+            ),
+            OCR_PROGRESS_TIMEOUT_MS
+        )
+    }
+
+    fun showOcrResult(title: String, content: String, durationMs: Long = OCR_RESULT_TIMEOUT_MS) {
+        val now = System.currentTimeMillis()
+        val display = CapsuleMessageComposer.composeOcrResult(title, content)
+        updateOcrCapsule(
+            OcrCapsuleState(
+                id = OCR_RESULT_ID,
+                notifId = OCR_RESULT_NOTIF_ID,
+                type = CapsuleService.TYPE_OCR_RESULT,
+                eventType = EVENT_TYPE_OCR_RESULT,
+                title = display.shortText,
+                content = display.secondaryText ?: content,
+                description = "",
+                color = android.graphics.Color.parseColor("#4CAF50"),
+                startMillis = now,
+                endMillis = now + durationMs,
+                display = display,
+                expiresAt = now + durationMs
+            ),
+            durationMs
+        )
+    }
+
+    fun clearOcrCapsule() {
+        ocrAutoClearJob?.cancel()
+        ocrAutoClearJob = null
+        ocrCapsuleState.value = null
+    }
+
+    private fun updateOcrCapsule(state: OcrCapsuleState, autoClearMs: Long?) {
+        val now = System.currentTimeMillis()
+        val current = ocrCapsuleState.value
+        if (current != null && current.type == state.type && current.display == state.display) {
+            if (now - lastOcrUpdateAt < OCR_UPDATE_THROTTLE_MS) {
+                return
+            }
+        }
+        lastOcrUpdateAt = now
+        ocrCapsuleState.value = state
+        if (autoClearMs != null) {
+            scheduleOcrAutoClear(autoClearMs)
+        }
+    }
+
+    private fun scheduleOcrAutoClear(delayMs: Long) {
+        ocrAutoClearJob?.cancel()
+        ocrAutoClearJob = appScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            clearOcrCapsule()
+        }
     }
 
     val uiState: StateFlow<CapsuleUiState> = createCapsuleStateFlow()
@@ -117,9 +220,9 @@ class CapsuleStateManager(
             Triple(events, courses, settings)
         }
 
-        return combine(baseCombine, networkSpeedState) { (events, courses, settings), networkSpeed ->
+        return combine(baseCombine, networkSpeedState, ocrCapsuleState) { (events, courses, settings), networkSpeed, ocrCapsule ->
             Log.d(TAG, "=== computeCapsuleState 被调用 ===")
-            computeCapsuleState(events, courses, settings, networkSpeed)
+            computeCapsuleState(events, courses, settings, networkSpeed, ocrCapsule)
         }.stateIn(
             scope = appScope,
             started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
@@ -131,11 +234,39 @@ class CapsuleStateManager(
         events: List<MyEvent>,
         courses: List<com.antgskds.calendarassistant.data.model.Course>,
         settings: MySettings,
-        networkSpeed: NetworkSpeedMonitor.NetworkSpeed?
+        networkSpeed: NetworkSpeedMonitor.NetworkSpeed?,
+        ocrCapsule: OcrCapsuleState?
     ): CapsuleUiState {
         Log.d(TAG, ">>> computeCapsuleState 开始执行")
 
-        // 【实验室】网速胶囊优先：如果开启网速胶囊，覆盖其他所有胶囊
+        val nowMillis = System.currentTimeMillis()
+        val activeOcrCapsule = ocrCapsule?.let { state ->
+            if (state.expiresAt != null && nowMillis >= state.expiresAt) {
+                clearOcrCapsule()
+                null
+            } else {
+                state
+            }
+        }
+
+        if (activeOcrCapsule != null && settings.isLiveCapsuleEnabled) {
+            val capsules = listOf(
+                createCapsuleItem(
+                    id = activeOcrCapsule.id,
+                    notifId = activeOcrCapsule.notifId,
+                    type = activeOcrCapsule.type,
+                    eventType = activeOcrCapsule.eventType,
+                    description = activeOcrCapsule.description,
+                    color = activeOcrCapsule.color,
+                    startMillis = activeOcrCapsule.startMillis,
+                    endMillis = activeOcrCapsule.endMillis,
+                    display = activeOcrCapsule.display
+                )
+            )
+            return CapsuleUiState.Active(capsules)
+        }
+
+        // 【实验室】网速胶囊：若未触发 OCR 胶囊则覆盖其他胶囊
         if (settings.isNetworkSpeedCapsuleEnabled && networkSpeed != null) {
             Log.d(TAG, "网速胶囊模式: ${networkSpeed.formattedSpeed}")
             val display = CapsuleMessageComposer.composeNetworkSpeed(networkSpeed)

@@ -40,14 +40,18 @@ fun LaboratoryPage(uiSize: Int = 2) {
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
-    LaunchedEffect(Unit) {
+    fun refreshPermissionStates() {
         hasOverlayPermission = Settings.canDrawOverlays(context)
+    }
+
+    LaunchedEffect(Unit) {
+        refreshPermissionStates()
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasOverlayPermission = Settings.canDrawOverlays(context)
+                refreshPermissionStates()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

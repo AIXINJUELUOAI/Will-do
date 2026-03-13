@@ -47,6 +47,19 @@ class SettingsViewModel(
         }
     }
 
+    fun updateMultimodalAiSettings(key: String, name: String, url: String) {
+        viewModelScope.launch {
+            val current = settings.value
+            repository.updateSettings(
+                current.copy(
+                    mmModelKey = key,
+                    mmModelName = name,
+                    mmModelUrl = url
+                )
+            )
+        }
+    }
+
     // 更新学期开始日期
     fun updateSemesterStartDate(date: String) {
         viewModelScope.launch {
@@ -62,9 +75,21 @@ class SettingsViewModel(
     }
 
     // 更新作息时间 JSON
-    fun updateTimeTable(json: String) {
+    fun updateTimeTable(json: String, configJson: String? = null) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(timeTableJson = json))
+            val current = settings.value
+            val updated = if (configJson != null) {
+                current.copy(timeTableJson = json, timeTableConfigJson = configJson)
+            } else {
+                current.copy(timeTableJson = json)
+            }
+            repository.updateSettings(updated)
+        }
+    }
+
+    fun updateTimeTableConfig(json: String) {
+        viewModelScope.launch {
+            repository.updateSettings(settings.value.copy(timeTableConfigJson = json))
         }
     }
 
@@ -77,7 +102,8 @@ class SettingsViewModel(
         pickupAggregation: Boolean? = null,
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
-        autoArchive: Boolean? = null
+        autoArchive: Boolean? = null,
+        useMultimodalAi: Boolean? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -88,6 +114,7 @@ class SettingsViewModel(
             if (advanceReminderEnabled != null) current = current.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
             if (advanceReminderMinutes != null) current = current.copy(advanceReminderMinutes = advanceReminderMinutes)
             if (autoArchive != null) current = current.copy(autoArchiveEnabled = autoArchive)
+            if (useMultimodalAi != null) current = current.copy(useMultimodalAi = useMultimodalAi)
 
             repository.updateSettings(current)
         }
