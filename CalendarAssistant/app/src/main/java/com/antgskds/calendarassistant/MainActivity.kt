@@ -43,6 +43,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
@@ -290,6 +291,107 @@ class MainActivity : ComponentActivity() {
                                     fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    )
+                }
+
+                // 崩溃恢复弹窗
+                var crashDialogShown by mutableStateOf(false)
+                var cleanupDialogShown by mutableStateOf(false)
+                var cleanupInfo by mutableStateOf("")
+
+                LaunchedEffect(Unit) {
+                    if (CrashHandler.isCrashedLastTime(this@MainActivity)) {
+                        crashDialogShown = true
+                    }
+                }
+
+                if (crashDialogShown) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            crashDialogShown = false
+                            cleanupInfo = CrashHandler.getCleanupInfo(this@MainActivity) ?: ""
+                            if (cleanupInfo.isNotEmpty()) {
+                                cleanupDialogShown = true
+                            }
+                            CrashHandler.clearCrashState(this@MainActivity)
+                        },
+                        title = {
+                            Text(
+                                text = "APP发生异常",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "APP刚刚发生了崩溃，崩溃日志已记录到:\n\n/Download/CrashLogs/exception.log\n\n您可以通过文件管理器查看并分享给开发者。",
+                                fontSize = 15.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    crashDialogShown = false
+                                    cleanupInfo = CrashHandler.getCleanupInfo(this@MainActivity) ?: ""
+                                    if (cleanupInfo.isNotEmpty()) {
+                                        cleanupDialogShown = true
+                                    }
+                                    CrashHandler.clearCrashState(this@MainActivity)
+                                },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                    .height(36.dp)
+                            ) {
+                                Text("确定", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    )
+                }
+
+                if (cleanupDialogShown && cleanupInfo.isNotEmpty()) {
+                    AlertDialog(
+                        onDismissRequest = { cleanupDialogShown = false },
+                        title = {
+                            Text(
+                                text = "异常数据已清除",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "检测到异常$cleanupInfo，当前已清除。",
+                                fontSize = 15.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { cleanupDialogShown = false },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                    .height(36.dp)
+                            ) {
+                                Text("确定", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                     )

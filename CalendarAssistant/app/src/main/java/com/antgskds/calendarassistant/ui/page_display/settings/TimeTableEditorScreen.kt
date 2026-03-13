@@ -72,7 +72,9 @@ fun TimeTableEditorScreen(
         }
     }
 
-    val defaultConfig = remember { TimeTableLayoutUtils.defaultConfig() }
+    val resolvedConfig = remember(settings.timeTableConfigJson, settings.timeTableJson) {
+        TimeTableLayoutUtils.resolveLayoutConfig(settings.timeTableConfigJson, settings.timeTableJson)
+    }
 
     val fabSize = when (uiSize) { 1 -> 56.dp; 2 -> 64.dp; else -> 72.dp }
     val fabIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
@@ -92,32 +94,24 @@ fun TimeTableEditorScreen(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    var morningCount by remember { mutableIntStateOf(defaultConfig.morningCount) }
-    var afternoonCount by remember { mutableIntStateOf(defaultConfig.afternoonCount) }
-    var nightCount by remember { mutableIntStateOf(defaultConfig.nightCount) }
-    var morningStart by remember { mutableStateOf(defaultConfig.morningStart) }
-    var afternoonStart by remember { mutableStateOf(defaultConfig.afternoonStart) }
-    var nightStart by remember { mutableStateOf(defaultConfig.nightStart) }
-    val customBreaks = remember { mutableStateMapOf<Int, Int>() }
-    val customDurations = remember { mutableStateMapOf<Int, Int>() }
+    var morningCount by remember(resolvedConfig) { mutableIntStateOf(resolvedConfig.morningCount) }
+    var afternoonCount by remember(resolvedConfig) { mutableIntStateOf(resolvedConfig.afternoonCount) }
+    var nightCount by remember(resolvedConfig) { mutableIntStateOf(resolvedConfig.nightCount) }
+    var morningStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.morningStart) }
+    var afternoonStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.afternoonStart) }
+    var nightStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.nightStart) }
+    val customBreaks = remember(resolvedConfig) { mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customBreaks) } }
+    val customDurations = remember(resolvedConfig) { mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customDurations) } }
 
     var showLayoutConfigDialog by remember { mutableStateOf(false) }
     var showBreakPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showDurationPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showTimePickerForAnchor by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(initialJson) {
-        val inferredConfig = TimeTableLayoutUtils.inferConfig(TimeTableLayoutUtils.parseNodes(initialJson))
-        morningCount = inferredConfig.morningCount
-        afternoonCount = inferredConfig.afternoonCount
-        nightCount = inferredConfig.nightCount
-        morningStart = inferredConfig.morningStart
-        afternoonStart = inferredConfig.afternoonStart
-        nightStart = inferredConfig.nightStart
-        customBreaks.clear()
-        customBreaks.putAll(inferredConfig.customBreaks)
-        customDurations.clear()
-        customDurations.putAll(inferredConfig.customDurations)
+    LaunchedEffect(settings.timeTableConfigJson, initialJson) {
+        if (settings.timeTableConfigJson.isBlank() && initialJson.isNotBlank()) {
+            viewModel.updateTimeTableConfig(TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig))
+        }
     }
 
     val layoutConfig = remember(
@@ -155,7 +149,9 @@ fun TimeTableEditorScreen(
     val afternoonStartNode = layoutConfig.afternoonStartNode
     val nightStartNode = layoutConfig.nightStartNode
 
-    LaunchedEffect(generatedNodes, afternoonCount, nightCount) {
+    LaunchedEffect(generatedNodes, afternoonCount, nightCount, settings.timeTableConfigJson) {
+        if (settings.timeTableConfigJson.isNotBlank()) return@LaunchedEffect
+
         if (afternoonCount > 0 && afternoonStartNode in 1..generatedNodes.size) {
             val actualAfternoonStart = parseTimeOrFallback(
                 generatedNodes[afternoonStartNode - 1].startTime,
@@ -193,19 +189,10 @@ fun TimeTableEditorScreen(
             itemsIndexed(generatedNodes) { _, node ->
                 val nodeIndex = node.index
                 val nodeDuration = TimeTableLayoutUtils.durationForNode(nodeIndex, layoutConfig)
-                val nodeStartTime = parseTimeOrFallback(
-                    value = node.startTime,
-                    fallback = when {
-                        nodeIndex == 1 && morningCount > 0 -> morningStart
-                        nodeIndex == 1 && morningCount == 0 && afternoonCount > 0 -> afternoonStart
-                        else -> nightStart
-                    }
-                )
-
                 when {
                     nodeIndex == 1 && morningCount > 0 -> SectionHeader(
                         "上午课程",
-                        nodeStartTime,
+                        morningStart,
                         sectionHeaderStyle,
                         contentBodyStyle
                     ) {
@@ -214,7 +201,7 @@ fun TimeTableEditorScreen(
 
                     nodeIndex == 1 && morningCount == 0 && afternoonCount > 0 -> SectionHeader(
                         "下午课程",
-                        nodeStartTime,
+                        afternoonStart,
                         sectionHeaderStyle,
                         contentBodyStyle
                     ) {
@@ -223,7 +210,7 @@ fun TimeTableEditorScreen(
 
                     nodeIndex == 1 && morningCount == 0 && afternoonCount == 0 && nightCount > 0 -> SectionHeader(
                         "晚上课程",
-                        nodeStartTime,
+                        nightStart,
                         sectionHeaderStyle,
                         contentBodyStyle
                     ) {
@@ -232,7 +219,7 @@ fun TimeTableEditorScreen(
 
                     afternoonCount > 0 && nodeIndex == afternoonStartNode -> SectionHeader(
                         "下午课程",
-                        nodeStartTime,
+                        afternoonStart,
                         sectionHeaderStyle,
                         contentBodyStyle
                     ) {
@@ -241,7 +228,7 @@ fun TimeTableEditorScreen(
 
                     nightCount > 0 && nodeIndex == nightStartNode -> SectionHeader(
                         "晚上课程",
-                        nodeStartTime,
+                        nightStart,
                         sectionHeaderStyle,
                         contentBodyStyle
                     ) {
@@ -355,7 +342,8 @@ fun TimeTableEditorScreen(
                         showToast("作息时间有重叠，请调整各时段开始时间", ToastType.ERROR)
                     } else {
                         val jsonStr = jsonParser.encodeToString(generatedNodes)
-                        viewModel.updateTimeTable(jsonStr)
+                        val configJson = TimeTableLayoutUtils.encodeLayoutConfig(layoutConfig)
+                        viewModel.updateTimeTable(jsonStr, configJson)
                         showToast("作息时间已保存", ToastType.SUCCESS)
                     }
                 },
@@ -726,8 +714,14 @@ private fun nearestOption(options: List<Int>, target: Int): Int {
 
 private fun parseTimeOrFallback(value: String, fallback: LocalTime): LocalTime {
     return try {
-        LocalTime.parse(value)
+        LocalTime.parse(normalizeTimeText(value))
     } catch (_: Exception) {
         fallback
     }
+}
+
+private fun normalizeTimeText(value: String): String {
+    return value.trim()
+        .replace('\uFF1A', ':')
+        .replace('.', ':')
 }

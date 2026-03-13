@@ -37,6 +37,8 @@ class CapsuleService : Service() {
         const val TYPE_PICKUP = 2
         const val TYPE_PICKUP_EXPIRED = 3
         const val TYPE_NETWORK_SPEED = 4
+        const val TYPE_OCR_PROGRESS = 5
+        const val TYPE_OCR_RESULT = 6
         private const val PLACEHOLDER_FOREGROUND_ID = -1
 
         @Volatile

@@ -201,7 +201,7 @@ private fun SettingsPageContent(
                     SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
                     SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
                     SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
-                    SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, uiSize)
+                    SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                     SettingsDestination.About -> AboutPage(
                         uiSize = uiSize,
                         onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) }

@@ -1,7 +1,9 @@
 package com.antgskds.calendarassistant.core.course
 
 import com.antgskds.calendarassistant.data.model.TimeNode
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.Duration
 import java.time.LocalTime
@@ -24,6 +26,18 @@ data class TimeTableLayoutConfig(
     val nightStartNode: Int get() = morningCount + afternoonCount + 1
 }
 
+@Serializable
+data class TimeTableLayoutSnapshot(
+    val morningCount: Int = 4,
+    val afternoonCount: Int = 4,
+    val nightCount: Int = 4,
+    val morningStart: String = "08:00",
+    val afternoonStart: String = "14:00",
+    val nightStart: String = "19:00",
+    val customBreaks: Map<Int, Int> = emptyMap(),
+    val customDurations: Map<Int, Int> = emptyMap()
+)
+
 object TimeTableLayoutUtils {
 
     const val MIN_SECTION_COUNT = 2
@@ -45,7 +59,55 @@ object TimeTableLayoutUtils {
         coerceInputValues = true
     }
 
+    private val configJson = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        coerceInputValues = true
+        prettyPrint = true
+    }
+
     fun defaultConfig(): TimeTableLayoutConfig = TimeTableLayoutConfig()
+
+    fun resolveLayoutConfig(configJsonString: String, timeTableJson: String): TimeTableLayoutConfig {
+        decodeLayoutConfig(configJsonString)?.let { return it }
+        val nodes = parseNodes(timeTableJson)
+        return if (nodes.isNotEmpty()) inferConfig(nodes) else defaultConfig()
+    }
+
+    fun encodeLayoutConfig(config: TimeTableLayoutConfig): String {
+        val snapshot = TimeTableLayoutSnapshot(
+            morningCount = config.morningCount,
+            afternoonCount = config.afternoonCount,
+            nightCount = config.nightCount,
+            morningStart = config.morningStart.format(formatter),
+            afternoonStart = config.afternoonStart.format(formatter),
+            nightStart = config.nightStart.format(formatter),
+            customBreaks = config.customBreaks,
+            customDurations = config.customDurations
+        )
+        return configJson.encodeToString(snapshot)
+    }
+
+    fun decodeLayoutConfig(configJsonString: String): TimeTableLayoutConfig? {
+        if (configJsonString.isBlank()) return null
+        return try {
+            val snapshot = configJson.decodeFromString<TimeTableLayoutSnapshot>(configJsonString)
+            val base = defaultConfig()
+            val rawConfig = TimeTableLayoutConfig(
+                morningCount = snapshot.morningCount,
+                afternoonCount = snapshot.afternoonCount,
+                nightCount = snapshot.nightCount,
+                morningStart = safeParseTime(snapshot.morningStart, base.morningStart),
+                afternoonStart = safeParseTime(snapshot.afternoonStart, base.afternoonStart),
+                nightStart = safeParseTime(snapshot.nightStart, base.nightStart),
+                customBreaks = snapshot.customBreaks,
+                customDurations = snapshot.customDurations
+            )
+            normalizeConfig(rawConfig)
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     fun parseNodes(jsonString: String): List<TimeNode> {
         return try {
@@ -298,10 +360,21 @@ object TimeTableLayoutUtils {
     }
 
     private fun safeParseTimeOrNull(value: String): LocalTime? {
+        val normalized = normalizeTimeText(value)
         return try {
-            LocalTime.parse(value, formatter)
+            LocalTime.parse(normalized)
         } catch (_: Exception) {
-            null
+            try {
+                LocalTime.parse(normalized, formatter)
+            } catch (_: Exception) {
+                null
+            }
         }
+    }
+
+    private fun normalizeTimeText(value: String): String {
+        return value.trim()
+            .replace('\uFF1A', ':')
+            .replace('.', ':')
     }
 }

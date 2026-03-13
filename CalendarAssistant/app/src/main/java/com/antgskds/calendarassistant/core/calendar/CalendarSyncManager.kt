@@ -9,12 +9,16 @@ import com.antgskds.calendarassistant.data.model.SyncData
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
 import com.antgskds.calendarassistant.core.util.EventDeduplicator
+import com.antgskds.calendarassistant.core.util.ExceptionLogStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+
+class RecurringSyncLimitException(message: String) : Exception(message)
+class LowMemoryAbortException(message: String) : Exception(message)
 
 /**
  * 日历同步管理器
@@ -32,6 +36,9 @@ class CalendarSyncManager(private val context: Context) {
          * 只同步未来 N 周的课程，避免生成过多历史事件
          */
         private const val COURSE_SYNC_WEEKS_AHEAD = 16
+
+        private const val RECURRING_INSTANCES_SYNC_LIMIT = 2000
+        private const val MIN_FREE_MEMORY_BYTES = 64L * 1024L * 1024L
     }
 
     private val calendarManager = CalendarManager(context)
@@ -91,6 +98,14 @@ class CalendarSyncManager(private val context: Context) {
 
             Log.d(TAG, "开始同步到日历 (ID: $calendarId)")
 
+            val memoryError = checkMemoryOrAbort(
+                action = "正向同步",
+                extra = "events=${events.size}, courses=${courses.size}, timeNodes=${timeNodes.size}"
+            )
+            if (memoryError != null) {
+                return@withContext Result.failure(memoryError)
+            }
+
             // 5. 同步课程（单向强制同步：先删除再重建）
             syncData = syncCourses(courses, semesterStart, totalWeeks, timeNodes, calendarId, syncData)
 
@@ -106,6 +121,12 @@ class CalendarSyncManager(private val context: Context) {
 
         } catch (e: Exception) {
             Log.e(TAG, "同步失败", e)
+            ExceptionLogStore.append(
+                context,
+                TAG,
+                "syncAllToCalendar failed: events=${events.size}, courses=${courses.size}, timeNodes=${timeNodes.size}",
+                e
+            )
             Result.failure(e)
         }
     }
@@ -276,14 +297,22 @@ class CalendarSyncManager(private val context: Context) {
             Log.d(TAG, "正在同步中，跳过")
             return@withContext Result.success(0)
         }
-        _isSyncing.set(true)
-        Log.d(TAG, "开始执行反向同步")
+            _isSyncing.set(true)
+            Log.d(TAG, "开始执行反向同步")
 
-        try {
-            // 1. 检查权限
-            if (!CalendarPermissionHelper.hasAllPermissions(context)) {
-                return@withContext Result.failure(SecurityException("缺少日历权限"))
-            }
+            var mappingSize = 0
+            var mappedSystemCount = 0
+            val activeCount = activeEvents.size
+            val archivedCount = archivedEvents.size
+            var syncWindowStart = 0L
+            var syncWindowEnd = 0L
+
+            try {
+
+                // 1. 检查权限
+                if (!CalendarPermissionHelper.hasAllPermissions(context)) {
+                    return@withContext Result.failure(SecurityException("缺少日历权限"))
+                }
 
             // 2. 读取同步配置
             val syncData = syncDataSource.loadSyncData()
@@ -304,6 +333,8 @@ class CalendarSyncManager(private val context: Context) {
             // 反向索引: System ID -> App ID
             val systemToAppMap = mapping.entries.associate { (k, v) -> v to k }
             val mappedSystemIds = mapping.values.mapNotNull { it.toLongOrNull() }.toSet()
+            mappingSize = mapping.size
+            mappedSystemCount = mappedSystemIds.size
 
             Log.d(TAG, "反向同步开始: 映射数量=${mapping.size}, 系统事件ID数量=${mappedSystemIds.size}, calendarId=$calendarId")
 
@@ -312,8 +343,16 @@ class CalendarSyncManager(private val context: Context) {
             var deletedCount = 0
             var hasChanges = false
             val now = System.currentTimeMillis()
-            val syncWindowStart = now - SYNC_LOOK_BACK_DAYS * 24 * 60 * 60 * 1000
-            val syncWindowEnd = now + SYNC_LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000
+            syncWindowStart = now - SYNC_LOOK_BACK_DAYS * 24 * 60 * 60 * 1000
+            syncWindowEnd = now + SYNC_LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000
+
+            val memoryError = checkMemoryOrAbort(
+                action = "反向同步",
+                extra = "mapping=$mappingSize, mappedSystem=$mappedSystemCount, active=$activeCount, archived=$archivedCount"
+            )
+            if (memoryError != null) {
+                return@withContext Result.failure(memoryError)
+            }
 
             // ==================== 阶段一：处理已映射的事件 (更新 & 删除) ====================
             // 直接查询这些 ID，无视时间范围，确保能捕捉到修改和删除
@@ -334,11 +373,16 @@ class CalendarSyncManager(private val context: Context) {
                     startMillis = syncWindowStart,
                     endMillis = syncWindowEnd
                 )
-                val recurringEventsForCheck = calendarManager.queryRecurringInstancesInRange(
-                    calendarId = calendarId,
-                    startMillis = syncWindowStart,
-                    endMillis = syncWindowEnd
-                )
+                val recurringEventsForCheck = if (allowRecurringSync) {
+                    calendarManager.queryRecurringInstancesInRangeLimited(
+                        calendarId = calendarId,
+                        startMillis = syncWindowStart,
+                        endMillis = syncWindowEnd,
+                        limit = 1
+                    ).events
+                } else {
+                    emptyList()
+                }
                 if (rangeEventsForCheck.isEmpty() && recurringEventsForCheck.isEmpty()) {
                     // 系统日历中完全没有事件，这是第一次同步，跳过反向同步
                     Log.d(TAG, "系统日历为空，跳过反向同步，等待正向同步")
@@ -467,11 +511,19 @@ class CalendarSyncManager(private val context: Context) {
 
             if (allowRecurringSync) {
                 val recurringSeries = calendarManager.queryRecurringSeries(calendarId)
-                val recurringInstances = calendarManager.queryRecurringInstancesInRange(
+                val recurringInstancesResult = calendarManager.queryRecurringInstancesInRangeLimited(
                     calendarId = calendarId,
                     startMillis = syncWindowStart,
-                    endMillis = syncWindowEnd
+                    endMillis = syncWindowEnd,
+                    limit = RECURRING_INSTANCES_SYNC_LIMIT
                 )
+                if (recurringInstancesResult.isTruncated) {
+                    val message = "重复日程实例数量超过上限($RECURRING_INSTANCES_SYNC_LIMIT)，已停止同步"
+                    Log.w(TAG, message)
+                    ExceptionLogStore.append(context, TAG, message)
+                    return@withContext Result.failure(RecurringSyncLimitException(message))
+                }
+                val recurringInstances = recurringInstancesResult.events
 
                 val recurringParents = (activeEvents + archivedEvents)
                     .filter { it.isRecurring && it.isRecurringParent && !it.recurringSeriesKey.isNullOrBlank() }
@@ -535,6 +587,12 @@ class CalendarSyncManager(private val context: Context) {
 
         } catch (e: Exception) {
             Log.e(TAG, "从系统日历同步失败", e)
+            ExceptionLogStore.append(
+                context,
+                TAG,
+                "syncFromCalendar failed: allowRecurringSync=$allowRecurringSync, mapping=$mappingSize, mappedSystem=$mappedSystemCount, active=$activeCount, archived=$archivedCount, window=[$syncWindowStart,$syncWindowEnd]",
+                e
+            )
             Result.failure(e)
         } finally {
             _isSyncing.set(false)
@@ -542,6 +600,29 @@ class CalendarSyncManager(private val context: Context) {
     }
 
     // ==================== 辅助方法 ====================
+
+    private fun checkMemoryOrAbort(action: String, extra: String): LowMemoryAbortException? {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val totalMemory = runtime.totalMemory()
+        val freeMemory = runtime.freeMemory()
+        val usedMemory = totalMemory - freeMemory
+        val availableMemory = maxMemory - usedMemory
+
+        if (availableMemory < MIN_FREE_MEMORY_BYTES) {
+            val message = "内存不足，已取消$action"
+            val detail = "available=${formatBytes(availableMemory)}, used=${formatBytes(usedMemory)}, max=${formatBytes(maxMemory)}, $extra"
+            Log.w(TAG, "$message ($detail)")
+            ExceptionLogStore.append(context, TAG, "$message ($detail)")
+            return LowMemoryAbortException(message)
+        }
+        return null
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val mb = bytes / (1024 * 1024)
+        return "${mb}MB"
+    }
 
     private suspend fun buildRecurringEvents(
         calendarId: Long,
