@@ -8,6 +8,7 @@ import com.antgskds.calendarassistant.core.util.LayoutAnalyzer
 import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
 import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.ModelMessage
 import com.antgskds.calendarassistant.data.model.ModelRequest
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -15,6 +16,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -86,7 +88,12 @@ object RecognitionProcessor {
         Log.d(TAG, "========== [AI 自然语言输入] ==========")
         Log.d(TAG, "用户输入: $text")
 
-        val modelName = settings.modelName.ifBlank { "deepseek-chat" }
+        val modelConfig = settings.activeAiConfig()
+        if (!modelConfig.isConfigured()) {
+            Log.e(TAG, "AI 配置缺失，无法解析文本输入")
+            return null
+        }
+        val modelName = modelConfig.name.ifBlank { "deepseek-chat" }
         val request = ModelRequest(
             model = modelName,
             messages = listOf(
@@ -99,8 +106,8 @@ object RecognitionProcessor {
         return try {
             val response = ApiModelProvider.generate(
                 request = request,
-                apiKey = settings.modelKey,
-                baseUrl = settings.modelUrl,
+                apiKey = modelConfig.key,
+                baseUrl = modelConfig.url,
                 modelName = modelName
             )
 
@@ -126,6 +133,10 @@ object RecognitionProcessor {
     suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): List<CalendarEventData> {
         val appContext = context.applicationContext
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
+
+        if (settings.useMultimodalAi) {
+            return analyzeImageWithMultimodal(bitmap, settings, appContext)
+        }
 
         val ocrResult = try {
             val visionText = processImageWithMlKit(bitmap)
@@ -252,7 +263,12 @@ object RecognitionProcessor {
         settings: MySettings,
         debugTag: String
     ): List<CalendarEventData> {
-        val modelName = settings.modelName.ifBlank { "deepseek-chat" }
+        val modelConfig = settings.activeAiConfig()
+        if (!modelConfig.isConfigured()) {
+            Log.e(TAG, "[$debugTag] AI 配置缺失，无法请求")
+            return emptyList()
+        }
+        val modelName = modelConfig.name.ifBlank { "deepseek-chat" }
         val userPrompt = "[OCR文本开始]\n$userText\n[OCR文本结束]"
 
         val request = ModelRequest(
@@ -267,8 +283,8 @@ object RecognitionProcessor {
         return try {
             val responseText = ApiModelProvider.generate(
                 request = request,
-                apiKey = settings.modelKey,
-                baseUrl = settings.modelUrl,
+                apiKey = modelConfig.key,
+                baseUrl = modelConfig.url,
                 modelName = modelName
             )
 
@@ -296,6 +312,85 @@ object RecognitionProcessor {
                 .addOnSuccessListener { continuation.resume(it) }
                 .addOnFailureListener { continuation.resumeWithException(it) }
         }
+
+    private suspend fun analyzeImageWithMultimodal(
+        bitmap: Bitmap,
+        settings: MySettings,
+        context: Context
+    ): List<CalendarEventData> {
+        val modelConfig = settings.activeAiConfig()
+        if (!modelConfig.isConfigured()) {
+            Log.e(TAG, "多模态 AI 配置缺失，跳过识别")
+            return emptyList()
+        }
+
+        val now = LocalDateTime.now()
+        val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
+        val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+        val prompt = AiPrompts.getMultimodalUnifiedPrompt(
+            context = context.applicationContext,
+            timeStr = now.format(dtfFull),
+            dateToday = now.format(dtfDate),
+            dateYesterday = now.minusDays(1).format(dtfDate),
+            dateBeforeYesterday = now.minusDays(2).format(dtfDate),
+            nowTime = now.format(dtfTime),
+            nowPlusHourTime = now.plusHours(1).format(dtfTime),
+            dayOfWeek = getDayOfWeek(now)
+        )
+
+        val imageBytes = bitmapToJpegBytes(bitmap)
+
+        return try {
+            val responseText = ApiModelProvider.generateWithImage(
+                prompt = prompt,
+                imageBytes = imageBytes,
+                mimeType = "image/jpeg",
+                apiKey = modelConfig.key,
+                baseUrl = modelConfig.url,
+                modelName = modelConfig.name
+            )
+
+            if (responseText.startsWith("Error:")) {
+                Log.e(TAG, "[多模态识别] API 请求失败: $responseText")
+                return emptyList()
+            }
+
+            val cleanJson = cleanJsonString(responseText)
+            val events = try {
+                jsonParser.decodeFromString<AiResponse>(cleanJson).events
+            } catch (e: Exception) {
+                val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
+                listOf(single)
+            }
+
+            val pickupEvents = events.filter {
+                it.tag == EventTags.PICKUP || it.type == "pickup"
+            }
+            val scheduleEvents = events.filter {
+                it.tag != EventTags.PICKUP && it.type != "pickup"
+            }
+            val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
+
+            val mergedEvents = refinedScheduleEvents + pickupEvents
+            mergedEvents
+                .groupBy { "${it.title}|${it.startTime}" }
+                .mapNotNull { (_, events) ->
+                    events.maxByOrNull { if (it.tag == EventTags.PICKUP) 1 else 0 }
+                }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "[多模态识别] 解析失败", e)
+            emptyList()
+        }
+    }
+
+    private fun bitmapToJpegBytes(bitmap: Bitmap): ByteArray {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+        return outputStream.toByteArray()
+    }
 
     private fun cleanJsonString(response: String): String {
         var json = response.trim()

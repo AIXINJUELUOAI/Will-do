@@ -18,6 +18,29 @@ object CapsuleMessageComposer {
         )
     }
 
+    fun composeOcrProgress(title: String, content: String): CapsuleDisplayModel {
+        val primary = sanitize(title) ?: "正在分析"
+        val secondary = sanitize(content)
+        return CapsuleDisplayModel(
+            shortText = primary,
+            primaryText = primary,
+            secondaryText = secondary,
+            expandedText = secondary
+        )
+    }
+
+    fun composeOcrResult(title: String, content: String): CapsuleDisplayModel {
+        val primary = sanitize(title) ?: "分析完成"
+        val secondary = sanitize(content)
+        val expanded = joinLines(secondary)
+        return CapsuleDisplayModel(
+            shortText = primary,
+            primaryText = primary,
+            secondaryText = secondary,
+            expandedText = expanded
+        )
+    }
+
     fun composeSchedule(
         event: MyEvent,
         isExpired: Boolean

@@ -49,7 +49,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val remoteViews = if (item.type == CapsuleService.TYPE_NETWORK_SPEED) {
             createNetworkSpeedRemoteViews(context, display.primaryText, subtitleText)
         } else {
-            createRemoteViews(context, item.eventType, display.primaryText, subtitleText)
+            createRemoteViews(context, item.type, item.eventType, display.primaryText, subtitleText)
         }
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -203,6 +203,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
 
     private fun createRemoteViews(
         context: Context,
+        capsuleType: Int,
         eventType: String,
         primaryText: String,
         secondaryText: String?
@@ -210,7 +211,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
             setTextViewText(R.id.tv_main_content, primaryText)
             setTextViewText(R.id.tv_sub_info, secondaryText ?: "")
-            setImageViewResource(R.id.iv_icon, resolveFlymeIcon(eventType))
+            setImageViewResource(R.id.iv_icon, resolveFlymeIcon(eventType, capsuleType))
         }
     }
 
@@ -234,15 +235,19 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             ?.joinToString(" · ")
     }
 
-    private fun resolveFlymeIcon(eventType: String): Int {
-        return when (eventType) {
-            EventTags.PICKUP -> R.drawable.ic_capsule_pickup
-            EventTags.TRAIN -> R.drawable.ic_capsule_train
-            EventTags.TAXI -> R.drawable.ic_capsule_taxi
-            EventType.COURSE -> R.drawable.ic_capsule_course
-            EventTags.GENERAL -> R.drawable.ic_stat_event
-            EventType.EVENT -> R.drawable.ic_capsule_event
-            else -> R.drawable.ic_capsule_event
+    private fun resolveFlymeIcon(eventType: String, capsuleType: Int): Int {
+        return when (capsuleType) {
+            CapsuleService.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
+            CapsuleService.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
+            else -> when (eventType) {
+                EventTags.PICKUP -> R.drawable.ic_capsule_pickup
+                EventTags.TRAIN -> R.drawable.ic_capsule_train
+                EventTags.TAXI -> R.drawable.ic_capsule_taxi
+                EventType.COURSE -> R.drawable.ic_capsule_course
+                EventTags.GENERAL -> R.drawable.ic_stat_event
+                EventType.EVENT -> R.drawable.ic_capsule_event
+                else -> R.drawable.ic_capsule_event
+            }
         }
     }
 

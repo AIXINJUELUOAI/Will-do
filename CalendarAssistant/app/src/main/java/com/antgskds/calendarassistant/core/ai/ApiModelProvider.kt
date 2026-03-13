@@ -1,8 +1,7 @@
 package com.antgskds.calendarassistant.core.ai
 
+import android.util.Base64
 import android.util.Log
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.ModelMessage
 import com.antgskds.calendarassistant.data.model.ModelRequest // 假设在 data.model 中定义了
 import com.antgskds.calendarassistant.data.model.ModelResponse // 假设在 data.model 中定义了
 import io.ktor.client.HttpClient
@@ -91,6 +90,80 @@ object ApiModelProvider {
         }
     }
 
+    suspend fun generateWithImage(
+        prompt: String,
+        imageBytes: ByteArray,
+        mimeType: String,
+        apiKey: String,
+        baseUrl: String,
+        modelName: String
+    ): String {
+        return try {
+            if (baseUrl.isBlank() || apiKey.isBlank()) {
+                Log.e("ApiModelProvider", "API URL or Key not configured")
+                return "Error: 配置缺失"
+            }
+
+            Log.d("ApiModelProvider", "Requesting (vision): $baseUrl (Model: $modelName)")
+
+            if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
+                return generateGeminiWithImage(client, baseUrl, apiKey, prompt, imageBytes, mimeType)
+            }
+
+            val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            val dataUrl = "data:$mimeType;base64,$base64"
+
+            val requestBody = buildJsonObject {
+                put("model", modelName)
+                putJsonArray("messages") {
+                    add(buildJsonObject {
+                        put("role", "system")
+                        put("content", prompt)
+                    })
+                    add(buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            add(buildJsonObject {
+                                put("type", "text")
+                                put("text", "请解析图片并输出JSON")
+                            })
+                            add(buildJsonObject {
+                                put("type", "image_url")
+                                putJsonObject("image_url") {
+                                    put("url", dataUrl)
+                                }
+                            })
+                        }
+                    })
+                }
+                put("temperature", 0.1)
+            }
+
+            val response = client.post {
+                url(baseUrl)
+                contentType(ContentType.Application.Json)
+                bearerAuth(apiKey)
+                setBody(requestBody)
+            }
+
+            val rawBody = response.bodyAsText()
+            Log.d("DEBUG_HTTP_VISION", "服务器原始响应: $rawBody")
+
+            if (!response.status.isSuccess()) {
+                Log.e("ApiModelProvider", "Request failed: ${response.status} - $rawBody")
+                return "Error: HTTP ${response.status}"
+            }
+
+            val json = Json { ignoreUnknownKeys = true }
+            val modelResponse = json.decodeFromString<ModelResponse>(rawBody)
+            modelResponse.choices.firstOrNull()?.message?.content ?: "Error: Empty Content"
+
+        } catch (e: Exception) {
+            Log.e("ApiModelProvider", "Vision network/parse error", e)
+            "Error: ${e.javaClass.simpleName} - ${e.message}"
+        }
+    }
+
     private suspend fun generateGemini(client: HttpClient, baseUrl: String, apiKey: String, request: ModelRequest): String {
         val finalUrl = if (baseUrl.contains("?")) "$baseUrl&key=$apiKey" else "$baseUrl?key=$apiKey"
 
@@ -121,6 +194,70 @@ object ApiModelProvider {
 
         val rawBody = response.bodyAsText()
         Log.d("DEBUG_HTTP_GEMINI", "Gemini 响应: $rawBody")
+
+        if (!response.status.isSuccess()) {
+            return "Error: Gemini HTTP ${response.status}"
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val candidates = root.optJSONArray("candidates")
+            if (candidates != null && candidates.length() > 0) {
+                val content = candidates.getJSONObject(0).optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                if (parts != null && parts.length() > 0) {
+                    parts.getJSONObject(0).optString("text", "")
+                } else {
+                    "Error: Empty Parts"
+                }
+            } else {
+                "Error: No Candidates"
+            }
+        } catch (e: Exception) {
+            "Error: Parse Gemini Failed"
+        }
+    }
+
+    private suspend fun generateGeminiWithImage(
+        client: HttpClient,
+        baseUrl: String,
+        apiKey: String,
+        prompt: String,
+        imageBytes: ByteArray,
+        mimeType: String
+    ): String {
+        val finalUrl = if (baseUrl.contains("?")) "$baseUrl&key=$apiKey" else "$baseUrl?key=$apiKey"
+        val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+
+        val geminiJson = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    putJsonArray("parts") {
+                        add(buildJsonObject {
+                            put("text", prompt)
+                        })
+                        add(buildJsonObject {
+                            putJsonObject("inline_data") {
+                                put("mime_type", mimeType)
+                                put("data", base64)
+                            }
+                        })
+                    }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("temperature", 0.1)
+            }
+        }
+
+        val response = client.post {
+            url(finalUrl)
+            contentType(ContentType.Application.Json)
+            setBody(geminiJson)
+        }
+
+        val rawBody = response.bodyAsText()
+        Log.d("DEBUG_HTTP_GEMINI", "Gemini 视觉响应: $rawBody")
 
         if (!response.status.isSuccess()) {
             return "Error: Gemini HTTP ${response.status}"

@@ -254,6 +254,29 @@ fun PreferenceSettingsPage(
                 }
             }
 
+            // ================== AI 板块 ==================
+            Text("AI", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "使用多模态AI",
+                        subtitle = "开启后图片识别将使用多模态模型",
+                        checked = settings.useMultimodalAi,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(useMultimodalAi = isChecked)
+                            showToast(if (isChecked) "已切换为多模态AI" else "已切换为文本AI")
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                }
+            }
+
             // ================== 日程板块 ==================
             Text("日程", style = sectionTitleStyle)
             Card(
@@ -315,7 +338,8 @@ fun PreferenceSettingsPage(
                                                 showToast("重复日程同步已关闭，已清理 $removedCount 条导入记录")
                                             }
                                         } else {
-                                            showToast("重复日程同步切换失败", ToastType.ERROR)
+                                            val message = result.exceptionOrNull()?.message
+                                            showToast(message ?: "重复日程同步切换失败", ToastType.ERROR)
                                         }
                                     }
                                 },
@@ -371,7 +395,7 @@ fun PreferenceSettingsPage(
                         subtitle = "截图与分析之间的等待时间",
                         value = settings.screenshotDelayMs.toFloat(),
                         onValueChange = { viewModel.updateScreenshotDelay(it.toLong()) },
-                        valueRange = 500f..1500f,
+                        valueRange = 1000f..2500f,
                         steps = 0, // 0 = 无极调节
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
