@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.ai.activeAiConfig
+import com.antgskds.calendarassistant.core.ai.isConfigured
+import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
@@ -105,8 +108,9 @@ fun HomePage(
             isImageImporting = true
             try {
                 val settings = uiState.settings
-                if (settings.modelKey.isBlank()) {
-                    Toast.makeText(context, "请先填写 API Key", Toast.LENGTH_SHORT).show()
+                val config = settings.activeAiConfig()
+                if (!config.isConfigured()) {
+                    Toast.makeText(context, config.missingConfigMessage(), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -483,6 +487,34 @@ fun HomePage(
                             }
                         }
 
+                        // 图片识别按钮
+                        AnimatedVisibility(
+                            visible = isFabExpanded,
+                            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
+                            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0f)
+                        ) {
+                            androidx.compose.material3.FloatingActionButton(
+                                onClick = {
+                                    if (isImageImporting) {
+                                        Toast.makeText(context, "正在识别中...", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isFabExpanded = false
+                                        imagePickerLauncher.launch("image/*")
+                                    }
+                                },
+                                shape = CircleShape,
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(fabSize)
+                            ) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = "识别图片",
+                                    modifier = Modifier.size(fabIconSize)
+                                )
+                            }
+                        }
+
                         // 添加日程按钮
                         AnimatedVisibility(
                             visible = isFabExpanded,
@@ -502,34 +534,6 @@ fun HomePage(
                                 Icon(
                                     Icons.Default.Add,
                                     contentDescription = "添加日程",
-                                    modifier = Modifier.size(fabIconSize)
-                                )
-                            }
-                        }
-
-                        // 图片识别按钮
-                        AnimatedVisibility(
-                            visible = isFabExpanded,
-                            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
-                            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0f)
-                        ) {
-                            androidx.compose.material3.FloatingActionButton(
-                                onClick = {
-                                    if (isImageImporting) {
-                                        Toast.makeText(context, "正在识别中...", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        isFabExpanded = false
-                                        imagePickerLauncher.launch("image/*")
-                                    }
-                                },
-                                shape = CircleShape,
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary,
-                                modifier = Modifier.size(fabSize)
-                            ) {
-                                Icon(
-                                    Icons.Default.Image,
-                                    contentDescription = "识别图片",
                                     modifier = Modifier.size(fabIconSize)
                                 )
                             }

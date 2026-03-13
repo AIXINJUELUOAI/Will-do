@@ -686,10 +686,18 @@ fun ScheduleCard(
     val fullSwipeTriggerPx = with(density) { -150.dp.toPx() }
     val dragLimitPx = with(density) { -190.dp.toPx() }
 
+    // 【归档相关参数】右滑触发阈值和飞出距离
+    val archiveTriggerPx = with(density) { 110.dp.toPx() }
+    val screenWidthPx = with(density) { 400.dp.toPx() }
+
     val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
 
     val isPastFullSwipe by remember { derivedStateOf { hasAction && offsetX.value <= fullSwipeTriggerPx } }
     var hasVibrated by remember { mutableStateOf(false) }
+
+    // 【核心新增】右滑（归档）震动状态
+    val isPastArchiveSwipe by remember { derivedStateOf { offsetX.value >= archiveTriggerPx } }
+    var hasVibratedArchive by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPastFullSwipe, hasAction) {
         if (hasAction && isPastFullSwipe && !hasVibrated) {
@@ -697,6 +705,16 @@ fun ScheduleCard(
             hasVibrated = true
         } else if (!isPastFullSwipe) {
             hasVibrated = false
+        }
+    }
+
+    // 【核心新增】右滑阈值的震动控制
+    LaunchedEffect(isPastArchiveSwipe) {
+        if (isPastArchiveSwipe && !hasVibratedArchive) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            hasVibratedArchive = true
+        } else if (!isPastArchiveSwipe) {
+            hasVibratedArchive = false
         }
     }
 
@@ -767,12 +785,26 @@ fun ScheduleCard(
                             detectHorizontalDragGestures(
                                 onDragStart = { scope.launch { offsetX.stop() } },
                                 onDragEnd = {
-                                    val fullSwipe = hasAction && offsetX.value <= fullSwipeTriggerPx
-                                    val shouldReveal = offsetX.value <= revealSnapThresholdPx
+                                    val fullSwipeLeft = hasAction && offsetX.value <= fullSwipeTriggerPx
+                                    val shouldRevealLeft = offsetX.value <= revealSnapThresholdPx
+                                    val fullSwipeRight = offsetX.value >= archiveTriggerPx
+
                                     scope.launch {
-                                        if (fullSwipe) { onUndo(event.id, event.tag); offsetX.animateTo(0f, swipeSpringSpec) }
-                                        else if (shouldReveal) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
-                                        else offsetX.animateTo(0f, swipeSpringSpec)
+                                        if (fullSwipeLeft) { 
+                                            onUndo(event.id, event.tag)
+                                            offsetX.animateTo(0f, swipeSpringSpec) 
+                                        } else if (fullSwipeRight) {
+                                            // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
+                                            offsetX.animateTo(
+                                                targetValue = screenWidthPx, 
+                                                animationSpec = tween(durationMillis = 200)
+                                            )
+                                            onEventAction(event.id, "archive")
+                                        } else if (shouldRevealLeft) {
+                                            offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                        } else {
+                                            offsetX.animateTo(0f, swipeSpringSpec)
+                                        }
                                     }
                                 },
                                 onDragCancel = {
@@ -785,8 +817,15 @@ fun ScheduleCard(
                                     change.consume()
                                     scope.launch {
                                         val current = offsetX.value
-                                        val resistance = when { dragAmount < 0 && current <= fullSwipeTriggerPx -> 0.25f; dragAmount < 0 && current <= revealOffsetPx -> 0.45f; else -> 0.85f }
-                                        offsetX.snapTo((current + (dragAmount * resistance)).coerceIn(dragLimitPx, 0f))
+                                        // 【阻尼感调校】向右滑过阈值后瞬间解除阻力，鼓励直接飞出去
+                                        val resistance = when { 
+                                            dragAmount < 0 && current <= fullSwipeTriggerPx -> 0.25f
+                                            dragAmount < 0 && current <= revealOffsetPx -> 0.45f
+                                            dragAmount > 0 && current >= archiveTriggerPx -> 0.95f
+                                            else -> 0.85f 
+                                        }
+                                        // 【修改】去除了上限 0f，允许卡片向右无限制拖拽
+                                        offsetX.snapTo((current + (dragAmount * resistance)).coerceAtLeast(dragLimitPx))
                                     }
                                 }
                             )

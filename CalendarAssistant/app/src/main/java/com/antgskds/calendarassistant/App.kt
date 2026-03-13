@@ -10,6 +10,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.antgskds.calendarassistant.core.util.CrashHandler
+import com.antgskds.calendarassistant.core.util.AnrMonitor
 import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
@@ -47,6 +49,12 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        
+        // 初始化全局崩溃捕获
+        CrashHandler.init(this)
+
+        // 启动轻量 ANR 监测
+        AnrMonitor.start(this)
         
         // 初始化通知渠道
         createNotificationChannels()

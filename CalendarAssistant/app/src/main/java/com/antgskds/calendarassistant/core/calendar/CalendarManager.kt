@@ -399,8 +399,43 @@ class CalendarManager(private val context: Context) {
         startMillis: Long,
         endMillis: Long,
         eventId: Long? = null
-    ): List<SystemEventInfo> = withContext(Dispatchers.IO) {
+    ): List<SystemEventInfo> {
+        return queryRecurringInstancesInRangeInternal(
+            calendarId = calendarId,
+            startMillis = startMillis,
+            endMillis = endMillis,
+            eventId = eventId,
+            limit = null
+        ).events
+    }
+
+    suspend fun queryRecurringInstancesInRangeLimited(
+        calendarId: Long,
+        startMillis: Long,
+        endMillis: Long,
+        eventId: Long? = null,
+        limit: Int
+    ): RecurringInstancesQueryResult {
+        return queryRecurringInstancesInRangeInternal(
+            calendarId = calendarId,
+            startMillis = startMillis,
+            endMillis = endMillis,
+            eventId = eventId,
+            limit = limit
+        )
+    }
+
+    private suspend fun queryRecurringInstancesInRangeInternal(
+        calendarId: Long,
+        startMillis: Long,
+        endMillis: Long,
+        eventId: Long?,
+        limit: Int?
+    ): RecurringInstancesQueryResult = withContext(Dispatchers.IO) {
+        val normalizedLimit = limit?.takeIf { it > 0 }
         val events = mutableListOf<SystemEventInfo>()
+        var truncated = false
+
         val builder = Instances.CONTENT_URI.buildUpon()
         ContentUris.appendId(builder, startMillis)
         ContentUris.appendId(builder, endMillis)
@@ -456,6 +491,11 @@ class CalendarManager(private val context: Context) {
 
                     if (rrule.isNullOrBlank()) continue
 
+                    if (normalizedLimit != null && events.size >= normalizedLimit) {
+                        truncated = true
+                        break
+                    }
+
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
                     val seriesKey = RecurringEventUtils.buildSeriesKey(calendarId, eventId)
                     val instanceKey = RecurringEventUtils.buildInstanceKey(seriesKey, start)
@@ -484,10 +524,10 @@ class CalendarManager(private val context: Context) {
             Log.e(TAG, "查询重复实例失败", e)
         }
 
-        if (events.isEmpty()) return@withContext events
+        if (events.isEmpty()) return@withContext RecurringInstancesQueryResult(events, truncated)
 
         val metadataByEventId = queryEventMetadata(events.map { it.eventId })
-        events.map { event ->
+        val enrichedEvents = events.map { event ->
             val metadata = metadataByEventId[event.eventId]
             if (metadata != null) {
                 event.copy(
@@ -499,6 +539,8 @@ class CalendarManager(private val context: Context) {
                 event
             }
         }
+
+        RecurringInstancesQueryResult(enrichedEvents, truncated)
     }
 
     suspend fun queryRecurringSeries(calendarId: Long): List<SystemEventInfo> = withContext(Dispatchers.IO) {
@@ -930,6 +972,11 @@ class CalendarManager(private val context: Context) {
         val appId: String? = null,
         val appEventType: String? = null,
         val tag: String? = null
+    )
+
+    data class RecurringInstancesQueryResult(
+        val events: List<SystemEventInfo>,
+        val isTruncated: Boolean
     )
 
     private data class EventMetadata(
