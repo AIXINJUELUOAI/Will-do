@@ -33,8 +33,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.2.1 Beta"
+        versionCode = 10
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -117,6 +117,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // 🔥 添加这一行：Jetpack Navigation Compose
+
     implementation("androidx.navigation:navigation-compose:2.8.0")
+
 }
