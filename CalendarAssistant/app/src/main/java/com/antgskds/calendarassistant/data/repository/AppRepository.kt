@@ -15,10 +15,13 @@ import com.antgskds.calendarassistant.data.source.EventJsonDataSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.EventDeduplicator
 import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import com.antgskds.calendarassistant.core.calendar.RecurringSyncLimitException
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
 import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
 import com.antgskds.calendarassistant.core.importer.ImportMode
@@ -156,9 +159,22 @@ class AppRepository private constructor(private val context: Context) {
 
     private fun refreshData() {
         scope.launch {
-            val rawEvents = normalizeEventsById(eventSource.loadEvents())
+            val rawEvents = eventSource.loadEvents()
             val loadedCourses = courseSource.loadCourses()
             val loadedSettings = settingsSource.loadSettings()
+            
+            val eventCleanupInfo = eventSource.getAndClearCleanupInfo()
+            val courseCleanupInfo = courseSource.getAndClearCleanupInfo()
+            
+            val cleanupInfo = listOf(eventCleanupInfo, courseCleanupInfo)
+                .filter { it.isNotEmpty() }
+                .joinToString("，")
+            
+            if (cleanupInfo.isNotEmpty()) {
+                CrashHandler.saveCleanupInfo(appContext, cleanupInfo)
+                Log.i("AppRepository", "数据自愈: $cleanupInfo")
+            }
+            
             val loadedEvents = if (loadedSettings.isRecurringCalendarSyncEnabled) {
                 rawEvents
             } else {
@@ -173,7 +189,8 @@ class AppRepository private constructor(private val context: Context) {
 
             _events.value = loadedEvents
             _courses.value = loadedCourses
-            _settings.value = loadedSettings
+            val normalizedSettings = ensureTimeTableConfig(loadedSettings)
+            _settings.value = normalizedSettings
             // _archivedEvents 保持初始为空，直到用户查看时加载
 
             loadedEvents.forEach { event ->
@@ -187,6 +204,21 @@ class AppRepository private constructor(private val context: Context) {
                 autoArchiveExpiredEvents()
             }
         }
+    }
+
+    private fun ensureTimeTableConfig(settings: MySettings): MySettings {
+        if (settings.timeTableConfigJson.isNotBlank() || settings.timeTableJson.isBlank()) {
+            return settings
+        }
+
+        val resolvedConfig = TimeTableLayoutUtils.resolveLayoutConfig(
+            configJsonString = "",
+            timeTableJson = settings.timeTableJson
+        )
+        val configJson = TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig)
+        val updated = settings.copy(timeTableConfigJson = configJson)
+        settingsSource.saveSettings(updated)
+        return updated
     }
 
     /**
@@ -625,7 +657,15 @@ class AppRepository private constructor(private val context: Context) {
             applySettingsNow(updatedSettings)
 
             if (enabled) {
-                syncFromCalendar()
+                val syncResult = syncFromCalendar()
+                if (syncResult.isFailure) {
+                    val exception = syncResult.exceptionOrNull()
+                    if (exception is RecurringSyncLimitException) {
+                        applySettingsNow(updatedSettings.copy(isRecurringCalendarSyncEnabled = false))
+                    }
+                    return syncResult
+                }
+                syncResult
             } else {
                 val removedCount = clearImportedRecurringEvents()
                 Result.success(removedCount)
@@ -718,7 +758,8 @@ class AppRepository private constructor(private val context: Context) {
             courses = _courses.value,
             semesterStartDate = _settings.value.semesterStartDate,
             totalWeeks = _settings.value.totalWeeks,
-            timeTableJson = _settings.value.timeTableJson
+            timeTableJson = _settings.value.timeTableJson,
+            timeTableConfigJson = _settings.value.timeTableConfigJson
         )
         return json.encodeToString(coursesData)
     }
@@ -804,7 +845,8 @@ class AppRepository private constructor(private val context: Context) {
             val newSettings = currentSettings.copy(
                 semesterStartDate = data.semesterStartDate,
                 totalWeeks = data.totalWeeks,
-                timeTableJson = data.timeTableJson
+                timeTableJson = data.timeTableJson,
+                timeTableConfigJson = data.timeTableConfigJson
             )
             updateSettings(newSettings)
 
@@ -1436,7 +1478,8 @@ private data class CoursesBackupData(
     val courses: List<Course>,
     val semesterStartDate: String,
     val totalWeeks: Int,
-    val timeTableJson: String
+    val timeTableJson: String,
+    val timeTableConfigJson: String = ""
 )
 
 @kotlinx.serialization.Serializable

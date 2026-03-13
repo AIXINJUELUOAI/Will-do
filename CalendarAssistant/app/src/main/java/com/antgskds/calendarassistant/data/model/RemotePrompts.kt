@@ -10,6 +10,8 @@ data class RemotePrompts(
     val userTextPrompt: String = "",
     @SerialName("unified_prompt")
     val unifiedPrompt: String = "",
+    @SerialName("mm_unified_prompt")
+    val mmUnifiedPrompt: String = "",
     @SerialName("schedule_prompt")
     val schedulePrompt: String = "",
     @SerialName("pickup_prompt")

@@ -23,6 +23,9 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.ai.activeAiConfig
+import com.antgskds.calendarassistant.core.ai.isConfigured
+import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
@@ -298,7 +301,11 @@ class TextAccessibilityService : AccessibilityService() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     takeScreenshotAndAnalyze()
                 } else {
-                    showResultNotification("系统版本过低", "截图功能需要 Android 11+")
+                    showResultNotification(
+                        "系统版本过低",
+                        "截图功能需要 Android 11+",
+                        useOcrCapsule = true
+                    )
                 }
             } finally {
                 isAnalyzing.set(false)
@@ -320,7 +327,11 @@ class TextAccessibilityService : AccessibilityService() {
                 }
                 override fun onFailure(errorCode: Int) {
                     cancelProgressNotification()
-                    showResultNotification("截图失败", "错误码: $errorCode")
+                    showResultNotification(
+                        "截图失败",
+                        "错误码: $errorCode",
+                        useOcrCapsule = true
+                    )
                 }
             }
         )
@@ -350,10 +361,17 @@ class TextAccessibilityService : AccessibilityService() {
             }
 
             val settings = repository.settings.value
-            if (settings.modelKey.isBlank()) {
+            val config = settings.activeAiConfig()
+            if (!config.isConfigured()) {
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
-                    showResultNotification("配置缺失", "请先填写 API Key", autoLaunch = true)
+                    showResultNotification(
+                        "配置缺失",
+                        config.missingConfigMessage(),
+                        autoLaunch = true,
+                        useOcrCapsule = true,
+                        durationMs = 12000L
+                    )
                 }
                 softwareBitmap.recycle()
                 return
@@ -369,14 +387,19 @@ class TextAccessibilityService : AccessibilityService() {
                 cancelProgressNotification()
                 if (validEvents.isEmpty()) {
                     // 未识别到日程：显示提示，5秒后自动消失
-                    showResultNotification("分析完成", "未识别到有效日程")
+                    showResultNotification(
+                        "分析完成",
+                        "未识别到有效日程",
+                        useOcrCapsule = true,
+                        durationMs = 5000L
+                    )
                     Handler(Looper.getMainLooper()).postDelayed({
                         cancelResultNotification()
                     }, 5000)
                     return@withContext
                 }
                 if (addedEvents.isNotEmpty()) {
-                    // 识别成功：显示添加结果，15秒后自动消失
+                    // 识别成功：显示添加结果，8秒后自动消失
                     val count = addedEvents.size
                     val title = "新增 $count 个事件"
                     val content = if (count == 1) {
@@ -385,10 +408,15 @@ class TextAccessibilityService : AccessibilityService() {
                     } else {
                         addedEvents.joinToString("，") { it.title }
                     }
-                    showResultNotification(title, content)
+                    showResultNotification(
+                        title,
+                        content,
+                        useOcrCapsule = true,
+                        durationMs = 8000L
+                    )
                     Handler(Looper.getMainLooper()).postDelayed({
                         cancelResultNotification()
-                    }, 15000)
+                    }, 8000)
                 }
             }
         } catch (e: Exception) {
@@ -396,7 +424,12 @@ class TextAccessibilityService : AccessibilityService() {
             Log.e(TAG, "处理截图出错", e)
             withContext(Dispatchers.Main) {
                 cancelProgressNotification()
-                showResultNotification("分析出错", "错误: ${e.message}")
+                showResultNotification(
+                    "分析出错",
+                    "错误: ${e.message}",
+                    useOcrCapsule = true,
+                    durationMs = 8000L
+                )
             }
         }
     }
@@ -466,31 +499,50 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     private fun showProgressNotification(title: String, content: String) {
-        showBaseNotification(NOTIFICATION_ID_PROGRESS, title, content, isProgress = true, autoLaunch = false)
+        if (shouldUseOcrCapsule()) {
+            repository.capsuleStateManager.showOcrProgress(title, content)
+        } else {
+            showBaseNotification(NOTIFICATION_ID_PROGRESS, title, content, isProgress = true, autoLaunch = false)
+        }
     }
 
     private fun cancelProgressNotification() {
+        if (shouldUseOcrCapsule()) {
+            repository.capsuleStateManager.clearOcrCapsule()
+            return
+        }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(NOTIFICATION_ID_PROGRESS)
     }
 
     private fun cancelResultNotification() {
+        if (shouldUseOcrCapsule()) {
+            repository.capsuleStateManager.clearOcrCapsule()
+            return
+        }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(NOTIFICATION_ID_RESULT)
     }
 
-    private fun showResultNotification(title: String, content: String, autoLaunch: Boolean = false) {
-        showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
+    private fun showResultNotification(
+        title: String,
+        content: String,
+        autoLaunch: Boolean = false,
+        useOcrCapsule: Boolean = false,
+        durationMs: Long = 8000L
+    ) {
+        if (useOcrCapsule && shouldUseOcrCapsule()) {
+            repository.capsuleStateManager.showOcrResult(title, content, durationMs)
+        } else {
+            showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
+        }
+    }
+
+    private fun shouldUseOcrCapsule(): Boolean {
+        return repository.settings.value.isLiveCapsuleEnabled
     }
 
     private fun showBaseNotification(id: Int, title: String, content: String, isProgress: Boolean, autoLaunch: Boolean) {
-        val settings = repository.settings.value
-        val isLiveCapsuleEnabled = settings.isLiveCapsuleEnabled
-        Log.d(TAG, "showBaseNotification: isLiveCapsuleEnabled=$isLiveCapsuleEnabled, title=$title")
-        
-        // 决定是否使用胶囊通知渠道
-        val useCapsuleChannel = isLiveCapsuleEnabled
-        
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -500,8 +552,7 @@ class TextAccessibilityService : AccessibilityService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 根据是否启用胶囊选择渠道
-        val channelId = if (useCapsuleChannel) App.CHANNEL_ID_LIVE else App.CHANNEL_ID_POPUP
+        val channelId = App.CHANNEL_ID_POPUP
 
         // 根据通知内容选择图标
         val smallIcon = when {
@@ -517,32 +568,6 @@ class TextAccessibilityService : AccessibilityService() {
             .setContentText(content)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        // 如果启用胶囊通知，添加胶囊特殊配置
-        if (useCapsuleChannel) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            }
-            builder.setOngoing(true)
-            
-            // 尝试使用反射调用 setRequestPromotedOngoing（Android 12+）
-            try {
-                val method = NotificationCompat.Builder::class.java.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
-                method.invoke(builder, true)
-            } catch (e: Exception) {
-                Log.d(TAG, "setRequestPromotedOngoing not available")
-            }
-            
-            // 添加 android.substName 到 extras（关键：让通知显示为胶囊）
-            try {
-                val extrasField = NotificationCompat.Builder::class.java.getDeclaredField("mExtras")
-                extrasField.isAccessible = true
-                val extras = extrasField.get(builder) as android.os.Bundle
-                extras.putBoolean("android.substName", true)
-            } catch (e: Exception) {
-                Log.d(TAG, "Failed to add substName extra: ${e.message}")
-            }
-        }
 
         if (autoLaunch || !isProgress) builder.setContentIntent(pendingIntent)
         if (isProgress) {

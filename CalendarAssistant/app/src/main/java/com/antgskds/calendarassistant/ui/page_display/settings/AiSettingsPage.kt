@@ -37,7 +37,6 @@ import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,16 +47,34 @@ fun AiSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
-    val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
-    val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
-    var modelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
-    var modelName by remember(settings) { mutableStateOf(settings.modelName) }
-    var modelKey by remember(settings) { mutableStateOf(settings.modelKey) }
+    val isMultimodalEnabled = settings.useMultimodalAi
+
+    var textModelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
+    var textModelName by remember(settings) { mutableStateOf(settings.modelName) }
+    var textModelKey by remember(settings) { mutableStateOf(settings.modelKey) }
+
+    var mmModelUrl by remember(settings) { mutableStateOf(settings.mmModelUrl) }
+    var mmModelName by remember(settings) { mutableStateOf(settings.mmModelName) }
+    var mmModelKey by remember(settings) { mutableStateOf(settings.mmModelKey) }
+
+    val activeModelUrl = if (isMultimodalEnabled) mmModelUrl else textModelUrl
+    val activeModelName = if (isMultimodalEnabled) mmModelName else textModelName
+    val activeModelKey = if (isMultimodalEnabled) mmModelKey else textModelKey
+
+    val onModelUrlChange: (String) -> Unit = { newValue ->
+        if (isMultimodalEnabled) mmModelUrl = newValue else textModelUrl = newValue
+    }
+    val onModelNameChange: (String) -> Unit = { newValue ->
+        if (isMultimodalEnabled) mmModelName = newValue else textModelName = newValue
+    }
+    val onModelKeyChange: (String) -> Unit = { newValue ->
+        if (isMultimodalEnabled) mmModelKey = newValue else textModelKey = newValue
+    }
 
     val fabSize = when (uiSize) { 1 -> 56.dp; 2 -> 64.dp; else -> 72.dp }
     val fabIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
@@ -95,12 +112,6 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         }
     }
 
-    LaunchedEffect(mainViewModel) {
-        mainViewModel.promptCheckFeedback.collectLatest { feedback ->
-            showToast(feedback.message, feedback.type)
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -117,66 +128,45 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 .padding(bottom = 120.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val modeLabel = if (isMultimodalEnabled) "多模态AI" else "文本AI"
+
             // 参数配置板块标题
             Text("参数配置", style = sectionTitleStyle)
+            Text(
+                text = "当前模式：$modeLabel（在偏好设置中切换）",
+                style = cardSubtitleStyle
+            )
+
 
             AiConfigForm(
-                initialUrl = modelUrl,
-                initialName = modelName,
-                initialKey = modelKey,
-                onUrlChange = { modelUrl = it },
-                onNameChange = { modelName = it },
-                onKeyChange = { modelKey = it },
+                initialUrl = activeModelUrl,
+                initialName = activeModelName,
+                initialKey = activeModelKey,
+                onUrlChange = onModelUrlChange,
+                onNameChange = onModelNameChange,
+                onKeyChange = onModelKeyChange,
                 cardTitleStyle = cardTitleStyle,
                 cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle,
                 contentBodyStyle = contentBodyStyle
             )
-
-            Text("云端 Prompt", style = sectionTitleStyle)
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("当前本地版本 v$promptLocalVersion", style = cardTitleStyle)
-                    Text(
-                        "手动检查云端 prompt 更新；发现新版本后会先弹窗确认，再决定是否拉取到本地。",
-                        style = cardSubtitleStyle
-                    )
-
-                    FilledTonalButton(
-                        onClick = { mainViewModel.checkPromptUpdatesManually() },
-                        enabled = !promptCheckInProgress,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        if (promptCheckInProgress) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("检查中...")
-                        } else {
-                            Text("手动检查更新")
-                        }
-                    }
-                }
-            }
         }
 
         FloatingActionButton(
             onClick = {
-                viewModel.updateAiSettings(modelKey.trim(), modelName.trim(), modelUrl.trim())
+                if (isMultimodalEnabled) {
+                    viewModel.updateMultimodalAiSettings(
+                        mmModelKey.trim(),
+                        mmModelName.trim(),
+                        mmModelUrl.trim()
+                    )
+                } else {
+                    viewModel.updateAiSettings(
+                        textModelKey.trim(),
+                        textModelName.trim(),
+                        textModelUrl.trim()
+                    )
+                }
                 scope.launch {
                     snackbarHostState.currentSnackbarData?.dismiss()
                     snackbarHostState.showSnackbar(message = "配置保存成功", duration = SnackbarDuration.Short)
@@ -317,9 +307,9 @@ private fun AiConfigForm(
                     placeholder = "输入模型名称",
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
-                    cardSubtitleStyle = cardSubtitleStyle
-                )
-            }
+                cardSubtitleStyle = cardSubtitleStyle
+            )
+        }
 
             MyDivider()
 

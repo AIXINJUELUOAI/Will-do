@@ -22,7 +22,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
 import com.antgskds.calendarassistant.data.model.ImportResult
@@ -35,7 +37,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
+fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewModel, uiSize: Int = 2) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -48,6 +50,8 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, uiSize: Int = 2) {
     var detectedStartDate by remember { mutableStateOf<String?>(null) }
     var importMode by remember { mutableStateOf(ImportMode.APPEND) }
     var importSettings by remember { mutableStateOf(true) }
+    val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
+    val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
 
     fun showToast(message: String, type: ToastType) {
         currentToastType = type
@@ -81,7 +85,12 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         color = MaterialTheme.colorScheme.onSurface
     )
 
-    // ... (中间的逻辑代码保持不变：peekStartDate, Launchers 等) ...
+    // 监听 Prompt 检查反馈
+    LaunchedEffect(mainViewModel) {
+        mainViewModel.promptCheckFeedback.collect { feedback ->
+            showToast(feedback.message, feedback.type)
+        }
+    }
     // 辅助：快速检测文件中的日期
     fun peekStartDate(jsonContent: String): String? {
         return try {
@@ -184,6 +193,48 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         }
     }
 
+    // 提示词导出
+    val exportPromptsLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val jsonData = AiPrompts.exportToJson(context)
+                    if (jsonData.isNotBlank()) {
+                        context.contentResolver.openOutputStream(uri)?.use { output -> output.write(jsonData.toByteArray()) }
+                        withContext(Dispatchers.Main) { showToast("提示词导出成功", ToastType.SUCCESS) }
+                    } else {
+                        withContext(Dispatchers.Main) { showToast("导出失败：无法获取提示词", ToastType.ERROR) }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) { showToast("导出失败: ${e.message}", ToastType.ERROR) }
+                }
+            }
+        }
+    }
+
+    // 提示词导入
+    val importPromptsLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    if (content != null) {
+                        val success = AiPrompts.importFromJson(context, content)
+                        withContext(Dispatchers.Main) {
+                            if (success) {
+                                showToast("提示词导入成功", ToastType.SUCCESS)
+                            } else {
+                                showToast("导入失败：格式无效", ToastType.ERROR)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) { showToast("导入失败: ${e.message}", ToastType.ERROR) }
+                }
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -213,6 +264,41 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     exportEventsLauncher.launch("calendar_events_$timestamp.json")
                 },
                 onImport = { importEventsLauncher.launch(arrayOf("application/json")) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle
+            )
+
+            Text("提示词管理", style = sectionTitleStyle)
+
+            val promptSource = if (promptLocalVersion > 1) "云端 v$promptLocalVersion" else "本地"
+            BackupCard(
+                title = "提示词来源：$promptSource",
+                desc = "导入/导出提示词，或检查云端更新",
+                onExport = {
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    exportPromptsLauncher.launch("ai_prompts_$timestamp.json")
+                },
+                onImport = { importPromptsLauncher.launch(arrayOf("application/json")) },
+                extraButton = {
+                    OutlinedButton(
+                        onClick = { mainViewModel.checkPromptUpdatesManually() },
+                        enabled = !promptCheckInProgress,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (promptCheckInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("检查中...")
+                        } else {
+                            Text("检查更新")
+                        }
+                    }
+                },
+                extraButtonText = "检查更新",
+                extraButtonOnTop = false,
                 cardTitleStyle = cardTitleStyle,
                 cardSubtitleStyle = cardSubtitleStyle
             )
@@ -356,6 +442,9 @@ fun BackupCard(
     onImport: () -> Unit,
     showExport: Boolean = true,
     importLabel: String = "导入",
+    extraButton: @Composable (() -> Unit)? = null,
+    extraButtonText: String = "检查更新",
+    extraButtonOnTop: Boolean = false,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
@@ -369,21 +458,63 @@ fun BackupCard(
             Text(title, style = cardTitleStyle)
             Text(desc, style = cardSubtitleStyle)
             Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (showExport) {
-                    OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+            if (extraButton != null && extraButtonOnTop) {
+                extraButton()
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onImport,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("导出")
+                        Text(importLabel)
+                    }
+                    if (showExport) {
+                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("导出")
+                        }
                     }
                 }
-                OutlinedButton(
-                    onClick = onImport,
-                    modifier = Modifier.weight(if (showExport) 1f else 1f)
-                ) {
-                    Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(importLabel)
+            } else if (extraButton != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onImport,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(importLabel)
+                    }
+                    if (showExport) {
+                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("导出")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                extraButton()
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (showExport) {
+                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("导出")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onImport,
+                        modifier = Modifier.weight(if (showExport) 1f else 1f)
+                    ) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(importLabel)
+                    }
                 }
             }
         }

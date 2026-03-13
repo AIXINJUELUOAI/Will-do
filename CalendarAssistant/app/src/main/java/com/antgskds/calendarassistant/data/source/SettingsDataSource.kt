@@ -77,12 +77,16 @@ class SettingsDataSource(context: Context) {
             modelName = prefs.getString("model_name", "") ?: "gpt-3.5-turbo",
             modelUrl = prefs.getString("model_url", "") ?: "",
             modelProvider = prefs.getString("model_provider", "") ?: "",
+            useMultimodalAi = false,
+            mmModelKey = "",
+            mmModelName = "",
+            mmModelUrl = "",
 
             showTomorrowEvents = prefs.getBoolean("show_tomorrow_events", false),
             isDailySummaryEnabled = prefs.getBoolean("daily_summary_enabled", false),
 
             tempEventsUseRecognitionTime = prefs.getBoolean("temp_events_use_rec_time", true),
-            screenshotDelayMs = prefs.getLong("screenshot_delay_ms", 700L),
+            screenshotDelayMs = prefs.getLong("screenshot_delay_ms", 1000L),
             isLiveCapsuleEnabled = prefs.getBoolean("live_capsule_enabled", false),
 
             // 新字段，旧数据中不存在，使用默认值

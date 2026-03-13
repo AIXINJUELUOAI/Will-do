@@ -9,6 +9,10 @@ data class MySettings(
     val modelName: String = "gpt-3.5-turbo",
     val modelUrl: String = "",
     val modelProvider: String = "", // 保留旧字段，防止数据丢失
+    val useMultimodalAi: Boolean = false,
+    val mmModelKey: String = "",
+    val mmModelName: String = "",
+    val mmModelUrl: String = "",
 
     // 功能开关
     val showTomorrowEvents: Boolean = false,
@@ -18,7 +22,7 @@ data class MySettings(
 
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true, // 旧版默认为 true
-    val screenshotDelayMs: Long = 700L,
+    val screenshotDelayMs: Long = 1000L,
     val isLiveCapsuleEnabled: Boolean = false,
 
     // 【新增】取件码聚合开关 (Beta)
@@ -32,6 +36,7 @@ data class MySettings(
     val semesterStartDate: String = "",
     val totalWeeks: Int = 20, // 旧版默认为 20
     val timeTableJson: String = "",
+    val timeTableConfigJson: String = "",
 
     // 主题设置
     val isDarkMode: Boolean = false,

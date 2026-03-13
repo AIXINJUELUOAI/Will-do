@@ -15,6 +15,9 @@ object IconUtils {
         return when (capsule.type) {
             CapsuleService.TYPE_NETWORK_SPEED -> R.drawable.ic_stat_net
 
+            CapsuleService.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
+            CapsuleService.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
+
             CapsuleService.TYPE_PICKUP, CapsuleService.TYPE_PICKUP_EXPIRED -> {
                 if (isFoodPickup(capsule.description)) R.drawable.ic_stat_food else R.drawable.ic_stat_package
             }

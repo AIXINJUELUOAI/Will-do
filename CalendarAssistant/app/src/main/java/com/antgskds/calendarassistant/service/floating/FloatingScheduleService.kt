@@ -30,6 +30,9 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.ai.activeAiConfig
+import com.antgskds.calendarassistant.core.ai.isConfigured
+import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
@@ -355,8 +358,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private fun handlePickedImage(uri: Uri) {
         serviceScope.launch {
             val settings = repository.settings.value
-            if (settings.modelKey.isBlank()) {
-                Toast.makeText(applicationContext, "请先填写 API Key", Toast.LENGTH_SHORT).show()
+            val config = settings.activeAiConfig()
+            if (!config.isConfigured()) {
+                Toast.makeText(applicationContext, config.missingConfigMessage(), Toast.LENGTH_SHORT).show()
                 finishPendingImagePick()
                 return@launch
             }
@@ -452,6 +456,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 when (actionType) {
                     "checkIn" -> repository.checkInTransport(eventId)
                     "complete" -> repository.completeScheduleEvent(eventId)
+                    "archive" -> {
+                        repository.archiveEvent(eventId)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)

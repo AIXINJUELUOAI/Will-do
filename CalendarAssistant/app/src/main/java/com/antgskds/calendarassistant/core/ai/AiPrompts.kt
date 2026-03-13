@@ -22,6 +22,14 @@ object AiPrompts {
         isLenient = true
     }
 
+    private val prettyJson = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        coerceInputValues = true
+        isLenient = true
+        prettyPrint = true
+    }
+
     private val defaultPrompts = RemotePrompts(
         version = 1,
         userTextPrompt = """
@@ -152,6 +160,80 @@ object AiPrompts {
                   "description": "严格遵循【微格式协议】生成的元数据",
                   "type": "event 或 pickup",
                   "tag": "【必须】general | pickup | train | taxi"
+                }
+              ]
+            }
+        """.trimIndent(),
+        mmUnifiedPrompt = """
+            你是一个高级日程助手。
+            【当前系统时间】：{{timeStr}}
+            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
+
+            任务：从图片内容中提取事件列表，将截图中的文字/票据/通知转成结构化日程数据。
+
+            【核心策略：场景分流】
+            你必须识别文本内容，将其归类为以下三种场景之一，并严格设置 tag 字段：
+
+            ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
+            **判定规则**：
+            - train: 包含 车次、座位号、12306、检票口
+            - taxi: 包含 车牌号、车型、司机、行程单、滴滴/高德
+
+            1. **UI 展示规范 (Title) - 必须包含 Emoji**：
+               - 🚄 火车/高铁："🚄 车次 路线"（示例："🚄 G1008 深圳-武汉"）
+               - 🚖 打车/网约车：优先 "🚖 颜色·车型 车牌"，其次 "🚖 车型 车牌"，最后 "🚖 平台 车牌"
+
+            2. **Location 填充规范**：
+               - 火车：必须填入出发站
+               - 打车：必须提取出发地 ➔ 目的地
+
+            3. **微格式 (Description)**：
+               - 火车：【列车】车次|检票口|座位号
+               - 打车：【用车】颜色|车型|车牌
+
+            4. **时间逻辑**：必须解析出发时间，若无日期则参考【日期基准】推断。
+
+            ========== 场景 2：取件/取餐 (【强制】tag: pickup) ==========
+            **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
+
+            1. **时间逻辑 (强制当前)**：
+               - 除非明确指定日期，否则 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
+
+            2. **UI 展示规范 (Title) - 必须包含 Emoji**：
+               - 📦 快递类："📦 菜鸟 1234"，"📦 圆通快递 1-1-8478"
+               - 🍔 餐饮类："🍔 取餐 A05"，"🍔 麦当劳 A114"
+
+            3. **Location 填充规范**：提取门店/驿站位置，若无明确位置信息则留空。
+
+            4. **微格式 (Description)**：
+               - 快递类：【取件】号码|品牌|位置
+               - 餐饮类：【取餐】号码|品牌|位置
+               - 如果位置为空，严禁在末尾添加多余分隔符。
+
+            5. **区分取件码与单号**：
+               - 取件码通常较短或带分隔符；纯数字且长度>12通常是快递单号。
+               - 仅有长单号时不创建事件；若同时有短取件码，必须以短取件码为准。
+
+            6. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
+
+            ========== 场景 3：普通日程 (【强制】tag: general) ==========
+            **判定规则**：不符合上述场景的所有其他日程。
+            1. 时间逻辑：参考【日期基准】推断。
+            2. Title：提炼核心事件。
+            3. Description：留空或填入原文备注。
+
+            【输出格式】
+            纯 JSON 对象：
+            {
+              "events": [
+                {
+                  "title": "标题",
+                  "startTime": "yyyy-MM-dd HH:mm",
+                  "endTime": "yyyy-MM-dd HH:mm",
+                  "location": "地点或空",
+                  "description": "备注或空",
+                  "type": "event 或 pickup",
+                  "tag": "general | pickup | train | taxi"
                 }
               ]
             }
@@ -289,6 +371,97 @@ object AiPrompts {
         return input + COPYRIGHT_MARKER
     }
 
+    fun exportToJson(context: Context): String {
+        val prompts = activePrompts(context)
+        return try {
+            buildString {
+                appendLine("# Will do 提示词导出")
+                appendLine("# version: ${prompts.version}")
+                appendLine()
+                
+                appendLine("=== userTextPrompt ===")
+                appendLine(prompts.userTextPrompt.replace("\\n", "\n"))
+                appendLine("=== end ===")
+                appendLine()
+                
+                appendLine("=== schedulePrompt ===")
+                appendLine(prompts.schedulePrompt.replace("\\n", "\n"))
+                appendLine("=== end ===")
+                appendLine()
+                
+                appendLine("=== pickupPrompt ===")
+                appendLine(prompts.pickupPrompt.replace("\\n", "\n"))
+                appendLine("=== end ===")
+                appendLine()
+                
+                appendLine("=== unifiedPrompt ===")
+                appendLine(prompts.unifiedPrompt.replace("\\n", "\n"))
+                appendLine("=== end ===")
+                appendLine()
+
+                appendLine("=== mmUnifiedPrompt ===")
+                appendLine(prompts.mmUnifiedPrompt.replace("\\n", "\n"))
+                appendLine("=== end ===")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "导出提示词失败: ${e.message}")
+            ""
+        }
+    }
+
+    fun importFromJson(context: Context, content: String): Boolean {
+        return try {
+            if (content.contains("=== userTextPrompt ===")) {
+                val prompts = parseCustomFormat(content)
+                updatePrompts(context.applicationContext, prompts)
+                Log.d(TAG, "导入提示词成功，version=${prompts.version}")
+                true
+            } else {
+                val prompts = json.decodeFromString<RemotePrompts>(content)
+                updatePrompts(context.applicationContext, prompts)
+                Log.d(TAG, "导入提示词成功，version=${prompts.version}")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "导入提示词失败: ${e.message}")
+            false
+        }
+    }
+
+    private fun parseCustomFormat(content: String): RemotePrompts {
+        val lines = content.lines()
+        var version = 1
+        val fields = mutableMapOf<String, StringBuilder>()
+        var currentField = ""
+        
+        for (line in lines) {
+            when {
+                line.startsWith("# version:") -> {
+                    version = line.substringAfter("# version:").trim().toIntOrNull() ?: 1
+                }
+                line.trim().startsWith("===") && line.trim().endsWith("===") -> {
+                    currentField = line.trim().removeSurrounding("===").trim()
+                    fields[currentField] = StringBuilder()
+                }
+                line.trim() == "=== end ===" -> {
+                    currentField = ""
+                }
+                currentField.isNotEmpty() && !line.startsWith("#") -> {
+                    fields[currentField]?.appendLine(line)
+                }
+            }
+        }
+        
+        return RemotePrompts(
+            version = version,
+            userTextPrompt = fields["userTextPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
+            schedulePrompt = fields["schedulePrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
+            pickupPrompt = fields["pickupPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
+            unifiedPrompt = fields["unifiedPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
+            mmUnifiedPrompt = fields["mmUnifiedPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: ""
+        )
+    }
+
     fun getLocalVersion(context: Context): Int {
         return loadCachedPrompts(context)?.version ?: defaultPrompts.version
     }
@@ -359,6 +532,30 @@ object AiPrompts {
         )
     }
 
+    fun getMultimodalUnifiedPrompt(
+        context: Context,
+        timeStr: String,
+        dateToday: String,
+        dateYesterday: String,
+        dateBeforeYesterday: String,
+        nowTime: String,
+        nowPlusHourTime: String,
+        dayOfWeek: String
+    ): String {
+        return render(
+            template = activePrompts(context).mmUnifiedPrompt,
+            values = mapOf(
+                "timeStr" to timeStr,
+                "dateToday" to dateToday,
+                "dateYesterday" to dateYesterday,
+                "dateBeforeYesterday" to dateBeforeYesterday,
+                "nowTime" to nowTime,
+                "nowPlusHourTime" to nowPlusHourTime,
+                "dayOfWeek" to dayOfWeek
+            )
+        )
+    }
+
     fun getSchedulePrompt(
         context: Context,
         timeStr: String,
@@ -414,7 +611,8 @@ object AiPrompts {
 
     private fun normalize(prompts: RemotePrompts): RemotePrompts {
         return prompts.copy(
-            unifiedPrompt = prompts.unifiedPrompt.ifBlank { defaultPrompts.unifiedPrompt }
+            unifiedPrompt = prompts.unifiedPrompt.ifBlank { defaultPrompts.unifiedPrompt },
+            mmUnifiedPrompt = prompts.mmUnifiedPrompt.ifBlank { defaultPrompts.mmUnifiedPrompt }
         )
     }
 
