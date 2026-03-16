@@ -54,6 +54,8 @@ class MainViewModel(
     val promptCheckInProgress: StateFlow<Boolean> = _promptCheckInProgress.asStateFlow()
     private val _promptLocalVersion = MutableStateFlow(AiPrompts.getLocalVersion(repository.appContext))
     val promptLocalVersion: StateFlow<Int> = _promptLocalVersion.asStateFlow()
+    private val _promptSource = MutableStateFlow(AiPrompts.getPromptSource(repository.appContext))
+    val promptSource: StateFlow<AiPrompts.PromptSource> = _promptSource.asStateFlow()
     private val _promptCheckFeedback = MutableSharedFlow<PromptCheckFeedback>(extraBufferCapacity = 1)
     val promptCheckFeedback: SharedFlow<PromptCheckFeedback> = _promptCheckFeedback.asSharedFlow()
     private var pendingPromptUpdate: RemotePrompts? = null
@@ -206,13 +208,18 @@ class MainViewModel(
     fun confirmPromptUpdate() {
         val remotePrompts = pendingPromptUpdate ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            AiPrompts.updatePrompts(repository.appContext, remotePrompts)
-            _promptLocalVersion.value = remotePrompts.version
+            AiPrompts.updatePrompts(repository.appContext, remotePrompts, AiPrompts.PromptSource.CLOUD)
+            refreshPromptInfo()
             Log.d("MainViewModel", "用户确认更新 prompt，version=${remotePrompts.version}")
             pendingPromptUpdate = null
             _promptUpdateDialogState.value = null
             sendPromptFeedback("已更新到本地 v${remotePrompts.version}", ToastType.SUCCESS)
         }
+    }
+
+    fun refreshPromptInfo() {
+        _promptLocalVersion.value = AiPrompts.getLocalVersion(repository.appContext)
+        _promptSource.value = AiPrompts.getPromptSource(repository.appContext)
     }
 
     fun dismissPromptUpdate() {
