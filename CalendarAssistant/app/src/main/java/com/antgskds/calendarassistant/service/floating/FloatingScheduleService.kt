@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
@@ -417,15 +418,20 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         serviceScope.launch {
             try {
                 val settings = repository.settings.value
-                val eventData = withContext(Dispatchers.IO) {
+                when (val result = withContext(Dispatchers.IO) {
                     RecognitionProcessor.parseUserText(text, settings, applicationContext)
-                }
-                if (eventData != null && eventData.title.isNotBlank()) {
-                    val event = convertToMyEvent(eventData, sourceImagePath)
-                    repository.addEvent(event)
-                    Toast.makeText(applicationContext, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(applicationContext, "未识别到有效日程", Toast.LENGTH_SHORT).show()
+                }) {
+                    is AnalysisResult.Success -> {
+                        val event = convertToMyEvent(result.data, sourceImagePath)
+                        repository.addEvent(event)
+                        Toast.makeText(applicationContext, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
+                    }
+                    is AnalysisResult.Empty -> {
+                        Toast.makeText(applicationContext, result.message, Toast.LENGTH_SHORT).show()
+                    }
+                    is AnalysisResult.Failure -> {
+                        Toast.makeText(applicationContext, result.failure.fullMessage(), Toast.LENGTH_SHORT).show()
+                    }
                 }
                 // 收起输入法
                 hideInputMethod()
@@ -433,7 +439,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse manual input", e)
                 hideInputMethod()
-                Toast.makeText(applicationContext, "识别失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, "分析失败：${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
                 onComplete()
             }
         }

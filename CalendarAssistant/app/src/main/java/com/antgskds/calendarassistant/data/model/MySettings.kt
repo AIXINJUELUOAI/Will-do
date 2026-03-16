@@ -13,6 +13,7 @@ data class MySettings(
     val mmModelKey: String = "",
     val mmModelName: String = "",
     val mmModelUrl: String = "",
+    val disableThinking: Boolean = false,
 
     // 功能开关
     val showTomorrowEvents: Boolean = false,

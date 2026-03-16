@@ -25,8 +25,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -34,6 +36,21 @@ import kotlin.coroutines.resumeWithException
 data class AiResponse(
     val events: List<CalendarEventData> = emptyList()
 )
+
+data class AnalysisFailure(
+    val title: String,
+    val detail: String
+) {
+    fun fullMessage(): String {
+        return if (detail.isBlank()) title else "$title：$detail"
+    }
+}
+
+sealed class AnalysisResult<out T> {
+    data class Success<T>(val data: T) : AnalysisResult<T>()
+    data class Empty(val message: String = "未识别到有效日程") : AnalysisResult<Nothing>()
+    data class Failure(val failure: AnalysisFailure) : AnalysisResult<Nothing>()
+}
 
 data class OcrResult(
     val rawText: String,
@@ -69,7 +86,7 @@ object RecognitionProcessor {
         }
     }
 
-    suspend fun parseUserText(text: String, settings: MySettings, context: Context): CalendarEventData? {
+    suspend fun parseUserText(text: String, settings: MySettings, context: Context): AnalysisResult<CalendarEventData> {
         val appContext = context.applicationContext
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -91,7 +108,7 @@ object RecognitionProcessor {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
             Log.e(TAG, "AI 配置缺失，无法解析文本输入")
-            return null
+            return AnalysisResult.Failure(AnalysisFailure("分析失败", "AI 配置缺失"))
         }
         val modelName = modelConfig.name.ifBlank { "deepseek-chat" }
         val request = ModelRequest(
@@ -104,33 +121,49 @@ object RecognitionProcessor {
         )
 
         return try {
-            val response = ApiModelProvider.generate(
+            when (val response = ApiModelProvider.generate(
                 request = request,
                 apiKey = modelConfig.key,
                 baseUrl = modelConfig.url,
-                modelName = modelName
-            )
-
-            if (response.startsWith("Error:")) {
-                Log.e(TAG, "API 返回错误: $response")
-                return null
+                modelName = modelName,
+                disableThinking = settings.disableThinking
+            )) {
+                is ApiCallResult.Success -> {
+                    Log.d(TAG, "[AI文本输入] 原始响应(${response.content.length} chars): ${response.content}")
+                    val cleanJson = cleanJsonString(response.content)
+                    Log.d(TAG, "[AI文本输入] 清洗后 JSON(${cleanJson.length} chars): $cleanJson")
+                    val hasEventsField = Regex("\"events\"\\s*:").containsMatchIn(cleanJson)
+                    val parsedEvent = if (hasEventsField) {
+                        val wrapper = jsonParser.decodeFromString<AiResponse>(cleanJson)
+                        Log.d(TAG, "[AI文本输入] 解析为事件列表: size=${wrapper.events.size}")
+                        wrapper.events.firstOrNull()
+                    } else {
+                        val event = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
+                        Log.d(
+                            TAG,
+                            "[AI文本输入] 解析为单事件: title=${event.title}, start=${event.startTime}, end=${event.endTime}, type=${event.type}, tag=${event.tag}"
+                        )
+                        event
+                    }
+                    if (parsedEvent == null || parsedEvent.title.isBlank()) {
+                        Log.d(TAG, "[AI文本输入] 解析结果为空")
+                        AnalysisResult.Empty()
+                    } else {
+                        AnalysisResult.Success(parsedEvent)
+                    }
+                }
+                is ApiCallResult.Failure -> {
+                    val failure = mapApiFailure(response)
+                    AnalysisResult.Failure(failure)
+                }
             }
-
-            val cleanJson = cleanJsonString(response)
-            try {
-                jsonParser.decodeFromString<CalendarEventData>(cleanJson)
-            } catch (e: Exception) {
-                val wrapper = jsonParser.decodeFromString<AiResponse>(cleanJson)
-                wrapper.events.firstOrNull()
-            }
-
         } catch (e: Exception) {
             Log.e(TAG, "AI 解析异常", e)
-            null
+            AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
         }
     }
 
-    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): List<CalendarEventData> {
+    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<CalendarEventData>> {
         val appContext = context.applicationContext
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
 
@@ -174,25 +207,30 @@ object RecognitionProcessor {
             }
         } catch (e: Exception) {
             Log.e(TAG, "OCR 过程发生异常", e)
-            return emptyList()
+            return AnalysisResult.Empty()
         }
 
         if (ocrResult.reconstructedText.isBlank()) {
             Log.w(TAG, "OCR 结果为空！")
-            return emptyList()
+            return AnalysisResult.Empty()
         }
 
+        val anchoredText = injectDateAnchors(ocrResult.reconstructedText, LocalDate.now())
+
         Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
-        Log.d(TAG, ocrResult.reconstructedText)
+        Log.d(TAG, anchoredText)
         Log.d(TAG, "============================================")
 
         return coroutineScope {
             try {
-                val scheduleDeferred = async { analyzeSchedule(ocrResult.reconstructedText, settings, appContext) }
-                val pickupDeferred = async { analyzePickup(ocrResult.reconstructedText, settings, appContext) }
+                val scheduleDeferred = async { analyzeSchedule(anchoredText, settings, appContext) }
+                val pickupDeferred = async { analyzePickup(anchoredText, settings, appContext) }
 
-                val scheduleEvents = scheduleDeferred.await()
-                val pickupEvents = pickupDeferred.await()
+                val scheduleResult = scheduleDeferred.await()
+                val pickupResult = pickupDeferred.await()
+
+                val scheduleEvents = (scheduleResult as? AnalysisResult.Success)?.data ?: emptyList()
+                val pickupEvents = (pickupResult as? AnalysisResult.Success)?.data ?: emptyList()
 
                 Log.d(TAG, "识别结果: 日程=${scheduleEvents.size}, 取件=${pickupEvents.size}")
 
@@ -209,10 +247,21 @@ object RecognitionProcessor {
                         events.maxByOrNull { if (it.tag == "pickup") 1 else 0 }!!
                     }
 
-                finalEvents
+                if (finalEvents.isNotEmpty()) {
+                    AnalysisResult.Success(finalEvents)
+                } else {
+                    val failure = listOf(scheduleResult, pickupResult)
+                        .filterIsInstance<AnalysisResult.Failure>()
+                        .firstOrNull()
+                    if (failure != null) {
+                        AnalysisResult.Failure(failure.failure)
+                    } else {
+                        AnalysisResult.Empty()
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "AI 分析过程出错", e)
-                emptyList()
+                AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
             }
         }
     }
@@ -221,7 +270,7 @@ object RecognitionProcessor {
         extractedText: String,
         settings: MySettings,
         context: Context
-    ): List<CalendarEventData> {
+    ): AnalysisResult<List<CalendarEventData>> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -242,7 +291,7 @@ object RecognitionProcessor {
         extractedText: String,
         settings: MySettings,
         context: Context
-    ): List<CalendarEventData> {
+    ): AnalysisResult<List<CalendarEventData>> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -262,11 +311,11 @@ object RecognitionProcessor {
         userText: String,
         settings: MySettings,
         debugTag: String
-    ): List<CalendarEventData> {
+    ): AnalysisResult<List<CalendarEventData>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
             Log.e(TAG, "[$debugTag] AI 配置缺失，无法请求")
-            return emptyList()
+            return AnalysisResult.Failure(AnalysisFailure("分析失败", "AI 配置缺失"))
         }
         val modelName = modelConfig.name.ifBlank { "deepseek-chat" }
         val userPrompt = "[OCR文本开始]\n$userText\n[OCR文本结束]"
@@ -281,27 +330,32 @@ object RecognitionProcessor {
         )
 
         return try {
-            val responseText = ApiModelProvider.generate(
+            when (val response = ApiModelProvider.generate(
                 request = request,
                 apiKey = modelConfig.key,
                 baseUrl = modelConfig.url,
-                modelName = modelName
-            )
+                modelName = modelName,
+                disableThinking = settings.disableThinking
+            )) {
+                is ApiCallResult.Success -> {
+                    val cleanJson = cleanJsonString(response.content)
+                    val aiResponse = jsonParser.decodeFromString<AiResponse>(cleanJson)
 
-            if (responseText.startsWith("Error:")) {
-                Log.e(TAG, "[$debugTag] API 请求失败: $responseText")
-                return emptyList()
+                    Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${aiResponse.events.size} 个事件")
+                    if (aiResponse.events.isEmpty()) {
+                        AnalysisResult.Empty()
+                    } else {
+                        AnalysisResult.Success(aiResponse.events)
+                    }
+                }
+                is ApiCallResult.Failure -> {
+                    val failure = mapApiFailure(response)
+                    AnalysisResult.Failure(failure)
+                }
             }
-
-            val cleanJson = cleanJsonString(responseText)
-            val aiResponse = jsonParser.decodeFromString<AiResponse>(cleanJson)
-
-            Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${aiResponse.events.size} 个事件")
-            aiResponse.events
-
         } catch (e: Exception) {
             Log.e(TAG, "[$debugTag] 解析失败", e)
-            emptyList()
+            AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
         }
     }
 
@@ -317,11 +371,11 @@ object RecognitionProcessor {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context
-    ): List<CalendarEventData> {
+    ): AnalysisResult<List<CalendarEventData>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
             Log.e(TAG, "多模态 AI 配置缺失，跳过识别")
-            return emptyList()
+            return AnalysisResult.Failure(AnalysisFailure("分析失败", "AI 配置缺失"))
         }
 
         val now = LocalDateTime.now()
@@ -343,46 +397,53 @@ object RecognitionProcessor {
         val imageBytes = bitmapToJpegBytes(bitmap)
 
         return try {
-            val responseText = ApiModelProvider.generateWithImage(
+            when (val response = ApiModelProvider.generateWithImage(
                 prompt = prompt,
                 imageBytes = imageBytes,
                 mimeType = "image/jpeg",
                 apiKey = modelConfig.key,
                 baseUrl = modelConfig.url,
-                modelName = modelConfig.name
-            )
+                modelName = modelConfig.name,
+                disableThinking = settings.disableThinking
+            )) {
+                is ApiCallResult.Success -> {
+                    val cleanJson = cleanJsonString(response.content)
+                    val events = try {
+                        jsonParser.decodeFromString<AiResponse>(cleanJson).events
+                    } catch (_: Exception) {
+                        val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
+                        listOf(single)
+                    }
 
-            if (responseText.startsWith("Error:")) {
-                Log.e(TAG, "[多模态识别] API 请求失败: $responseText")
-                return emptyList()
-            }
+                    val pickupEvents = events.filter {
+                        it.tag == EventTags.PICKUP || it.type == "pickup"
+                    }
+                    val scheduleEvents = events.filter {
+                        it.tag != EventTags.PICKUP && it.type != "pickup"
+                    }
+                    val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
 
-            val cleanJson = cleanJsonString(responseText)
-            val events = try {
-                jsonParser.decodeFromString<AiResponse>(cleanJson).events
-            } catch (e: Exception) {
-                val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
-                listOf(single)
-            }
+                    val mergedEvents = refinedScheduleEvents + pickupEvents
+                    val finalEvents = mergedEvents
+                        .groupBy { "${it.title}|${it.startTime}" }
+                        .mapNotNull { (_, events) ->
+                            events.maxByOrNull { if (it.tag == EventTags.PICKUP) 1 else 0 }
+                        }
 
-            val pickupEvents = events.filter {
-                it.tag == EventTags.PICKUP || it.type == "pickup"
-            }
-            val scheduleEvents = events.filter {
-                it.tag != EventTags.PICKUP && it.type != "pickup"
-            }
-            val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
-
-            val mergedEvents = refinedScheduleEvents + pickupEvents
-            mergedEvents
-                .groupBy { "${it.title}|${it.startTime}" }
-                .mapNotNull { (_, events) ->
-                    events.maxByOrNull { if (it.tag == EventTags.PICKUP) 1 else 0 }
+                    if (finalEvents.isEmpty()) {
+                        AnalysisResult.Empty()
+                    } else {
+                        AnalysisResult.Success(finalEvents)
+                    }
                 }
-
+                is ApiCallResult.Failure -> {
+                    val failure = mapApiFailure(response)
+                    AnalysisResult.Failure(failure)
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "[多模态识别] 解析失败", e)
-            emptyList()
+            AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
         }
     }
 
@@ -398,6 +459,149 @@ object RecognitionProcessor {
             json = json.substringAfter("json").substringAfter("\n").substringBeforeLast("```")
         }
         return json
+    }
+
+    private fun mapApiFailure(failure: ApiCallResult.Failure): AnalysisFailure {
+        val title = "分析失败"
+        return when (failure.kind) {
+            ApiErrorKind.CONFIG -> AnalysisFailure(title, "AI 配置缺失")
+            ApiErrorKind.PARSE -> AnalysisFailure(title, "返回格式错误")
+            ApiErrorKind.NETWORK -> {
+                val detail = buildNetworkDetail(failure.message)
+                AnalysisFailure(title, detail)
+            }
+            ApiErrorKind.HTTP -> {
+                val code = failure.statusCode
+                val detail = when (code) {
+                    401, 403 -> "API Key 无效或无权限 (${code})"
+                    404 -> "服务地址(URL)无效或模型不存在 (404)"
+                    400, 422 -> "请求参数错误/模型不支持该参数 (${code})"
+                    null -> "请求失败"
+                    else -> "HTTP $code"
+                }
+                AnalysisFailure(title, detail)
+            }
+            ApiErrorKind.UNKNOWN -> AnalysisFailure(title, failure.message.ifBlank { "请求失败" })
+        }
+    }
+
+    private fun buildNetworkDetail(message: String): String {
+        val lower = message.lowercase()
+        val tag = when {
+            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeoutexception") -> "timeout"
+            lower.contains("unknownhost") -> "unknown host"
+            lower.contains("unreachable") -> "unreachable"
+            lower.contains("network") -> "network"
+            else -> ""
+        }
+        return if (tag.isBlank()) "网络连接失败" else "网络连接失败 ($tag)"
+    }
+
+    private val fullDateRegex = Regex("(\\d{4})[年/\\-.](\\d{1,2})[月/\\-.](\\d{1,2})(?:日|号)?")
+    private val monthDayRegex = Regex("(\\d{1,2})[月/\\-.](\\d{1,2})(?:日|号)?")
+    private val dayOnlyRegex = Regex("(?<!\\d)(\\d{1,2})(?:日|号)(?!\\d)")
+    private val dayOfWeekRegex = Regex("(?:周|星期|礼拜)([一二三四五六日天])")
+
+    private fun injectDateAnchors(text: String, now: LocalDate): String {
+        if (text.isBlank()) return text
+        val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+        val result = StringBuilder()
+        var lastAnchor: LocalDate? = null
+
+        text.lines().forEach { line ->
+            result.appendLine(line)
+            val anchor = parseBaseDateFromSystemLine(line, now) ?: return@forEach
+            if (anchor != lastAnchor) {
+                result.appendLine("[@date=${anchor.format(formatter)}]")
+                lastAnchor = anchor
+            }
+        }
+
+        return result.toString().trimEnd()
+    }
+
+    private fun parseBaseDateFromSystemLine(line: String, now: LocalDate): LocalDate? {
+        val trimmed = line.trim()
+        if (!trimmed.startsWith("[C]")) return null
+        val content = trimmed.removePrefix("[C]").trim()
+        if (content.isBlank()) return null
+
+        parseRelativeDateKeyword(content, now)?.let { return it }
+        parseFullDate(content)?.let { return it }
+        parseMonthDay(content, now)?.let { return it }
+        parseDayOnly(content, now)?.let { return it }
+        parseDayOfWeekOnly(content, now)?.let { return it }
+
+        return null
+    }
+
+    private fun parseRelativeDateKeyword(text: String, now: LocalDate): LocalDate? {
+        return when {
+            text.contains("今天") -> now
+            text.contains("昨日") || text.contains("昨天") -> now.minusDays(1)
+            text.contains("前天") -> now.minusDays(2)
+            else -> null
+        }
+    }
+
+    private fun parseFullDate(text: String): LocalDate? {
+        val match = fullDateRegex.find(text) ?: return null
+        val year = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
+        val month = match.groupValues.getOrNull(2)?.toIntOrNull() ?: return null
+        val day = match.groupValues.getOrNull(3)?.toIntOrNull() ?: return null
+        return safeDate(year, month, day)
+    }
+
+    private fun parseMonthDay(text: String, now: LocalDate): LocalDate? {
+        val match = monthDayRegex.find(text) ?: return null
+        val month = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
+        val day = match.groupValues.getOrNull(2)?.toIntOrNull() ?: return null
+        var candidate = safeDate(now.year, month, day) ?: return null
+        if (candidate.isAfter(now.plusDays(7))) {
+            candidate = candidate.minusYears(1)
+        }
+        return candidate
+    }
+
+    private fun parseDayOnly(text: String, now: LocalDate): LocalDate? {
+        if (text.contains("月") || text.contains("-") || text.contains("/") || text.contains(".")) return null
+        val match = dayOnlyRegex.find(text) ?: return null
+        val day = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
+        val currentMonthCandidate = safeDate(now.year, now.monthValue, day)
+        val previousMonth = now.minusMonths(1)
+        var candidate = currentMonthCandidate ?: safeDate(previousMonth.year, previousMonth.monthValue, day) ?: return null
+        if (candidate.isAfter(now.plusDays(7))) {
+            candidate = candidate.minusMonths(1)
+        }
+        return candidate
+    }
+
+    private fun parseDayOfWeekOnly(text: String, now: LocalDate): LocalDate? {
+        val match = dayOfWeekRegex.find(text) ?: return null
+        val dayChar = match.groupValues.getOrNull(1)?.firstOrNull() ?: return null
+        val targetDay = resolveDayOfWeek(dayChar) ?: return null
+        return now.with(TemporalAdjusters.previousOrSame(targetDay))
+    }
+
+    private fun resolveDayOfWeek(ch: Char): DayOfWeek? {
+        return when (ch) {
+            '一' -> DayOfWeek.MONDAY
+            '二' -> DayOfWeek.TUESDAY
+            '三' -> DayOfWeek.WEDNESDAY
+            '四' -> DayOfWeek.THURSDAY
+            '五' -> DayOfWeek.FRIDAY
+            '六' -> DayOfWeek.SATURDAY
+            '日', '天' -> DayOfWeek.SUNDAY
+            else -> null
+        }
+    }
+
+    private fun safeDate(year: Int, month: Int, day: Int): LocalDate? {
+        return try {
+            LocalDate.of(year, month, day)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
