@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
@@ -377,46 +378,74 @@ class TextAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val eventsList = RecognitionProcessor.analyzeImage(softwareBitmap, settings, applicationContext)
+            val analysisResult = RecognitionProcessor.analyzeImage(softwareBitmap, settings, applicationContext)
             softwareBitmap.recycle()
-
-            val validEvents = eventsList.filter { it.title.isNotBlank() }
-            val addedEvents = if (validEvents.isNotEmpty()) saveEventsLocally(validEvents, imageFile.absolutePath) else emptyList()
 
             withContext(Dispatchers.Main) {
                 cancelProgressNotification()
-                if (validEvents.isEmpty()) {
-                    // 未识别到日程：显示提示，5秒后自动消失
-                    showResultNotification(
-                        "分析完成",
-                        "未识别到有效日程",
-                        useOcrCapsule = true,
-                        durationMs = 5000L
-                    )
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        cancelResultNotification()
-                    }, 5000)
-                    return@withContext
-                }
-                if (addedEvents.isNotEmpty()) {
-                    // 识别成功：显示添加结果，8秒后自动消失
-                    val count = addedEvents.size
-                    val title = "新增 $count 个事件"
-                    val content = if (count == 1) {
-                        val e = addedEvents.first()
-                        "${e.description}(${e.startTime})"
-                    } else {
-                        addedEvents.joinToString("，") { it.title }
+                when (analysisResult) {
+                    is AnalysisResult.Success -> {
+                        val validEvents = analysisResult.data.filter { it.title.isNotBlank() }
+                        val addedEvents = if (validEvents.isNotEmpty()) {
+                            saveEventsLocally(validEvents, imageFile.absolutePath)
+                        } else {
+                            emptyList()
+                        }
+
+                        if (validEvents.isEmpty()) {
+                            showResultNotification(
+                                "分析完成",
+                                "未识别到有效日程",
+                                useOcrCapsule = true,
+                                durationMs = 5000L
+                            )
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                cancelResultNotification()
+                            }, 5000)
+                            return@withContext
+                        }
+                        if (addedEvents.isNotEmpty()) {
+                            val count = addedEvents.size
+                            val title = "新增 $count 个事件"
+                            val content = if (count == 1) {
+                                val e = addedEvents.first()
+                                "${e.description}(${e.startTime})"
+                            } else {
+                                addedEvents.joinToString("，") { it.title }
+                            }
+                            showResultNotification(
+                                title,
+                                content,
+                                useOcrCapsule = true,
+                                durationMs = 8000L
+                            )
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                cancelResultNotification()
+                            }, 8000)
+                        }
                     }
-                    showResultNotification(
-                        title,
-                        content,
-                        useOcrCapsule = true,
-                        durationMs = 8000L
-                    )
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        cancelResultNotification()
-                    }, 8000)
+                    is AnalysisResult.Empty -> {
+                        showResultNotification(
+                            "分析完成",
+                            analysisResult.message,
+                            useOcrCapsule = true,
+                            durationMs = 5000L
+                        )
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            cancelResultNotification()
+                        }, 5000)
+                    }
+                    is AnalysisResult.Failure -> {
+                        showResultNotification(
+                            analysisResult.failure.title,
+                            analysisResult.failure.detail,
+                            useOcrCapsule = true,
+                            durationMs = 8000L
+                        )
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            cancelResultNotification()
+                        }, 8000)
+                    }
                 }
             }
         } catch (e: Exception) {

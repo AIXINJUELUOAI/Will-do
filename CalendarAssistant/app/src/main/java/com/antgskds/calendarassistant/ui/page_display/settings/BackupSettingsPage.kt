@@ -51,6 +51,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
     var importMode by remember { mutableStateOf(ImportMode.APPEND) }
     var importSettings by remember { mutableStateOf(true) }
     val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
+    val promptSource by mainViewModel.promptSource.collectAsState()
     val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
 
     fun showToast(message: String, type: ToastType) {
@@ -223,6 +224,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                         withContext(Dispatchers.Main) {
                             if (success) {
                                 showToast("提示词导入成功", ToastType.SUCCESS)
+                                mainViewModel.refreshPromptInfo()
                             } else {
                                 showToast("导入失败：格式无效", ToastType.ERROR)
                             }
@@ -270,9 +272,13 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
 
             Text("提示词管理", style = sectionTitleStyle)
 
-            val promptSource = if (promptLocalVersion > 1) "云端 v$promptLocalVersion" else "本地"
+            val promptSourceText = if (promptSource == AiPrompts.PromptSource.CLOUD) {
+                "云端 v$promptLocalVersion"
+            } else {
+                "本地"
+            }
             BackupCard(
-                title = "提示词来源：$promptSource",
+                title = "提示词来源：$promptSourceText",
                 desc = "导入/导出提示词，或检查云端更新",
                 onExport = {
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())

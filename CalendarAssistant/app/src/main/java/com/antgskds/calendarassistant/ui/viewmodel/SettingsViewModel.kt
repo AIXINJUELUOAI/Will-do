@@ -103,7 +103,8 @@ class SettingsViewModel(
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
         autoArchive: Boolean? = null,
-        useMultimodalAi: Boolean? = null
+        useMultimodalAi: Boolean? = null,
+        disableThinking: Boolean? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -115,6 +116,7 @@ class SettingsViewModel(
             if (advanceReminderMinutes != null) current = current.copy(advanceReminderMinutes = advanceReminderMinutes)
             if (autoArchive != null) current = current.copy(autoArchiveEnabled = autoArchive)
             if (useMultimodalAi != null) current = current.copy(useMultimodalAi = useMultimodalAi)
+            if (disableThinking != null) current = current.copy(disableThinking = disableThinking)
 
             repository.updateSettings(current)
         }
