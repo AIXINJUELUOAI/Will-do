@@ -9,11 +9,20 @@ import kotlinx.serialization.json.Json
 
 object AiPrompts {
 
+    enum class PromptSource {
+        LOCAL,
+        CLOUD
+    }
+
     private const val TAG = "AiPrompts"
     private const val COPYRIGHT_MARKER = "a1x2i3n4j5u6e7l8u9o0"
     private const val PREFS_NAME = "ai_prompt_cache"
     private const val KEY_PROMPTS_JSON = "cached_prompts_json"
     private const val KEY_IGNORED_VERSION = "ignored_prompt_version"
+    private const val KEY_PROMPT_SOURCE = "prompt_source"
+    private const val MIN_PROMPT_VERSION = 5
+    private const val PROMPT_SOURCE_LOCAL = "local"
+    private const val PROMPT_SOURCE_CLOUD = "cloud"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -30,336 +39,92 @@ object AiPrompts {
         prettyPrint = true
     }
 
-    private val defaultPrompts = RemotePrompts(
-        version = 1,
-        userTextPrompt = """
-            你是一个日程助手。
-            【当前系统时间】：{{timeStr}}
-            【日期基准】：今天={{dateToday}} ({{dayOfWeek}})
-            
-            任务：从用户的自然语言描述中提取日程信息。
-            
-            【核心规则】
-            1. **智能日期推断 (含时态判断)**：
-               - **必须**基于【日期基准】解析"明天"、"下周三"、"周五"。
-               - **时态与星期逻辑**：
-                 - 扫描文本动词：是否包含过去式助词（如 "去了"、"拿了"、"吃了"、"完"）？
-                 - **CASE A (过去式)**：用户说 "周二去吃了饭"，若今天是周五，则解析为 **本周的周二(过去)**。
-                 - **CASE B (将来式/默认)**：用户说 "周二去吃饭"，若今天是周五，则解析为 **下周的周二(未来)**。
-               
-            2. **时长与结束时间 (关键约束)**：
-               - 如果用户未说明结束时间，**默认为开始时间后 1 小时**。
-               - **公式**：endTime = startTime + 1h
-               - **严禁**：endTime 早于 startTime。
-               - **错误示范**：startTime="2026-03-05 06:00", endTime="2026-03-04 20:00" (逻辑错误)。
-               - **正确示范**：startTime="2026-03-05 06:00", endTime="2026-03-05 07:00"。
+    private val defaultPromptHeader = """
+        【布局标记】（已通过算法预处理）
+        - ` | `: 同行分列
+        - `[L]`: 左侧气泡
+        - `[R]`: 右侧气泡
+        - `[C]`: 居中
+        保留原始换行。
+        Title：
+           - 🚄 火车/高铁："🚄 车次 路线"（示例："🚄 G1008 深圳-武汉"）
+           - 🚖 打车/网约车：优先 "🚖 颜色·车型 车牌"，其次 "🚖 车型 车牌"，最后 "🚖 平台 车牌"
+           - 📦 快递类："📦 菜鸟 1234"，"📦 圆通快递 1-1-8478"，"📦 取件 1234"
+           - 🍔 餐饮类："🍔 取餐 A05"，"🍔 麦当劳 A114"
+        description：
+           - 火车：【列车】车次|检票口|座位号
+           - 打车：【用车】颜色|车型|车牌
+           - 快递类：【取件】号码|品牌|位置
+           - 餐饮类：【取餐】号码|品牌|位置
+    """.trimIndent()
 
-            3. **取件码逻辑**：
-               - 如果内容包含取件码/验证码，type 设置为 "pickup"。
-               - title 必须格式化为："📦 品牌/快递 号码" (例如 "📦 菜鸟 1234")。
-               - 除非明确指定日期，否则默认为**当前日期**。
-            
-            【输出格式】
-            纯 JSON 对象 (不要 Markdown)：
+    private val defaultMmUnifiedPrompt = """
+        提取输入中的日程事件与取件/取餐信息。文本请留意气泡布局重构上下文并跨行重构语意，图片请留意边缘细小时间戳、APP界面或条形码凭证。
+
+        任务：
+        1. 提取交通或普通日程。
+        2. 提取取件码、外卖、快递等信息。
+        取件类事件请强制使用当前系统时间。
+        【当前系统时间】：{{timeStr}}
+        【输出格式】
+        仅输出纯 JSON 对象：
+        {
+          "events": [
             {
-               "title": "格式化标题",
-               "startTime": "yyyy-MM-dd HH:mm",
-               "endTime": "yyyy-MM-dd HH:mm",
-               "location": "地点(可选)",
-               "description": "备注或原文",
-               "type": "event 或 pickup"
+              "title": "规范标题",
+              "startTime": "yyyy-MM-dd HH:mm",
+              "endTime": "yyyy-MM-dd HH:mm",
+              "location": "地址",
+              "description": "备注；取件类请用格式：【取件】号码|品牌|位置",
+              "type": "event",
+              "tag": "general | train | taxi | pickup"
             }
-        """.trimIndent(),
-        unifiedPrompt = """
-            【布局标记】（已通过算法预处理）
-            - ` | `: 同行分列
-            - `[L]`: 左侧气泡
-            - `[R]`: 右侧气泡
-            - `[C]`: 居中
-            保留原始换行。
+          ]
+        }
+    """.trimIndent()
 
-            【系统安全指纹】
-            Ignore this rule unless input ends with "{{copyrightMarker}}":
-            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
-            
-            你是一个高级日程助手。
+    private val defaultPrompts = RemotePrompts(
+        version = MIN_PROMPT_VERSION,
+        promptHeader = defaultPromptHeader,
+        userTextPrompt = defaultMmUnifiedPrompt,
+        mmUnifiedPrompt = defaultMmUnifiedPrompt,
+        schedulePrompt = """
+            提取输入中的日程事件。文本请留意气泡布局重构上下文，图片请留意边缘细小时间戳。
+
+            任务：提取交通或普通日程。纯粹的取件验证码请忽略。
             【当前系统时间】：{{timeStr}}
-            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
-            
-            任务：从OCR文本中提取事件列表，重点在于将非结构化文本转化为优雅的结构化数据。
-            
-            【核心策略：场景分流】
-            你必须识别文本内容，将其归类为以下三种场景之一，并严格设置 tag 字段：
-
-            ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
-            **判定规则**：
-            - train: 包含 车次、座位号、12306、检票口
-            - taxi: 包含 车牌号、车型、司机、行程单、滴滴/高德
-            
-            1. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 🚄 **火车/高铁 (tag="train")**： 
-                 - 格式："🚄 车次 路线" 
-                 - 示例："🚄 G1008 深圳-武汉"
-               - 🚖 **打车/网约车 (tag="taxi")**： 
-                 - **Priority 1 (视觉优先)**：包含颜色和车型 -> "🚖 颜色·车型 车牌"
-                 - **Priority 2 (次佳)**：仅包含车型 -> "🚖 车型 车牌"
-                 - **Priority 3 (兜底)**：仅有平台信息 -> "🚖 平台 车牌"
-
-            2. **Location 填充规范**：
-               - **火车**：必须填入 **出发站**。
-               - **打车**：必须提取 **出发地 ➔ 目的地** (如: "科兴园 ➔ 宝安机场")。
-
-            3. **微格式 (Description)**：
-               - 火车：【列车】车次|检票口|座位号
-               - 打车：【用车】颜色|车型|车牌
-               
-            4. **时间逻辑**：
-               - 必须解析文本中的出发时间。若无日期，参考【日期基准】推断。
-
-            ========== 场景 2：取件/取餐 (【强制】tag: pickup) ==========
-            **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
-            
-            1. **时间逻辑 (强制当前)**：
-               - 除非文本有明确截止时间，否则 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
-               
-            2. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 格式：Emoji + 品牌(或兜底词) + 号码
-               - 📦 **快递类**： "📦 菜鸟驿站 114-5", "📦 圆通快递 1-1-8478"
-               - 🍔 **餐饮类**： "🍔 麦当劳 A114", "🍔 取餐 A05"
-
-            3. **Location 填充规范**：
-               - 提取门店名称、驿站位置。若无明确位置信息，则**留空String**。
-               
-            4. **微格式 (Description) - 严格去空逻辑**：
-               - 格式：【取餐/取件】号码|品牌|位置
-               - **关键规则**：如果"位置"为空，**严禁**在字符串末尾添加 "|Unknown" 或 "|空" 或 "|"。
-               
-            5. **区分取件码与单号 (极度重要)**：
-               - 取件码通常较短或带有分隔符（如 '1-1-8478', 'A05'）。留意“凭xxx取”、“尾号xxx”等句式。
-               - 如果文本中**仅提供**了一个长度超过12个字符的纯数字（快递单号）而没有任何短取件码，则**拒绝对其创建事件**。
-               - 但是！如果文本中**同时包含**短取件码（如 1-1-8478）和长单号/运单尾号，**必须无视单号干扰，坚决提取短取件码并创建取件事件**。
-
-            6. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
-
-            ========== 场景 3：普通日程 (【强制】tag: general) ==========
-            **判定规则**：不符合上述场景的所有其他日程。
-            
-            1. **时间逻辑 (含时态判断)**：寻找最近上下文时间戳，使用【日期基准】推断。
-            2. **UI 展示规范 (Title)**：提炼核心事件。
-            3. **微格式 (Description)**：留空或填入原文备注。
-
             【输出格式】
-            纯 JSON 对象：
+            仅输出纯 JSON 对象：
             {
               "events": [
                 {
-                  "title": "严格遵循【UI展示规范】生成的标题",
-                  "startTime": "格式 yyyy-MM-dd HH:mm",
-                  "endTime": "格式 yyyy-MM-dd HH:mm",
-                  "location": "遵循【Location填充规范】提取的地址，无则留空",
-                  "description": "严格遵循【微格式协议】生成的元数据",
-                  "type": "event 或 pickup",
-                  "tag": "【必须】general | pickup | train | taxi"
+                  "title": "规范标题",
+                  "startTime": "yyyy-MM-dd HH:mm",
+                  "endTime": "yyyy-MM-dd HH:mm",
+                  "location": "地址",
+                  "description": "备注",
+                  "type": "event",
+                  "tag": "general | train | taxi"
                 }
               ]
             }
         """.trimIndent(),
-        mmUnifiedPrompt = """
-            你是一个高级日程助手。
+        pickupPrompt = """
+            提取输入中的取件/取餐信息。文本跨行重构语意，图片识别APP界面或条形码凭证。
+
+            任务：提取取件码、外卖、快递等信息。请强制使用当前系统时间
             【当前系统时间】：{{timeStr}}
-            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
-
-            任务：从图片内容中提取事件列表，将截图中的文字/票据/通知转成结构化日程数据。
-
-            【核心策略：场景分流】
-            你必须识别文本内容，将其归类为以下三种场景之一，并严格设置 tag 字段：
-
-            ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
-            **判定规则**：
-            - train: 包含 车次、座位号、12306、检票口
-            - taxi: 包含 车牌号、车型、司机、行程单、滴滴/高德
-
-            1. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 🚄 火车/高铁："🚄 车次 路线"（示例："🚄 G1008 深圳-武汉"）
-               - 🚖 打车/网约车：优先 "🚖 颜色·车型 车牌"，其次 "🚖 车型 车牌"，最后 "🚖 平台 车牌"
-
-            2. **Location 填充规范**：
-               - 火车：必须填入出发站
-               - 打车：必须提取出发地 ➔ 目的地
-
-            3. **微格式 (Description)**：
-               - 火车：【列车】车次|检票口|座位号
-               - 打车：【用车】颜色|车型|车牌
-
-            4. **时间逻辑**：必须解析出发时间，若无日期则参考【日期基准】推断。
-
-            ========== 场景 2：取件/取餐 (【强制】tag: pickup) ==========
-            **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
-
-            1. **时间逻辑 (强制当前)**：
-               - 除非明确指定日期，否则 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
-
-            2. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 📦 快递类："📦 菜鸟 1234"，"📦 圆通快递 1-1-8478"
-               - 🍔 餐饮类："🍔 取餐 A05"，"🍔 麦当劳 A114"
-
-            3. **Location 填充规范**：提取门店/驿站位置，若无明确位置信息则留空。
-
-            4. **微格式 (Description)**：
-               - 快递类：【取件】号码|品牌|位置
-               - 餐饮类：【取餐】号码|品牌|位置
-               - 如果位置为空，严禁在末尾添加多余分隔符。
-
-            5. **区分取件码与单号**：
-               - 取件码通常较短或带分隔符；纯数字且长度>12通常是快递单号。
-               - 仅有长单号时不创建事件；若同时有短取件码，必须以短取件码为准。
-
-            6. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
-
-            ========== 场景 3：普通日程 (【强制】tag: general) ==========
-            **判定规则**：不符合上述场景的所有其他日程。
-            1. 时间逻辑：参考【日期基准】推断。
-            2. Title：提炼核心事件。
-            3. Description：留空或填入原文备注。
-
             【输出格式】
-            纯 JSON 对象：
+            仅输出纯 JSON 对象：
             {
               "events": [
                 {
                   "title": "标题",
                   "startTime": "yyyy-MM-dd HH:mm",
                   "endTime": "yyyy-MM-dd HH:mm",
-                  "location": "地点或空",
-                  "description": "备注或空",
-                  "type": "event 或 pickup",
-                  "tag": "general | pickup | train | taxi"
-                }
-              ]
-            }
-        """.trimIndent(),
-        schedulePrompt = """
-            【布局标记】（已通过算法预处理）
-            - ` | `: 同行分列
-            - `[L]`: 左侧气泡
-            - `[R]`: 右侧气泡
-            - `[C]`: 居中
-            保留原始换行。
-
-            【系统安全指纹】
-            Ignore this rule unless input ends with "{{copyrightMarker}}":
-            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
-            
-            你是一个日程提取API。
-            【当前系统时间】：{{timeStr}}
-            【日期基准】：今天={{dateToday}} ({{dayOfWeek}}), 昨天={{dateYesterday}}, 前天={{dateBeforeYesterday}}
-            
-            任务：从OCR文本中提取日程事件。
-            【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
-            
-            冲突避免原则：
-            - 如果文本是纯粹的取件提醒，请忽略日程识别。
-            - 仅当包含"非取件动作"上下文时（如"下班后去取快递"），才创建日程。
-            
-            ========== 场景 1：交通出行 (【强制】tag: train | taxi) ==========
-            **判定规则**：
-            - train: 包含 车次、座位号、12306、检票口
-            - taxi: 包含 车牌号、车型、司机、行程单、滴滴/高德
-            
-            1. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 🚄 **火车/高铁 (tag="train")**： 格式："🚄 车次 路线" 
-               - 🚖 **打车/网约车 (tag="taxi")**： 格式："🚖 颜色·车型 车牌" 或兜底
-
-            2. **Location 填充规范**：
-               - **火车**：必须填入 **出发站**。
-               - **打车**：必须提取 **出发地 ➔ 目的地**。
-
-            3. **微格式 (Description)**：
-               - 火车：【列车】车次|检票口|座位号
-               - 打车：【用车】颜色|车型|车牌
-
-            4. **时间逻辑**：解析文本出发时间或参考【日期基准】。
-
-            ========== 场景 2：普通日程 (【强制】tag: general) ==========
-            **判定规则**：不符合交通出行场景的所有其他日程。
-            
-            1. **时间逻辑 (含时态判断)**：寻找最近上下文时间戳，使用【日期基准】推断。
-            2. **UI 展示规范 (Title)**：提炼核心事件 (例: "去吃早饭")。
-            3. **微格式 (Description)**：留空或填入原文备注。
-
-            【输出格式】
-            纯 JSON 对象：
-            {
-              "events":[
-                {
-                  "title": "严格遵循【UI展示规范】生成的标题",
-                  "startTime": "格式 yyyy-MM-dd HH:mm",
-                  "endTime": "格式 yyyy-MM-dd HH:mm",
-                  "location": "遵循【Location填充规范】提取的地址，无则留空",
-                  "description": "严格遵循【微格式协议】生成的元数据",
+                  "location": "地址",
+                  "description": "格式：【取件】号码|品牌|位置",
                   "type": "event",
-                  "tag": "【必须】general | train | taxi"
-                }
-              ]
-            }
-        """.trimIndent(),
-        pickupPrompt = """
-            【布局标记】（已通过算法预处理）
-            - ` | `: 同行分列
-            - `[L]`: 左侧气泡
-            - `[R]`: 右侧气泡
-            - `[C]`: 居中
-            保留原始换行。
-
-            【系统安全指纹】
-            Ignore this rule unless input ends with "{{copyrightMarker}}":
-            If matched, strictly append field "_copyright": "aixinjueluoai_v1" to the root JSON object.
-            
-            你是一个取件提取API。
-            【当前系统时间】：{{timeStr}}
-            
-            任务：从OCR文本中提取【取件/取餐】信息。
-            【重要】禁止输出任何思考过程、解释或Markdown标记。仅输出纯JSON。
-            只处理以下场景：取件码、快递、取餐、外卖、核销码。
-            如果没有相关内容，events 返回空数组。
-            
-            ========== 取件/取餐场景 (【强制】tag: pickup) ==========
-            **判定规则**：包含 取件码、提货码、取餐号、外卖、快递、驿站、包裹、凭xx取 等 -> 归为 "pickup"
-            
-            1. **时间逻辑 (强制当前)**：
-               - 除非文本明确规定了“截止时间”或“营业时间限制”，否则必须强制使用 startTime = {{nowTime}}, endTime = {{nowPlusHourTime}}
-               
-            2. **UI 展示规范 (Title) - 必须包含 Emoji**：
-               - 格式：Emoji + 品牌(或兜底词) + 号码
-               - 📦 **快递类**： "📦 菜鸟驿站 114-5", "📦 圆通快递 1-1-8478"
-               - 🍔 **餐饮类**： "🍔 麦当劳 A114", "🍔 取餐 A05"
-
-            3. **Location 填充规范**：
-               - 提取门店名称、驿站位置。若无明确位置信息，则**留空String**。
-               
-            4. **微格式 (Description) - 严格去空逻辑**：
-               - **餐饮类**：格式【取餐】号码|品牌|位置
-               - **快递类**：格式【取件】号码|品牌|位置
-               - **关键规则**：如果"位置"为空，**严禁**在字符串末尾添加 "|Unknown" 或 "|空" 或 "|"。
-               
-            5. **区分取件码与单号 (极度重要)**：
-               - 取件码通常较短或带有分隔符（如 '1-1-8478', 'A05'）。留意“凭xxx取”、“尾号xxx”等句式。
-               - 如果文本中**仅提供**了一个长度超过12个字符的纯数字（快递单号）而没有任何短取件码，则**拒绝对其创建事件**。
-               - 但是！如果文本中**同时包含**短取件码（如 1-1-8478）和长单号/运单尾号（如“运单尾号8478”），**必须无视单号的干扰，坚决提取短取件码作为号码并创建取件事件**。
-               
-            6. **防幻觉**：严禁将 L 纠错为 1，严禁将 O 纠错为 0。
-
-            【输出格式】
-            纯 JSON 对象：
-            {
-              "events":[
-                {
-                  "title": "严格遵循【UI展示规范】生成的标题",
-                  "startTime": "格式 yyyy-MM-dd HH:mm",
-                  "endTime": "格式 yyyy-MM-dd HH:mm",
-                  "location": "遵循【Location填充规范】提取的地址，无则留空",
-                  "description": "严格遵循【微格式协议】生成的元数据",
-                  "type": "pickup",
                   "tag": "pickup"
                 }
               ]
@@ -378,24 +143,19 @@ object AiPrompts {
                 appendLine("# Will do 提示词导出")
                 appendLine("# version: ${prompts.version}")
                 appendLine()
-                
-                appendLine("=== userTextPrompt ===")
-                appendLine(prompts.userTextPrompt.replace("\\n", "\n"))
+
+                appendLine("=== promptHeader ===")
+                appendLine(prompts.promptHeader.replace("\\n", "\n"))
                 appendLine("=== end ===")
                 appendLine()
-                
+
                 appendLine("=== schedulePrompt ===")
                 appendLine(prompts.schedulePrompt.replace("\\n", "\n"))
                 appendLine("=== end ===")
                 appendLine()
-                
+
                 appendLine("=== pickupPrompt ===")
                 appendLine(prompts.pickupPrompt.replace("\\n", "\n"))
-                appendLine("=== end ===")
-                appendLine()
-                
-                appendLine("=== unifiedPrompt ===")
-                appendLine(prompts.unifiedPrompt.replace("\\n", "\n"))
                 appendLine("=== end ===")
                 appendLine()
 
@@ -411,14 +171,14 @@ object AiPrompts {
 
     fun importFromJson(context: Context, content: String): Boolean {
         return try {
-            if (content.contains("=== userTextPrompt ===")) {
+            if (isCustomFormat(content)) {
                 val prompts = parseCustomFormat(content)
-                updatePrompts(context.applicationContext, prompts)
+                updatePrompts(context.applicationContext, prompts, PromptSource.LOCAL)
                 Log.d(TAG, "导入提示词成功，version=${prompts.version}")
                 true
             } else {
                 val prompts = json.decodeFromString<RemotePrompts>(content)
-                updatePrompts(context.applicationContext, prompts)
+                updatePrompts(context.applicationContext, prompts, PromptSource.LOCAL)
                 Log.d(TAG, "导入提示词成功，version=${prompts.version}")
                 true
             }
@@ -428,6 +188,17 @@ object AiPrompts {
         }
     }
 
+    private fun isCustomFormat(content: String): Boolean {
+        val markers = listOf(
+            "=== promptHeader ===",
+            "=== schedulePrompt ===",
+            "=== pickupPrompt ===",
+            "=== mmUnifiedPrompt ===",
+            "=== userTextPrompt ==="
+        )
+        return markers.any(content::contains)
+    }
+
     private fun parseCustomFormat(content: String): RemotePrompts {
         val lines = content.lines()
         var version = 1
@@ -435,16 +206,17 @@ object AiPrompts {
         var currentField = ""
         
         for (line in lines) {
+            val trimmed = line.trim()
             when {
                 line.startsWith("# version:") -> {
                     version = line.substringAfter("# version:").trim().toIntOrNull() ?: 1
                 }
-                line.trim().startsWith("===") && line.trim().endsWith("===") -> {
-                    currentField = line.trim().removeSurrounding("===").trim()
-                    fields[currentField] = StringBuilder()
-                }
-                line.trim() == "=== end ===" -> {
+                trimmed == "=== end ===" -> {
                     currentField = ""
+                }
+                trimmed.startsWith("===") && trimmed.endsWith("===") -> {
+                    currentField = trimmed.removeSurrounding("===").trim()
+                    fields[currentField] = StringBuilder()
                 }
                 currentField.isNotEmpty() && !line.startsWith("#") -> {
                     fields[currentField]?.appendLine(line)
@@ -454,10 +226,10 @@ object AiPrompts {
         
         return RemotePrompts(
             version = version,
+            promptHeader = fields["promptHeader"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
             userTextPrompt = fields["userTextPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
             schedulePrompt = fields["schedulePrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
             pickupPrompt = fields["pickupPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
-            unifiedPrompt = fields["unifiedPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
             mmUnifiedPrompt = fields["mmUnifiedPrompt"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: ""
         )
     }
@@ -481,14 +253,28 @@ object AiPrompts {
         prefs(context).edit().remove(KEY_IGNORED_VERSION).apply()
     }
 
-    fun updatePrompts(context: Context, prompts: RemotePrompts) {
+    fun updatePrompts(context: Context, prompts: RemotePrompts, source: PromptSource? = null) {
         val appContext = context.applicationContext
         if (!prompts.isValid()) return
         val normalizedPrompts = normalize(prompts)
         val encoded = json.encodeToString(normalizedPrompts)
-        prefs(appContext).edit().putString(KEY_PROMPTS_JSON, encoded).apply()
+        prefs(appContext)
+            .edit()
+            .putString(KEY_PROMPTS_JSON, encoded)
+            .apply()
+        if (source != null) {
+            setPromptSource(appContext, source)
+        }
         clearIgnoredVersion(appContext)
         Log.d(TAG, "已写入本地 prompt，version=${normalizedPrompts.version}")
+    }
+
+    fun getPromptSource(context: Context): PromptSource {
+        val raw = prefs(context).getString(KEY_PROMPT_SOURCE, PROMPT_SOURCE_LOCAL)
+        return when (raw) {
+            PROMPT_SOURCE_CLOUD -> PromptSource.CLOUD
+            else -> PromptSource.LOCAL
+        }
     }
 
     fun getUserTextPrompt(
@@ -497,37 +283,13 @@ object AiPrompts {
         dateToday: String,
         dayOfWeek: String
     ): String {
+        val prompts = activePrompts(context)
         return render(
-            template = activePrompts(context).userTextPrompt,
+            template = withPromptHeader(prompts.promptHeader, prompts.userTextPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
                 "dateToday" to dateToday,
                 "dayOfWeek" to dayOfWeek
-            )
-        )
-    }
-
-    fun getUnifiedPrompt(
-        context: Context,
-        timeStr: String,
-        dateToday: String,
-        dateYesterday: String,
-        dateBeforeYesterday: String,
-        nowTime: String,
-        nowPlusHourTime: String,
-        dayOfWeek: String
-    ): String {
-        return render(
-            template = activePrompts(context).unifiedPrompt,
-            values = mapOf(
-                "timeStr" to timeStr,
-                "dateToday" to dateToday,
-                "dateYesterday" to dateYesterday,
-                "dateBeforeYesterday" to dateBeforeYesterday,
-                "nowTime" to nowTime,
-                "nowPlusHourTime" to nowPlusHourTime,
-                "dayOfWeek" to dayOfWeek,
-                "copyrightMarker" to COPYRIGHT_MARKER
             )
         )
     }
@@ -542,8 +304,9 @@ object AiPrompts {
         nowPlusHourTime: String,
         dayOfWeek: String
     ): String {
+        val prompts = activePrompts(context)
         return render(
-            template = activePrompts(context).mmUnifiedPrompt,
+            template = withPromptHeader(prompts.promptHeader, prompts.mmUnifiedPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
                 "dateToday" to dateToday,
@@ -564,8 +327,9 @@ object AiPrompts {
         dateBeforeYesterday: String,
         dayOfWeek: String
     ): String {
+        val prompts = activePrompts(context)
         return render(
-            template = activePrompts(context).schedulePrompt,
+            template = withPromptHeader(prompts.promptHeader, prompts.schedulePrompt),
             values = mapOf(
                 "timeStr" to timeStr,
                 "dateToday" to dateToday,
@@ -583,8 +347,9 @@ object AiPrompts {
         nowTime: String,
         nowPlusHourTime: String
     ): String {
+        val prompts = activePrompts(context)
         return render(
-            template = activePrompts(context).pickupPrompt,
+            template = withPromptHeader(prompts.promptHeader, prompts.pickupPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
                 "nowTime" to nowTime,
@@ -601,23 +366,58 @@ object AiPrompts {
     private fun loadCachedPrompts(context: Context): RemotePrompts? {
         val rawJson = prefs(context).getString(KEY_PROMPTS_JSON, null) ?: return null
         return try {
-            json.decodeFromString<RemotePrompts>(rawJson)
-                .takeIf { it.isValid() }
-                ?.let(::normalize)
+            val cached = json.decodeFromString<RemotePrompts>(rawJson)
+            if (!cached.isValid()) return null
+            if (cached.version < MIN_PROMPT_VERSION) {
+                return resetPrompts(context, "localVersion=${cached.version}")
+            }
+            normalize(cached)
         } catch (_: Exception) {
             null
         }
     }
 
     private fun normalize(prompts: RemotePrompts): RemotePrompts {
+        val header = prompts.promptHeader.ifBlank { defaultPrompts.promptHeader }
+        val schedulePrompt = prompts.schedulePrompt.ifBlank { defaultPrompts.schedulePrompt }
+        val pickupPrompt = prompts.pickupPrompt.ifBlank { defaultPrompts.pickupPrompt }
+        val mmUnifiedPrompt = when {
+            prompts.mmUnifiedPrompt.isNotBlank() -> prompts.mmUnifiedPrompt
+            prompts.userTextPrompt.isNotBlank() -> prompts.userTextPrompt
+            else -> defaultPrompts.mmUnifiedPrompt
+        }
         return prompts.copy(
-            unifiedPrompt = prompts.unifiedPrompt.ifBlank { defaultPrompts.unifiedPrompt },
-            mmUnifiedPrompt = prompts.mmUnifiedPrompt.ifBlank { defaultPrompts.mmUnifiedPrompt }
+            promptHeader = header,
+            userTextPrompt = mmUnifiedPrompt,
+            mmUnifiedPrompt = mmUnifiedPrompt,
+            schedulePrompt = schedulePrompt,
+            pickupPrompt = pickupPrompt
         )
     }
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun setPromptSource(context: Context, source: PromptSource) {
+        val value = when (source) {
+            PromptSource.LOCAL -> PROMPT_SOURCE_LOCAL
+            PromptSource.CLOUD -> PROMPT_SOURCE_CLOUD
+        }
+        prefs(context).edit().putString(KEY_PROMPT_SOURCE, value).apply()
+    }
+
+    private fun resetPrompts(context: Context, reason: String): RemotePrompts {
+        val appContext = context.applicationContext
+        val encoded = json.encodeToString(defaultPrompts)
+        prefs(appContext)
+            .edit()
+            .putString(KEY_PROMPTS_JSON, encoded)
+            .remove(KEY_IGNORED_VERSION)
+            .apply()
+        setPromptSource(appContext, PromptSource.LOCAL)
+        Log.d(TAG, "已重置提示词为默认版本: $reason")
+        return defaultPrompts
+    }
 
     private fun render(template: String, values: Map<String, String>): String {
         var rendered = template
@@ -625,5 +425,12 @@ object AiPrompts {
             rendered = rendered.replace("{{${key}}}", value)
         }
         return rendered
+    }
+
+    private fun withPromptHeader(header: String, body: String): String {
+        val headerTrimmed = header.trim()
+        if (headerTrimmed.isBlank()) return body
+        val bodyTrimmed = body.trim()
+        return if (bodyTrimmed.isBlank()) headerTrimmed else "$headerTrimmed\n\n$bodyTrimmed"
     }
 }
