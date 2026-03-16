@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
@@ -97,6 +99,11 @@ fun HomePage(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    var todaySearchQuery by rememberSaveable { mutableStateOf("") }
+    var allSearchQuery by rememberSaveable { mutableStateOf("") }
+    var isSearchMode by rememberSaveable { mutableStateOf(false) }
+    var searchTab by rememberSaveable { mutableIntStateOf(0) }
+
     var isImageImporting by remember { mutableStateOf(false) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -141,13 +148,20 @@ fun HomePage(
                     return@launch
                 }
 
-                val eventData = withContext(Dispatchers.IO) {
+                val analysisResult = withContext(Dispatchers.IO) {
                     RecognitionProcessor.parseUserText(ocrText, settings, context.applicationContext)
                 }
 
-                if (eventData == null || eventData.title.isBlank()) {
-                    Toast.makeText(context, "未识别到有效日程", Toast.LENGTH_SHORT).show()
-                    return@launch
+                val eventData = when (analysisResult) {
+                    is AnalysisResult.Success -> analysisResult.data
+                    is AnalysisResult.Empty -> {
+                        Toast.makeText(context, analysisResult.message, Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    is AnalysisResult.Failure -> {
+                        Toast.makeText(context, analysisResult.failure.fullMessage(), Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
                 }
 
                 val event = convertAiEventToMyEvent(
@@ -158,7 +172,7 @@ fun HomePage(
                 viewModel.addEvent(event)
                 Toast.makeText(context, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "识别失败: ${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "分析失败：${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
             } finally {
                 isImageImporting = false
             }
@@ -177,6 +191,16 @@ fun HomePage(
         1 -> 24.dp
         2 -> 28.dp
         else -> 32.dp
+    }
+    val topBarIconSize = when (uiSize) {
+        1 -> 24.dp
+        2 -> 28.dp
+        else -> 32.dp
+    }
+    val topBarEdgePadding = when (uiSize) {
+        1 -> 6.dp
+        2 -> 8.dp
+        else -> 10.dp
     }
 
     // --- 1. 手势与动画状态 ---
@@ -271,8 +295,26 @@ fun HomePage(
         }
     }
 
+    LaunchedEffect(currentTab) {
+        if (isSearchMode && currentTab != searchTab) {
+            isSearchMode = false
+            when (searchTab) {
+                0 -> todaySearchQuery = ""
+                1 -> allSearchQuery = ""
+            }
+        }
+    }
+
     BackHandler(enabled = offsetY.value > 0f) {
         scope.launch { offsetY.animateTo(0f) }
+    }
+
+    BackHandler(enabled = isSearchMode) {
+        isSearchMode = false
+        when (searchTab) {
+            0 -> todaySearchQuery = ""
+            1 -> allSearchQuery = ""
+        }
     }
 
     var serviceEnabled by remember {
@@ -432,8 +474,96 @@ fun HomePage(
                             titleContentColor = MaterialTheme.colorScheme.onBackground,
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
+                        navigationIcon = {
+                            IconButton(
+                                onClick = onSettingsClick,
+                                modifier = Modifier.padding(start = topBarEdgePadding)
+                            ) {
+                                Icon(
+                                    Icons.Default.Menu,
+                                    contentDescription = "菜单",
+                                    modifier = Modifier.size(topBarIconSize)
+                                )
+                            }
+                        },
                         title = {
-                            Text(if (currentTab == 0) "今日日程" else "全部日程")
+                            if ((currentTab == 0 || currentTab == 1) && isSearchMode) {
+                                OutlinedTextField(
+                                    value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
+                                    onValueChange = {
+                                        if (currentTab == 1) {
+                                            allSearchQuery = it
+                                        } else {
+                                            todaySearchQuery = it
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("搜索标题、备注或地点...") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = "搜索",
+                                            modifier = Modifier.size(topBarIconSize)
+                                        )
+                                    },
+                                    trailingIcon = if ((if (currentTab == 1) allSearchQuery else todaySearchQuery).isNotEmpty()) {
+                                        {
+                                            IconButton(onClick = {
+                                                if (currentTab == 1) {
+                                                    allSearchQuery = ""
+                                                } else {
+                                                    todaySearchQuery = ""
+                                                }
+                                            }) {
+                                                Icon(
+                                                    Icons.Default.Clear,
+                                                    contentDescription = "清除",
+                                                    modifier = Modifier.size(topBarIconSize)
+                                                )
+                                            }
+                                        }
+                                    } else null,
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                    )
+                                )
+                            } else {
+                                Text(if (currentTab == 0) "今日日程" else "全部日程")
+                            }
+                        },
+                        actions = {
+                            if (currentTab == 0 || currentTab == 1) {
+                                if (isSearchMode) {
+                                    IconButton(onClick = {
+                                        isSearchMode = false
+                                        when (searchTab) {
+                                            0 -> todaySearchQuery = ""
+                                            1 -> allSearchQuery = ""
+                                        }
+                                    }, modifier = Modifier.padding(end = topBarEdgePadding)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "关闭搜索",
+                                            modifier = Modifier.size(topBarIconSize)
+                                        )
+                                    }
+                                } else {
+                                    IconButton(onClick = {
+                                        isSearchMode = true
+                                        searchTab = currentTab
+                                    }, modifier = Modifier.padding(end = topBarEdgePadding)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = "搜索",
+                                            modifier = Modifier.size(topBarIconSize)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     )
                 },
@@ -564,6 +694,28 @@ fun HomePage(
                 Box(modifier = Modifier.padding(innerPadding)) {
                     if (currentTab == 0) {
                         // === 今日视图内容 ===
+                        val todayEvents = remember(uiState.currentDateEvents, todaySearchQuery) {
+                            if (todaySearchQuery.isBlank()) {
+                                uiState.currentDateEvents
+                            } else {
+                                uiState.currentDateEvents.filter { event ->
+                                    event.title.contains(todaySearchQuery, ignoreCase = true) ||
+                                            event.description.contains(todaySearchQuery, ignoreCase = true) ||
+                                            event.location.contains(todaySearchQuery, ignoreCase = true)
+                                }
+                            }
+                        }
+                        val tomorrowEvents = remember(uiState.tomorrowEvents, todaySearchQuery) {
+                            if (todaySearchQuery.isBlank()) {
+                                uiState.tomorrowEvents
+                            } else {
+                                uiState.tomorrowEvents.filter { event ->
+                                    event.title.contains(todaySearchQuery, ignoreCase = true) ||
+                                            event.description.contains(todaySearchQuery, ignoreCase = true) ||
+                                            event.location.contains(todaySearchQuery, ignoreCase = true)
+                                }
+                            }
+                        }
                         LazyColumn(
                             // 绑定 listState
                             state = listState,
@@ -635,11 +787,11 @@ fun HomePage(
 
                             item { SectionHeader(if (uiState.selectedDate == LocalDate.now()) "今日安排" else "${uiState.selectedDate.monthValue}月${uiState.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
 
-                            val events = uiState.currentDateEvents
-                            if (events.isEmpty()) {
-                                item { Text("下滑以打开课表", modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
+                            if (todayEvents.isEmpty()) {
+                                val emptyText = if (todaySearchQuery.isBlank()) "下滑以打开课表" else "未找到相关日程"
+                                item { Text(emptyText, modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
                             } else {
-                                items(events, key = { "today_${it.id}" }) { event ->
+                                items(todayEvents, key = { "today_${it.id}" }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,
@@ -655,9 +807,9 @@ fun HomePage(
                                 }
                             }
 
-                            if (uiState.selectedDate == LocalDate.now() && uiState.tomorrowEvents.isNotEmpty()) {
+                            if (uiState.selectedDate == LocalDate.now() && tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
-                                items(uiState.tomorrowEvents, key = { "tomorrow_${it.id}" }) { event ->
+                                items(tomorrowEvents, key = { "tomorrow_${it.id}" }) { event ->
                                     SwipeableEventItem(
                                         event = event,
                                         isRevealed = uiState.revealedEventId == event.id,
@@ -679,7 +831,8 @@ fun HomePage(
                             onEditEvent = { onEditEvent(it) },
                             uiSize = uiSize,
                             // 【修改 2】透传给 AllEventsPage
-                            pickupTimestamp = pickupTimestamp
+                            pickupTimestamp = pickupTimestamp,
+                            searchQuery = allSearchQuery
                         )
                     }
                 }

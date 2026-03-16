@@ -11,7 +11,8 @@ data class ModelRequest(
     val model: String,
     val messages: List<ModelMessage>,
     val temperature: Double = 0.5,
-    @SerialName("response_format") val responseFormat: ResponseFormat? = null
+    @SerialName("response_format") val responseFormat: ResponseFormat? = null,
+    @SerialName("reasoning_effort") val reasoningEffort: String? = null
 ) {
     @Serializable
     data class ResponseFormat(val type: String)

@@ -3,10 +3,6 @@ package com.antgskds.calendarassistant.ui.page_display
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,12 +22,10 @@ fun AllEventsPage(
     viewModel: MainViewModel,
     onEditEvent: (MyEvent) -> Unit,
     uiSize: Int = 2,
-    pickupTimestamp: Long = 0L
+    pickupTimestamp: Long = 0L,
+    searchQuery: String = ""
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
-    // 1. 本地 UI 状态
-    var searchQuery by remember { mutableStateOf("") }
 
     // 核心过滤逻辑
     val filteredEvents by remember(uiState.allEvents, searchQuery) {
@@ -75,29 +69,6 @@ fun AllEventsPage(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // A. 搜索栏
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            placeholder = { Text("搜索标题、备注或地点...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
-            trailingIcon = if (searchQuery.isNotEmpty()) {
-                {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "清除")
-                    }
-                }
-            } else null,
-            singleLine = true,
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
-        )
-
         // 过滤后的本地数据用于显示
         val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
