@@ -274,6 +274,23 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SwitchSettingItem(
+                        title = "关闭思考",
+                        subtitle = "仅适配 OpenAI",
+                        checked = settings.disableThinking,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(disableThinking = isChecked)
+                            showToast(if (isChecked) "快速模式已开启" else "快速模式已关闭")
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
                 }
             }
 
