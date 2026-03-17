@@ -4,7 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,6 +21,17 @@ class BootReceiver : BroadcastReceiver() {
 
             // 2. 恢复早晚报调度
             DailySummaryReceiver.schedule(context)
+
+            // 3. 恢复后台保活检查
+            KeepAliveReceiver.schedule(context)
+
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            AccessibilityGuardian.checkAndRestoreIfNeeded(
+                context,
+                scope,
+                showToast = false,
+                isBackground = true
+            )
         }
     }
 }
