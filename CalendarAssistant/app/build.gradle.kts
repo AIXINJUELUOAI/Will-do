@@ -120,4 +120,9 @@ dependencies {
 
     implementation("androidx.navigation:navigation-compose:2.8.0")
 
+    // === Shizuku (静默提权) ===
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("dev.rikka.shizuku:aidl:13.1.5")
+
 }

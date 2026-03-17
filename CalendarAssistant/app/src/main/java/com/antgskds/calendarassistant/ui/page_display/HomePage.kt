@@ -61,6 +61,7 @@ import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -70,7 +71,9 @@ import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -105,13 +108,21 @@ fun HomePage(
     var searchTab by rememberSaveable { mutableIntStateOf(0) }
 
     var isImageImporting by remember { mutableStateOf(false) }
+    var imageImportJob by remember { mutableStateOf<Job?>(null) }
+
+    val cancelImageImport = {
+        imageImportJob?.cancel()
+        imageImportJob = null
+        isImageImporting = false
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri == null || isImageImporting) return@rememberLauncherForActivityResult
 
-        scope.launch {
+        imageImportJob?.cancel()
+        imageImportJob = scope.launch {
             isImageImporting = true
             try {
                 val settings = uiState.settings
@@ -171,10 +182,13 @@ fun HomePage(
                 )
                 viewModel.addEvent(event)
                 Toast.makeText(context, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
+            } catch (_: CancellationException) {
+                // 取消识别时不提示错误
             } catch (e: Exception) {
                 Toast.makeText(context, "分析失败：${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
             } finally {
                 isImageImporting = false
+                imageImportJob = null
             }
         }
     }
@@ -839,20 +853,36 @@ fun HomePage(
             }
         }
 
-        if (isImageImporting) {
-            AlertDialog(
-                onDismissRequest = {},
-                confirmButton = {},
-                title = { Text("正在识别") },
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text("OCR + AI 分析中...")
-                    }
-                }
+        AnimatedVisibility(
+            visible = isImageImporting,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
             )
         }
+
+        FloatingActionCard(
+            visible = isImageImporting,
+            title = "正在识别",
+            content = "OCR + AI 分析中...",
+            confirmText = "处理中",
+            dismissText = "取消",
+            isDestructive = false,
+            isLoading = true,
+            allowDismissWhileLoading = true,
+            onConfirm = {},
+            onDismiss = cancelImageImport,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
