@@ -14,10 +14,12 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.util.FlymeUtils
+import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
+import com.antgskds.calendarassistant.service.capsule.provider.XiaomiCapsuleProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,7 +71,11 @@ class CapsuleService : Service() {
         super.onCreate()
         isServiceRunning = true
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        provider = if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
+        provider = when {
+            OsUtils.isHyperOS() -> XiaomiCapsuleProvider()
+            FlymeUtils.isFlyme() -> FlymeCapsuleProvider()
+            else -> NativeCapsuleProvider()
+        }
         startObservingCapsuleState()
         Log.d(TAG, "CapsuleService created")
     }

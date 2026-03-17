@@ -16,6 +16,7 @@ import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,6 +65,9 @@ class App : Application() {
 
         // 启动定期日历同步（每1分钟）
         startPeriodicSync()
+
+        // 启动后台保活检查（每30分钟）
+        KeepAliveReceiver.schedule(this)
 
         // 启动网速监控
         startNetworkSpeedMonitoring()

@@ -13,6 +13,10 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -23,6 +27,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class CaptureTileService : TileService() {
 
     private val TAG = "CaptureTileDebug"
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onStartListening() {
         super.onStartListening()
@@ -50,29 +55,28 @@ class CaptureTileService : TileService() {
             tile.updateTile()
         }
 
-        // 获取无障碍服务实例 (静态变量)
-        val service = TextAccessibilityService.instance
+        serviceScope.launch {
+            val service = TextAccessibilityService.instance
 
-        if (service != null) {
-            Log.d(TAG, "无障碍服务实例存在，准备调用 startAnalysis")
+            if (service != null) {
+                Log.d(TAG, "无障碍服务实例存在，准备调用 startAnalysis")
 
-            // 1. 收起通知栏 (必须先做，否则截图全是通知栏)
-            service.closeNotificationPanel()
+                service.closeNotificationPanel()
 
-            // 2. 开始分析 (传递延迟时间)
-            service.startAnalysis(500.milliseconds)
+                service.startAnalysis(500.milliseconds)
 
-            if (tile != null) {
-                tile.state = Tile.STATE_INACTIVE
-                tile.updateTile()
-            }
-        } else {
-            Log.e(TAG, "无障碍服务实例为 NULL，发送提示通知")
-            sendEnableServiceNotification()
+                if (tile != null) {
+                    tile.state = Tile.STATE_INACTIVE
+                    tile.updateTile()
+                }
+            } else {
+                Log.e(TAG, "无障碍服务实例为 NULL，发送提示通知")
+                sendEnableServiceNotification()
 
-            if (tile != null) {
-                tile.state = Tile.STATE_INACTIVE
-                tile.updateTile()
+                if (tile != null) {
+                    tile.state = Tile.STATE_INACTIVE
+                    tile.updateTile()
+                }
             }
         }
     }
