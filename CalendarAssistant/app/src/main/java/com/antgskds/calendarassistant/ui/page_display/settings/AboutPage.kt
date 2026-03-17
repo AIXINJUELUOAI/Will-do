@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.PrivilegeManager
 
 @Composable
 fun AboutPage(
@@ -164,6 +165,20 @@ fun AboutPage(
             text = "本软件已完整开源并遵循 GPLv3 协议",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val daemonStatus = when (PrivilegeManager.privilegeType) {
+            PrivilegeManager.PrivilegeType.SHIZUKU -> "Daemon: Shizuku Active"
+            PrivilegeManager.PrivilegeType.ROOT -> "Daemon: Root Active"
+            PrivilegeManager.PrivilegeType.NONE -> "Daemon: None"
+        }
+        Text(
+            text = daemonStatus,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
         )
 
