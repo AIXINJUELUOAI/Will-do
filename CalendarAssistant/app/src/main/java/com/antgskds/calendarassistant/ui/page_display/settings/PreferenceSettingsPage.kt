@@ -12,6 +12,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +32,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
+import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
@@ -111,6 +116,16 @@ fun PreferenceSettingsPage(
                 }
             }
         }
+    }
+
+    val requestCalendarPermission = {
+        showPermissionDialog = false
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
+        } else {
+            emptyArray()
+        }
+        calendarPermissionLauncher.launch(permissions)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -432,27 +447,35 @@ fun PreferenceSettingsPage(
                 .padding(bottom = 32.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
-    }
 
-    if (showPermissionDialog) {
-        AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
-            title = { Text("需要日历权限") },
-            text = { Text("为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showPermissionDialog = false
-                        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
-                        } else { emptyArray() }
-                        calendarPermissionLauncher.launch(permissions)
-                    }
-                ) { Text("授予权限") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) { Text("取消") }
-            }
+        AnimatedVisibility(
+            visible = showPermissionDialog,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { showPermissionDialog = false }
+                    )
+            )
+        }
+
+        FloatingActionCard(
+            visible = showPermissionDialog,
+            title = "需要日历权限",
+            content = "为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。",
+            confirmText = "授予权限",
+            dismissText = "取消",
+            isDestructive = false,
+            isLoading = false,
+            onConfirm = requestCalendarPermission,
+            onDismiss = { showPermissionDialog = false },
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
 }
