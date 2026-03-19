@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
+import com.antgskds.calendarassistant.core.util.ImageCompressionUtils
 import com.antgskds.calendarassistant.core.util.LayoutAnalyzer
 import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
@@ -16,7 +17,6 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
-import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -448,9 +448,7 @@ object RecognitionProcessor {
     }
 
     private fun bitmapToJpegBytes(bitmap: Bitmap): ByteArray {
-        val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-        return outputStream.toByteArray()
+        return ImageCompressionUtils.compressForAiRecognition(bitmap)
     }
 
     private fun cleanJsonString(response: String): String {

@@ -10,6 +10,9 @@ import java.time.temporal.ChronoUnit
 
 object CourseManager {
 
+    // ✅ 缓存默认时间节点，避免每次都重新生成
+    private val defaultTimeNodesCache by lazy { getDefaultTimeNodesInternal() }
+
     fun getDailyCourses(
         targetDate: LocalDate,
         allCourses: List<Course>,
@@ -76,6 +79,10 @@ object CourseManager {
     }
 
     private fun getDefaultTimeNodes(): List<TimeNode> {
+        return defaultTimeNodesCache
+    }
+
+    private fun getDefaultTimeNodesInternal(): List<TimeNode> {
         return TimeTableLayoutUtils.generateNodes(TimeTableLayoutUtils.defaultConfig())
     }
 }

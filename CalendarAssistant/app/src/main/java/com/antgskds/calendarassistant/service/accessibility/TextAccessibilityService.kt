@@ -314,14 +314,23 @@ class TextAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * 截图并分析屏幕内容
+     *
+     * ⚠️ 注意：takeScreenshot() 必须在主线程调用（系统要求）
+     * 但分析工作 (processScreenshot) 会在后台线程执行，避免阻塞主线程
+     */
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         showProgressNotification("正在分析", "正在分析屏幕内容...")
+
+        // ✅ 主线程调用 takeScreenshot（系统要求）
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshotResult: ScreenshotResult) {
+                    // ✅ 将耗时的分析工作移到后台线程
                     analysisJob = serviceScope.launch(Dispatchers.IO) {
                         processScreenshot(screenshotResult)
                     }

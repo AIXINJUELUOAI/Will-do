@@ -23,7 +23,6 @@ class KeepAliveReceiver : BroadcastReceiver() {
             try {
                 AccessibilityGuardian.restoreIfNeeded(
                     context,
-                    showToast = false,
                     isBackground = true
                 )
             } catch (e: Exception) {

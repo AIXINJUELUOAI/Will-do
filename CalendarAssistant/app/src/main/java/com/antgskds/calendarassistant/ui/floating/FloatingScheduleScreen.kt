@@ -3,12 +3,22 @@ package com.antgskds.calendarassistant.ui.floating
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -135,6 +145,29 @@ fun FloatingScheduleScreen(
     var isLoading by remember { mutableStateOf(false) }
     var pickerRequest by remember { mutableStateOf<FloatingPickerRequest?>(null) }
 
+    // 动画状态
+    var isAppearing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 关闭函数：先播动画，再执行销毁
+    val animateClose = {
+        scope.launch {
+            isAppearing = false
+            delay(250) // 等待退出动画播完
+            onClose()
+        }
+    }
+
+    // 进入时立即触发动画
+    LaunchedEffect(Unit) {
+        isAppearing = true
+    }
+
+    // 动画曲线定义
+    val fastOutSlowIn = remember { CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f) }
+    val enterDuration = 280 // 毫秒
+    val exitDuration = 200 // 毫秒
+
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -142,10 +175,20 @@ fun FloatingScheduleScreen(
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
 
+    // 背景透明度动画
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (isAppearing) 0.6f else 0f,
+        animationSpec = tween(
+            durationMillis = if (isAppearing) enterDuration else exitDuration,
+            easing = androidx.compose.animation.core.LinearEasing
+        ),
+        label = "bg_dim"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
+            .background(Color.Black.copy(alpha = bgAlpha))
             .pointerInput(isImeVisible, isPickerVisible) {
                 detectTapGestures(onTap = {
                     if (isPickerVisible) return@detectTapGestures
@@ -153,28 +196,35 @@ fun FloatingScheduleScreen(
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
                     } else {
-                        onClose()
+                        animateClose()
                     }
                 })
             }
     ) {
-        TimeWheelList(
-            events = events,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxHeight()
-                .fillMaxWidth(),
-            listState = listState,
-            onUpdateEvent = onUpdateEvent,
-            onEventAction = onEventAction,
-            onUndo = { id, tag -> onUndo(id, tag) },
-            onRequestDatePicker = { initialDate, onConfirm ->
-                pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
-            },
-            onRequestTimePicker = { initialTime, onConfirm ->
-                pickerRequest = FloatingPickerRequest.Time(initialTime, onConfirm)
-            }
-        )
+        // 日程列表：淡入淡出
+        AnimatedVisibility(
+            visible = isAppearing,
+            enter = fadeIn(animationSpec = tween(enterDuration, easing = fastOutSlowIn)),
+            exit = fadeOut(animationSpec = tween(exitDuration, easing = fastOutSlowIn)),
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            TimeWheelList(
+                events = events,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(),
+                listState = listState,
+                onUpdateEvent = onUpdateEvent,
+                onEventAction = onEventAction,
+                onUndo = { id, tag -> onUndo(id, tag) },
+                onRequestDatePicker = { initialDate, onConfirm ->
+                    pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
+                },
+                onRequestTimePicker = { initialTime, onConfirm ->
+                    pickerRequest = FloatingPickerRequest.Time(initialTime, onConfirm)
+                }
+            )
+        }
 
         // 顶部遮罩
         Box(
@@ -182,7 +232,7 @@ fun FloatingScheduleScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(80.dp)
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)))
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = bgAlpha), Color.Transparent)))
         )
 
         // 底部遮罩
@@ -191,36 +241,44 @@ fun FloatingScheduleScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(150.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = bgAlpha))))
         )
 
-        BottomInteractionArea(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            text = manualInputText,
-            onTextChange = { manualInputText = it },
-            onManualSubmit = { text ->
-                if (text.isNotBlank()) {
+        // 底部输入框：淡入淡出
+        AnimatedVisibility(
+            visible = isAppearing,
+            enter = fadeIn(animationSpec = tween(enterDuration, easing = fastOutSlowIn)),
+            exit = fadeOut(animationSpec = tween(exitDuration, easing = fastOutSlowIn)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            BottomInteractionArea(
+                modifier = Modifier,
+                text = manualInputText,
+                onTextChange = { manualInputText = it },
+                onManualSubmit = { text ->
+                    if (text.isNotBlank()) {
+                        isLoading = true
+                        onLoadingChange(true)
+                        onManualInput(text) {
+                            isLoading = false
+                            onLoadingChange(false)
+                        }
+                        manualInputText = ""
+                    }
+                },
+                onPickImage = {
+                    if (isLoading) return@BottomInteractionArea
                     isLoading = true
                     onLoadingChange(true)
-                    onManualInput(text) {
+                    onPickImageRequest {
                         isLoading = false
                         onLoadingChange(false)
                     }
-                    manualInputText = ""
-                }
-            },
-            onPickImage = {
-                if (isLoading) return@BottomInteractionArea
-                isLoading = true
-                onLoadingChange(true)
-                onPickImageRequest {
-                    isLoading = false
-                    onLoadingChange(false)
-                }
-            },
-            onSwipeUpClose = onClose,
-            isLoading = isLoading
-        )
+                },
+                onSwipeUpClose = { animateClose() },
+                isLoading = isLoading
+            )
+        }
 
         pickerRequest?.let { request ->
             when (request) {
@@ -457,6 +515,36 @@ private fun FloatingPickerOverlay(
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    var isVisible by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 带动画的关闭函数
+    val animateDismiss = {
+        scope.launch {
+            isVisible = false
+            delay(250) // 等待退出动画播完
+            onDismiss()
+        }
+    }
+
+    // 带动画的确认函数
+    val animateConfirm = {
+        scope.launch {
+            isVisible = false
+            delay(250)
+            onConfirm()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    // 动画曲线
+    val fastOutSlowIn = remember { CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f) }
+    val enterDuration = 280
+    val exitDuration = 200
+
     // 【核心魔法】：获取当前屏幕密度，并创建一个缩小到 80% 的新密度
     val currentDensity = LocalDensity.current
     val customDensity = remember(currentDensity) {
@@ -466,22 +554,47 @@ private fun FloatingPickerOverlay(
         )
     }
 
+    // 背景透明度动画
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (isVisible) 0.4f else 0f,
+        animationSpec = tween(
+            durationMillis = if (isVisible) enterDuration else exitDuration,
+            easing = androidx.compose.animation.core.LinearEasing
+        ),
+        label = "picker_bg_dim"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+            .background(Color.Black.copy(alpha = bgAlpha))
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    if (isVisible) animateDismiss()
+                })
+            },
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp), // 圆角稍微收敛，显得更干练
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            modifier = Modifier
-                .padding(horizontal = 48.dp) // 左右边距加大，让弹窗变窄，像 iOS 风格的小组件
-                .fillMaxWidth()
-                .pointerInput(Unit) { detectTapGestures(onTap = { }) }
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = scaleIn(
+                initialScale = 0.9f,
+                animationSpec = tween(enterDuration, easing = fastOutSlowIn)
+            ) + fadeIn(animationSpec = tween(enterDuration)),
+            exit = scaleOut(
+                targetScale = 0.9f,
+                animationSpec = tween(exitDuration, easing = fastOutSlowIn)
+            ) + fadeOut(animationSpec = tween(exitDuration))
         ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp), // 圆角稍微收敛，显得更干练
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .padding(horizontal = 48.dp) // 左右边距加大，让弹窗变窄，像 iOS 风格的小组件
+                    .fillMaxWidth()
+                    .pointerInput(Unit) { detectTapGestures(onTap = { }) }
+            ) {
             Column(
                 modifier = Modifier.padding(top = 20.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -507,7 +620,7 @@ private fun FloatingPickerOverlay(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(
-                        onClick = onDismiss,
+                        onClick = { animateDismiss() },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         modifier = Modifier
                             .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
@@ -517,7 +630,7 @@ private fun FloatingPickerOverlay(
                     }
                     Spacer(Modifier.width(4.dp))
                     Button(
-                        onClick = onConfirm,
+                        onClick = { animateConfirm() },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         modifier = Modifier
                             .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
@@ -526,6 +639,7 @@ private fun FloatingPickerOverlay(
                         Text("确定", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+            }
             }
         }
     }

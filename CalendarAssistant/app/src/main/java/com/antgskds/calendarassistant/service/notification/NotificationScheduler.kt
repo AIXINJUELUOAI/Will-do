@@ -82,16 +82,20 @@ object NotificationScheduler {
         val now = System.currentTimeMillis()
         val immediateThreshold = 60 * 1000L
 
-        event.reminders.forEach { minutesBefore ->
-            val triggerTime = startMillis - (minutesBefore * 60 * 1000)
-            val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
-            if (triggerTime > now) {
-                scheduleSingleAlarm(
-                    context, event, minutesBefore, triggerTime, label,
-                    ACTION_REMINDER, alarmManager
-                )
-            } else if (now - triggerTime < immediateThreshold) {
-                AlarmReceiver.showStandardNotification(context, event, label)
+        if (isLiveCapsuleEnabled) {
+            Log.d("NotificationScheduler", "胶囊开启，跳过普通提醒调度: ${event.id}")
+        } else {
+            event.reminders.forEach { minutesBefore ->
+                val triggerTime = startMillis - (minutesBefore * 60 * 1000)
+                val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
+                if (triggerTime > now) {
+                    scheduleSingleAlarm(
+                        context, event, minutesBefore, triggerTime, label,
+                        ACTION_REMINDER, alarmManager
+                    )
+                } else if (now - triggerTime < immediateThreshold) {
+                    AlarmReceiver.showStandardNotification(context, event, label)
+                }
             }
         }
 
@@ -109,7 +113,11 @@ object NotificationScheduler {
                 }
             } else if (now - triggerTime < immediateThreshold) {
                 // 过去但 < 1分钟，立即通知
-                AlarmReceiver.showStandardNotification(context, event, label)
+                if (!isLiveCapsuleEnabled) {
+                    AlarmReceiver.showStandardNotification(context, event, label)
+                } else {
+                    Log.d("NotificationScheduler", "胶囊开启，跳过提前提醒普通通知: ${event.id}")
+                }
             }
         }
 

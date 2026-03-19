@@ -455,7 +455,7 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun completeScheduleEvent(id: String) {
         val event = _events.value.find { it.id == id }
-        if (event != null && event.eventType == EventType.EVENT && !event.isCompleted) {
+        if (event != null && (event.eventType == EventType.EVENT || event.eventType == EventType.COURSE) && !event.isCompleted) {
             val now = java.time.LocalDateTime.now()
             val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
 

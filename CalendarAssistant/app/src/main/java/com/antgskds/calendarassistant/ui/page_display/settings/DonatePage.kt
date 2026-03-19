@@ -63,6 +63,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
@@ -73,7 +74,10 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 @Composable
-fun DonatePage(uiSize: Int = 2) {
+fun DonatePage(
+    uiSize: Int = 2,
+    settingsViewModel: SettingsViewModel? = null
+) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
 
@@ -139,6 +143,8 @@ fun DonatePage(uiSize: Int = 2) {
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     confettiTrigger += 1
+                    // 保存捐赠状态
+                    settingsViewModel?.updateHasDonated(true)
                 },
                 modifier = Modifier
                     .fillMaxWidth()

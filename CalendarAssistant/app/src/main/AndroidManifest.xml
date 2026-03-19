@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 超级岛广播权限（signature 级，仅模块自身可用） -->
+    <permission
+        android:name="com.antgskds.calendarassistant.SEND_ISLAND"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.antgskds.calendarassistant.SEND_ISLAND" />
+
     <!-- 基础网络与通知 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -43,6 +49,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CalendarAssistant"
         tools:targetApi="35">
+
+        <!-- Xposed Module -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="Will do 超级岛支持" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+        <meta-data
+            android:name="xposedscope"
+            android:value="com.antgskds.calendarassistant;com.android.systemui" />
 
         <!-- Flyme 实况通知支持 -->
         <meta-data
@@ -123,9 +143,26 @@
             </intent-filter>
         </service>
 
+        <!-- 悬浮窗磁贴服务 -->
+        <service
+            android:name=".service.tile.FloatingTileService"
+            android:icon="@drawable/ic_qs_floating"
+            android:label="悬浮窗"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- 4. 悬浮窗服务 -->
         <service
             android:name=".service.floating.FloatingScheduleService"
+            android:exported="false" />
+
+        <!-- 4. 侧边栏唤起服务 -->
+        <service
+            android:name=".service.floating.EdgeBarService"
             android:exported="false" />
 
         <!-- 4. 闹钟广播接收器 -->

@@ -14,12 +14,11 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.util.FlymeUtils
-import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
-import com.antgskds.calendarassistant.service.capsule.provider.XiaomiCapsuleProvider
+import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,12 +66,12 @@ class CapsuleService : Service() {
     private var monitorJob: Job? = null
     private var isAggregateMode = false
 
+
     override fun onCreate() {
         super.onCreate()
         isServiceRunning = true
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         provider = when {
-            OsUtils.isHyperOS() -> XiaomiCapsuleProvider()
             FlymeUtils.isFlyme() -> FlymeCapsuleProvider()
             else -> NativeCapsuleProvider()
         }
@@ -123,11 +122,13 @@ class CapsuleService : Service() {
                 Log.d(TAG, "无胶囊，停止服务")
                 monitorJob?.cancel()
                 isAggregateMode = false
+                MiuiIslandManager.clear(this)
                 stopServiceSafely()
             }
             is CapsuleUiState.Active -> {
                 Log.d(TAG, "活跃胶囊数量: ${state.capsules.size}")
                 updateCapsules(state.capsules)
+                MiuiIslandManager.update(this, state.capsules)
             }
         }
     }
@@ -152,6 +153,7 @@ class CapsuleService : Service() {
             upsertCapsule(capsuleItem)
         }
         Log.d(TAG, "新胶囊已创建到内存")
+
 
         if (newAggregateMode) {
             serviceScope.launch {
@@ -274,23 +276,25 @@ class CapsuleService : Service() {
             return
         }
 
-        val now = System.currentTimeMillis()
-
         val candidates = activeCapsules.values.filter { capsule ->
-            if (capsule.notificationId !in validIds) return@filter false
-
-            val isPickup = capsule.type == TYPE_PICKUP || capsule.type == TYPE_PICKUP_EXPIRED
-            if (isPickup) {
-                now < capsule.endTime + (5 * 60 * 1000)
-            } else {
-                now < capsule.endTime
-            }
+            capsule.notificationId in validIds && isCapsuleActive(capsule, System.currentTimeMillis())
         }
 
         if (candidates.isEmpty()) {
             Log.d(TAG, "所有胶囊已过期，停止服务")
             stopServiceSafely()
             return
+        }
+
+        val foregroundCapsule = selectForegroundCandidate(validIds)
+        if (foregroundCapsule != null && foregroundCapsule.notificationId != currentForegroundId) {
+            Log.d(TAG, "刷新前台通知: ${foregroundCapsule.originalId}, id=${foregroundCapsule.notificationId}")
+            currentForegroundId = foregroundCapsule.notificationId
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(foregroundCapsule.notificationId, foregroundCapsule.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(foregroundCapsule.notificationId, foregroundCapsule.notification)
+            }
         }
 
         candidates.forEach { capsule ->
@@ -330,6 +334,7 @@ class CapsuleService : Service() {
         }
     }
 
+
     /**
      * 刷新前台通知，确保剩余胶囊中有一个被设置为前台
      * 解决多胶囊场景下，删除一个胶囊后其他胶囊不显示的问题
@@ -340,17 +345,13 @@ class CapsuleService : Service() {
             stopServiceSafely()
             return
         }
-
-        // 优先使用聚合胶囊作为前台
-        val aggregateCapsule = activeCapsules.values.find { 
-            it.originalId == CapsuleStateManager.AGGREGATE_PICKUP_ID && it.notificationId in validIds 
+        val foregroundCapsule = selectForegroundCandidate(validIds)
+        if (foregroundCapsule == null) {
+            Log.d(TAG, "无有效胶囊，停止服务")
+            stopServiceSafely()
+            return
         }
-
-        val foregroundCapsule = aggregateCapsule ?: activeCapsules.values.firstOrNull { 
-            it.notificationId in validIds 
-        }
-
-        if (foregroundCapsule != null && foregroundCapsule.notificationId != currentForegroundId) {
+        if (foregroundCapsule.notificationId != currentForegroundId) {
             Log.d(TAG, "刷新前台通知: ${foregroundCapsule.originalId}, id=${foregroundCapsule.notificationId}")
             currentForegroundId = foregroundCapsule.notificationId
             if (Build.VERSION.SDK_INT >= 34) {
@@ -359,6 +360,27 @@ class CapsuleService : Service() {
                 startForeground(foregroundCapsule.notificationId, foregroundCapsule.notification)
             }
         }
+    }
+
+    private fun selectForegroundCandidate(validIds: Set<Int>): CapsuleMetadata? {
+        val now = System.currentTimeMillis()
+        val candidates = activeCapsules.values.filter { capsule ->
+            capsule.notificationId in validIds && isCapsuleActive(capsule, now)
+        }
+        if (candidates.isEmpty()) return null
+        return candidates.sortedWith(
+            compareByDescending<CapsuleMetadata> { it.startTime }
+                .thenByDescending { it.endTime }
+        ).first()
+    }
+
+    private fun isCapsuleActive(capsule: CapsuleMetadata, now: Long): Boolean {
+        val extraMillis = if (capsule.type == TYPE_PICKUP || capsule.type == TYPE_PICKUP_EXPIRED) {
+            5 * 60 * 1000L
+        } else {
+            0L
+        }
+        return now < capsule.endTime + extraMillis
     }
 
     override fun onDestroy() {

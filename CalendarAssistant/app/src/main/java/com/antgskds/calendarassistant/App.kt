@@ -9,6 +9,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
@@ -16,6 +17,7 @@ import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +73,8 @@ class App : Application() {
 
         // 启动网速监控
         startNetworkSpeedMonitoring()
+
+        startEdgeBarIfNeeded()
     }
 
     private fun createNotificationChannels() {
@@ -168,6 +172,17 @@ class App : Application() {
                     }
                 }
             }
+        }
+    }
+
+    private fun startEdgeBarIfNeeded() {
+        try {
+            val settings = repository.settings.value
+            if (settings.edgeBarEnabled && Settings.canDrawOverlays(this)) {
+                startService(Intent(this, EdgeBarService::class.java))
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "启动侧边栏失败", e)
         }
     }
 
