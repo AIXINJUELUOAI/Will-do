@@ -4,12 +4,10 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 object AccessibilityGuardian {
     private const val TAG = "AccessibilityGuardian"
@@ -23,17 +21,15 @@ object AccessibilityGuardian {
     fun checkAndRestoreIfNeeded(
         context: Context,
         scope: CoroutineScope,
-        showToast: Boolean = false,
         isBackground: Boolean = false
     ) {
         scope.launch(Dispatchers.IO) {
-            restoreIfNeeded(context, showToast, isBackground)
+            restoreIfNeeded(context, isBackground)
         }
     }
 
     suspend fun restoreIfNeeded(
         context: Context,
-        showToast: Boolean = false,
         isBackground: Boolean = false
     ): Boolean {
         val now = System.currentTimeMillis()
@@ -65,11 +61,6 @@ object AccessibilityGuardian {
 
         if (!PrivilegeManager.hasPrivilege) {
             Log.d(TAG, "No privilege, cannot restore accessibility service")
-            if (showToast) {
-                withContext(Dispatchers.Main) {
-                    UniversalToastUtil.showInfo(context, "无障碍服务未开启，请手动在设置中开启")
-                }
-            }
             return false
         }
 
@@ -80,11 +71,6 @@ object AccessibilityGuardian {
             Log.d(TAG, "Accessibility service restored successfully")
         } else {
             Log.w(TAG, "Accessibility service not restored, restored=$restored")
-            if (showToast) {
-                withContext(Dispatchers.Main) {
-                    UniversalToastUtil.showInfo(context, "无障碍服务未开启，请手动在设置中开启")
-                }
-            }
         }
         return isRestored
     }

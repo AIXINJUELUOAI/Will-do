@@ -9,7 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -71,11 +72,12 @@ fun AllEventsPage(
     ) {
         // 过滤后的本地数据用于显示
         val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
 
         // 列表内容
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 80.dp + bottomInset, top = 8.dp),
+            contentPadding = PaddingValues(bottom = floatingBarOffset, top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 空状态

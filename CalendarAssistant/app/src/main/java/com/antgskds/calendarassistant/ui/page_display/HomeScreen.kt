@@ -1,19 +1,19 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material3.*
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -64,6 +64,9 @@ fun HomeScreen(
     // 【修改 2】初始 Tab 状态不需要依赖参数了，默认为 0 即可，依靠 LaunchedEffect 来跳转
     var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=All
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
+    var isActionExpanded by remember { mutableStateOf(false) }
+    var searchRequestId by remember { mutableIntStateOf(0) }
+    var imageRequestId by remember { mutableIntStateOf(0) }
 
     // 【修改 3】新增：监听时间戳变化
     // 只要 timestamp 变化且大于 0，就强制切到"全部"Tab
@@ -139,9 +142,16 @@ fun HomeScreen(
         }
     }
 
+    fun openAddEventDialog() {
+        recurringEditSession = null
+        eventToEdit = null
+        showAddEventDialog = true
+    }
+
     
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
 
     Box(modifier = Modifier) {
         // 核心布局
@@ -162,48 +172,64 @@ fun HomeScreen(
                     }
                 )
             },
-            bottomBar = {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Today, null) },
-                        label = { Text("今日") },
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.List, null) },
-                        label = { Text("全部") },
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 }
-                    )
-                }
-            },
+            bottomBar = {},
             content = {
                     HomePage(
                         viewModel = mainViewModel,
                         currentTab = selectedTab,
                         uiSize = settings.uiSize,
                         pickupTimestamp = pickupTimestamp,
-                        onSettingsClick = { isSidebarOpen = !isSidebarOpen },
+                        isActionExpanded = isActionExpanded,
+                        onActionExpandedChange = { isActionExpanded = it },
+                        searchRequestId = searchRequestId,
+                        imageRequestId = imageRequestId,
+                        onTabChange = { selectedTab = it },
                         onCourseClick = { _, _ -> },
-                        onAddEventClick = {
-                            recurringEditSession = null
-                            eventToEdit = null
-                            showAddEventDialog = true
-                        },
+                        onAddEventClick = { openAddEventDialog() },
                         onEditEvent = { event -> beginEdit(event) },
-                        onScheduleExpandedChange = { isScheduleExpanded = it },
-                        onRecommendedClick = { title ->
-                            recurringEditSession = null
-                            eventToEdit = null
-                            recommendedTitleForDialog = title
-                            showAddEventDialog = true
-                        }
+                        onScheduleExpandedChange = { isScheduleExpanded = it }
                     )
             }
+        )
+
+        IntegratedFloatingBar(
+            isExpanded = isActionExpanded,
+            onExpandedChange = { isActionExpanded = it },
+            isSidebarOpen = isSidebarOpen,
+            selectedTab = selectedTab,
+            onMenuClick = {
+                isActionExpanded = false
+                isSidebarOpen = !isSidebarOpen
+            },
+            onHomeClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                selectedTab = 0
+            },
+            onListClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                selectedTab = 1
+            },
+            onSearchClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                searchRequestId += 1
+            },
+            onImageClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                imageRequestId += 1
+            },
+            onEditClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                openAddEventDialog()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = IntegratedFloatingBarBottomSpacing + bottomInset)
+                .zIndex(3f)
         )
 
         // SnackbarHost 放在屏幕底部
@@ -211,7 +237,7 @@ fun HomeScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp + bottomInset),
+                .padding(bottom = floatingBarOffset),
             snackbar = { snackbarData ->
                 UniversalToast(message = snackbarData.visuals.message, type = currentToastType)
             }

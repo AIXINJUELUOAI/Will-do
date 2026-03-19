@@ -12,12 +12,14 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
+import com.antgskds.calendarassistant.xposed.XposedModuleStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -130,11 +132,13 @@ class EventActionReceiver : BroadcastReceiver() {
 
         // 刷新胶囊状态（兼容旧逻辑）
         withContext(Dispatchers.Main) {
-            val serviceIntent = Intent(context, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
+            if (!isMiuiIslandMode(context)) {
+                val serviceIntent = Intent(context, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
             }
             UniversalToastUtil.showSuccess(context, "已延长至 $newEndTimeStr")
         }
@@ -263,11 +267,13 @@ class EventActionReceiver : BroadcastReceiver() {
 
         repository.capsuleStateManager.forceRefresh()
 
-        val serviceIntent = Intent(App.instance, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            App.instance.startForegroundService(serviceIntent)
-        } else {
-            App.instance.startService(serviceIntent)
+        if (!isMiuiIslandMode(App.instance)) {
+            val serviceIntent = Intent(App.instance, com.antgskds.calendarassistant.service.capsule.CapsuleService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                App.instance.startForegroundService(serviceIntent)
+            } else {
+                App.instance.startService(serviceIntent)
+            }
         }
     }
 
@@ -298,6 +304,15 @@ class EventActionReceiver : BroadcastReceiver() {
             now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
         } catch (e: Exception) {
             Log.e("EventActionReceiver", "解析聚合取件时间失败: ${event.id}", e)
+            false
+        }
+    }
+
+    private fun isMiuiIslandMode(context: Context): Boolean {
+        return try {
+            val settings = (context.applicationContext as App).repository.settings.value
+            settings.isLiveCapsuleEnabled && OsUtils.isHyperOS() && XposedModuleStatus.isActive()
+        } catch (_: Exception) {
             false
         }
     }

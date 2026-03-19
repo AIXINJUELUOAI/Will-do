@@ -10,9 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -48,7 +46,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
@@ -66,7 +63,8 @@ import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
-import com.antgskds.calendarassistant.ui.analyzer.ScheduleRecommendationAnalyzer
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
@@ -91,16 +89,20 @@ fun HomePage(
     currentTab: Int,
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
-    onSettingsClick: () -> Unit,
+    isActionExpanded: Boolean = false,
+    onActionExpandedChange: (Boolean) -> Unit = {},
+    searchRequestId: Int = 0,
+    imageRequestId: Int = 0,
+    onTabChange: (Int) -> Unit = {},
     onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
     onEditEvent: (MyEvent) -> Unit = {},
-    onScheduleExpandedChange: (Boolean) -> Unit = {},
-    onRecommendedClick: (String) -> Unit = {}
+    onScheduleExpandedChange: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
@@ -193,28 +195,10 @@ fun HomePage(
         }
     }
 
-    val recommendationAnalyzer = remember { ScheduleRecommendationAnalyzer() }
-    var recommendedTitle by remember { mutableStateOf<String?>(null) }
-
-    val fabSize = when (uiSize) {
-        1 -> 56.dp
-        2 -> 64.dp
-        else -> 72.dp
-    }
-    val fabIconSize = when (uiSize) {
-        1 -> 24.dp
-        2 -> 28.dp
-        else -> 32.dp
-    }
     val topBarIconSize = when (uiSize) {
         1 -> 24.dp
         2 -> 28.dp
         else -> 32.dp
-    }
-    val topBarEdgePadding = when (uiSize) {
-        1 -> 6.dp
-        2 -> 8.dp
-        else -> 10.dp
     }
 
     // --- 1. 手势与动画状态 ---
@@ -331,6 +315,23 @@ fun HomePage(
         }
     }
 
+    LaunchedEffect(searchRequestId) {
+        if (searchRequestId > 0) {
+            isSearchMode = true
+            searchTab = currentTab
+        }
+    }
+
+    LaunchedEffect(imageRequestId) {
+        if (imageRequestId > 0 && !isImageImporting) {
+            imagePickerLauncher.launch("image/*")
+        }
+    }
+
+    BackHandler(enabled = isActionExpanded) {
+        onActionExpandedChange(false)
+    }
+
     var serviceEnabled by remember {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
         val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
@@ -344,20 +345,9 @@ fun HomePage(
         mutableStateOf(notificationManager.areNotificationsEnabled())
     }
     var editingCourse by remember { mutableStateOf<Pair<Course, LocalDate>?>(null) }
-    var isFabExpanded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isFabExpanded) {
-        if (isFabExpanded && uiState.settings.enableSmartRecommendation) {
-            recommendedTitle = recommendationAnalyzer.getRecommendation(
-                events = uiState.allEvents,
-                currentDateTime = LocalDateTime.now()
-            )
-        } else {
-            recommendedTitle = null
-        }
-    }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
 
     LifecycleResumeEffect(context) {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
@@ -467,10 +457,10 @@ fun HomePage(
                 .fillMaxSize()
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .graphicsLayer { alpha = 1f - progress }
-                .pointerInput(isFabExpanded) {
+                .pointerInput(isActionExpanded) {
                     detectTapGestures(onTap = {
-                        if (isFabExpanded) {
-                            isFabExpanded = false
+                        if (isActionExpanded) {
+                            onActionExpandedChange(false)
                         } else {
                             viewModel.onRevealEvent(null)
                         }
@@ -488,18 +478,6 @@ fun HomePage(
                             titleContentColor = MaterialTheme.colorScheme.onBackground,
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
-                        navigationIcon = {
-                            IconButton(
-                                onClick = onSettingsClick,
-                                modifier = Modifier.padding(start = topBarEdgePadding)
-                            ) {
-                                Icon(
-                                    Icons.Default.Menu,
-                                    contentDescription = "菜单",
-                                    modifier = Modifier.size(topBarIconSize)
-                                )
-                            }
-                        },
                         title = {
                             if ((currentTab == 0 || currentTab == 1) && isSearchMode) {
                                 OutlinedTextField(
@@ -547,161 +525,8 @@ fun HomePage(
                                 Text(if (currentTab == 0) "今日日程" else "全部日程")
                             }
                         },
-                        actions = {
-                            if (currentTab == 0 || currentTab == 1) {
-                                if (isSearchMode) {
-                                    IconButton(onClick = {
-                                        isSearchMode = false
-                                        when (searchTab) {
-                                            0 -> todaySearchQuery = ""
-                                            1 -> allSearchQuery = ""
-                                        }
-                                    }, modifier = Modifier.padding(end = topBarEdgePadding)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "关闭搜索",
-                                            modifier = Modifier.size(topBarIconSize)
-                                        )
-                                    }
-                                } else {
-                                    IconButton(onClick = {
-                                        isSearchMode = true
-                                        searchTab = currentTab
-                                    }, modifier = Modifier.padding(end = topBarEdgePadding)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Search,
-                                            contentDescription = "搜索",
-                                            modifier = Modifier.size(topBarIconSize)
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        actions = {}
                     )
-                },
-                floatingActionButton = {
-                    val fabRotation by animateFloatAsState(
-                        targetValue = if (isFabExpanded) 45f else 0f,
-                        animationSpec = tween(durationMillis = 300),
-                        label = "fabRotation"
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxHeight(),
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End)
-                    ) {
-                        // 推荐按钮 - 左侧展开
-                        AnimatedVisibility(
-                            visible = isFabExpanded && recommendedTitle != null,
-                            enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it } + expandHorizontally(tween(300)),
-                            exit = fadeOut(tween(300)) + slideOutHorizontally(tween(300)) { it } + shrinkHorizontally(tween(300))
-                        ) {
-                            Surface(
-                                onClick = {
-                                    isFabExpanded = false
-                                    recommendedTitle?.let { onRecommendedClick(it) }
-                                },
-                                shape = RoundedCornerShape(20.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shadowElevation = 6.dp
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .height(fabSize)
-                                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(fabIconSize),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = recommendedTitle ?: "",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        }
-
-                        // 图片识别按钮
-                        AnimatedVisibility(
-                            visible = isFabExpanded,
-                            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
-                            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0f)
-                        ) {
-                            androidx.compose.material3.FloatingActionButton(
-                                onClick = {
-                                    if (isImageImporting) {
-                                        Toast.makeText(context, "正在识别中...", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        isFabExpanded = false
-                                        imagePickerLauncher.launch("image/*")
-                                    }
-                                },
-                                shape = CircleShape,
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(fabSize)
-                            ) {
-                                Icon(
-                                    Icons.Default.Image,
-                                    contentDescription = "识别图片",
-                                    modifier = Modifier.size(fabIconSize)
-                                )
-                            }
-                        }
-
-                        // 添加日程按钮
-                        AnimatedVisibility(
-                            visible = isFabExpanded,
-                            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0f),
-                            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0f)
-                        ) {
-                            androidx.compose.material3.FloatingActionButton(
-                                onClick = {
-                                    isFabExpanded = false
-                                    onAddEventClick()
-                                },
-                                shape = CircleShape,
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(fabSize)
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "添加日程",
-                                    modifier = Modifier.size(fabIconSize)
-                                )
-                            }
-                        }
-
-                        // 主FAB按钮
-                        androidx.compose.material3.FloatingActionButton(
-                            onClick = { isFabExpanded = !isFabExpanded },
-                            shape = CircleShape,
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(fabSize)
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "展开菜单",
-                                modifier = Modifier
-                                    .size(fabIconSize)
-                                    .graphicsLayer {
-                                        rotationZ = fabRotation
-                                    }
-                            )
-                        }
-                    }
                 },
                 bottomBar = {}
             ) { innerPadding ->
@@ -734,7 +559,7 @@ fun HomePage(
                             // 绑定 listState
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 80.dp + bottomInset),
+                            contentPadding = PaddingValues(bottom = floatingBarOffset),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -851,6 +676,7 @@ fun HomePage(
                     }
                 }
             }
+
         }
 
         AnimatedVisibility(

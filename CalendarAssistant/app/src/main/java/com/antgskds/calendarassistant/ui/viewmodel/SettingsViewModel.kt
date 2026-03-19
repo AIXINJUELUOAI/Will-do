@@ -100,6 +100,9 @@ class SettingsViewModel(
         dailySummary: Boolean? = null,
         liveCapsule: Boolean? = null,
         pickupAggregation: Boolean? = null,
+        edgeBarEnabled: Boolean? = null,
+        networkSpeedCapsule: Boolean? = null,
+        floatingWindow: Boolean? = null,
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
         autoArchive: Boolean? = null,
@@ -112,6 +115,9 @@ class SettingsViewModel(
             if (dailySummary != null) current = current.copy(isDailySummaryEnabled = dailySummary)
             if (liveCapsule != null) current = current.copy(isLiveCapsuleEnabled = liveCapsule)
             if (pickupAggregation != null) current = current.copy(isPickupAggregationEnabled = pickupAggregation)
+            if (edgeBarEnabled != null) current = current.copy(edgeBarEnabled = edgeBarEnabled)
+            if (networkSpeedCapsule != null) current = current.copy(isNetworkSpeedCapsuleEnabled = networkSpeedCapsule)
+            if (floatingWindow != null) current = current.copy(isFloatingWindowEnabled = floatingWindow)
             if (advanceReminderEnabled != null) current = current.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
             if (advanceReminderMinutes != null) current = current.copy(advanceReminderMinutes = advanceReminderMinutes)
             if (autoArchive != null) current = current.copy(autoArchiveEnabled = autoArchive)
@@ -174,6 +180,26 @@ class SettingsViewModel(
     fun updateSmartRecommendation(enabled: Boolean) {
         viewModelScope.launch {
             repository.updateSettings(settings.value.copy(enableSmartRecommendation = enabled))
+        }
+    }
+
+    fun updateEdgeBarSettings(
+        enabled: Boolean? = null,
+        side: String? = null,
+        yPercent: Float? = null,
+        widthDp: Int? = null,
+        heightDp: Int? = null,
+        alpha: Float? = null
+    ) {
+        viewModelScope.launch {
+            var current = settings.value
+            if (enabled != null) current = current.copy(edgeBarEnabled = enabled)
+            if (side != null) current = current.copy(edgeBarSide = side)
+            if (yPercent != null) current = current.copy(edgeBarYPercent = yPercent)
+            if (widthDp != null) current = current.copy(edgeBarWidthDp = widthDp)
+            if (heightDp != null) current = current.copy(edgeBarHeightDp = heightDp)
+            if (alpha != null) current = current.copy(edgeBarAlpha = alpha)
+            repository.updateSettings(current)
         }
     }
 
@@ -268,5 +294,16 @@ class SettingsViewModel(
             refreshSyncStatus()
         }
         return result
+    }
+
+    /**
+     * 更新捐赠状态
+     */
+    fun updateHasDonated(hasDonated: Boolean) {
+        viewModelScope.launch {
+            repository.updateSettings(
+                repository.settings.value.copy(hasDonated = hasDonated)
+            )
+        }
     }
 }

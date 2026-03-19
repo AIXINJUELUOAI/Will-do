@@ -204,9 +204,10 @@ private fun SettingsPageContent(
                     SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                     SettingsDestination.About -> AboutPage(
                         uiSize = uiSize,
-                        onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) }
+                        onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) },
+                        settingsViewModel = settingsViewModel
                     )
-                    SettingsDestination.Donate -> DonatePage(uiSize)
+                    SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
                     SettingsDestination.Laboratory -> LaboratoryPage(uiSize)
                     SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Archives,

@@ -15,12 +15,13 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
-import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.xposed.XposedModuleStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -212,6 +213,11 @@ class AlarmReceiver : BroadcastReceiver() {
                 handleCapsuleRefresh(context, eventId, eventTitle)
             }
             NotificationScheduler.ACTION_REMINDER, null -> {
+                val settings = (context.applicationContext as App).repository.settings.value
+                if (settings.isLiveCapsuleEnabled) {
+                    Log.d(TAG, "胶囊开启，跳过普通提醒: $eventId")
+                    return
+                }
                 // 处理普通提醒（action 可能为 null 的情况作为兜底）
                 val reminderLabel = intent.getStringExtra("REMINDER_LABEL") ?: ""
                 val eventLocation = intent.getStringExtra("EVENT_LOCATION") ?: ""
@@ -280,16 +286,17 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleCapsuleStart(context: Context, intent: Intent, eventId: String, title: String) {
+        if (isMiuiIslandMode(context)) {
+            Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
+            (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
+            return
+        }
         // ✅ 适配：通过 Repository 获取设置
         val repository = (context.applicationContext as App).repository
         val settings = repository.settings.value
-
-        // 检查无障碍服务是否运行 (作为系统能力锁)
-        // 检查用户开关 (作为意愿锁)
-        val isServiceRunning = TextAccessibilityService.instance != null
         val isEnabled = settings.isLiveCapsuleEnabled
 
-        if (isEnabled && isServiceRunning) {
+        if (isEnabled) {
             Log.d(TAG, "启动胶囊服务: $title (新架构：启动后会自动订阅uiState)")
 
             // ✅ 新架构：Dumb Service 只需要启动，会自动订阅 uiState 并显示胶囊
@@ -315,8 +322,17 @@ class AlarmReceiver : BroadcastReceiver() {
 
         } else {
             // 【降级逻辑】
-            Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled, OCR服务:$isServiceRunning) -> 降级为普通通知")
+            Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled)")
             showStandardNotification(context, eventId, title, "日程开始")
+        }
+    }
+
+    private fun isMiuiIslandMode(context: Context): Boolean {
+        return try {
+            val settings = (context.applicationContext as App).repository.settings.value
+            settings.isLiveCapsuleEnabled && OsUtils.isHyperOS() && XposedModuleStatus.isActive()
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -325,6 +341,11 @@ class AlarmReceiver : BroadcastReceiver() {
      * 新架构：Dumb Service 只需要重新启动，会自动重新订阅 uiState 并更新胶囊显示
      */
     private fun handleCapsuleRefresh(context: Context, eventId: String, title: String) {
+        if (isMiuiIslandMode(context)) {
+            Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
+            (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
+            return
+        }
         Log.d(TAG, "刷新胶囊: $title (准点时刷新文案)")
 
         // 重新启动 CapsuleService，它会重新计算状态并更新通知
@@ -338,6 +359,11 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleCapsuleEnd(context: Context, eventId: String) {
+        if (isMiuiIslandMode(context)) {
+            Log.d(TAG, "MIUI 岛模式，结束胶囊刷新")
+            (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
+            return
+        }
         // ✅ 新架构：Dumb Service 不需要 ACTION_STOP
         // 只需启动 Service，它会重新订阅 uiState 并自动更新/停止
         val serviceIntent = Intent(context, CapsuleService::class.java)

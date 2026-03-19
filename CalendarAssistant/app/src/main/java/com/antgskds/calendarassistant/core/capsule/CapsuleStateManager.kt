@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -16,11 +17,15 @@ import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
+import com.antgskds.calendarassistant.xposed.XposedModuleStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow // ✅ 改用 StateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -175,22 +180,74 @@ class CapsuleStateManager(
         startServiceWakeup()
     }
 
+    /**
+     * 启动服务唤醒机制
+     * 当胶囊状态变为 Active 时自动启动 CapsuleService
+     */
     private fun startServiceWakeup() {
         appScope.launch {
             uiState.collect { state ->
+                val settings = repository.settings.value
+                val useMiuiIsland = isMiuiIslandMode(settings)
                 when (state) {
                     is CapsuleUiState.Active -> {
-                        Log.d(TAG, "主动唤醒：状态变为 Active，启动 CapsuleService")
-                        val serviceIntent = Intent(context, CapsuleService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            context.startForegroundService(serviceIntent)
+                        Log.d(TAG, "主动唤醒：状态变为 Active")
+                        if (useMiuiIsland) {
+                            MiuiIslandManager.update(context, state.capsules)
+                            stopCapsuleServiceIfRunning()
                         } else {
-                            context.startService(serviceIntent)
+                            startCapsuleServiceSafely()
                         }
                     }
                     is CapsuleUiState.None -> {
                         Log.d(TAG, "状态变为 None，Service 将自动停止")
+                        if (useMiuiIsland) {
+                            MiuiIslandManager.clear(context)
+                            stopCapsuleServiceIfRunning()
+                        } else {
+                            MiuiIslandManager.clear(context)
+                        }
                     }
+                }
+            }
+        }
+    }
+
+    private fun isMiuiIslandMode(settings: MySettings): Boolean {
+        return settings.isLiveCapsuleEnabled && OsUtils.isHyperOS() && XposedModuleStatus.isActive()
+    }
+
+    private fun stopCapsuleServiceIfRunning() {
+        if (!CapsuleService.isServiceRunning) return
+        try {
+            context.stopService(Intent(context, CapsuleService::class.java))
+        } catch (e: Exception) {
+            Log.w(TAG, "停止 CapsuleService 失败", e)
+        }
+    }
+
+    /**
+     * 安全启动胶囊服务
+     * 包含对 ForegroundServiceStartNotAllowedException 的处理
+     */
+    private fun startCapsuleServiceSafely() {
+        val serviceIntent = Intent(context, CapsuleService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+            Log.d(TAG, "CapsuleService 启动成功")
+        } catch (e: Exception) {
+            when {
+                e is android.app.ForegroundServiceStartNotAllowedException ||
+                (e.message?.contains("ForegroundServiceStartNotAllowedException") == true) -> {
+                    Log.w(TAG, "前台服务启动被系统拒绝，应用可能在后台。将在应用回到前台时重试。")
+                    // 延迟重试：当应用回到前台时通过 forceRefresh() 重新触发
+                }
+                else -> {
+                    Log.e(TAG, "启动 CapsuleService 失败", e)
                 }
             }
         }
@@ -223,7 +280,8 @@ class CapsuleStateManager(
         return combine(baseCombine, networkSpeedState, ocrCapsuleState) { (events, courses, settings), networkSpeed, ocrCapsule ->
             Log.d(TAG, "=== computeCapsuleState 被调用 ===")
             computeCapsuleState(events, courses, settings, networkSpeed, ocrCapsule)
-        }.stateIn(
+        }.flowOn(Dispatchers.Default)  // ✅ 将胶囊计算移到后台线程，避免主线程 ANR
+        .stateIn(
             scope = appScope,
             started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
             initialValue = CapsuleUiState.None

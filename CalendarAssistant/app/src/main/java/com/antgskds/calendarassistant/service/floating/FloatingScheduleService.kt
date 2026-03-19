@@ -63,6 +63,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
         const val ACTION_IMAGE_PICKED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICKED"
         const val ACTION_IMAGE_PICK_CANCELLED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICK_CANCELLED"
+        const val ACTION_FLOATING_SHOWN = "com.antgskds.calendarassistant.floating.action.SHOWN"
+        const val ACTION_FLOATING_HIDDEN = "com.antgskds.calendarassistant.floating.action.HIDDEN"
         const val EXTRA_IMAGE_URI = "extra_image_uri"
 
         @Volatile var isShowing: Boolean = false
@@ -92,13 +94,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 TextAccessibilityService.ACTION_CLOSE_FLOATING -> {
-                    stopSelf()
+                    requestClose()
                 }
                 Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
                     // 监听 Home 键或多任务键，自动关闭悬浮窗
                     val reason = intent.getStringExtra("reason")
                     if (reason == "homekey" || reason == "recentapps") {
-                        stopSelf()
+                        requestClose()
                     }
                 }
             }
@@ -108,6 +110,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     override fun onCreate() {
         super.onCreate()
         isShowing = true
+        sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
@@ -129,7 +132,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
 
         if (!Settings.canDrawOverlays(this)) {
-            stopSelf()
+            requestClose()
             return
         }
 
@@ -190,7 +193,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             setOnKeyListener { _, keyCode, event ->
                 if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-                    stopSelf()
+                    requestClose()
                     return@setOnKeyListener true
                 }
                 false
@@ -219,7 +222,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 ) {
                     FloatingScheduleScreen(
                         events = events,
-                        onClose = { stopSelf() },
+                        onClose = { requestClose() },
                         onManualInput = { text, onComplete ->
                             handleManualInput(text = text, sourceImagePath = null, onComplete = onComplete)
                         },
@@ -281,7 +284,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         } catch (e: Exception) {
             Log.e(TAG, "UI Init Failed", e)
             isViewAttached = false
-            stopSelf()
+            requestClose()
         }
     }
 
@@ -509,6 +512,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
         when (intent?.action) {
             ACTION_IMAGE_PICKED -> {
                 showFloatingWindow()
@@ -533,6 +537,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     override fun onDestroy() {
         isShowing = false
+        sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         serviceScope.cancel()
         composeView?.let { view ->
@@ -547,4 +552,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun requestClose() {
+        sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
+        stopSelf()
+    }
 }
