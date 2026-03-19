@@ -167,9 +167,10 @@ class MainViewModel(
             currentDateEvents = todayMerged,
             tomorrowEvents = tomorrowMerged
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default)  // ✅ 将计算移到后台线程，避免主线程 ANR
+    .stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,  // ✅ 改为 Eagerly，确保 init 中的归档操作能被捕获
+        started = SharingStarted.WhileSubscribed(5000),  // ✅ 改为 WhileSubscribed，避免不必要的计算
         initialValue = MainUiState()
     )
 

@@ -66,6 +66,10 @@ object TimeTableLayoutUtils {
         prettyPrint = true
     }
 
+    // ✅ 添加 LRU 缓存，限制缓存大小为 100 个条目，避免内存占用过大
+    private val timeParseCache = androidx.collection.LruCache<String, LocalTime>(100)
+    private val configCache = mutableMapOf<String, TimeTableLayoutConfig>()
+
     fun defaultConfig(): TimeTableLayoutConfig = TimeTableLayoutConfig()
 
     fun resolveLayoutConfig(configJsonString: String, timeTableJson: String): TimeTableLayoutConfig {
@@ -361,7 +365,11 @@ object TimeTableLayoutUtils {
 
     private fun safeParseTimeOrNull(value: String): LocalTime? {
         val normalized = normalizeTimeText(value)
-        return try {
+        // ✅ 先尝试从缓存获取
+        timeParseCache[normalized]?.let { return it }
+
+        // 缓存未命中，进行解析
+        val result = try {
             LocalTime.parse(normalized)
         } catch (_: Exception) {
             try {
@@ -370,6 +378,12 @@ object TimeTableLayoutUtils {
                 null
             }
         }
+
+        // ✅ 将解析结果存入缓存
+        if (result != null) {
+            timeParseCache.put(normalized, result)
+        }
+        return result
     }
 
     private fun normalizeTimeText(value: String): String {

@@ -29,7 +29,6 @@ class BootReceiver : BroadcastReceiver() {
             AccessibilityGuardian.checkAndRestoreIfNeeded(
                 context,
                 scope,
-                showToast = false,
                 isBackground = true
             )
         }

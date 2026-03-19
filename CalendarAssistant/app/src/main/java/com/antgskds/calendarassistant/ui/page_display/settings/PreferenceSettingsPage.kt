@@ -19,18 +19,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -46,6 +52,7 @@ fun PreferenceSettingsPage(
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -64,6 +71,44 @@ fun PreferenceSettingsPage(
     // 获取 events 用于检测重复提醒
     val repository = remember { AppRepository.getInstance(context) }
     val events by repository.events.collectAsState()
+
+    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+
+    fun refreshOverlayPermission() {
+        hasOverlayPermission = Settings.canDrawOverlays(context)
+    }
+
+    LaunchedEffect(Unit) {
+        refreshOverlayPermission()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshOverlayPermission()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    fun openOverlayPermissionSettings() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        )
+        context.startActivity(intent)
+    }
+
+    fun startEdgeBarService() {
+        context.startService(Intent(context, EdgeBarService::class.java))
+    }
+
+    fun stopEdgeBarService() {
+        context.stopService(Intent(context, EdgeBarService::class.java))
+    }
 
     // --- 字体样式优化 ---
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
@@ -171,6 +216,212 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SwitchSettingItem(
+                        title = "悬浮日程",
+                        subtitle = "长按音量+键呼出悬浮窗",
+                        checked = settings.isFloatingWindowEnabled,
+                        onCheckedChange = { isChecked ->
+                            if (isChecked && !hasOverlayPermission) {
+                                openOverlayPermissionSettings()
+                                return@SwitchSettingItem
+                            }
+                            viewModel.updatePreference(
+                                floatingWindow = isChecked,
+                                edgeBarEnabled = if (isChecked) settings.edgeBarEnabled else false
+                            )
+                            if (!isChecked) {
+                                stopEdgeBarService()
+                            } else if (settings.edgeBarEnabled) {
+                                startEdgeBarService()
+                            }
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "需要悬浮窗权限才能正常使用",
+                            style = cardSubtitleStyle,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = settings.isFloatingWindowEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        SwitchSettingItem(
+                            title = "侧边栏唤起",
+                            subtitle = "在屏幕侧边滑动呼出悬浮窗",
+                            checked = settings.edgeBarEnabled,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked && !hasOverlayPermission) {
+                                    openOverlayPermissionSettings()
+                                    return@SwitchSettingItem
+                                }
+                                viewModel.updateEdgeBarSettings(enabled = isChecked)
+                                if (isChecked) {
+                                    startEdgeBarService()
+                                } else {
+                                    stopEdgeBarService()
+                                }
+                            },
+                            cardTitleStyle = cardTitleStyle,
+                            cardSubtitleStyle = cardSubtitleStyle
+                        )
+
+                        AnimatedVisibility(
+                            visible = settings.edgeBarEnabled,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("侧边位置", style = cardTitleStyle)
+                                        Text("默认右侧", style = cardSubtitleStyle)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        val isRight = settings.edgeBarSide == "RIGHT"
+                                        if (isRight) {
+                                            Button(onClick = { viewModel.updateEdgeBarSettings(side = "RIGHT") }) {
+                                                Text("右侧")
+                                            }
+                                            OutlinedButton(onClick = { viewModel.updateEdgeBarSettings(side = "LEFT") }) {
+                                                Text("左侧")
+                                            }
+                                        } else {
+                                            OutlinedButton(onClick = { viewModel.updateEdgeBarSettings(side = "RIGHT") }) {
+                                                Text("右侧")
+                                            }
+                                            Button(onClick = { viewModel.updateEdgeBarSettings(side = "LEFT") }) {
+                                                Text("左侧")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+
+                                SliderSettingItem(
+                                    title = "纵向位置",
+                                    subtitle = "上下位置百分比",
+                                    value = settings.edgeBarYPercent,
+                                    onValueChange = { viewModel.updateEdgeBarSettings(yPercent = it) },
+                                    valueRange = 0f..100f,
+                                    steps = 9,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "%"
+                                )
+
+                                SliderSettingItem(
+                                    title = "宽度",
+                                    subtitle = "侧边条宽度",
+                                    value = settings.edgeBarWidthDp.toFloat(),
+                                    onValueChange = { viewModel.updateEdgeBarSettings(widthDp = it.toInt()) },
+                                    valueRange = 4f..20f,
+                                    steps = 15,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "dp"
+                                )
+
+                                SliderSettingItem(
+                                    title = "高度",
+                                    subtitle = "侧边条高度",
+                                    value = settings.edgeBarHeightDp.toFloat(),
+                                    onValueChange = { viewModel.updateEdgeBarSettings(heightDp = it.toInt()) },
+                                    valueRange = 60f..240f,
+                                    steps = 17,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "dp"
+                                )
+
+                                SliderSettingItem(
+                                    title = "颜色深浅",
+                                    subtitle = "调整透明度",
+                                    value = (settings.edgeBarAlpha * 100f),
+                                    onValueChange = { viewModel.updateEdgeBarSettings(alpha = it / 100f) },
+                                    valueRange = 10f..100f,
+                                    steps = 8,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "%"
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = {
+                                        viewModel.updateEdgeBarSettings(
+                                            enabled = true,
+                                            side = "RIGHT",
+                                            yPercent = 50f,
+                                            widthDp = 8,
+                                            heightDp = 120,
+                                            alpha = 0.4f
+                                        )
+                                    }) {
+                                        Text("恢复默认")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -205,7 +456,7 @@ fun PreferenceSettingsPage(
                         checked = settings.isLiveCapsuleEnabled,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(liveCapsule = isChecked)
-                            if (isChecked) showToast("请确保已开启无障碍权限", ToastType.INFO)
+                            if (isChecked) showToast("实况胶囊已开启", ToastType.INFO)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -266,8 +517,51 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    SwitchSettingItem(
+                        title = "网速胶囊",
+                        subtitle = "在状态栏显示下载速度",
+                        checked = settings.isNetworkSpeedCapsuleEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(networkSpeedCapsule = isChecked)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "网速胶囊会覆盖其他胶囊显示",
+                            style = cardSubtitleStyle,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
                 }
             }
+
 
             // ================== AI 板块 ==================
             Text("AI", style = sectionTitleStyle)
