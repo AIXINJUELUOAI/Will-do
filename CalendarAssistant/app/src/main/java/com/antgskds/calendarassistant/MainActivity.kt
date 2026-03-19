@@ -320,7 +320,7 @@ class MainActivity : ComponentActivity() {
         if (::mainViewModel.isInitialized) {
             mainViewModel.refreshData()
         }
-        AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope, showToast = true)
+        AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

@@ -7,6 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -21,14 +23,19 @@ import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
 @Composable
 fun AboutPage(
     uiSize: Int = 2,
-    onNavigateToDonate: () -> Unit = {}
+    onNavigateToDonate: () -> Unit = {},
+    settingsViewModel: SettingsViewModel? = null
 ) {
 
     val context = LocalContext.current
+
+    // 获取捐赠状态，如果 settingsViewModel 为 null 则默认为 false
+    val hasDonated = settingsViewModel?.settings?.collectAsState()?.value?.hasDonated ?: false
 
     // --- 链接配置 ---
     // 您的 GitHub 仓库
@@ -95,12 +102,15 @@ fun AboutPage(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // “感谢您的捐赠” 字体样式已和“特别致谢”统一
-        Text(
-            text = "感谢您的捐赠",
-            style = sectionTitleStyle,
-            textAlign = TextAlign.Center
-        )
+        // 仅在用户已捐赠时显示
+        if (hasDonated) {
+            // “感谢您的捐赠” 字体样式已和”特别致谢”统一
+            Text(
+                text = "感谢您的捐赠",
+                style = sectionTitleStyle,
+                textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(modifier = Modifier.height(64.dp))
 

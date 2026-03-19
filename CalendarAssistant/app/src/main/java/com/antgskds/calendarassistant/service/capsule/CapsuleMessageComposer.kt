@@ -211,7 +211,7 @@ object CapsuleMessageComposer {
         )
         val action = if (!event.isCompleted && !isExpired) {
             CapsuleActionSpec(
-                label = "已完成",
+                label = if (event.eventType == EventType.COURSE) "已结束" else "已完成",
                 receiverAction = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
             )
         } else {

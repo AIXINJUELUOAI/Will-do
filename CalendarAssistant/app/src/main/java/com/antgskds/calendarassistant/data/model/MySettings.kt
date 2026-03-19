@@ -60,6 +60,17 @@ data class MySettings(
     // 悬浮窗功能开关
     val isFloatingWindowEnabled: Boolean = false,
 
+    // 侧边栏唤起
+    val edgeBarEnabled: Boolean = false,
+    val edgeBarSide: String = "RIGHT",
+    val edgeBarYPercent: Float = 50f,
+    val edgeBarWidthDp: Int = 8,
+    val edgeBarHeightDp: Int = 120,
+    val edgeBarAlpha: Float = 0.4f,
+
     // 系统日历重复日程反向同步
-    val isRecurringCalendarSyncEnabled: Boolean = false
+    val isRecurringCalendarSyncEnabled: Boolean = false,
+
+    // 捐赠状态
+    val hasDonated: Boolean = false
 )
