@@ -919,6 +919,9 @@ class AppRepository private constructor(private val context: Context) {
      * 导出日程数据（包含活跃事件和归档事件）
      */
     suspend fun exportEventsData(): String {
+        // 确保归档数据已加载（懒加载）
+        ensureArchivesLoaded()
+
         val eventsData = EventsBackupData(
             events = _events.value,
             archivedEvents = _archivedEvents.value
