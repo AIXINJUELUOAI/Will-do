@@ -56,6 +56,8 @@ object AiPrompts {
            - 打车：【用车】颜色|车型|车牌
            - 快递类：【取件】号码|品牌|位置
            - 餐饮类：【取餐】号码|品牌|位置
+           
+           endTime = startTime + 1h
     """.trimIndent()
 
     private val defaultMmUnifiedPrompt = """

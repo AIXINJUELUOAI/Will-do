@@ -32,17 +32,9 @@ fun CourseManagerScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
 
-    // 根据 uiSize 计算 FAB 尺寸，与主页保持一致
-    val fabSize = when (uiSize) {
-        1 -> 56.dp  // 小
-        2 -> 64.dp  // 中
-        else -> 72.dp // 大
-    }
-    val fabIconSize = when (uiSize) {
-        1 -> 24.dp  // 小
-        2 -> 28.dp  // 中
-        else -> 32.dp // 大
-    }
+    // 统一 FAB 尺寸为 72.dp，图标 34.dp
+    val fabSize = 72.dp
+    val fabIconSize = 34.dp
 
     // 过滤影子课程
     val displayCourses = remember(courses) {

@@ -176,13 +176,6 @@ class SettingsViewModel(
         }
     }
 
-    // 更新智能推荐开关
-    fun updateSmartRecommendation(enabled: Boolean) {
-        viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(enableSmartRecommendation = enabled))
-        }
-    }
-
     fun updateEdgeBarSettings(
         enabled: Boolean? = null,
         side: String? = null,
