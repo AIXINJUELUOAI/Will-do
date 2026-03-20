@@ -125,11 +125,11 @@ private fun resolveManualEndChange(
 @Composable
 fun AddEventDialog(
     eventToEdit: MyEvent? = null,
-    recommendedTitle: String? = null,
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),
     recurringNextOccurrenceText: String? = null,
     recurringEditHint: String? = null,
+    visible: Boolean = true,
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (MyEvent) -> Unit
@@ -155,7 +155,7 @@ fun AddEventDialog(
         }
     }
 
-    var title by remember { mutableStateOf(eventToEdit?.title ?: recommendedTitle ?: "") }
+    var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
     var startDate by remember { mutableStateOf(initialRange.start.toLocalDate()) }
     var endDate by remember { mutableStateOf(initialRange.end.toLocalDate()) }
     var startTime by remember { mutableStateOf(initialRange.start.toLocalTime().format(timeFormatter)) }
@@ -167,7 +167,8 @@ fun AddEventDialog(
     val reminders = remember { mutableStateListOf<Int>().apply { addAll(eventToEdit?.reminders ?: emptyList()) } }
 
     var sourceBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(eventToEdit) {
+    LaunchedEffect(eventToEdit, visible) {
+        if (!visible) return@LaunchedEffect
         val path = eventToEdit?.sourceImagePath
         if (!path.isNullOrBlank()) {
             withContext(Dispatchers.IO) {
@@ -193,6 +194,8 @@ fun AddEventDialog(
         endDate = end.toLocalDate()
         endTime = end.toLocalTime().format(timeFormatter)
     }
+
+    if (!visible) return
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(

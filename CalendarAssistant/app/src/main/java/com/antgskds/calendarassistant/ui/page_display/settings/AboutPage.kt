@@ -99,6 +99,11 @@ fun AboutPage(
             name = "阿巴阿巴6789",
             contribution = "关于Flyme的实况通知代码"
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        ContributorLine(
+            name = "zz1812",
+            contribution = "关于小米的超级岛代码"
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
