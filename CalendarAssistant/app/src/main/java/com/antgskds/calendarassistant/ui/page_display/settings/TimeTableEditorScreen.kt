@@ -76,8 +76,9 @@ fun TimeTableEditorScreen(
         TimeTableLayoutUtils.resolveLayoutConfig(settings.timeTableConfigJson, settings.timeTableJson)
     }
 
-    val fabSize = when (uiSize) { 1 -> 56.dp; 2 -> 64.dp; else -> 72.dp }
-    val fabIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
+    // 统一 FAB 尺寸为 72.dp，图标 34.dp
+    val fabSize = 72.dp
+    val fabIconSize = 34.dp
 
     val sectionHeaderStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.Bold,

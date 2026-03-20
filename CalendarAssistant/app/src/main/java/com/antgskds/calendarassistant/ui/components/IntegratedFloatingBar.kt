@@ -1,17 +1,41 @@
 package com.antgskds.calendarassistant.ui.components
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -21,9 +45,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 // 统一高度设定为 68dp (增强视觉存在感)
 val IntegratedFloatingBarHeight = 68.dp
@@ -62,40 +84,42 @@ fun IntegratedFloatingBar(
     val navContent = lerp(HydrogenContent, MaterialTheme.colorScheme.onSurfaceVariant, mdBlend)
     val fabBg = lerp(HydrogenFab, MaterialTheme.colorScheme.primary, mdBlend)
     val fabIcon = lerp(HydrogenFabIcon, MaterialTheme.colorScheme.onPrimary, mdBlend)
+
     val navShape = CircleShape
     val fabShape = RoundedCornerShape(22.dp)
     val navElevation = 6.dp
     val fabElevation = 6.dp
     val navHeight = IntegratedFloatingBarHeight + 4.dp
     val fabSize = IntegratedFloatingBarHeight + 4.dp
+    val navItemWidth = 76.dp
+    val navItemSpacing = 4.dp
+    val navPaddingHorizontal = 6.dp
+
+    val navExpandedWidth = navItemWidth * 3f + navItemSpacing * 2f + navPaddingHorizontal * 2f
+    val navCollapsedWidth = navHeight
+    val fabCollapsedWidth = fabSize
+
+    val navWidth by animateDpAsState(
+        targetValue = if (isExpanded) navCollapsedWidth else navExpandedWidth,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "navWidth"
+    )
+    val iconAreaWidth by animateDpAsState(
+        targetValue = if (isExpanded) navExpandedWidth - navCollapsedWidth else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "iconAreaWidth"
+    )
+    val actionWidth = fabCollapsedWidth + iconAreaWidth
 
     val isMenuSelected = isSidebarOpen
     val isTabHighlightEnabled = !isSidebarOpen
+    val currentTabIcon = if (selectedTab == 0) Icons.Default.Home else Icons.Default.List
+    val currentTabClick = if (selectedTab == 0) onHomeClick else onListClick
 
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // --- 1. 垂直菜单 (Hydrogen 风格药丸) ---
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = IntegratedFloatingBarHeight + 16.dp, end = 4.dp)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                MenuActionPill(Icons.Default.Search, "搜索日程", navBg, navContent, onSearchClick)
-                MenuActionPill(Icons.Default.Image, "导入图片", navBg, navContent, onImageClick)
-                MenuActionPill(Icons.Default.Edit, "新建日程", navBg, navContent, onEditClick)
-            }
-        }
-
-        // --- 2. 底栏主体 (严格参考 Hydrogen 比例) ---
         Row(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -103,79 +127,129 @@ fun IntegratedFloatingBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            // 左侧：Hydrogen 岛
             Card(
                 shape = navShape,
                 colors = CardDefaults.cardColors(containerColor = navBg),
                 elevation = CardDefaults.cardElevation(defaultElevation = navElevation),
                 modifier = Modifier
                     .height(navHeight)
-                    .weight(1f, fill = false)
+                    .width(navWidth)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // 菜单图标
-                    HydrogenNavIcon(
-                        icon = Icons.Default.Menu,
-                        isSelected = isMenuSelected,
-                        indicatorColor = navIndicator,
-                        contentColor = navContent,
-                        onClick = onMenuClick
-                    )
-                    
-                    HydrogenNavIcon(
-                        icon = Icons.Default.Home,
-                        isSelected = isTabHighlightEnabled && selectedTab == 0,
-                        indicatorColor = navIndicator,
-                        contentColor = navContent,
-                        onClick = onHomeClick
-                    )
-                    
-                    HydrogenNavIcon(
-                        icon = Icons.Default.List,
-                        isSelected = isTabHighlightEnabled && selectedTab == 1,
-                        indicatorColor = navIndicator,
-                        contentColor = navContent,
-                        onClick = onListClick
-                    )
+                if (isExpanded) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = navPaddingHorizontal, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        HydrogenNavIcon(
+                            icon = if (isSidebarOpen) Icons.Default.Menu else currentTabIcon,
+                            isSelected = true,
+                            indicatorColor = navIndicator,
+                            contentColor = navContent,
+                            onClick = {
+                                onExpandedChange(false)
+                                if (isSidebarOpen) {
+                                    onMenuClick()
+                                } else {
+                                    currentTabClick()
+                                }
+                            }
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.padding(horizontal = navPaddingHorizontal, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(navItemSpacing)
+                    ) {
+                        HydrogenNavIcon(
+                            icon = Icons.Default.Menu,
+                            isSelected = isMenuSelected,
+                            indicatorColor = navIndicator,
+                            contentColor = navContent,
+                            onClick = onMenuClick
+                        )
+
+                        HydrogenNavIcon(
+                            icon = Icons.Default.Home,
+                            isSelected = isTabHighlightEnabled && selectedTab == 0,
+                            indicatorColor = navIndicator,
+                            contentColor = navContent,
+                            onClick = onHomeClick
+                        )
+
+                        HydrogenNavIcon(
+                            icon = Icons.Default.List,
+                            isSelected = isTabHighlightEnabled && selectedTab == 1,
+                            indicatorColor = navIndicator,
+                            contentColor = navContent,
+                            onClick = onListClick
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 右侧：FAB (尺寸加大)
             Card(
-                onClick = { onExpandedChange(!isExpanded) },
                 shape = fabShape,
                 colors = CardDefaults.cardColors(containerColor = fabBg),
                 elevation = CardDefaults.cardElevation(defaultElevation = fabElevation),
-                modifier = Modifier.size(fabSize)
+                modifier = Modifier
+                    .height(fabSize)
+                    .width(actionWidth)
             ) {
-                Box(
+                Row(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Toggle",
-                        tint = fabIcon,
+                    Box(
                         modifier = Modifier
-                            .size(34.dp)
-                            .rotate(rotation)
-                    )
+                            .width(iconAreaWidth)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = isExpanded,
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                ActionIconButton(Icons.Default.Search, "搜索", fabIcon, onSearchClick)
+                                ActionIconButton(Icons.Default.Image, "图片", fabIcon, onImageClick)
+                                ActionIconButton(Icons.Default.Edit, "新建", fabIcon, onEditClick)
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(fabCollapsedWidth)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconButton(onClick = { onExpandedChange(!isExpanded) }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Toggle",
+                                tint = fabIcon,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .rotate(rotation)
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/**
- * 关键组件：Hydrogen 风格的导航项
- * 指示器不再是扁平药丸，而是填充容器高度的圆角块
- */
 @Composable
 private fun HydrogenNavIcon(
     icon: ImageVector,
@@ -187,58 +261,52 @@ private fun HydrogenNavIcon(
     Box(
         modifier = Modifier
             .fillMaxHeight()
-            .width(76.dp)
-            .clip(CircleShape)
-            .clickable { onClick() },
+            .width(76.dp),
         contentAlignment = Alignment.Center
     ) {
-        if (isSelected) {
-            // Hydrogen 的指示器：高度几乎撑满，圆角稍小
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp, horizontal = 4.dp)
-                    .background(indicatorColor, CircleShape)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth()
+                .padding(vertical = 4.dp, horizontal = 4.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .background(indicatorColor, CircleShape)
+                )
+            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(28.dp)
             )
         }
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(28.dp)
-        )
     }
 }
 
 @Composable
-private fun MenuActionPill(
+private fun ActionIconButton(
     icon: ImageVector,
-    text: String,
-    backgroundColor: Color,
-    contentColor: Color,
+    contentDescription: String,
+    tint: Color,
     onClick: () -> Unit
 ) {
-    Surface(
-        shape = CircleShape,
-        color = backgroundColor,
-        modifier = Modifier.clickable { onClick() },
-        shadowElevation = 5.dp
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(44.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(icon, null, modifier = Modifier.size(24.dp), tint = contentColor)
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = contentColor
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }

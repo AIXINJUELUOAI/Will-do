@@ -54,9 +54,6 @@ data class MySettings(
     // 【实验室】网速胶囊开关
     val isNetworkSpeedCapsuleEnabled: Boolean = false,
 
-    // 智能推荐开关
-    val enableSmartRecommendation: Boolean = true,
-
     // 悬浮窗功能开关
     val isFloatingWindowEnabled: Boolean = false,
 

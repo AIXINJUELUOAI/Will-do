@@ -93,6 +93,7 @@ fun HomePage(
     onActionExpandedChange: (Boolean) -> Unit = {},
     searchRequestId: Int = 0,
     imageRequestId: Int = 0,
+    isSidebarOpen: Boolean = false,
     onTabChange: (Int) -> Unit = {},
     onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
@@ -107,7 +108,6 @@ fun HomePage(
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
-    var searchTab by rememberSaveable { mutableIntStateOf(0) }
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -293,32 +293,22 @@ fun HomePage(
         }
     }
 
-    LaunchedEffect(currentTab) {
-        if (isSearchMode && currentTab != searchTab) {
-            isSearchMode = false
-            when (searchTab) {
-                0 -> todaySearchQuery = ""
-                1 -> allSearchQuery = ""
-            }
-        }
-    }
-
     BackHandler(enabled = offsetY.value > 0f) {
         scope.launch { offsetY.animateTo(0f) }
     }
 
     BackHandler(enabled = isSearchMode) {
         isSearchMode = false
-        when (searchTab) {
-            0 -> todaySearchQuery = ""
-            1 -> allSearchQuery = ""
+        if (currentTab == 1) {
+            allSearchQuery = ""
+        } else {
+            todaySearchQuery = ""
         }
     }
 
     LaunchedEffect(searchRequestId) {
         if (searchRequestId > 0) {
             isSearchMode = true
-            searchTab = currentTab
         }
     }
 
@@ -479,58 +469,27 @@ fun HomePage(
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
                         title = {
-                            if ((currentTab == 0 || currentTab == 1) && isSearchMode) {
-                                OutlinedTextField(
-                                    value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
-                                    onValueChange = {
-                                        if (currentTab == 1) {
-                                            allSearchQuery = it
-                                        } else {
-                                            todaySearchQuery = it
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("搜索标题、备注或地点...") },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Search,
-                                            contentDescription = "搜索",
-                                            modifier = Modifier.size(topBarIconSize)
-                                        )
-                                    },
-                                    trailingIcon = if ((if (currentTab == 1) allSearchQuery else todaySearchQuery).isNotEmpty()) {
-                                        {
-                                            IconButton(onClick = {
-                                                if (currentTab == 1) {
-                                                    allSearchQuery = ""
-                                                } else {
-                                                    todaySearchQuery = ""
-                                                }
-                                            }) {
-                                                Icon(
-                                                    Icons.Default.Clear,
-                                                    contentDescription = "清除",
-                                                    modifier = Modifier.size(topBarIconSize)
-                                                )
-                                            }
-                                        }
-                                    } else null,
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(24.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                                    )
-                                )
-                            } else {
-                                Text(if (currentTab == 0) "今日日程" else "全部日程")
-                            }
+                            Text(if (currentTab == 0) "今日日程" else "全部日程")
                         },
                         actions = {}
                     )
                 },
                 bottomBar = {}
             ) { innerPadding ->
-                Box(modifier = Modifier.padding(innerPadding)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == 1)
+                    val searchBarHeight = 64.dp
+                    val searchBarOffset = searchBarHeight + 12.dp
+                    val contentBottomPadding = if (showSearchBar) {
+                        floatingBarOffset + searchBarOffset
+                    } else {
+                        floatingBarOffset
+                    }
+
                     if (currentTab == 0) {
                         // === 今日视图内容 ===
                         val todayEvents = remember(uiState.currentDateEvents, todaySearchQuery) {
@@ -559,7 +518,7 @@ fun HomePage(
                             // 绑定 listState
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = floatingBarOffset),
+                            contentPadding = PaddingValues(bottom = contentBottomPadding),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -671,7 +630,53 @@ fun HomePage(
                             uiSize = uiSize,
                             // 【修改 2】透传给 AllEventsPage
                             pickupTimestamp = pickupTimestamp,
-                            searchQuery = allSearchQuery
+                            searchQuery = allSearchQuery,
+                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp
+                        )
+                    }
+
+                    if (showSearchBar) {
+                        OutlinedTextField(
+                            value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
+                            onValueChange = {
+                                if (currentTab == 1) {
+                                    allSearchQuery = it
+                                } else {
+                                    todaySearchQuery = it
+                                }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = floatingBarOffset + 12.dp)
+                                .fillMaxWidth(0.75f)
+                                .height(searchBarHeight),
+                            placeholder = { Text("搜索标题、备注或地点...") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "搜索",
+                                    modifier = Modifier.size(topBarIconSize)
+                                )
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { isSearchMode = false },
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "关闭",
+                                        modifier = Modifier.size(topBarIconSize)
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
                         )
                     }
                 }
@@ -707,7 +712,9 @@ fun HomePage(
             allowDismissWhileLoading = true,
             onConfirm = {},
             onDismiss = cancelImageImport,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = floatingBarOffset)
         )
     }
 }
