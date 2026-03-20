@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
@@ -24,7 +25,8 @@ fun AllEventsPage(
     onEditEvent: (MyEvent) -> Unit,
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
-    searchQuery: String = ""
+    searchQuery: String = "",
+    extraBottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -75,59 +77,53 @@ fun AllEventsPage(
         val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
 
         // 列表内容
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = floatingBarOffset, top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // 空状态
-            if (filteredEvents.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(400.dp)
-                            .padding(40.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val emptyText = if (searchQuery.isBlank()) {
-                            "暂无日程记录"
-                        } else {
-                            "未找到相关日程"
-                        }
-                        Text(emptyText, color = Color.Gray)
+        if (filteredEvents.isEmpty()) {
+            // 空状态居中显示
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.align(Alignment.Center)) {
+                    val emptyText = if (searchQuery.isBlank()) {
+                        "暂无日程记录"
+                    } else {
+                        "未找到相关日程"
                     }
+                    Text(emptyText, color = MaterialTheme.colorScheme.secondary)
                 }
             }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = floatingBarOffset + extraBottomPadding, top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 列表项
+                items(filteredEvents, key = { it.id }) { event ->
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        // 头部日期信息
+                        Text(
+                            text = if (event.isRecurringParent) {
+                                "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}"
+                            } else {
+                                "${event.startDate} ~ ${event.endDate}"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
+                        )
 
-            // 列表项
-            items(filteredEvents, key = { it.id }) { event ->
-                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    // 头部日期信息
-                    Text(
-                        text = if (event.isRecurringParent) {
-                            "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}"
-                        } else {
-                            "${event.startDate} ~ ${event.endDate}"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
-                    )
-
-                    // 滑动组件
-                    SwipeableEventItem(
-                        event = event,
-                        isRevealed = uiState.revealedEventId == event.id,
-                        onExpand = { viewModel.onRevealEvent(event.id) },
-                        onCollapse = { viewModel.onRevealEvent(null) },
-                        onDelete = { viewModel.deleteEvent(event) },
-                        onImportant = { viewModel.toggleImportant(event) }, // 修正参数名
-                        onEdit = { onEditEvent(event) }, // 移除 onClick，仅保留 onEdit
-                        uiSize = uiSize,
-                        isArchivePage = false,
-                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
-                    )
+                        // 滑动组件
+                        SwipeableEventItem(
+                            event = event,
+                            isRevealed = uiState.revealedEventId == event.id,
+                            onExpand = { viewModel.onRevealEvent(event.id) },
+                            onCollapse = { viewModel.onRevealEvent(null) },
+                            onDelete = { viewModel.deleteEvent(event) },
+                            onImportant = { viewModel.toggleImportant(event) }, // 修正参数名
+                            onEdit = { onEditEvent(event) }, // 移除 onClick，仅保留 onEdit
+                            uiSize = uiSize,
+                            isArchivePage = false,
+                            onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
+                        )
+                    }
                 }
             }
         }

@@ -14,9 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +30,9 @@ import java.time.temporal.ChronoUnit
 
 // === 依据技术文档定义的常量 ===
 private val HeaderHeight = 50.dp
+private val TopBarHeight = 56.dp
 private val SidebarWidth = 35.dp
+private val HeaderIconSize = 28.dp
 
 @Composable
 fun ScheduleView(
@@ -177,43 +182,47 @@ private fun WeekControllerBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(HeaderHeight)
+            .height(TopBarHeight)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         IconButton(onClick = { if (viewingWeek > 1) onWeekChange(viewingWeek - 1) }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Prev", tint = MaterialTheme.colorScheme.onSurface)
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                "Prev",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(HeaderIconSize)
+            )
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.clickable { onReset() }
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "第 $viewingWeek 周",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                if (viewingWeek == currentWeek) {
-                    Text(
-                        text = " (本周)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
             Text(
-                text = "$viewingMonth 月",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = buildAnnotatedString {
+                    append("${viewingMonth}月 第${viewingWeek}周")
+                    if (viewingWeek == currentWeek) {
+                        append(" ")
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                            append("(本周)")
+                        }
+                    }
+                },
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
         IconButton(onClick = { if (viewingWeek < totalWeeks) onWeekChange(viewingWeek + 1) }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next", tint = MaterialTheme.colorScheme.onSurface)
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                "Next",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(HeaderIconSize)
+            )
         }
     }
 }
@@ -239,13 +248,13 @@ private fun WeekHeaderRow(monday: LocalDate, today: LocalDate) {
             ) {
                 Text(
                     text = name,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = color,
                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
                 )
                 Text(
                     text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = color,
                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
                 )
@@ -271,7 +280,7 @@ private fun SidebarColumn(maxNodes: Int, nodeHeight: Dp) {
             ) {
                 Text(
                     text = i.toString(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

@@ -201,11 +201,21 @@ fun FloatingScheduleScreen(
                 })
             }
     ) {
-        // 日程列表：淡入淡出
+        // 日程列表：从右侧滑入滑出
         AnimatedVisibility(
             visible = isAppearing,
-            enter = fadeIn(animationSpec = tween(enterDuration, easing = fastOutSlowIn)),
-            exit = fadeOut(animationSpec = tween(exitDuration, easing = fastOutSlowIn)),
+            enter = fadeIn(
+                animationSpec = tween(enterDuration, easing = fastOutSlowIn)
+            ) + slideInHorizontally(
+                animationSpec = tween(enterDuration, easing = fastOutSlowIn),
+                initialOffsetX = { it }  // 从屏幕右侧滑入
+            ),
+            exit = fadeOut(
+                animationSpec = tween(exitDuration, easing = fastOutSlowIn)
+            ) + slideOutHorizontally(
+                animationSpec = tween(exitDuration, easing = fastOutSlowIn),
+                targetOffsetX = { it }  // 向屏幕右侧滑出
+            ),
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
             TimeWheelList(
@@ -244,11 +254,21 @@ fun FloatingScheduleScreen(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = bgAlpha))))
         )
 
-        // 底部输入框：淡入淡出
+        // 底部输入框：从下方滑入滑出
         AnimatedVisibility(
             visible = isAppearing,
-            enter = fadeIn(animationSpec = tween(enterDuration, easing = fastOutSlowIn)),
-            exit = fadeOut(animationSpec = tween(exitDuration, easing = fastOutSlowIn)),
+            enter = fadeIn(
+                animationSpec = tween(enterDuration, easing = fastOutSlowIn)
+            ) + slideInVertically(
+                animationSpec = tween(enterDuration, easing = fastOutSlowIn),
+                initialOffsetY = { it }  // 从屏幕下方滑入
+            ),
+            exit = fadeOut(
+                animationSpec = tween(exitDuration, easing = fastOutSlowIn)
+            ) + slideOutVertically(
+                animationSpec = tween(exitDuration, easing = fastOutSlowIn),
+                targetOffsetY = { it }  // 向屏幕下方滑出
+            ),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             BottomInteractionArea(

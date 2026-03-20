@@ -285,6 +285,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     exportPromptsLauncher.launch("ai_prompts_$timestamp.json")
                 },
                 onImport = { importPromptsLauncher.launch(arrayOf("application/json")) },
+                swapButtons = true, // 导出在左，导入在右
                 extraButton = {
                     OutlinedButton(
                         onClick = { mainViewModel.checkPromptUpdatesManually() },
@@ -451,6 +452,7 @@ fun BackupCard(
     extraButton: @Composable (() -> Unit)? = null,
     extraButtonText: String = "检查更新",
     extraButtonOnTop: Boolean = false,
+    swapButtons: Boolean = false, // 是否交换导出/导入按钮顺序（导出在左，导入在右）
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
@@ -486,19 +488,39 @@ fun BackupCard(
                 }
             } else if (extraButton != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onImport,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(importLabel)
-                    }
-                    if (showExport) {
-                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                    if (swapButtons) {
+                        // 导出在左，导入在右
+                        if (showExport) {
+                            OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("导出")
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = onImport,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("导出")
+                            Text(importLabel)
+                        }
+                    } else {
+                        // 导入在左，导出在右
+                        OutlinedButton(
+                            onClick = onImport,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(importLabel)
+                        }
+                        if (showExport) {
+                            OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("导出")
+                            }
                         }
                     }
                 }

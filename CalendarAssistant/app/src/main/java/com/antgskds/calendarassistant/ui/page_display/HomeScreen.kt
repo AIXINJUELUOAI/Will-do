@@ -78,12 +78,24 @@ fun HomeScreen(
 
     // 弹窗状态管理
     var showAddEventDialog by remember { mutableStateOf(false) }
-    var recommendedTitleForDialog by remember { mutableStateOf<String?>(null) }
     var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
+    var pendingAddDialog by remember { mutableStateOf(false) }
+    var addDialogRequestId by remember { mutableIntStateOf(0) }
+    val dialogDelayMs = 240L
+
+    LaunchedEffect(pendingAddDialog) {
+        if (!pendingAddDialog) return@LaunchedEffect
+        kotlinx.coroutines.delay(dialogDelayMs)
+        if (!showAddEventDialog && eventToEdit == null) {
+            showAddEventDialog = true
+        }
+        pendingAddDialog = false
+    }
 
     fun beginEdit(event: MyEvent) {
+        pendingAddDialog = false
         if (event.eventType == "course") {
             editingVirtualCourse = event
             eventToEdit = null
@@ -143,9 +155,12 @@ fun HomeScreen(
     }
 
     fun openAddEventDialog() {
+        isActionExpanded = false
+        addDialogRequestId += 1
         recurringEditSession = null
         eventToEdit = null
-        showAddEventDialog = true
+        showAddEventDialog = false
+        pendingAddDialog = true
     }
 
     
@@ -183,6 +198,7 @@ fun HomeScreen(
                         onActionExpandedChange = { isActionExpanded = it },
                         searchRequestId = searchRequestId,
                         imageRequestId = imageRequestId,
+                        isSidebarOpen = isSidebarOpen,
                         onTabChange = { selectedTab = it },
                         onCourseClick = { _, _ -> },
                         onAddEventClick = { openAddEventDialog() },
@@ -247,18 +263,20 @@ fun HomeScreen(
     // --- 全局弹窗处理 (仅保留日常操作) ---
 
     // 1. 普通日程编辑/添加
-    if (showAddEventDialog || eventToEdit != null) {
+    val isDialogVisible = showAddEventDialog || eventToEdit != null
+    val dialogKey = eventToEdit?.id ?: "add_$addDialogRequestId"
+    key(dialogKey) {
         AddEventDialog(
+            visible = isDialogVisible,
             eventToEdit = eventToEdit,
-            recommendedTitle = recommendedTitleForDialog,
             currentEventsCount = uiState.allEvents.size,
             settings = settings,
             recurringNextOccurrenceText = recurringEditSession?.nextOccurrenceText,
             recurringEditHint = recurringEditSession?.editHint,
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
+                pendingAddDialog = false
                 showAddEventDialog = false
-                recommendedTitleForDialog = null
                 eventToEdit = null
                 recurringEditSession = null
             },
@@ -277,8 +295,8 @@ fun HomeScreen(
                 } else {
                     mainViewModel.updateEvent(newEvent)
                 }
+                pendingAddDialog = false
                 showAddEventDialog = false
-                recommendedTitleForDialog = null
                 eventToEdit = null
                 recurringEditSession = null
             }
