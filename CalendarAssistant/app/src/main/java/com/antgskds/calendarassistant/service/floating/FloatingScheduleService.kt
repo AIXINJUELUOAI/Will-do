@@ -52,6 +52,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -207,6 +208,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings by repository.settings.collectAsState()
                 val context = LocalContext.current
 
+                // 根据悬浮窗日程范围设置过滤事件
+                val today = LocalDate.now()
+                val tomorrow = today.plusDays(1)
+                val filteredEvents = when (settings.floatingEventRange) {
+                    1 -> events.filter { it.startDate == today || it.endDate == today }
+                    2 -> events.filter {
+                        it.startDate == today || it.startDate == tomorrow ||
+                        it.endDate == today || it.endDate == tomorrow
+                    }
+                    else -> events // 0 = 全部日程
+                }
+
                 val isDarkTheme = when (settings.themeMode) {
                     1 -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
                     2 -> false
@@ -221,7 +234,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     themeColorScheme = themeColorSchemeEnum
                 ) {
                     FloatingScheduleScreen(
-                        events = events,
+                        events = filteredEvents,
                         onClose = { requestClose() },
                         onManualInput = { text, onComplete ->
                             handleManualInput(text = text, sourceImagePath = null, onComplete = onComplete)

@@ -19,7 +19,9 @@ import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.xposed.XposedModuleStatus
 import kotlinx.coroutines.CoroutineScope
@@ -343,7 +345,12 @@ class AlarmReceiver : BroadcastReceiver() {
     private fun handleCapsuleRefresh(context: Context, eventId: String, title: String) {
         if (isMiuiIslandMode(context)) {
             Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
-            (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
+            val repository = (context.applicationContext as App).repository
+            repository.capsuleStateManager.forceRefresh()
+            when (val state = repository.capsuleStateManager.uiState.value) {
+                is CapsuleUiState.Active -> MiuiIslandManager.update(context, state.capsules)
+                is CapsuleUiState.None -> MiuiIslandManager.clear(context)
+            }
             return
         }
         Log.d(TAG, "刷新胶囊: $title (准点时刷新文案)")

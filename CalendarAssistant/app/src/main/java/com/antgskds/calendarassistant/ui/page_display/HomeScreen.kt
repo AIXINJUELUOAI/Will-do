@@ -6,7 +6,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
@@ -64,6 +68,8 @@ fun HomeScreen(
     // 【修改 2】初始 Tab 状态不需要依赖参数了，默认为 0 即可，依靠 LaunchedEffect 来跳转
     var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=All
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
+    var scheduleProgress by remember { mutableFloatStateOf(0f) }
+    var scheduleOffsetPx by remember { mutableFloatStateOf(0f) }
     var isActionExpanded by remember { mutableStateOf(false) }
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
@@ -203,7 +209,9 @@ fun HomeScreen(
                         onCourseClick = { _, _ -> },
                         onAddEventClick = { openAddEventDialog() },
                         onEditEvent = { event -> beginEdit(event) },
-                        onScheduleExpandedChange = { isScheduleExpanded = it }
+                        onScheduleExpandedChange = { isScheduleExpanded = it },
+                        onScheduleProgressChange = { scheduleProgress = it },
+                        onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) }
                     )
             }
         )
@@ -245,6 +253,11 @@ fun HomeScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = IntegratedFloatingBarBottomSpacing + bottomInset)
+                .offset { IntOffset(0, scheduleOffsetPx.roundToInt()) }
+                .graphicsLayer {
+                    val clamped = scheduleProgress.coerceIn(0f, 1f)
+                    alpha = 1f - clamped
+                }
                 .zIndex(3f)
         )
 

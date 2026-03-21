@@ -56,6 +56,7 @@ data class MySettings(
 
     // 悬浮窗功能开关
     val isFloatingWindowEnabled: Boolean = false,
+    val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
 
     // 侧边栏唤起
     val edgeBarEnabled: Boolean = false,

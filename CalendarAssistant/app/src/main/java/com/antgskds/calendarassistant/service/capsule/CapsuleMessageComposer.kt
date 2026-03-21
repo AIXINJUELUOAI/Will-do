@@ -209,9 +209,10 @@ object CapsuleMessageComposer {
             tertiaryText,
             summaryText(event.description)?.takeUnless { it == detailText }
         )
-        val action = if (!event.isCompleted && !isExpired) {
+        // 课程事件不显示按钮
+        val action = if (!event.isCompleted && !isExpired && event.eventType != EventType.COURSE) {
             CapsuleActionSpec(
-                label = if (event.eventType == EventType.COURSE) "已结束" else "已完成",
+                label = "已完成",
                 receiverAction = EventActionReceiver.ACTION_COMPLETE_SCHEDULE
             )
         } else {
