@@ -98,7 +98,9 @@ fun HomePage(
     onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
     onEditEvent: (MyEvent) -> Unit = {},
-    onScheduleExpandedChange: (Boolean) -> Unit = {}
+    onScheduleExpandedChange: (Boolean) -> Unit = {},
+    onScheduleProgressChange: (Float) -> Unit = {},
+    onScheduleOffsetChange: (Float) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
@@ -211,8 +213,12 @@ fun HomePage(
     // 提升 listState，用于精确判断列表是否到达顶部
     val listState = rememberLazyListState()
 
+    val progress = (offsetY.value / maxOffsetPx).coerceIn(0f, 1f)
+
     LaunchedEffect(offsetY.value) {
         onScheduleExpandedChange(offsetY.value > 0)
+        onScheduleProgressChange(progress)
+        onScheduleOffsetChange(offsetY.value)
     }
 
     // === 核心修改：NestedScrollConnection ===
@@ -357,8 +363,6 @@ fun HomePage(
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
     ) {
-        val progress = (offsetY.value / maxOffsetPx).coerceIn(0f, 1f)
-
         // === 背景层：课程表视图 ===
         Box(
             modifier = Modifier

@@ -276,6 +276,28 @@ fun PreferenceSettingsPage(
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        FloatingEventRangeSlider(
+                            title = "悬浮窗日程范围",
+                            subtitle = when (settings.floatingEventRange) {
+                                0 -> "显示全部日程"
+                                1 -> "只显示今日日程"
+                                2 -> "显示今日和明日日程"
+                                else -> "显示全部日程"
+                            },
+                            eventRange = settings.floatingEventRange,
+                            onEventRangeChange = { range ->
+                                viewModel.updatePreference(floatingEventRange = range)
+                            },
+                            cardTitleStyle = cardTitleStyle,
+                            cardSubtitleStyle = cardSubtitleStyle
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
                         SwitchSettingItem(
                             title = "侧边栏唤起",
                             subtitle = "在屏幕侧边滑动呼出悬浮窗",
@@ -888,6 +910,55 @@ fun AdvanceReminderSettingItem(
                     steps = 1 // 30, 45, 60 三个离散值
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun FloatingEventRangeSlider(
+    title: String,
+    subtitle: String,
+    eventRange: Int,
+    onEventRangeChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        // 标题行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = cardTitleStyle)
+                Text(subtitle, style = cardSubtitleStyle)
+            }
+        }
+
+        // 滑块区域
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+        ) {
+            // 标签行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = "全部日程", style = cardSubtitleStyle)
+                Text(text = "今日日程", style = cardSubtitleStyle)
+                Text(text = "今日+明日", style = cardSubtitleStyle)
+            }
+            Slider(
+                value = eventRange.toFloat(),
+                onValueChange = { onEventRangeChange(it.toInt()) },
+                valueRange = 0f..2f,
+                steps = 1
+            )
         }
     }
 }
