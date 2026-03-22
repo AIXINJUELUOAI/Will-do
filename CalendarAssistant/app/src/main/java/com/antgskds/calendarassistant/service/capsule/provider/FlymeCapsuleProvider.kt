@@ -240,13 +240,13 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             CapsuleService.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
             CapsuleService.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
             else -> when (eventType) {
-                EventTags.PICKUP -> R.drawable.ic_capsule_pickup
-                EventTags.TRAIN -> R.drawable.ic_capsule_train
-                EventTags.TAXI -> R.drawable.ic_capsule_taxi
-                EventType.COURSE -> R.drawable.ic_capsule_course
+                EventTags.PICKUP -> R.drawable.ic_stat_package
+                EventTags.TRAIN -> R.drawable.ic_stat_train
+                EventTags.TAXI -> R.drawable.ic_stat_car
+                EventType.COURSE -> R.drawable.ic_stat_course
                 EventTags.GENERAL -> R.drawable.ic_stat_event
-                EventType.EVENT -> R.drawable.ic_capsule_event
-                else -> R.drawable.ic_capsule_event
+                EventType.EVENT -> R.drawable.ic_stat_event
+                else -> R.drawable.ic_stat_event
             }
         }
     }
