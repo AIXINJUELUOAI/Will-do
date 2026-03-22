@@ -7,7 +7,8 @@
       "Bash(./gradlew assembleDebug --no-daemon)",
       "Bash(./gradlew assembleDebug --console=plain)",
       "Bash(./gradlew assembleDebug)",
-      "Bash(where java:*)"
+      "Bash(where java:*)",
+      "Bash(adb shell:*)"
     ]
   }
 }
