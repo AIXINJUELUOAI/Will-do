@@ -12,6 +12,11 @@ object IconUtils {
     }
 
     fun getSmallIconForCapsule(capsule: CapsuleUiState.Active.CapsuleItem): Int {
+        // 聚合取件码胶囊始终使用包裹图标
+        if (capsule.id == com.antgskds.calendarassistant.core.capsule.CapsuleStateManager.AGGREGATE_PICKUP_ID) {
+            return R.drawable.ic_stat_package
+        }
+
         return when (capsule.type) {
             CapsuleService.TYPE_NETWORK_SPEED -> R.drawable.ic_stat_net
 
@@ -55,6 +60,4 @@ object IconUtils {
     fun getScanningIcon(): Int = R.drawable.ic_stat_scan
 
     fun getSuccessIcon(): Int = R.drawable.ic_stat_success
-
-    fun getAnalyzingIcon(): Int = R.drawable.ic_stat_sparkle
 }

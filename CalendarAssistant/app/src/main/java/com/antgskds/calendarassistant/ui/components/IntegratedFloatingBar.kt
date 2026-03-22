@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -47,15 +46,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 
-// 统一高度设定为 68dp (增强视觉存在感)
+// 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
+// 注意：这个值通常用于外部布局，现在组件内部也自带了阴影缓冲
 val IntegratedFloatingBarBottomSpacing = 24.dp
 
-// --- Hydrogen 核心配色 (极低饱和度) ---
-val HydrogenBg = Color(0xFFF1F1EA)      // 奶油白底色
-val HydrogenIndicator = Color(0xFFE2E2D5) // 稍微深一点的奶油灰
-val HydrogenContent = Color(0xFF44473E)   // 深橄榄绿/灰 (用于图标和文字)
-val HydrogenFab = Color(0xFF4B5541)       // 深色按钮，形成视觉对比
+// --- Hydrogen 核心配色 ---
+val HydrogenBg = Color(0xFFF1F1EA)
+val HydrogenIndicator = Color(0xFFE2E2D5)
+val HydrogenContent = Color(0xFF44473E)
+val HydrogenFab = Color(0xFF4B5541)
 val HydrogenFabIcon = Color(0xFFF1F1EA)
 
 @Composable
@@ -116,13 +116,17 @@ fun IntegratedFloatingBar(
     val currentTabIcon = if (selectedTab == 0) Icons.Default.Home else Icons.Default.List
     val currentTabClick = if (selectedTab == 0) onHomeClick else onListClick
 
+    // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.BottomCenter
     ) {
+        // 修改点 2：在 Row 上增加底部内边距 padding(bottom = 20.dp)
+        // 这一步非常关键：它为 Card 下方的阴影留出了 20dp 的“安全区”
         Row(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
+                .padding(bottom = 20.dp) // 新增：给底部阴影留出空间
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
