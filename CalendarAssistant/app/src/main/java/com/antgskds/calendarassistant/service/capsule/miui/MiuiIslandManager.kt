@@ -11,7 +11,7 @@ import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
@@ -98,8 +98,8 @@ object MiuiIslandManager {
     }
 
     private fun isCapsuleActive(item: CapsuleUiState.Active.CapsuleItem, now: Long): Boolean {
-        val extraMillis = if (item.type == CapsuleService.TYPE_PICKUP ||
-            item.type == CapsuleService.TYPE_PICKUP_EXPIRED
+        val extraMillis = if (item.type == CapsuleStateManager.TYPE_PICKUP ||
+            item.type == CapsuleStateManager.TYPE_PICKUP_EXPIRED
         ) {
             5 * 60 * 1000L
         } else {
@@ -183,7 +183,7 @@ object MiuiIslandManager {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): Pair<Icon?, Icon?> {
-        val iconResId = IconUtils.getSmallIconForCapsule(item)
+        val iconResId = IconUtils.getSmallIconForCapsule(context, item)
         val bitmap = CapsuleUiUtils.drawableToBitmap(context, iconResId)
         if (bitmap != null) {
             val icon = Icon.createWithBitmap(bitmap)
@@ -281,8 +281,8 @@ object MiuiIslandManager {
         actions: List<MiuiIslandAction>
     ): Int {
         return when (item.type) {
-            CapsuleService.TYPE_OCR_PROGRESS,
-            CapsuleService.TYPE_OCR_RESULT -> MiuiIslandRequest.TEMPLATE_TEXT_ICON
+            CapsuleStateManager.TYPE_OCR_PROGRESS,
+            CapsuleStateManager.TYPE_OCR_RESULT -> MiuiIslandRequest.TEMPLATE_TEXT_ICON
             else -> if (display.action != null && actions.isNotEmpty()) {
                 MiuiIslandRequest.TEMPLATE_TEXT_ICON_ACTION
             } else {
@@ -299,8 +299,8 @@ object MiuiIslandManager {
             EventTags.GENERAL -> "日程"
             EventType.COURSE -> "课程"
             else -> when (item.type) {
-                CapsuleService.TYPE_PICKUP,
-                CapsuleService.TYPE_PICKUP_EXPIRED -> if (isFoodPickup(item.description)) "取餐" else "取件"
+                CapsuleStateManager.TYPE_PICKUP,
+                CapsuleStateManager.TYPE_PICKUP_EXPIRED -> if (isFoodPickup(item.description)) "取餐" else "取件"
                 else -> "日程"
             }
         }
@@ -332,9 +332,9 @@ object MiuiIslandManager {
 
     private fun buildSummaryStatus(item: CapsuleUiState.Active.CapsuleItem): String {
         return when (item.type) {
-            CapsuleService.TYPE_OCR_RESULT -> "已完成"
-            CapsuleService.TYPE_OCR_PROGRESS,
-            CapsuleService.TYPE_NETWORK_SPEED -> "进行中"
+            CapsuleStateManager.TYPE_OCR_RESULT -> "已完成"
+            CapsuleStateManager.TYPE_OCR_PROGRESS,
+            CapsuleStateManager.TYPE_NETWORK_SPEED -> "进行中"
             else -> {
                 val now = System.currentTimeMillis()
                 if (now < item.startMillis) "即将进行" else "进行中"

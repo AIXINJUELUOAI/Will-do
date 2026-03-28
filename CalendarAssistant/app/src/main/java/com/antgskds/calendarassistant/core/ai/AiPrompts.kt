@@ -48,16 +48,37 @@ object AiPrompts {
         保留原始换行。
         Title：
            - 🚄 火车/高铁："🚄 车次 路线"（示例："🚄 G1008 深圳-武汉"）
+           - ✈️ 航班："✈️ 航班号 航线"（示例："✈️ CA1301 北京-上海"）
            - 🚖 打车/网约车：优先 "🚖 颜色·车型 车牌"，其次 "🚖 车型 车牌"，最后 "🚖 平台 车牌"
-           - 📦 快递类："📦 菜鸟 1234"，"📦 圆通快递 1-1-8478"，"📦 取件 1234"
-           - 🍔 餐饮类："🍔 取餐 A05"，"🍔 麦当劳 A114"
+           - 📦 取件："📦 菜鸟 1234"，"📦 圆通快递 1-1-8478"，"📦 取件 1234"
+           - 🍔 取餐："🍔 取餐 A05"，"🍔 麦当劳 A114"
+           - 🎫 取票："🎫 取票 1234 56"
+           - 🚚 寄件："🚚 寄件 1234"
         description：
-           - 火车：【列车】车次|检票口|座位号
-           - 打车：【用车】颜色|车型|车牌
-           - 快递类：【取件】号码|品牌|位置
-           - 餐饮类：【取餐】号码|品牌|位置
-           
+           - 🚄 火车：【列车】车次|检票口|座位号
+           - ✈️ 航班：【航班】航班号|登机口|座位号
+           - 🚖 打车：【用车】颜色|车型|车牌
+           - 📦 取件：【取件】取件码|品牌|位置
+           - 🍔 取餐：【取餐】取餐码|品牌|位置
+           - 🎫 取票：【取票】取票号|品牌|位置
+           - 🚚 寄件：【寄件】寄件码|品牌|地点
+
            endTime = startTime + 1h
+    """.trimIndent()
+
+    private val defaultRulePatch = """
+        规则补丁（优先级最高）：
+        1. description 必须以 【中文名】 开头。
+        2. 规则格式：
+           - train: 【列车】车次|检票口|座位号
+           - taxi: 【用车】颜色|车型|车牌
+           - pickup: 【取件】取件码|品牌|位置
+           - food: 【取餐】取餐码|品牌|位置
+           - ticket: 【取票】取票码|品牌|位置
+           - sender: 【寄件】寄件码|品牌|地点
+           - flight: 【航班】航班号|登机口|座位号
+           - general: 【日程】备注（或普通描述）
+        3. tag 字段仍按 ruleId 填写（如 general/train/taxi/pickup/food/ticket/sender/flight 等）。
     """.trimIndent()
 
     private val defaultMmUnifiedPrompt = """
@@ -77,9 +98,9 @@ object AiPrompts {
               "startTime": "yyyy-MM-dd HH:mm",
               "endTime": "yyyy-MM-dd HH:mm",
               "location": "地址",
-              "description": "备注；取件类请用格式：【取件】号码|品牌|位置",
+                "description": "备注；取件类请用格式：【取件】取件码|品牌|位置",
               "type": "event",
-              "tag": "general | train | taxi | pickup"
+              "tag": "general | train | taxi | flight | pickup | food | ticket | sender"
             }
           ]
         }
@@ -104,17 +125,17 @@ object AiPrompts {
                   "startTime": "yyyy-MM-dd HH:mm",
                   "endTime": "yyyy-MM-dd HH:mm",
                   "location": "地址",
-                  "description": "备注",
+              "description": "备注（格式：【日程】...）",
                   "type": "event",
-                  "tag": "general | train | taxi"
+                  "tag": "general | train | taxi | flight"
                 }
               ]
             }
         """.trimIndent(),
         pickupPrompt = """
-            提取输入中的取件/取餐信息。文本跨行重构语意，图片识别APP界面或条形码凭证。
+            提取输入中的取件/取餐/取票/寄件信息。文本跨行重构语意，图片识别APP界面或条形码凭证。
 
-            任务：提取取件码、外卖、快递等信息。请强制使用当前系统时间
+            任务：提取取件码、外卖、快递、取票码、寄件码等信息。请强制使用当前系统时间
             【当前系统时间】：{{timeStr}}
             【输出格式】
             仅输出纯 JSON 对象：
@@ -125,9 +146,9 @@ object AiPrompts {
                   "startTime": "yyyy-MM-dd HH:mm",
                   "endTime": "yyyy-MM-dd HH:mm",
                   "location": "地址",
-                  "description": "格式：【取件】号码|品牌|位置",
+              "description": "格式见规则补丁",
                   "type": "event",
-                  "tag": "pickup"
+                  "tag": "pickup | food | ticket | sender"
                 }
               ]
             }
@@ -206,7 +227,7 @@ object AiPrompts {
         var version = 1
         val fields = mutableMapOf<String, StringBuilder>()
         var currentField = ""
-        
+
         for (line in lines) {
             val trimmed = line.trim()
             when {
@@ -225,7 +246,7 @@ object AiPrompts {
                 }
             }
         }
-        
+
         return RemotePrompts(
             version = version,
             promptHeader = fields["promptHeader"]?.toString()?.trimEnd()?.replace("\n", "\\n") ?: "",
@@ -283,16 +304,20 @@ object AiPrompts {
         context: Context,
         timeStr: String,
         dateToday: String,
-        dayOfWeek: String
+        dayOfWeek: String,
+        rulePatch: String? = null
     ): String {
         val prompts = activePrompts(context)
-        return render(
+        return appendRulePatch(
+            render(
             template = withPromptHeader(prompts.promptHeader, prompts.userTextPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
                 "dateToday" to dateToday,
                 "dayOfWeek" to dayOfWeek
             )
+        ),
+            rulePatch
         )
     }
 
@@ -304,10 +329,12 @@ object AiPrompts {
         dateBeforeYesterday: String,
         nowTime: String,
         nowPlusHourTime: String,
-        dayOfWeek: String
+        dayOfWeek: String,
+        rulePatch: String? = null
     ): String {
         val prompts = activePrompts(context)
-        return render(
+        return appendRulePatch(
+            render(
             template = withPromptHeader(prompts.promptHeader, prompts.mmUnifiedPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
@@ -318,6 +345,8 @@ object AiPrompts {
                 "nowPlusHourTime" to nowPlusHourTime,
                 "dayOfWeek" to dayOfWeek
             )
+        ),
+            rulePatch
         )
     }
 
@@ -327,10 +356,12 @@ object AiPrompts {
         dateToday: String,
         dateYesterday: String,
         dateBeforeYesterday: String,
-        dayOfWeek: String
+        dayOfWeek: String,
+        rulePatch: String? = null
     ): String {
         val prompts = activePrompts(context)
-        return render(
+        return appendRulePatch(
+            render(
             template = withPromptHeader(prompts.promptHeader, prompts.schedulePrompt),
             values = mapOf(
                 "timeStr" to timeStr,
@@ -340,6 +371,8 @@ object AiPrompts {
                 "dayOfWeek" to dayOfWeek,
                 "copyrightMarker" to COPYRIGHT_MARKER
             )
+        ),
+            rulePatch
         )
     }
 
@@ -350,7 +383,8 @@ object AiPrompts {
         nowPlusHourTime: String
     ): String {
         val prompts = activePrompts(context)
-        return render(
+        return appendRulePatch(
+            render(
             template = withPromptHeader(prompts.promptHeader, prompts.pickupPrompt),
             values = mapOf(
                 "timeStr" to timeStr,
@@ -359,6 +393,16 @@ object AiPrompts {
                 "copyrightMarker" to COPYRIGHT_MARKER
             )
         )
+        )
+    }
+
+    private fun appendRulePatch(prompt: String, extraPatch: String? = null): String {
+        val extra = extraPatch?.trim().orEmpty()
+        return if (extra.isBlank()) {
+            prompt + "\n\n" + defaultRulePatch
+        } else {
+            prompt + "\n\n" + defaultRulePatch + "\n\n" + extra
+        }
     }
 
     private fun activePrompts(context: Context): RemotePrompts {

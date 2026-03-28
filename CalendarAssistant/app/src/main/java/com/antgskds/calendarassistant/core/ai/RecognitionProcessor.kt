@@ -8,6 +8,8 @@ import com.antgskds.calendarassistant.core.util.ImageCompressionUtils
 import com.antgskds.calendarassistant.core.util.LayoutAnalyzer
 import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.core.ai.RulePatchProvider
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.ModelMessage
@@ -28,6 +30,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -57,6 +60,18 @@ data class OcrResult(
     val reconstructedText: String,
     val screenWidth: Int,
     val screenHeight: Int
+)
+
+private data class AiEventFeature(
+    val event: CalendarEventData,
+    val normalizedTitle: String,
+    val startTime: LocalDateTime?,
+    val pickupCode: String?,
+    val pickupPlatform: String?,
+    val ridePlate: String?,
+    val trainNo: String?,
+    val hasMicroFormat: Boolean,
+    val isPickup: Boolean
 )
 
 object RecognitionProcessor {
@@ -95,11 +110,14 @@ object RecognitionProcessor {
         val dateToday = now.format(dtfDate)
         val dayOfWeek = getDayOfWeek(now)
 
+        val rulePatch = RulePatchProvider.loadSchedulePatch(appContext)
+
         val prompt = AiPrompts.getUserTextPrompt(
             context = appContext,
             timeStr = timeStr,
             dateToday = dateToday,
-            dayOfWeek = dayOfWeek
+            dayOfWeek = dayOfWeek,
+            rulePatch = rulePatch
         )
 
         Log.d(TAG, "========== [AI 自然语言输入] ==========")
@@ -149,7 +167,8 @@ object RecognitionProcessor {
                         Log.d(TAG, "[AI文本输入] 解析结果为空")
                         AnalysisResult.Empty()
                     } else {
-                        AnalysisResult.Success(parsedEvent)
+                        val normalized = enforceRuleHeaders(listOf(parsedEvent)).first()
+                        AnalysisResult.Success(normalized)
                     }
                 }
                 is ApiCallResult.Failure -> {
@@ -241,11 +260,7 @@ object RecognitionProcessor {
                 }
 
                 val allEvents = refinedScheduleEvents + pickupEvents
-                val finalEvents = allEvents
-                    .groupBy { "${it.title}|${it.startTime}" }
-                    .map { (_, events) ->
-                        events.maxByOrNull { if (it.tag == "pickup") 1 else 0 }!!
-                    }
+                val finalEvents = deduplicateAiEvents(allEvents)
 
                 if (finalEvents.isNotEmpty()) {
                     AnalysisResult.Success(finalEvents)
@@ -275,13 +290,16 @@ object RecognitionProcessor {
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+        val rulePatch = RulePatchProvider.loadSchedulePatch(context)
+
         val schedulePrompt = AiPrompts.getSchedulePrompt(
             context = context.applicationContext,
             timeStr = now.format(dtfFull),
             dateToday = now.format(dtfDate),
             dateYesterday = now.minusDays(1).format(dtfDate),
             dateBeforeYesterday = now.minusDays(2).format(dtfDate),
-            dayOfWeek = getDayOfWeek(now)
+            dayOfWeek = getDayOfWeek(now),
+            rulePatch = rulePatch
         )
 
         return executeAiRequest(schedulePrompt, extractedText, settings, "日程识别")
@@ -345,7 +363,7 @@ object RecognitionProcessor {
                     if (aiResponse.events.isEmpty()) {
                         AnalysisResult.Empty()
                     } else {
-                        AnalysisResult.Success(aiResponse.events)
+                        AnalysisResult.Success(enforceRuleHeaders(aiResponse.events))
                     }
                 }
                 is ApiCallResult.Failure -> {
@@ -383,6 +401,8 @@ object RecognitionProcessor {
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
         val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
+        val rulePatch = RulePatchProvider.loadSchedulePatch(context)
+
         val prompt = AiPrompts.getMultimodalUnifiedPrompt(
             context = context.applicationContext,
             timeStr = now.format(dtfFull),
@@ -391,7 +411,8 @@ object RecognitionProcessor {
             dateBeforeYesterday = now.minusDays(2).format(dtfDate),
             nowTime = now.format(dtfTime),
             nowPlusHourTime = now.plusHours(1).format(dtfTime),
-            dayOfWeek = getDayOfWeek(now)
+            dayOfWeek = getDayOfWeek(now),
+            rulePatch = rulePatch
         )
 
         val imageBytes = bitmapToJpegBytes(bitmap)
@@ -408,27 +429,24 @@ object RecognitionProcessor {
             )) {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
-                    val events = try {
-                        jsonParser.decodeFromString<AiResponse>(cleanJson).events
-                    } catch (_: Exception) {
-                        val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
-                        listOf(single)
-                    }
+                        val events = try {
+                            jsonParser.decodeFromString<AiResponse>(cleanJson).events
+                        } catch (_: Exception) {
+                            val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
+                            listOf(single)
+                        }
+                        val normalizedEvents = enforceRuleHeaders(events)
 
-                    val pickupEvents = events.filter {
-                        it.tag == EventTags.PICKUP || it.type == "pickup"
-                    }
-                    val scheduleEvents = events.filter {
-                        it.tag != EventTags.PICKUP && it.type != "pickup"
-                    }
+                        val pickupEvents = normalizedEvents.filter {
+                            it.tag == EventTags.PICKUP || it.type == "pickup"
+                        }
+                        val scheduleEvents = normalizedEvents.filter {
+                            it.tag != EventTags.PICKUP && it.type != "pickup"
+                        }
                     val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
 
-                    val mergedEvents = refinedScheduleEvents + pickupEvents
-                    val finalEvents = mergedEvents
-                        .groupBy { "${it.title}|${it.startTime}" }
-                        .mapNotNull { (_, events) ->
-                            events.maxByOrNull { if (it.tag == EventTags.PICKUP) 1 else 0 }
-                        }
+                        val mergedEvents = refinedScheduleEvents + pickupEvents
+                        val finalEvents = deduplicateAiEvents(mergedEvents)
 
                     if (finalEvents.isEmpty()) {
                         AnalysisResult.Empty()
@@ -493,6 +511,59 @@ object RecognitionProcessor {
             else -> ""
         }
         return if (tag.isBlank()) "网络连接失败" else "网络连接失败 ($tag)"
+    }
+
+    private fun enforceRuleHeaders(events: List<CalendarEventData>): List<CalendarEventData> {
+        return events.map { event ->
+            val ruleId = normalizeRuleId(event)
+            val description = normalizeDescriptionHeader(event.description, ruleId)
+            event.copy(
+                description = description,
+                tag = ruleId
+            )
+        }
+    }
+
+    private fun normalizeRuleId(event: CalendarEventData): String {
+        val fromHeader = RuleMatchingEngine.resolvePayload(event.description, event.tag)?.ruleId
+        if (!fromHeader.isNullOrBlank()) return fromHeader
+
+        val raw = event.tag.trim().lowercase()
+        if (raw == RuleMatchingEngine.RULE_TRAIN ||
+            raw == RuleMatchingEngine.RULE_TAXI ||
+            raw == RuleMatchingEngine.RULE_PICKUP ||
+            raw == RuleMatchingEngine.RULE_FLIGHT ||
+            raw.matches(Regex("[a-z0-9_]+"))) {
+            return raw
+        }
+
+        val type = event.type.trim().lowercase()
+        return when (type) {
+            "pickup" -> RuleMatchingEngine.RULE_PICKUP
+            else -> RuleMatchingEngine.RULE_GENERAL
+        }
+    }
+
+    private fun normalizeDescriptionHeader(description: String, ruleId: String): String {
+        val displayName = when (ruleId) {
+            RuleMatchingEngine.RULE_TRAIN -> "列车"
+            RuleMatchingEngine.RULE_TAXI -> "用车"
+            RuleMatchingEngine.RULE_FLIGHT -> "航班"
+            RuleMatchingEngine.RULE_PICKUP -> "取件"
+            RuleMatchingEngine.RULE_FOOD -> "取餐"
+            RuleMatchingEngine.RULE_TICKET -> "取票"
+            RuleMatchingEngine.RULE_SENDER -> "寄件"
+            else -> "日程"
+        }
+        val clean = description.trim()
+        if (clean.isBlank()) return "【$displayName】"
+
+        val payload = RuleMatchingEngine.resolvePayload(clean, ruleId)
+        if (payload != null) {
+            return "【$displayName】${payload.payload}".trim()
+        }
+
+        return "【$displayName】$clean".trim()
     }
 
     private val fullDateRegex = Regex("(\\d{4})[年/\\-.](\\d{1,2})[月/\\-.](\\d{1,2})(?:日|号)?")
@@ -662,5 +733,187 @@ object RecognitionProcessor {
             DayOfWeek.SATURDAY -> "星期六"
             DayOfWeek.SUNDAY -> "星期日"
         }
+    }
+
+    private val timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    private val licensePlateRegex = Regex("[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9·•\\.]{4,6}")
+    private val trainNoRegex = Regex("[GCDZTKSYL]\\d{1,4}")
+    private const val DUPLICATE_TIME_TOLERANCE_MINUTES = 10L
+
+    private fun deduplicateAiEvents(events: List<CalendarEventData>): List<CalendarEventData> {
+        if (events.size <= 1) return events
+        val features = events.map { buildFeature(it) }
+        val consumed = BooleanArray(events.size)
+
+        val pickupGroups = mutableMapOf<String, MutableList<Int>>()
+        val rideGroups = mutableMapOf<String, MutableList<Int>>()
+        val trainGroups = mutableMapOf<String, MutableList<Int>>()
+
+        features.forEachIndexed { index, feature ->
+            feature.pickupCode?.takeIf { it.isNotBlank() }?.let {
+                pickupGroups.getOrPut(it) { mutableListOf() }.add(index)
+            }
+            feature.ridePlate?.takeIf { it.isNotBlank() }?.let {
+                rideGroups.getOrPut(it) { mutableListOf() }.add(index)
+            }
+            feature.trainNo?.takeIf { it.isNotBlank() }?.let {
+                trainGroups.getOrPut(it) { mutableListOf() }.add(index)
+            }
+        }
+
+        fun consumeGroup(group: List<Int>) {
+            val active = group.filterNot { consumed[it] }
+            if (active.size <= 1) return
+            val best = active.maxByOrNull { scoreFeature(features[it]) } ?: return
+            active.forEach { if (it != best) consumed[it] = true }
+        }
+
+        pickupGroups.values.forEach { consumeGroup(it) }
+        rideGroups.values.forEach { consumeGroup(it) }
+        trainGroups.values.forEach { consumeGroup(it) }
+
+        val pickupIndices = features.indices.filter { !consumed[it] && features[it].isPickup }
+        val pickupFeatures = pickupIndices.map { it to features[it] }
+        features.forEachIndexed { index, feature ->
+            if (consumed[index] || feature.isPickup) return@forEachIndexed
+            val matchedPickup = pickupFeatures.firstOrNull { (_, pickup) ->
+                isPickupDuplicate(feature, pickup)
+            }
+            if (matchedPickup != null) {
+                consumed[index] = true
+            }
+        }
+
+        val remaining = features.indices.filterNot { consumed[it] }
+        val groupedByTitle = remaining.groupBy { features[it].normalizedTitle }.filterKeys { it.isNotBlank() }
+        groupedByTitle.values.forEach { indices ->
+            if (indices.size <= 1) return@forEach
+            val sorted = indices.sortedBy { features[it].startTime ?: LocalDateTime.MAX }
+            var anchor = sorted.first()
+            for (i in 1 until sorted.size) {
+                val candidate = sorted[i]
+                if (isWeakDuplicate(features[anchor], features[candidate])) {
+                    val winner = if (scoreFeature(features[anchor]) >= scoreFeature(features[candidate])) anchor else candidate
+                    val loser = if (winner == anchor) candidate else anchor
+                    consumed[loser] = true
+                    anchor = winner
+                } else {
+                    anchor = candidate
+                }
+            }
+        }
+
+        return features.indices.filterNot { consumed[it] }.map { features[it].event }
+    }
+
+    private fun buildFeature(event: CalendarEventData): AiEventFeature {
+        val title = event.title.trim()
+        val description = event.description.trim()
+        val normalizedTitle = normalizeText(title)
+        val startTime = parseDateTime(event.startTime)
+
+        val hasPickupMicro = description.startsWith("【取件】") || description.startsWith("【取餐】") || description.startsWith("【pickup】")
+        val hasRideMicro = description.startsWith("【用车】") || description.startsWith("【taxi】")
+        val hasTrainMicro = description.startsWith("【列车】") || description.startsWith("【train】")
+        val hasMicroFormat = hasPickupMicro || hasRideMicro || hasTrainMicro
+
+        var pickupCode: String? = null
+        var pickupPlatform: String? = null
+        if (hasPickupMicro) {
+            val payload = RuleMatchingEngine.resolvePayload(description, RuleMatchingEngine.RULE_PICKUP)
+            if (payload?.ruleId == RuleMatchingEngine.RULE_PICKUP) {
+                val fields = RuleMatchingEngine.splitFields(payload.payload, 3)
+                pickupCode = fields[0].trim().ifBlank { null }
+                pickupPlatform = fields[1].trim().ifBlank { null }
+            }
+        }
+
+        val ridePlate = extractLicensePlate(description).ifBlankOrNull()
+            ?: extractLicensePlate(title).ifBlankOrNull()
+
+        val trainNo = extractTrainNo(description).ifBlankOrNull()
+            ?: extractTrainNo(title).ifBlankOrNull()
+
+        val isPickup = event.tag == EventTags.PICKUP || event.type == "pickup" || hasPickupMicro
+
+        return AiEventFeature(
+            event = event,
+            normalizedTitle = normalizedTitle,
+            startTime = startTime,
+            pickupCode = pickupCode,
+            pickupPlatform = pickupPlatform,
+            ridePlate = ridePlate,
+            trainNo = trainNo,
+            hasMicroFormat = hasMicroFormat,
+            isPickup = isPickup
+        )
+    }
+
+    private fun scoreFeature(feature: AiEventFeature): Int {
+        var score = 0
+        if (feature.hasMicroFormat) score += 5
+        if (!feature.pickupCode.isNullOrBlank() || !feature.ridePlate.isNullOrBlank() || !feature.trainNo.isNullOrBlank()) score += 3
+        if (feature.startTime != null) score += 2
+        val descLen = feature.event.description.trim().length
+        val titleLen = feature.event.title.trim().length
+        if (descLen > titleLen) score += 1
+        if (descLen >= 12) score += 1
+        return score
+    }
+
+    private fun isPickupDuplicate(candidate: AiEventFeature, pickup: AiEventFeature): Boolean {
+        val platform = pickup.pickupPlatform?.let { normalizeText(it) }.orEmpty()
+        val pickupTitle = pickup.normalizedTitle
+        val candidateTitle = candidate.normalizedTitle
+
+        val platformMatch = platform.isNotBlank() && (candidateTitle.contains(platform) || platform.contains(candidateTitle))
+        val titleMatch = pickupTitle.isNotBlank() && candidateTitle.isNotBlank() && (candidateTitle.contains(pickupTitle) || pickupTitle.contains(candidateTitle))
+        if (!platformMatch && !titleMatch) return false
+
+        val timeDiff = minutesDiff(candidate.startTime, pickup.startTime)
+        return timeDiff == null || timeDiff <= DUPLICATE_TIME_TOLERANCE_MINUTES
+    }
+
+    private fun isWeakDuplicate(a: AiEventFeature, b: AiEventFeature): Boolean {
+        if (a.normalizedTitle.isBlank() || b.normalizedTitle.isBlank()) return false
+        if (a.normalizedTitle != b.normalizedTitle) return false
+        val timeDiff = minutesDiff(a.startTime, b.startTime) ?: return false
+        return timeDiff <= DUPLICATE_TIME_TOLERANCE_MINUTES
+    }
+
+    private fun minutesDiff(a: LocalDateTime?, b: LocalDateTime?): Long? {
+        if (a == null || b == null) return null
+        return kotlin.math.abs(ChronoUnit.MINUTES.between(a, b))
+    }
+
+    private fun parseDateTime(value: String?): LocalDateTime? {
+        val text = value?.trim().orEmpty()
+        if (text.isBlank()) return null
+        return try {
+            LocalDateTime.parse(text, timeFormatter)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractLicensePlate(text: String): String? {
+        val match = licensePlateRegex.find(text)
+        return match?.value
+    }
+
+    private fun extractTrainNo(text: String): String? {
+        val match = trainNoRegex.find(text)
+        return match?.value
+    }
+
+    private fun normalizeText(text: String): String {
+        val cleaned = text.trim().lowercase()
+        if (cleaned.isBlank()) return ""
+        return cleaned.replace(Regex("[\\s\\p{Punct}·•、，。；：！!？?（）()\\[\\]【】{}<>《》“”\"'`~|/_\\-]+"), "")
+    }
+
+    private fun String?.ifBlankOrNull(): String? {
+        val value = this?.trim().orEmpty()
+        return value.ifBlank { null }
     }
 }

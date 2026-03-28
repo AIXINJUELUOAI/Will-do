@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -46,7 +47,7 @@ class MainViewModel(
     private val repository: AppRepository
 ) : ViewModel() {
 
-    // ✅ 时间触发器：每 10 秒触发一次，确保过期状态能及时更新
+    // ✅ 精确过期触发器：仅在事件实际过期时触发 UI 刷新，避免无效轮询
     private val _timeTrigger = MutableStateFlow(System.currentTimeMillis())
     private val _promptUpdateDialogState = MutableStateFlow<PromptUpdateDialogState?>(null)
     val promptUpdateDialogState: StateFlow<PromptUpdateDialogState?> = _promptUpdateDialogState.asStateFlow()
@@ -61,10 +62,15 @@ class MainViewModel(
     private var pendingPromptUpdate: RemotePrompts? = null
 
     init {
-        // 启动定时器
+        // 精确定时器：等待最近的未过期事件过期时才触发刷新
         viewModelScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(10_000)  // 10 秒
+                val delayMs = calculateDelayToNextExpiration()
+                if (delayMs > 0) {
+                    kotlinx.coroutines.delay(delayMs)
+                } else {
+                    kotlinx.coroutines.delay(60_000L) // 保底：无未过期事件时 60 秒检查一次
+                }
                 _timeTrigger.value = System.currentTimeMillis()
             }
         }
@@ -78,6 +84,33 @@ class MainViewModel(
         }
 
         checkPromptUpdatesSilently()
+    }
+
+    /**
+     * 计算距离下一个事件过期还有多少毫秒。
+     * 遍历所有事件，找到尚未过期但即将过期的事件中，最早到达结束时间的那个。
+     */
+    private fun calculateDelayToNextExpiration(): Long {
+        val now = LocalDateTime.now()
+        var nearestEndMillis = Long.MAX_VALUE
+
+        for (event in repository.events.value) {
+            if (event.isRecurringParent) continue
+            try {
+                val timeParts = event.endTime.split(":")
+                val hour = timeParts.getOrElse(0) { "23" }.toIntOrNull() ?: 23
+                val minute = timeParts.getOrElse(1) { "59" }.toIntOrNull() ?: 59
+                val endDateTime = LocalDateTime.of(event.endDate, java.time.LocalTime.of(hour, minute))
+                if (endDateTime.isAfter(now)) {
+                    val diff = ChronoUnit.MILLIS.between(now, endDateTime)
+                    if (diff in 1 until nearestEndMillis) {
+                        nearestEndMillis = diff
+                    }
+                }
+            } catch (_: Exception) { continue }
+        }
+
+        return if (nearestEndMillis == Long.MAX_VALUE) -1L else nearestEndMillis
     }
 
     // 归档事件（公开访问）

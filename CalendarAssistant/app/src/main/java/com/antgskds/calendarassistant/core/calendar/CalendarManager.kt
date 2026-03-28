@@ -11,6 +11,8 @@ import android.provider.CalendarContract.ExtendedProperties
 import android.provider.CalendarContract.Events
 import android.provider.CalendarContract.Instances
 import android.util.Log
+import com.antgskds.calendarassistant.data.db.entity.EventInstanceEntity
+import com.antgskds.calendarassistant.data.db.entity.EventMasterEntity
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.TimeNode
@@ -21,6 +23,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.min
 
@@ -53,6 +56,8 @@ class CalendarManager(private val context: Context) {
     }
 
     private val contentResolver: ContentResolver = context.contentResolver
+    private val exDateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
+    private val systemZone = ZoneId.systemDefault()
 
     // ==================== 日历管理 ====================
 
@@ -190,6 +195,62 @@ class CalendarManager(private val context: Context) {
             success
         } catch (e: Exception) {
             Log.e(TAG, "更新事件异常: $eventId", e)
+            false
+        }
+    }
+
+    suspend fun createRecurringEvent(
+        master: EventMasterEntity,
+        instance: EventInstanceEntity,
+        tag: String,
+        excludedStartTimes: List<Long>,
+        calendarId: Long
+    ): Long = withContext(Dispatchers.IO) {
+        try {
+            val values = buildRecurringEventContentValues(master, instance, excludedStartTimes, calendarId)
+            val uri = contentResolver.insert(Events.CONTENT_URI, values)
+            val eventId = uri?.lastPathSegment?.toLongOrNull() ?: -1L
+
+            if (eventId != -1L) {
+                if (!upsertEventMetadata(eventId, master.masterId, master.eventType, tag)) {
+                    Log.w(TAG, "重复事件元数据保存失败: $eventId - ${master.title}")
+                }
+                Log.d(TAG, "创建重复事件成功: $eventId - ${master.title}")
+            } else {
+                Log.e(TAG, "创建重复事件失败: ${master.title}")
+            }
+
+            eventId
+        } catch (e: Exception) {
+            Log.e(TAG, "创建重复事件异常: ${master.title}", e)
+            -1L
+        }
+    }
+
+    suspend fun updateRecurringEvent(
+        eventId: Long,
+        master: EventMasterEntity,
+        instance: EventInstanceEntity,
+        tag: String,
+        excludedStartTimes: List<Long>,
+        calendarId: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val values = buildRecurringEventContentValues(master, instance, excludedStartTimes, calendarId)
+            val uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId)
+            val rowsUpdated = contentResolver.update(uri, values, null, null)
+            val success = rowsUpdated > 0
+            if (success) {
+                if (!upsertEventMetadata(eventId, master.masterId, master.eventType, tag)) {
+                    Log.w(TAG, "重复事件元数据更新失败: $eventId - ${master.title}")
+                }
+                Log.d(TAG, "更新重复事件成功: $eventId - ${master.title}")
+            } else {
+                Log.w(TAG, "更新重复事件失败（未找到记录）: $eventId")
+            }
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "更新重复事件异常: $eventId", e)
             false
         }
     }
@@ -708,13 +769,22 @@ class CalendarManager(private val context: Context) {
     }
 
     private fun upsertEventMetadata(eventId: Long, event: MyEvent): Boolean {
+        return upsertEventMetadata(eventId, event.id, event.eventType, event.tag)
+    }
+
+    private fun upsertEventMetadata(
+        eventId: Long,
+        appId: String,
+        eventType: String,
+        tag: String
+    ): Boolean {
         return try {
             deleteEventMetadata(eventId)
 
             val metadataEntries = listOf(
-                EXTENDED_PROPERTY_APP_ID to event.id,
-                EXTENDED_PROPERTY_EVENT_TYPE to event.eventType,
-                EXTENDED_PROPERTY_TAG to event.tag
+                EXTENDED_PROPERTY_APP_ID to appId,
+                EXTENDED_PROPERTY_EVENT_TYPE to eventType,
+                EXTENDED_PROPERTY_TAG to tag
             )
 
             metadataEntries.forEach { (name, value) ->
@@ -838,6 +908,55 @@ class CalendarManager(private val context: Context) {
         }
 
         return values
+    }
+
+    private fun buildRecurringEventContentValues(
+        master: EventMasterEntity,
+        instance: EventInstanceEntity,
+        excludedStartTimes: List<Long>,
+        calendarId: Long
+    ): android.content.ContentValues {
+        val values = android.content.ContentValues()
+
+        values.put(Events.CALENDAR_ID, calendarId)
+        values.put(Events.TITLE, master.title)
+        values.put(Events.EVENT_LOCATION, master.location)
+        values.put(Events.DESCRIPTION, master.description)
+
+        values.put(Events.DTSTART, instance.startTime)
+        values.put(Events.DTEND, instance.endTime)
+        values.put(Events.EVENT_TIMEZONE, systemZone.id)
+        values.put(Events.ALL_DAY, 0)
+
+        values.put(Events.EVENT_COLOR, master.colorArgb)
+
+        val rrule = master.rrule?.trim().orEmpty()
+        if (rrule.isNotBlank()) {
+            values.put(Events.RRULE, rrule)
+        }
+
+        val exDate = buildExDate(excludedStartTimes)
+        if (!exDate.isNullOrBlank()) {
+            values.put(Events.EXDATE, exDate)
+        }
+
+        if (master.remindersJson.isNotBlank() && master.remindersJson != "[]") {
+            values.put(Events.HAS_ALARM, 1)
+        }
+
+        return values
+    }
+
+    private fun buildExDate(excludedStartTimes: List<Long>): String? {
+        if (excludedStartTimes.isEmpty()) return null
+        return excludedStartTimes
+            .sorted()
+            .joinToString(",") { millis ->
+                Instant.ofEpochMilli(millis)
+                    .atZone(systemZone)
+                    .toLocalDateTime()
+                    .format(exDateFormatter)
+            }
     }
 
     /**

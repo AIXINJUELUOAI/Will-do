@@ -14,11 +14,12 @@ import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 
@@ -46,10 +47,10 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         val whiteIconBitmap = rawBitmap?.let { CapsuleUiUtils.tintBitmap(it, Color.WHITE) }
         val capsuleIcon = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
 
-        val remoteViews = if (item.type == CapsuleService.TYPE_NETWORK_SPEED) {
+        val remoteViews = if (item.type == CapsuleStateManager.TYPE_NETWORK_SPEED) {
             createNetworkSpeedRemoteViews(context, display.primaryText, subtitleText)
         } else {
-            createRemoteViews(context, item.type, item.eventType, display.primaryText, subtitleText)
+            createRemoteViews(context, item.type, item.eventType, display.primaryText, subtitleText, iconResId)
         }
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -206,12 +207,14 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         capsuleType: Int,
         eventType: String,
         primaryText: String,
-        secondaryText: String?
+        secondaryText: String?,
+        iconResId: Int
     ): RemoteViews {
+        val resolvedIcon = if (iconResId != 0) iconResId else resolveFlymeIcon(eventType, capsuleType)
         return RemoteViews(context.packageName, R.layout.notification_live_flyme).apply {
             setTextViewText(R.id.tv_main_content, primaryText)
             setTextViewText(R.id.tv_sub_info, secondaryText ?: "")
-            setImageViewResource(R.id.iv_icon, resolveFlymeIcon(eventType, capsuleType))
+            setImageViewResource(R.id.iv_icon, resolvedIcon)
         }
     }
 
@@ -237,16 +240,29 @@ class FlymeCapsuleProvider : ICapsuleProvider {
 
     private fun resolveFlymeIcon(eventType: String, capsuleType: Int): Int {
         return when (capsuleType) {
-            CapsuleService.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
-            CapsuleService.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
-            else -> when (eventType) {
-                EventTags.PICKUP -> R.drawable.ic_stat_package
-                EventTags.TRAIN -> R.drawable.ic_stat_train
-                EventTags.TAXI -> R.drawable.ic_stat_car
-                EventType.COURSE -> R.drawable.ic_stat_course
-                EventTags.GENERAL -> R.drawable.ic_stat_event
-                EventType.EVENT -> R.drawable.ic_stat_event
-                else -> R.drawable.ic_stat_event
+            CapsuleStateManager.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
+            CapsuleStateManager.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
+            else -> {
+                // 使用 RuleMatchingEngine 解析，fallback 到 eventType
+                val payload = RuleMatchingEngine.resolvePayload(null, eventType)
+                val ruleId = payload?.ruleId ?: eventType
+                // 优先从 RuleRegistry 获取
+                val customIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getCustomCapsuleIconResId(ruleId)
+                if (customIcon != null) return customIcon
+                val defaultIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getIconResId(ruleId)
+                if (defaultIcon != null) return defaultIcon
+                when (ruleId) {
+                    RuleMatchingEngine.RULE_PICKUP -> R.drawable.ic_stat_package
+                    RuleMatchingEngine.RULE_FOOD -> R.drawable.ic_stat_food
+                    RuleMatchingEngine.RULE_TRAIN -> R.drawable.ic_stat_train
+                    RuleMatchingEngine.RULE_TAXI -> R.drawable.ic_stat_car
+                    RuleMatchingEngine.RULE_FLIGHT -> R.drawable.ic_stat_flight
+                    RuleMatchingEngine.RULE_TICKET -> R.drawable.ic_stat_ticket
+                    RuleMatchingEngine.RULE_SENDER -> R.drawable.ic_stat_sender
+                    EventType.COURSE -> R.drawable.ic_stat_course
+                    RuleMatchingEngine.RULE_GENERAL, EventTags.GENERAL -> R.drawable.ic_stat_event
+                    else -> R.drawable.ic_stat_event
+                }
             }
         }
     }

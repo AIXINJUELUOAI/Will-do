@@ -7,7 +7,6 @@ import android.content.Intent
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
@@ -41,22 +40,14 @@ class NativeCapsuleProvider : ICapsuleProvider {
             .setContentTitle(display.primaryText)
             .setContentIntent(createContentPendingIntent(context, item))
             .setOngoing(true)
-            .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .setColor(item.color)
-            .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setGroup("LIVE_CAPSULE_GROUP")
-            .setGroupSummary(false)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
 
         builder.setContentText(display.secondaryText ?: " ")
         display.tertiaryText?.let { builder.setSubText(it) }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-        }
 
         val expandedText = display.expandedText ?: display.secondaryText ?: " "
         builder.setStyle(
@@ -65,9 +56,16 @@ class NativeCapsuleProvider : ICapsuleProvider {
                 .bigText(expandedText)
         )
 
-        applyShortCriticalText(builder, collapsedShortText)
-        requestPromotedOngoing(builder)
-        builder.addExtras(createPromotionExtras(collapsedShortText))
+        // Android 15+: 请求提升为实况通知（Live Activity）
+        if (Build.VERSION.SDK_INT >= 35) {
+            val extras = Bundle()
+            extras.putBoolean("android.requestPromotedOngoing", true)
+            builder.addExtras(extras)
+        }
+        // Android 16+: 在状态栏胶囊中显示简短文本
+        if (Build.VERSION.SDK_INT >= 36) {
+            builder.setShortCriticalText(collapsedShortText)
+        }
 
         display.action?.let { addAction(builder, context, item.id, it) }
 
@@ -114,42 +112,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
             pendingIntent
         ).build()
         builder.addAction(notificationAction)
-    }
-
-    private fun applyShortCriticalText(builder: Notification.Builder, text: String) {
-        if (Build.VERSION.SDK_INT >= 36) {
-            builder.setShortCriticalText(text)
-            return
-        }
-
-        try {
-            val methodSetText = Notification.Builder::class.java.getMethod(
-                "setShortCriticalText",
-                String::class.java
-            )
-            methodSetText.invoke(builder, text)
-        } catch (e: Exception) {
-            Log.d(TAG, "setShortCriticalText not available")
-        }
-    }
-
-    private fun requestPromotedOngoing(builder: Notification.Builder) {
-        try {
-            val methodSetPromoted = Notification.Builder::class.java.getMethod(
-                "setRequestPromotedOngoing",
-                Boolean::class.java
-            )
-            methodSetPromoted.invoke(builder, true)
-        } catch (e: Exception) {
-            Log.d(TAG, "setRequestPromotedOngoing not available")
-        }
-    }
-
-    private fun createPromotionExtras(title: String): Bundle {
-        return Bundle().apply {
-            putBoolean("android.substName", true)
-            putString("android.title", title)
-        }
     }
 
     private fun collapseShortText(text: String): String {
