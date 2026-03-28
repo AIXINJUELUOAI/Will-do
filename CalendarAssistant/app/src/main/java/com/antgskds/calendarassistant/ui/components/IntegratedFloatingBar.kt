@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
@@ -49,7 +50,7 @@ import androidx.compose.ui.unit.dp
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
 // 注意：这个值通常用于外部布局，现在组件内部也自带了阴影缓冲
-val IntegratedFloatingBarBottomSpacing = 24.dp
+val IntegratedFloatingBarBottomSpacing = 0.dp
 
 // --- Hydrogen 核心配色 ---
 val HydrogenBg = Color(0xFFF1F1EA)
@@ -79,7 +80,8 @@ fun IntegratedFloatingBar(
     )
 
     val mdBlend = 1.0f
-    val navBg = lerp(HydrogenBg, MaterialTheme.colorScheme.surfaceContainerLow, mdBlend)
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val navBg = lerp(HydrogenBg, if (isDark) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, mdBlend)
     val navIndicator = lerp(HydrogenIndicator, MaterialTheme.colorScheme.secondaryContainer, mdBlend)
     val navContent = lerp(HydrogenContent, MaterialTheme.colorScheme.onSurfaceVariant, mdBlend)
     val fabBg = lerp(HydrogenFab, MaterialTheme.colorScheme.primary, mdBlend)

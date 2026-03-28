@@ -1,10 +1,8 @@
 package com.antgskds.calendarassistant
 
-import android.app.AlarmManager
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,7 +12,9 @@ import android.util.Log
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
 import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
+import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncWorker
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
+import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
@@ -131,28 +131,9 @@ class App : Application() {
             return
         }
 
-        // 用于反向同步的 CoroutineScope
-        val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
         calendarObserver = CalendarContentObserver(applicationContext) {
-            Log.d(TAG, "检测到系统日历变化（已防抖 2 秒）")
-
-            // 触发反向同步：系统日历 -> App
-            syncScope.launch {
-                try {
-                    val result = repository.syncFromCalendar()
-                    if (result.isSuccess) {
-                        val count = result.getOrNull() ?: 0
-                        if (count > 0) {
-                            Log.d(TAG, "反向同步成功：从系统日历同步了 $count 个事件")
-                        }
-                    } else {
-                        Log.w(TAG, "反向同步失败：${result.exceptionOrNull()?.message}")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "反向同步异常", e)
-                }
-            }
+            Log.d(TAG, "检测到系统日历变化，使用 WorkManager 触发反向同步")
+            CalendarReverseSyncWorker.enqueue(applicationContext)
         }
         calendarObserver?.register()
         Log.d(TAG, "日历内容观察者已初始化并注册")
@@ -191,25 +172,7 @@ class App : Application() {
      * 使用 AlarmManager 每隔一段时间触发一次同步
      */
     private fun startPeriodicSync() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, CalendarSyncReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // 每 1 分钟同步一次
-        val intervalMillis = 60 * 1000L // 1 分钟
-
-        alarmManager.setRepeating(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + intervalMillis,
-            intervalMillis,
-            pendingIntent
-        )
-        Log.d(TAG, "定期日历同步已启动，间隔: 1 分钟")
+        CalendarReverseSyncScheduler.schedule(this)
     }
 }
 
@@ -224,6 +187,8 @@ class CalendarSyncReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "收到定期同步广播")
+
+        CalendarReverseSyncScheduler.schedule(context)
 
         val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val repository = AppRepository.getInstance(context)

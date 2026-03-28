@@ -62,13 +62,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ConfirmationNumber
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.LocalTaxi
+import androidx.compose.material.icons.rounded.ShoppingBag
+import androidx.compose.material.icons.rounded.Undo
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.ShoppingBag
-import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
@@ -109,11 +109,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.core.util.PickupUtils
-import com.antgskds.calendarassistant.core.util.TransportUtils
+import com.antgskds.calendarassistant.core.rule.ActionIconType
+import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.rule.StatusColor
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.delay
@@ -792,20 +792,16 @@ fun ScheduleCard(
     val contentColor = if (isExpired) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation = if (isInProgress) 6.dp else 2.dp
 
-    val transportInfo = remember(event.description, event.isCheckedIn) { TransportUtils.parse(event.description, event.isCheckedIn) }
+    val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn, event.isRecurringParent, event.eventType) {
+        EventPresenter.present(context, event)
+    }
+    val resolvedRuleId = model.ruleId
 
     val hasAction = remember(event.isRecurringParent, isExpired, event.isCompleted, event.isCheckedIn) {
         !event.isRecurringParent && (!isExpired || (event.isCompleted || event.isCheckedIn))
     }
 
-    val displayTitle = remember(event, transportInfo, isExpired) {
-        when {
-            event.tag == "train" -> if (event.isCheckedIn) transportInfo.mainDisplay else if (isExpired) event.title else transportInfo.mainDisplay.ifBlank { "待检票" }
-            event.tag == "taxi" -> if (event.isCompleted || isExpired) event.title else transportInfo.mainDisplay
-            event.tag == EventTags.PICKUP -> if (event.isCompleted || isExpired) event.title else PickupUtils.parsePickupInfo(event).code
-            else -> event.title
-        }
-    }
+    val displayTitle = if (isExpired) event.title else model.title
 
     val density = LocalDensity.current
     val actionButtonSize = 46.dp
@@ -852,15 +848,14 @@ fun ScheduleCard(
         }
     }
 
-    val actionInfo = remember(event.isCompleted, event.tag, event.eventType, event.isCheckedIn) {
-        if (event.isCompleted || event.isCheckedIn) Pair(Icons.Rounded.Undo, Color(0xFFFFA726))
-        else when (event.tag) {
-            "train" -> Pair(Icons.Rounded.ConfirmationNumber, Color(0xFF4CAF50))
-            "taxi" -> Pair(Icons.Rounded.LocalTaxi, Color(0xFFFF9800))
-            EventTags.PICKUP, "package" -> Pair(Icons.Rounded.ShoppingBag, Color(0xFF2196F3))
-            else -> Pair(Icons.Rounded.CheckCircle, Color(0xFF4CAF50))
-        }
+    val actionIcon = when (model.actionIcon.type) {
+        ActionIconType.UNDO -> Icons.Rounded.Undo
+        ActionIconType.CHECKIN -> Icons.Rounded.ConfirmationNumber
+        ActionIconType.RIDE -> Icons.Rounded.LocalTaxi
+        ActionIconType.PICKUP -> Icons.Rounded.ShoppingBag
+        ActionIconType.COMPLETE -> Icons.Rounded.CheckCircle
     }
+    val actionColor = Color(model.actionIcon.color)
 
     Box(modifier = modifier) {
         // 背景滑动按钮
@@ -878,10 +873,10 @@ fun ScheduleCard(
                     if (hasAction) {
                         Surface(
                             modifier = Modifier.size(actionButtonSize), shape = CircleShape,
-                            color = if (isPastFullSwipe) actionInfo.second else actionInfo.second.copy(alpha = 0.92f),
-                            onClick = { scope.launch { onUndo(event.id, event.tag); offsetX.animateTo(0f, swipeSpringSpec) } }
+                            color = if (isPastFullSwipe) actionColor else actionColor.copy(alpha = 0.92f),
+                            onClick = { scope.launch { onUndo(event.id, resolvedRuleId); offsetX.animateTo(0f, swipeSpringSpec) } }
                         ) {
-                            Box(contentAlignment = Alignment.Center) { Icon(actionInfo.first, null, Modifier.size(22.dp), tint = Color.White) }
+                            Box(contentAlignment = Alignment.Center) { Icon(actionIcon, null, Modifier.size(22.dp), tint = Color.White) }
                         }
                     }
 
@@ -925,7 +920,7 @@ fun ScheduleCard(
 
                                     scope.launch {
                                         if (fullSwipeLeft) { 
-                                            onUndo(event.id, event.tag)
+                                            onUndo(event.id, resolvedRuleId)
                                             offsetX.animateTo(0f, swipeSpringSpec) 
                                         } else if (fullSwipeRight) {
                                             // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
@@ -997,12 +992,21 @@ fun ScheduleCard(
                             modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
                         when {
-                            event.isRecurringParent -> StatusLabel("重复", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                            event.isCheckedIn -> StatusLabel("已检票", Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.2f))
-                            event.isCompleted -> StatusLabel(when(event.tag) { EventTags.PICKUP -> "已取件"; "taxi" -> "已用车"; else -> "已完成" }, MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            isInProgress -> StatusLabel("进行中", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                            isComingSoon -> StatusLabel("即将开始", Color(0xFFFF9800), Color(0xFFFF9800).copy(alpha = 0.2f))
-                            isExpired -> StatusLabel("已结束", MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                            model.statusLabel != null -> StatusLabel(
+                                model.statusLabel,
+                                when (model.statusColor) {
+                                    StatusColor.PRIMARY -> MaterialTheme.colorScheme.primary
+                                    StatusColor.SUCCESS -> Color(0xFF4CAF50)
+                                    StatusColor.WARNING -> Color(0xFFFF9800)
+                                    StatusColor.MUTED -> MaterialTheme.colorScheme.outline
+                                },
+                                when (model.statusColor) {
+                                    StatusColor.PRIMARY -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                    StatusColor.SUCCESS -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                    StatusColor.WARNING -> Color(0xFFFF9800).copy(alpha = 0.2f)
+                                    StatusColor.MUTED -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                }
+                            )
                         }
                     }
                     Row(modifier = Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1264,20 +1268,22 @@ fun ScheduleCard(
                                     }
                                 } else {
                                     Column(modifier = Modifier.fillMaxWidth()) {
-                                        if (event.location.isNotBlank()) {
-                                            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 6.dp)) {
+                                        val expandedSubtitle = model.subtitle?.takeIf { it.isNotBlank() }
+                                        val expandedDetail = model.detail?.takeIf { it.isNotBlank() }
+                                        if (!expandedSubtitle.isNullOrBlank()) {
+                                            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = if (!expandedDetail.isNullOrBlank()) 6.dp else 0.dp)) {
                                                 Icon(Icons.Default.LocationOn, "地点", Modifier.size(14.dp).padding(top = 2.dp), tint = if (isExpired) contentColor else MaterialTheme.colorScheme.primary)
                                                 Spacer(Modifier.width(6.dp))
-                                                Text(event.location, style = MaterialTheme.typography.bodySmall, color = titleColor)
+                                                Text(expandedSubtitle, style = MaterialTheme.typography.bodySmall, color = titleColor)
                                             }
                                         }
-                                        if (event.description.isNotBlank()) {
+                                        if (!expandedDetail.isNullOrBlank()) {
                                             Row(verticalAlignment = Alignment.Top) {
                                                 Icon(Icons.Outlined.Description, "备注", Modifier.size(14.dp).padding(top = 2.dp), tint = if (isExpired) contentColor else MaterialTheme.colorScheme.secondary)
                                                 Spacer(Modifier.width(6.dp))
-                                                Text(event.description, style = MaterialTheme.typography.bodySmall, color = contentColor, lineHeight = 18.sp)
+                                                Text(expandedDetail, style = MaterialTheme.typography.bodySmall, color = contentColor, lineHeight = 18.sp)
                                             }
-                                        } else if (event.location.isBlank()) {
+                                        } else if (expandedSubtitle == null) {
                                             Text("无更多详情", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 20.dp))
                                         }
                                     }
