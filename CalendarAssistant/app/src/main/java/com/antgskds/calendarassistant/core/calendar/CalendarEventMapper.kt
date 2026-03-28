@@ -165,11 +165,11 @@ object CalendarEventMapper {
 
             // 优先使用 fixedId，否则生成新 ID
             val eventId = fixedId
-                ?: systemEvent.appId?.takeIf { it.isNotBlank() }
                 ?: if (systemEvent.isRecurring && systemEvent.instanceKey != null) {
                     RecurringEventUtils.buildInstanceId(systemEvent.instanceKey)
                 } else {
-                    "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
+                    systemEvent.appId?.takeIf { it.isNotBlank() }
+                        ?: "sync_calendar_${systemEvent.eventId}_${System.currentTimeMillis()}"
                 }
 
             return MyEvent(

@@ -15,12 +15,12 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.xposed.XposedModuleStatus
@@ -34,8 +34,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * 职责：接收 AlarmManager 的定时广播，并分流处理：
  * 1. 普通提醒 -> 直接发送 Notification
- * 2. 胶囊开始 -> 启动 [CapsuleService] (ACTION_START)
- * 3. 胶囊结束 -> 启动 [CapsuleService] (ACTION_STOP)
+ * 2. 胶囊开始 -> 刷新胶囊状态 (forceRefresh)
+ * 3. 胶囊结束 -> 刷新胶囊状态 (forceRefresh)
  *
  * 安全加固：在处理任何操作前，先验证事件是否仍存在于数据源中
  */
@@ -61,12 +61,21 @@ class AlarmReceiver : BroadcastReceiver() {
             val eventEndTime = event.endTime
             val eventTag = event.tag
 
+            // 使用 RuleMatchingEngine 解析规则，回退到 event.tag
+            val ruleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
+            val effectiveRuleId = ruleId ?: when (eventTag) {
+                EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
+                EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
+                EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
+                else -> RuleMatchingEngine.RULE_GENERAL
+            }
+
             val timeText = formatTimeText(eventStartTime, eventEndTime)
             val locationText = if (eventLocation.isNotEmpty()) "【${eventLocation}】" else ""
-            val actionText = when (eventTag) {
-                EventTags.PICKUP -> "请前往取件"
-                EventTags.TRAIN -> "请准备检票"
-                EventTags.TAXI -> "请准备上车"
+            val actionText = when (effectiveRuleId) {
+                RuleMatchingEngine.RULE_PICKUP -> "请前往取件"
+                RuleMatchingEngine.RULE_TRAIN -> "请准备检票"
+                RuleMatchingEngine.RULE_TAXI -> "请准备上车"
                 else -> ""
             }
             val prefixLabel = if (label.isNotEmpty() && !label.contains("开始") && !label.contains("现在")) {
@@ -82,7 +91,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification_small)
-                .setContentTitle(event.title)
+                .setContentTitle(EventPresenter.present(context, event).title)
                 .setContentText(finalContentText)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(finalContentText))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -99,28 +108,28 @@ class AlarmReceiver : BroadcastReceiver() {
                 (context.applicationContext as App).repository
             } catch (e: Exception) { null }
 
-            if (repository != null && eventTag.isNotEmpty()) {
+            if (repository != null && effectiveRuleId != null) {
                 try {
                     val evt = repository.events.value.find { it.id == event.id }
                     if (evt != null) {
                         val isCompleted = evt.isCompleted
                         val isCheckedIn = evt.isCheckedIn
 
-                        val shouldShowButton = when (eventTag) {
-                            EventTags.TRAIN -> !isCheckedIn
-                            EventTags.PICKUP, EventTags.TAXI, EventTags.GENERAL -> !isCompleted
+                        val shouldShowButton = when (effectiveRuleId) {
+                            RuleMatchingEngine.RULE_TRAIN -> !isCheckedIn
+                            RuleMatchingEngine.RULE_PICKUP, RuleMatchingEngine.RULE_TAXI, RuleMatchingEngine.RULE_GENERAL -> !isCompleted
                             else -> false
                         }
 
                         if (shouldShowButton) {
-                            val buttonText = when (eventTag) {
-                                EventTags.PICKUP -> "已取"
-                                EventTags.TAXI -> "已用车"
-                                EventTags.TRAIN -> "已检票"
+                            val buttonText = when (effectiveRuleId) {
+                                RuleMatchingEngine.RULE_PICKUP -> "已取"
+                                RuleMatchingEngine.RULE_TAXI -> "已用车"
+                                RuleMatchingEngine.RULE_TRAIN -> "已检票"
                                 else -> "已完成"
                             }
-                            val intentAction = when (eventTag) {
-                                EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                            val intentAction = when (effectiveRuleId) {
+                                RuleMatchingEngine.RULE_TRAIN -> EventActionReceiver.ACTION_CHECKIN
                                 else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
                             }
 
@@ -202,17 +211,18 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         val eventTitle = intent.getStringExtra("EVENT_TITLE") ?: "日程提醒"
+        val eventRuleId = intent.getStringExtra("EVENT_RULE_ID") ?: ""
 
         when (action) {
             // 使用 Scheduler 中定义的常量，确保逻辑一致
             NotificationScheduler.ACTION_CAPSULE_START -> {
-                handleCapsuleStart(context, intent, eventId, eventTitle)
+                handleCapsuleStart(context, intent, eventId, eventTitle, eventRuleId)
             }
             NotificationScheduler.ACTION_CAPSULE_END -> {
-                handleCapsuleEnd(context, eventId)
+                handleCapsuleEnd(context, eventId, eventRuleId)
             }
             NotificationScheduler.ACTION_REFRESH_CAPSULE -> {
-                handleCapsuleRefresh(context, eventId, eventTitle)
+                handleCapsuleRefresh(context, eventId, eventTitle, eventRuleId)
             }
             NotificationScheduler.ACTION_REMINDER, null -> {
                 val settings = (context.applicationContext as App).repository.settings.value
@@ -229,7 +239,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 val eventColor = intent.getIntExtra("EVENT_COLOR", 0)
                 showStandardNotification(
                     context, eventId, eventTitle, reminderLabel,
-                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor
+                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor,
+                    eventRuleId.ifEmpty { null }
                 )
             }
             else -> {
@@ -242,7 +253,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 val eventColor = intent.getIntExtra("EVENT_COLOR", 0)
                 showStandardNotification(
                     context, eventId, eventTitle, reminderLabel,
-                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor
+                    eventLocation, eventStartTime, eventEndTime, eventTag, eventColor,
+                    eventRuleId.ifEmpty { null }
                 )
             }
         }
@@ -287,7 +299,7 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun handleCapsuleStart(context: Context, intent: Intent, eventId: String, title: String) {
+    private fun handleCapsuleStart(context: Context, intent: Intent, eventId: String, title: String, eventRuleId: String) {
         if (isMiuiIslandMode(context)) {
             Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
             (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
@@ -299,17 +311,8 @@ class AlarmReceiver : BroadcastReceiver() {
         val isEnabled = settings.isLiveCapsuleEnabled
 
         if (isEnabled) {
-            Log.d(TAG, "启动胶囊服务: $title (新架构：启动后会自动订阅uiState)")
-
-            // ✅ 新架构：Dumb Service 只需要启动，会自动订阅 uiState 并显示胶囊
-            val serviceIntent = Intent(context, CapsuleService::class.java)
-            // 不再需要 action，Service 启动后会自动处理
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
+            Log.d(TAG, "启动胶囊: $title (刷新状态)")
+            repository.capsuleStateManager.forceRefresh()
 
             // 2. 听觉层：播放提示音
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -325,7 +328,9 @@ class AlarmReceiver : BroadcastReceiver() {
         } else {
             // 【降级逻辑】
             Log.d(TAG, "跳过实况胶囊 (开关:$isEnabled)")
-            showStandardNotification(context, eventId, title, "日程开始")
+            showStandardNotification(context, eventId, title, "日程开始",
+                eventRuleId = eventRuleId.ifEmpty { null }
+            )
         }
     }
 
@@ -342,7 +347,7 @@ class AlarmReceiver : BroadcastReceiver() {
      * 处理胶囊刷新（准点时刷新文案从"还有x分钟"改为"进行中"）
      * 新架构：Dumb Service 只需要重新启动，会自动重新订阅 uiState 并更新胶囊显示
      */
-    private fun handleCapsuleRefresh(context: Context, eventId: String, title: String) {
+    private fun handleCapsuleRefresh(context: Context, eventId: String, title: String, eventRuleId: String) {
         if (isMiuiIslandMode(context)) {
             Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
             val repository = (context.applicationContext as App).repository
@@ -354,40 +359,22 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
         Log.d(TAG, "刷新胶囊: $title (准点时刷新文案)")
-
-        // 重新启动 CapsuleService，它会重新计算状态并更新通知
-        val serviceIntent = Intent(context, CapsuleService::class.java)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
     }
 
-    private fun handleCapsuleEnd(context: Context, eventId: String) {
+    private fun handleCapsuleEnd(context: Context, eventId: String, eventRuleId: String) {
         if (isMiuiIslandMode(context)) {
             Log.d(TAG, "MIUI 岛模式，结束胶囊刷新")
             (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
             return
         }
-        // ✅ 新架构：Dumb Service 不需要 ACTION_STOP
-        // 只需启动 Service，它会重新订阅 uiState 并自动更新/停止
-        val serviceIntent = Intent(context, CapsuleService::class.java)
-        // 不需要 action，Service 启动后会自动检查状态并更新
-
-        // 使用 startService 发送停止指令通常足够且更安全（避免 Foreground 限制）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        (context.applicationContext as App).repository.capsuleStateManager.forceRefresh()
     }
 
     private fun showStandardNotification(
         context: Context, eventId: String, title: String, label: String,
         eventLocation: String = "", eventStartTime: String = "", eventEndTime: String = "",
-        eventTag: String = "", eventColor: Int = 0
+        eventTag: String = "", eventColor: Int = 0, eventRuleId: String? = null
     ) {
         val channelId = App.CHANNEL_ID_POPUP
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -402,10 +389,32 @@ class AlarmReceiver : BroadcastReceiver() {
         // 智能文案生成
         val timeText = formatTimeText(eventStartTime, eventEndTime)
         val locationText = if (eventLocation.isNotEmpty()) "【${eventLocation}】" else ""
-        val actionText = when (eventTag) {
-            EventTags.PICKUP -> "请前往取件"
-            EventTags.TRAIN -> "请准备检票"
-            EventTags.TAXI -> "请准备上车"
+
+        // 计算 effectiveRuleId：优先使用 eventRuleId（非空时），否则走现有 ruleId/tag 逻辑
+        val repository = try {
+            (context.applicationContext as App).repository
+        } catch (e: Exception) { null }
+
+        val effectiveRuleId = if (!eventRuleId.isNullOrEmpty()) {
+            // 优先：使用 Intent 传递的 ruleId
+            eventRuleId
+        } else {
+            // 回退：从 repository 获取事件并解析规则
+            val ruleId = repository?.events?.value?.find { it.id == eventId }?.let {
+                RuleMatchingEngine.resolvePayload(it)?.ruleId
+            }
+            ruleId ?: when (eventTag) {
+                EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
+                EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
+                EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
+                else -> RuleMatchingEngine.RULE_GENERAL
+            }
+        }
+
+        val actionText = when (effectiveRuleId) {
+            RuleMatchingEngine.RULE_PICKUP -> "请前往取件"
+            RuleMatchingEngine.RULE_TRAIN -> "请准备检票"
+            RuleMatchingEngine.RULE_TAXI -> "请准备上车"
             else -> ""
         }
         val prefixLabel = if (label.isNotEmpty() && !label.contains("开始") && !label.contains("现在")) {
@@ -436,11 +445,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         // 添加操作按钮（根据事件类型）
         // 检查事件是否已完成/已检票
-        val repository = try {
-            (context.applicationContext as App).repository
-        } catch (e: Exception) { null }
-
-        if (repository != null && eventTag.isNotEmpty()) {
+        if (repository != null && effectiveRuleId != null) {
             try {
                 val event = repository.events.value.find { it.id == eventId }
                 if (event != null) {
@@ -448,21 +453,21 @@ class AlarmReceiver : BroadcastReceiver() {
                     val isCheckedIn = event.isCheckedIn
 
                     // 根据事件类型决定是否显示按钮
-                    val shouldShowButton = when (eventTag) {
-                        EventTags.TRAIN -> !isCheckedIn
-                        EventTags.PICKUP, EventTags.TAXI, EventTags.GENERAL -> !isCompleted
+                    val shouldShowButton = when (effectiveRuleId) {
+                        RuleMatchingEngine.RULE_TRAIN -> !isCheckedIn
+                        RuleMatchingEngine.RULE_PICKUP, RuleMatchingEngine.RULE_TAXI, RuleMatchingEngine.RULE_GENERAL -> !isCompleted
                         else -> false
                     }
 
                     if (shouldShowButton) {
-                        val buttonText = when (eventTag) {
-                            EventTags.PICKUP -> "已取"
-                            EventTags.TAXI -> "已用车"
-                            EventTags.TRAIN -> "已检票"
+                        val buttonText = when (effectiveRuleId) {
+                            RuleMatchingEngine.RULE_PICKUP -> "已取"
+                            RuleMatchingEngine.RULE_TAXI -> "已用车"
+                            RuleMatchingEngine.RULE_TRAIN -> "已检票"
                             else -> "已完成"
                         }
-                        val intentAction = when (eventTag) {
-                            EventTags.TRAIN -> EventActionReceiver.ACTION_CHECKIN
+                        val intentAction = when (effectiveRuleId) {
+                            RuleMatchingEngine.RULE_TRAIN -> EventActionReceiver.ACTION_CHECKIN
                             else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
                         }
 
@@ -489,7 +494,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val notification = builder.build()
         manager.notify(eventId.hashCode(), notification)
-        Log.d(TAG, "已显示普通通知: title=$title, label=$label, tag=$eventTag")
+        Log.d(TAG, "已显示普通通知: title=$title, label=$label, tag=$eventTag, ruleId=$eventRuleId, effectiveRuleId=$effectiveRuleId")
     }
 
     private fun playAlert(context: Context) {

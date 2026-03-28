@@ -258,28 +258,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onEventAction = { eventId, actionType ->
                             handleEventAction(eventId, actionType)
                         },
-                        onUndo = { eventId, tag ->
-                            // 直接从 repository 获取最新状态
+                        onUndo = { eventId, _ ->
                             serviceScope.launch {
-                                kotlinx.coroutines.delay(100)
-                                val latestEvent = repository.events.value.find { it.id == eventId }
-                                Log.d(TAG, "onUndo直接获取: eventId=$eventId, isCheckedIn=${latestEvent?.isCheckedIn}, isCompleted=${latestEvent?.isCompleted}")
-                                when {
-                                    latestEvent?.isCheckedIn == true -> {
-                                        Log.d(TAG, "调用undoCheckInTransport")
-                                        repository.undoCheckInTransport(eventId)
-                                    }
-                                    latestEvent?.isCompleted == true -> repository.undoCompleteEvent(eventId)
-                                    else -> {
-                                        // 如果既不是已检票也不是已完成，则执行操作（检票或完成）
-                                        Log.d(TAG, "执行操作: tag=$tag")
-                                        if (tag == "train") {
-                                            repository.checkInTransport(eventId)
-                                        } else {
-                                            repository.completeScheduleEvent(eventId)
-                                        }
-                                    }
-                                }
+                                repository.performPrimaryRuleAction(eventId)
                             }
                         },
                         onLoadingChange = { loading -> 
@@ -476,14 +457,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         serviceScope.launch {
             try {
                 when (actionType) {
-                    "checkIn" -> repository.checkInTransport(eventId)
-                    "complete" -> repository.completeScheduleEvent(eventId)
                     "archive" -> {
                         repository.archiveEvent(eventId)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
                         }
                     }
+                    else -> repository.performPrimaryRuleAction(eventId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)

@@ -13,13 +13,12 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
@@ -53,8 +52,8 @@ object NotificationScheduler {
 
     fun scheduleReminders(context: Context, event: MyEvent) {
         val settings = AppRepository.getInstance(context).settings.value
-        if (event.isRecurringParent || (event.isRecurring && !settings.isRecurringCalendarSyncEnabled)) {
-            Log.d("NotificationScheduler", "跳过重复日程提醒: ${event.id}")
+        if (event.isRecurringParent) {
+            Log.d("NotificationScheduler", "跳过重复日程父事件提醒: ${event.id}")
             return
         }
 
@@ -86,7 +85,7 @@ object NotificationScheduler {
             Log.d("NotificationScheduler", "胶囊开启，跳过普通提醒调度: ${event.id}")
         } else {
             event.reminders.forEach { minutesBefore ->
-                val triggerTime = startMillis - (minutesBefore * 60 * 1000)
+                val triggerTime = startMillis - (minutesBefore.toLong() * 60 * 1000)
                 val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
                 if (triggerTime > now) {
                     scheduleSingleAlarm(
@@ -101,7 +100,7 @@ object NotificationScheduler {
 
         // 2. 全局提前提醒：根据胶囊开关决定走胶囊还是普通通知
         if (isAdvanceEnabled && advanceMinutes > 0) {
-            val triggerTime = startMillis - (advanceMinutes * 60 * 1000)
+            val triggerTime = startMillis - (advanceMinutes.toLong() * 60 * 1000)
             val label = "提前${advanceMinutes}分钟"
             if (triggerTime > now) {
                 if (isLiveCapsuleEnabled) {
@@ -176,6 +175,7 @@ object NotificationScheduler {
                 (event.color.green * 255).toInt(),
                 (event.color.blue * 255).toInt()
             ))
+            putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(event)?.ruleId ?: event.tag)
         }
         val requestCode = (event.id.hashCode() + minutesBefore).toInt()
         scheduleAlarmExact(context, triggerTime, intent, requestCode, alarmManager)
@@ -201,6 +201,7 @@ object NotificationScheduler {
             if (actualStartTime > 0) {
                 putExtra("ACTUAL_START_MILLIS", actualStartTime)
             }
+            putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(event)?.ruleId ?: event.tag)
         }
         val offset = when (actionType) {
             ACTION_CAPSULE_START -> OFFSET_CAPSULE_START
@@ -232,6 +233,7 @@ object NotificationScheduler {
                 (event.color.green * 255).toInt(),
                 (event.color.blue * 255).toInt()
             ))
+            putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(event)?.ruleId ?: event.tag)
         }
         val requestCode = (event.id.hashCode() + OFFSET_REFRESH_CAPSULE).toInt()
         scheduleAlarmExact(context, actualStartTime, intent, requestCode, alarmManager)
@@ -324,13 +326,14 @@ object NotificationScheduler {
         )
 
         // 构建通知
+        val model = EventPresenter.present(context, event)
         val notification = NotificationCompat.Builder(context, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle(event.title)
-            .setContentText("取件码")
+            .setContentTitle(model.title)
+            .setContentText(model.subtitle ?: "取件码")
             .setStyle(NotificationCompat.BigTextStyle()
-                .setBigContentTitle(event.title)
-                .bigText("${event.description}")//删除备注：${event.description}
+                .setBigContentTitle(model.title)
+                .bigText(model.subtitle ?: model.detail ?: event.description)
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_EVENT)

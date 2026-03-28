@@ -4,51 +4,55 @@
     android:id="@+id/root_layout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@android:color/white"
+    android:background="@android:color/transparent"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="16dp">
+    android:paddingStart="14dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
 
+    <!-- 左侧：图标 -->
+    <ImageView
+        android:id="@+id/iv_icon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        tools:src="@android:drawable/stat_sys_download"
+        tools:tint="#FFFFFF" />
+
+    <!-- 中间：核心信息区 -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
+        <!-- 标题 -->
         <TextView
             android:id="@+id/tv_main_content"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#1A1A1A"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            tools:text="↓ 5.2 MB/s" />
+            android:letterSpacing="0.03"
+            android:textColor="#F2F2F2"
+            android:textSize="18sp"
+            tools:text="5.2 MB/s" />
 
+        <!-- 副标题 -->
         <TextView
             android:id="@+id/tv_sub_info"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="#757575"
-            android:textSize="14sp"
+            android:textColor="#99FFFFFF"
+            android:textSize="12sp"
             tools:text="下载速度" />
 
     </LinearLayout>
-
-    <ImageView
-        android:id="@+id/iv_icon"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="16dp"
-        android:contentDescription="@null"
-        android:scaleType="fitCenter"
-        android:src="@android:drawable/stat_sys_download"
-        tools:tint="#4CAF50" />
 
 </LinearLayout>

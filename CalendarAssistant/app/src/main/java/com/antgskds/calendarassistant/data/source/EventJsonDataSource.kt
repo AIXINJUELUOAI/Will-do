@@ -14,6 +14,7 @@ import java.io.File
 class EventJsonDataSource(private val context: Context) {
     private val fileName = "events.json"
     private val backupFileName = "events.json.bak"
+    private val roomBackupFileName = "events.room.bak"
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
@@ -93,6 +94,16 @@ class EventJsonDataSource(private val context: Context) {
             file.writeText(content)
         } catch (e: Exception) {
             Log.e("EventJsonDataSource", "Error saving events", e)
+        }
+    }
+
+    suspend fun saveEventsBackup(events: List<MyEvent>) = withContext(Dispatchers.IO) {
+        try {
+            val backupFile = File(context.filesDir, roomBackupFileName)
+            val content = json.encodeToString(events)
+            backupFile.writeText(content)
+        } catch (e: Exception) {
+            Log.e("EventJsonDataSource", "Error saving events backup", e)
         }
     }
 }

@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +25,9 @@ class BootReceiver : BroadcastReceiver() {
 
             // 3. 恢复后台保活检查
             KeepAliveReceiver.schedule(context)
+
+            // 4. 恢复定期反向同步
+            CalendarReverseSyncScheduler.schedule(context)
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             AccessibilityGuardian.checkAndRestoreIfNeeded(

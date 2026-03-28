@@ -15,6 +15,7 @@ import java.io.File
  */
 class ArchiveJsonDataSource(private val context: Context) {
     private val fileName = "archives.json"
+    private val roomBackupFileName = "archives.room.bak"
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
@@ -54,6 +55,16 @@ class ArchiveJsonDataSource(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("ArchiveJsonDataSource", "Error saving archived events", e)
+        }
+    }
+
+    suspend fun saveArchivedEventsBackup(events: List<MyEvent>) = withContext(Dispatchers.IO) {
+        try {
+            val content = json.encodeToString(events)
+            val file = File(context.filesDir, roomBackupFileName)
+            file.writeText(content)
+        } catch (e: Exception) {
+            Log.e("ArchiveJsonDataSource", "Error saving archived events backup", e)
         }
     }
 }

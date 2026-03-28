@@ -58,6 +58,10 @@ data class MySettings(
     val isFloatingWindowEnabled: Boolean = false,
     val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
 
+    // 长按音量+动作
+    val volumeUpLongPressEnabled: Boolean = false,
+    val volumeUpLongPressAction: Int = 0, // 0=无操作, 1=识屏, 2=悬浮窗
+
     // 侧边栏唤起
     val edgeBarEnabled: Boolean = false,
     val edgeBarSide: String = "RIGHT",
@@ -65,9 +69,6 @@ data class MySettings(
     val edgeBarWidthDp: Int = 8,
     val edgeBarHeightDp: Int = 120,
     val edgeBarAlpha: Float = 0.4f,
-
-    // 系统日历重复日程反向同步
-    val isRecurringCalendarSyncEnabled: Boolean = false,
 
     // 捐赠状态
     val hasDonated: Boolean = false
