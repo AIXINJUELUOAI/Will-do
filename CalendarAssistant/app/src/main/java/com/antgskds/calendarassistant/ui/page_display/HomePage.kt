@@ -12,6 +12,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -550,9 +552,13 @@ fun HomePage(
                                                 }
                                             )
                                         },
-                                    shape = RoundedCornerShape(4.dp),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
+                                            MaterialTheme.colorScheme.surfaceContainerLow
+                                        else MaterialTheme.colorScheme.surface
+                                    )
                                 ) {
                                     Column(modifier = Modifier.fillMaxSize()) {
                                         Box(
@@ -651,7 +657,7 @@ fun HomePage(
                             },
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = floatingBarOffset + 12.dp)
+                                .padding(bottom = floatingBarOffset + 36.dp)
                                 .fillMaxWidth(0.75f)
                                 .height(searchBarHeight),
                             placeholder = { Text("搜索标题、备注或地点...") },
@@ -718,7 +724,7 @@ fun HomePage(
             onDismiss = cancelImageImport,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBarOffset)
+                .padding(bottom = floatingBarOffset + 16.dp)
         )
     }
 }

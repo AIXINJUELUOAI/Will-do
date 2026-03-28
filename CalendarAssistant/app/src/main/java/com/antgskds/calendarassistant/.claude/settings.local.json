@@ -19,7 +19,10 @@
       "Bash(grep:*)",
       "Bash(where:*)",
       "Bash(echo:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(mkdir -p app/src/main/java/com/antgskds/calendarassistant/data/db/model)",
+      "Bash(mkdir -p app/src/main/java/com/antgskds/calendarassistant/data/db/dao)",
+      "Bash(cd:*)"
     ]
   }
 }

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
     // 🔥 启用序列化插件
     kotlin("plugin.serialization")
 }
@@ -33,8 +34,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.2.2"
+        versionCode = 13
+        versionName = "1.2.3 Beta3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -128,5 +129,13 @@ dependencies {
     // === MIUI 超级岛 (LSPosed/Xposed) ===
     implementation("io.github.d4viddf:hyperisland_kit:0.4.3")
     compileOnly("de.robv.android.xposed:api:82")
+
+    // === Room 数据库 ===
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // === WorkManager ===
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
 }

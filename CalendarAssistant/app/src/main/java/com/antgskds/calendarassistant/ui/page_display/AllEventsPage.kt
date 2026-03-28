@@ -46,27 +46,28 @@ fun AllEventsPage(
                             event.location.contains(searchQuery, ignoreCase = true)
                 }
                 searchMatch
-            }.sortedWith(
-                compareBy(
-                    // 1. 过期状态（未过期在前）
-                    { event -> DateCalculator.isEventExpired(event) },
-                    // 2. 重要性（重要在前）
-                    { event -> !event.isImportant },
-                    // 3. 折中方案：事件未开始按开始日，已开始按结束日
-                    { event ->
-                        val isExpired = DateCalculator.isEventExpired(event)
+            }.sortedWith { a, b ->
+                val aExpired = DateCalculator.isEventExpired(a)
+                val bExpired = DateCalculator.isEventExpired(b)
+                when {
+                    aExpired != bExpired -> if (aExpired) 1 else -1
+                    a.isImportant != b.isImportant -> if (a.isImportant) -1 else 1
+                    else -> {
                         val today = LocalDate.now()
-                        val isStarted = event.startDate.isBefore(today) || event.startDate == today
-                        if (isExpired) {
-                            -event.endDate.toEpochDay() // 已过期，按结束日倒序（最近过期的在前）
-                        } else if (isStarted) {
-                            event.endDate.toEpochDay() // 未过期且已开始，按结束日正序（快结束的在前）
-                        } else {
-                            -event.startDate.toEpochDay() // 未开始，按开始日倒序（最近开始的在前）
+                        fun dateKey(e: MyEvent, expired: Boolean): Long {
+                            val started = e.startDate.isBefore(today) || e.startDate == today
+                            return when {
+                                expired -> -e.endDate.toEpochDay()
+                                started -> e.endDate.toEpochDay()
+                                else -> -e.startDate.toEpochDay()
+                            }
                         }
+                        val dateCmp = dateKey(a, aExpired).compareTo(dateKey(b, bExpired))
+                        if (dateCmp != 0) dateCmp
+                        else a.startTime.compareTo(b.startTime)
                     }
-                )
-            )
+                }
+            }
         }
     }
 

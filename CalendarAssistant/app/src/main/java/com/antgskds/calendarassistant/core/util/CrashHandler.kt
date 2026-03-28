@@ -14,6 +14,7 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
         private const val PREF_NAME = "crash_prefs"
         private const val KEY_CRASHED = "is_crashed"
         private const val KEY_CLEANUP_INFO = "cleanup_info"
+        private const val KEY_CRASHED_AT = "crashed_at"
 
         @Volatile
         private var INSTANCE: CrashHandler? = null
@@ -50,7 +51,15 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
 
         fun markCrashed(context: Context) {
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putBoolean(KEY_CRASHED, true).apply()
+            prefs.edit()
+                .putBoolean(KEY_CRASHED, true)
+                .putLong(KEY_CRASHED_AT, System.currentTimeMillis())
+                .apply()
+        }
+
+        fun getLastCrashTimestamp(context: Context): Long {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return prefs.getLong(KEY_CRASHED_AT, 0L)
         }
 
         fun saveCleanupInfo(context: Context, info: String) {

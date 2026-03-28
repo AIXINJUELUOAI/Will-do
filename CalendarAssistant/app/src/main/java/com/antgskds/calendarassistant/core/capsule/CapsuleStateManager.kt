@@ -1,11 +1,13 @@
 package com.antgskds.calendarassistant.core.capsule
 
+import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.EventTags
@@ -15,8 +17,11 @@ import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
-import com.antgskds.calendarassistant.service.capsule.CapsuleService
+import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
+import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
+import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.xposed.XposedModuleStatus
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +38,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 胶囊状态管理器 - 主动唤醒模式
@@ -49,10 +55,17 @@ class CapsuleStateManager(
         const val AGGREGATE_PICKUP_ID = "AGGREGATE_PICKUP"
         const val AGGREGATE_NOTIF_ID = 99999
 
+        // 胶囊类型常量（原 TYPE_*）
+        const val TYPE_SCHEDULE = 1
+        const val TYPE_PICKUP = 2
+        const val TYPE_PICKUP_EXPIRED = 3
+        const val TYPE_NETWORK_SPEED = 4
+        const val TYPE_OCR_PROGRESS = 5
+        const val TYPE_OCR_RESULT = 6
+
         private const val OCR_PROGRESS_ID = "OCR_PROGRESS"
         private const val OCR_RESULT_ID = "OCR_RESULT"
-        private const val OCR_PROGRESS_NOTIF_ID = 88886
-        private const val OCR_RESULT_NOTIF_ID = 88887
+        private const val OCR_NOTIF_ID = 88886
         private const val OCR_PROGRESS_TIMEOUT_MS = 2 * 60 * 1000L
         private const val OCR_RESULT_TIMEOUT_MS = 8000L
         private const val OCR_UPDATE_THROTTLE_MS = 600L
@@ -86,6 +99,13 @@ class CapsuleStateManager(
     private var ocrAutoClearJob: Job? = null
     private var lastOcrUpdateAt = 0L
 
+    // 通知管理
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val provider: ICapsuleProvider = if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
+    private val activeNotifIds = ConcurrentHashMap.newKeySet<Int>()
+    private var monitorJob: Job? = null
+    private var isAggregateMode = false
+
     /**
      * 【修复问题3】强制刷新胶囊状态
      * ✅ 改为同步执行，确保调用后立即生效
@@ -107,8 +127,8 @@ class CapsuleStateManager(
         updateOcrCapsule(
             OcrCapsuleState(
                 id = OCR_PROGRESS_ID,
-                notifId = OCR_PROGRESS_NOTIF_ID,
-                type = CapsuleService.TYPE_OCR_PROGRESS,
+                notifId = OCR_NOTIF_ID,
+                type = TYPE_OCR_PROGRESS,
                 eventType = EVENT_TYPE_OCR_PROGRESS,
                 title = display.shortText,
                 content = display.secondaryText ?: content,
@@ -129,8 +149,8 @@ class CapsuleStateManager(
         updateOcrCapsule(
             OcrCapsuleState(
                 id = OCR_RESULT_ID,
-                notifId = OCR_RESULT_NOTIF_ID,
-                type = CapsuleService.TYPE_OCR_RESULT,
+                notifId = OCR_NOTIF_ID,
+                type = TYPE_OCR_RESULT,
                 eventType = EVENT_TYPE_OCR_RESULT,
                 title = display.shortText,
                 content = display.secondaryText ?: content,
@@ -177,36 +197,32 @@ class CapsuleStateManager(
     val uiState: StateFlow<CapsuleUiState> = createCapsuleStateFlow()
 
     init {
-        startServiceWakeup()
+        startNotificationManager()
     }
 
     /**
-     * 启动服务唤醒机制
-     * 当胶囊状态变为 Active 时自动启动 CapsuleService
+     * 启动通知管理机制
+     * 当胶囊状态变化时自动发布/更新/取消通知
      */
-    private fun startServiceWakeup() {
+    private fun startNotificationManager() {
         appScope.launch {
             uiState.collect { state ->
                 val settings = repository.settings.value
                 val useMiuiIsland = isMiuiIslandMode(settings)
                 when (state) {
                     is CapsuleUiState.Active -> {
-                        Log.d(TAG, "主动唤醒：状态变为 Active")
                         if (useMiuiIsland) {
                             MiuiIslandManager.update(context, state.capsules)
-                            stopCapsuleServiceIfRunning()
+                            cancelAllCapsuleNotifications()
                         } else {
-                            startCapsuleServiceSafely()
+                            updateCapsules(state.capsules)
                         }
                     }
                     is CapsuleUiState.None -> {
-                        Log.d(TAG, "状态变为 None，Service 将自动停止")
-                        if (useMiuiIsland) {
-                            MiuiIslandManager.clear(context)
-                            stopCapsuleServiceIfRunning()
-                        } else {
-                            MiuiIslandManager.clear(context)
-                        }
+                        monitorJob?.cancel()
+                        isAggregateMode = false
+                        MiuiIslandManager.clear(context)
+                        cancelAllCapsuleNotifications()
                     }
                 }
             }
@@ -217,40 +233,78 @@ class CapsuleStateManager(
         return settings.isLiveCapsuleEnabled && OsUtils.isHyperOS() && XposedModuleStatus.isActive()
     }
 
-    private fun stopCapsuleServiceIfRunning() {
-        if (!CapsuleService.isServiceRunning) return
-        try {
-            context.stopService(Intent(context, CapsuleService::class.java))
-        } catch (e: Exception) {
-            Log.w(TAG, "停止 CapsuleService 失败", e)
+    private fun updateCapsules(newCapsules: List<CapsuleUiState.Active.CapsuleItem>) {
+        val validIds = newCapsules.map { it.notifId }.toSet()
+
+        val newAggregateMode = newCapsules.any { it.id == AGGREGATE_PICKUP_ID }
+        if (newAggregateMode && !isAggregateMode) {
+            isAggregateMode = true
+            startMonitoring()
+        } else if (!newAggregateMode && isAggregateMode) {
+            isAggregateMode = false
+            monitorJob?.cancel()
+        }
+
+        newCapsules.forEach { item ->
+            val iconResId = IconUtils.getSmallIconForCapsule(context, item)
+            val notification = provider.buildNotification(context, item, iconResId)
+            notificationManager.notify(item.notifId, notification)
+            activeNotifIds.add(item.notifId)
+        }
+
+        // 清理不再需要的通知
+        val staleIds = activeNotifIds.toMutableSet()
+        staleIds.removeAll(validIds)
+        staleIds.forEach { id ->
+            notificationManager.cancel(id)
+            activeNotifIds.remove(id)
         }
     }
 
-    /**
-     * 安全启动胶囊服务
-     * 包含对 ForegroundServiceStartNotAllowedException 的处理
-     */
-    private fun startCapsuleServiceSafely() {
-        val serviceIntent = Intent(context, CapsuleService::class.java)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
-            Log.d(TAG, "CapsuleService 启动成功")
-        } catch (e: Exception) {
-            when {
-                e is android.app.ForegroundServiceStartNotAllowedException ||
-                (e.message?.contains("ForegroundServiceStartNotAllowedException") == true) -> {
-                    Log.w(TAG, "前台服务启动被系统拒绝，应用可能在后台。将在应用回到前台时重试。")
-                    // 延迟重试：当应用回到前台时通过 forceRefresh() 重新触发
-                }
-                else -> {
-                    Log.e(TAG, "启动 CapsuleService 失败", e)
+    private fun startMonitoring() {
+        monitorJob?.cancel()
+        monitorJob = appScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(3000)
+                if (isAggregateMode) {
+                    cleanupStaleNotifications()
                 }
             }
         }
+    }
+
+    private fun cleanupStaleNotifications() {
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+            val activeNotifications = notificationManager.activeNotifications
+            activeNotifications.forEach { sb ->
+                val notificationId = sb.id
+                if (notificationId !in activeNotifIds) return@forEach
+                val channelId = sb.notification.channelId
+                val channelMatch = channelId != null && channelId.contains("live", ignoreCase = true)
+                if (channelMatch) {
+                    // 检查对应的胶囊是否仍然有效
+                    val state = uiState.value
+                    if (state is CapsuleUiState.Active) {
+                        val stillValid = state.capsules.any { it.notifId == notificationId }
+                        if (!stillValid) {
+                            notificationManager.cancel(notificationId)
+                            activeNotifIds.remove(notificationId)
+                            Log.d(TAG, "清除过期胶囊通知: id=$notificationId")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "清理过期通知失败", e)
+        }
+    }
+
+    private fun cancelAllCapsuleNotifications() {
+        activeNotifIds.forEach { id ->
+            notificationManager.cancel(id)
+        }
+        activeNotifIds.clear()
     }
 
     private fun createCapsuleStateFlow(): StateFlow<CapsuleUiState> {
@@ -308,20 +362,20 @@ class CapsuleStateManager(
         }
 
         if (activeOcrCapsule != null && settings.isLiveCapsuleEnabled) {
-            val capsules = listOf(
-                createCapsuleItem(
-                    id = activeOcrCapsule.id,
-                    notifId = activeOcrCapsule.notifId,
-                    type = activeOcrCapsule.type,
-                    eventType = activeOcrCapsule.eventType,
-                    description = activeOcrCapsule.description,
-                    color = activeOcrCapsule.color,
-                    startMillis = activeOcrCapsule.startMillis,
-                    endMillis = activeOcrCapsule.endMillis,
-                    display = activeOcrCapsule.display
-                )
+            val ocrItem = createCapsuleItem(
+                id = activeOcrCapsule.id,
+                notifId = activeOcrCapsule.notifId,
+                type = activeOcrCapsule.type,
+                eventType = activeOcrCapsule.eventType,
+                description = activeOcrCapsule.description,
+                color = activeOcrCapsule.color,
+                startMillis = activeOcrCapsule.startMillis,
+                endMillis = activeOcrCapsule.endMillis,
+                display = activeOcrCapsule.display
             )
-            return CapsuleUiState.Active(capsules)
+            // OCR 胶囊不阻断后续日程计算，与日程胶囊共存
+            val scheduleCapsules = computeScheduleCapsules(events, courses, settings)
+            return CapsuleUiState.Active(listOf(ocrItem) + scheduleCapsules)
         }
 
         // 【实验室】网速胶囊：若未触发 OCR 胶囊则覆盖其他胶囊
@@ -332,7 +386,7 @@ class CapsuleStateManager(
                 createCapsuleItem(
                     id = "network_speed",
                     notifId = 88888,
-                    type = CapsuleService.TYPE_NETWORK_SPEED,
+                    type = TYPE_NETWORK_SPEED,
                     eventType = "network_speed",
                     description = "",
                     color = android.graphics.Color.parseColor("#4CAF50"),
@@ -348,6 +402,16 @@ class CapsuleStateManager(
             return CapsuleUiState.None
         }
 
+        val capsules = computeScheduleCapsules(events, courses, settings)
+        return if (capsules.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(capsules)
+    }
+
+    private fun computeScheduleCapsules(
+        events: List<MyEvent>,
+        courses: List<com.antgskds.calendarassistant.data.model.Course>,
+        settings: MySettings
+    ): List<CapsuleUiState.Active.CapsuleItem> {
+
         val now = LocalDateTime.now()
         val today = LocalDate.now()
 
@@ -357,7 +421,7 @@ class CapsuleStateManager(
         // 4. 过滤活跃事件
         val activeEvents = allEvents.filter { event ->
             try {
-                if (event.isRecurringParent || (event.isRecurring && !settings.isRecurringCalendarSyncEnabled)) {
+                if (event.isRecurringParent) {
                     return@filter false
                 }
 
@@ -388,22 +452,22 @@ class CapsuleStateManager(
 
         if (activeEvents.isEmpty()) {
             Log.d(TAG, "无活跃事件 (Active list empty)")
-            return CapsuleUiState.None
+            return emptyList()
         }
 
         // ... 后续构建胶囊逻辑保持不变 ...
-        val (pickupEvents, scheduleEvents) = activeEvents.partition { it.tag == EventTags.PICKUP }
+        val (pickupEvents, scheduleEvents) = activeEvents.partition { isPickupRule(it) }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
         scheduleEvents.forEach { event ->
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
-            val display = CapsuleMessageComposer.composeSchedule(event, isExpired)
+            val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired)
 
             capsules.add(createCapsuleItem(
                 id = event.id,
                 notifId = event.id.hashCode(),
-                type = CapsuleService.TYPE_SCHEDULE,
+                type = TYPE_SCHEDULE,
                 eventType = resolveCapsuleEventType(event),
                 description = event.description,
                 color = event.color.toArgb(),
@@ -430,17 +494,14 @@ class CapsuleStateManager(
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
                 now.isAfter(endDateTime)
             }
-            val capsuleType = if (isAnyExpired) CapsuleService.TYPE_PICKUP_EXPIRED else CapsuleService.TYPE_PICKUP
-            val display = CapsuleMessageComposer.composeAggregatePickup(
-                pickupEvents = pickupEvents,
-                hasExpiredItems = isAnyExpired
-            )
+            val capsuleType = if (isAnyExpired) TYPE_PICKUP_EXPIRED else TYPE_PICKUP
+            val display = CapsuleMessageComposer.composeAggregatePickup(context, pickupEvents)
 
             capsules.add(createCapsuleItem(
                 id = AGGREGATE_PICKUP_ID,
                 notifId = AGGREGATE_NOTIF_ID,
                 type = capsuleType,
-                eventType = EventTags.PICKUP,
+                eventType = RuleMatchingEngine.RULE_PICKUP,
                 description = pickupEvents.firstOrNull()?.description ?: "",
                 color = android.graphics.Color.GREEN,
                 startMillis = System.currentTimeMillis(),
@@ -461,15 +522,14 @@ class CapsuleStateManager(
                 // 3. ✅ 关键：根据过期状态决定胶囊类型
                 // 如果过期，直接传 TYPE_PICKUP_EXPIRED (3)，不让 Provider 瞎猜
                 val capsuleType = if (isExpired) {
-                    CapsuleService.TYPE_PICKUP_EXPIRED
+                    TYPE_PICKUP_EXPIRED
                 } else {
-                    CapsuleService.TYPE_PICKUP
+                    TYPE_PICKUP
                 }
 
-                // 4. ✅ 回退：ID 保持稳定，不再 +1
-                // 我们改用 CapsuleService 里的暴力刷新策略来解决弹窗问题
+                // 4. ID 保持稳定，不再 +1
                 val dynamicNotifId = event.id.hashCode()
-                val display = CapsuleMessageComposer.composePickup(event, isExpired)
+                val display = CapsuleMessageComposer.composePickup(context, event, isExpired)
 
                 // ✅ 详细日志：输出生成的胶囊信息
                 Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=${display.shortText}")
@@ -478,7 +538,7 @@ class CapsuleStateManager(
                     id = event.id,
                     notifId = dynamicNotifId, // ID 保持不变
                     type = capsuleType,
-                    eventType = event.tag,
+                    eventType = RuleMatchingEngine.RULE_PICKUP,
                     description = event.description,
                     color = android.graphics.Color.GREEN,
                     startMillis = toMillis(event, event.startTime),
@@ -489,7 +549,7 @@ class CapsuleStateManager(
         }
 
         Log.d(TAG, "最终胶囊数量: ${capsules.size}")
-        return CapsuleUiState.Active(capsules)
+        return capsules
     }
 
     private fun createCapsuleItem(
@@ -523,8 +583,26 @@ class CapsuleStateManager(
         return if (event.eventType == EventType.COURSE) {
             EventType.COURSE
         } else {
-            event.tag
+            resolveRuleId(event)
         }
+    }
+
+    private fun resolveRuleId(event: MyEvent): String {
+        val parsedRuleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
+        if (!parsedRuleId.isNullOrBlank()) {
+            return parsedRuleId
+        }
+        return when (event.tag) {
+            EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
+            EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
+            EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
+            EventTags.GENERAL -> RuleMatchingEngine.RULE_GENERAL
+            else -> if (event.tag.isNotBlank()) event.tag else RuleMatchingEngine.RULE_GENERAL
+        }
+    }
+
+    private fun isPickupRule(event: MyEvent): Boolean {
+        return resolveRuleId(event) == RuleMatchingEngine.RULE_PICKUP
     }
 
     private fun toMillis(event: MyEvent, timeStr: String): Long {

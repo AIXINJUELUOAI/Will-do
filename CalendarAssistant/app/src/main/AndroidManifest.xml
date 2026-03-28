@@ -24,6 +24,7 @@
     <!-- 前台服务 (胶囊) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- 🔥 新增：开机自启权限 (必须有这个，BootReceiver 才能工作) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -120,18 +121,7 @@
         </service>
 
 
-        <!-- 2. 实况胶囊服务 -->
-        <service
-            android:name=".service.capsule.CapsuleService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.service.foreground.specialUse"
-                android:value="live_capsule" />
-        </service>
-
-        <!-- 3. 下拉磁贴服务 -->
+        <!-- 2. 下拉磁贴服务 -->
         <service
             android:name=".service.tile.CaptureTileService"
             android:icon="@drawable/ic_qs_recognition"
@@ -167,6 +157,12 @@
 
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".service.receiver.AlarmReceiver" />
+
+        <!-- 日历定期同步接收器 -->
+        <receiver
+            android:name=".CalendarSyncReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- 5. 每日汇总接收器 (已修正) -->
         <!-- 这里的 exported=false 是对的，因为我们是用显式 Intent 调用的 -->
