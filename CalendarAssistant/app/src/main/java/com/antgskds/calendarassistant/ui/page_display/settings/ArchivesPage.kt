@@ -36,7 +36,9 @@ fun ArchivesPage(
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        viewModel.fetchArchivedEvents()
+        if (archivedEvents.isEmpty()) {
+            viewModel.fetchArchivedEvents()
+        }
     }
 
     val groupedEvents = remember(archivedEvents) {

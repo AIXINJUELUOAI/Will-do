@@ -23,12 +23,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.util.DateCalculator
+import com.antgskds.calendarassistant.core.rule.EventPresenter
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.launch
@@ -91,6 +93,13 @@ fun SwipeableEventItem(
     // 移除 remember 缓存，让 isExpired 每次重组时重新计算
     // 这样 _timeTrigger 触发重组时，过期状态能实时更新
     val isExpired = DateCalculator.isEventExpired(event)
+    val context = LocalContext.current
+
+    val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn) {
+        EventPresenter.present(context, event)
+    }
+
+    val displayDescription = model.subtitle ?: model.detail
 
     LaunchedEffect(isRevealed) {
         if (isRevealed) {
@@ -274,24 +283,16 @@ fun SwipeableEventItem(
                                     }
                                 }
 
-                                // 3. 描述 (Description)
-                                if (event.description.isNotBlank()) {
-                                    Text(
-                                        text = event.description,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2
-                                    )
-                                }
+                        // 3. 描述 (Description)
+                        if (!displayDescription.isNullOrBlank()) {
+                            Text(
+                                text = displayDescription,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
 
-                                // 4. 地点
-                                if (event.location.isNotBlank()) {
-                                    Text(
-                                        text = event.location,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.Gray
-                                    )
-                                }
                     }
                 }
             }

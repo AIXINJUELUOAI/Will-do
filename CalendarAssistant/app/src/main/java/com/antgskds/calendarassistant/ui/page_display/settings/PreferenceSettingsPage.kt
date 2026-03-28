@@ -68,9 +68,8 @@ fun PreferenceSettingsPage(
         }
     }
 
-    // 获取 events 用于检测重复提醒
+    // 用于按需查询 events（避免订阅全量 Flow）
     val repository = remember { AppRepository.getInstance(context) }
-    val events by repository.events.collectAsState()
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
@@ -223,7 +222,7 @@ fun PreferenceSettingsPage(
                     )
                     SwitchSettingItem(
                         title = "悬浮日程",
-                        subtitle = "长按音量+键呼出悬浮窗",
+                        subtitle = "用于悬浮窗日程显示与编辑",
                         checked = settings.isFloatingWindowEnabled,
                         onCheckedChange = { isChecked ->
                             if (isChecked && !hasOverlayPermission) {
@@ -447,6 +446,32 @@ fun PreferenceSettingsPage(
                 }
             }
 
+            // ================== 操作板块 ==================
+            Text("操作", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    VolumeLongPressSettingItem(
+                        title = "长按音量+",
+                        subtitle = "自定义长按音量+动作",
+                        checked = settings.volumeUpLongPressEnabled,
+                        action = settings.volumeUpLongPressAction,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(volumeUpLongPressEnabled = isChecked)
+                        },
+                        onActionChange = { action ->
+                            viewModel.updatePreference(volumeUpLongPressAction = action)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                }
+            }
+
             // ================== 通知板块 ==================
             Text("通知", style = sectionTitleStyle)
             Card(
@@ -525,7 +550,7 @@ fun PreferenceSettingsPage(
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(advanceReminderEnabled = isChecked)
                             if (isChecked && settings.advanceReminderMinutes > 0) {
-                                val hasDuplicate = events.any { event ->
+                                val hasDuplicate = repository.events.value.any { event ->
                                     event.reminders.any { it <= settings.advanceReminderMinutes }
                                 }
                                 if (hasDuplicate) {
@@ -671,28 +696,6 @@ fun PreferenceSettingsPage(
                                 modifier = Modifier.padding(start = 16.dp),
                                 thickness = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
-                            SwitchSettingItem(
-                                title = "同步重复日程 (Beta)",
-                                subtitle = "从系统日历导入重复日程，仅同步正负30天实例",
-                                checked = settings.isRecurringCalendarSyncEnabled,
-                                onCheckedChange = { isChecked ->
-                                    viewModel.toggleRecurringCalendarSync(isChecked) { result ->
-                                        if (result.isSuccess) {
-                                            if (isChecked) {
-                                                showToast("重复日程同步已开启，并已立即同步")
-                                            } else {
-                                                val removedCount = result.getOrNull() ?: 0
-                                                showToast("重复日程同步已关闭，已清理 $removedCount 条导入记录")
-                                            }
-                                        } else {
-                                            val message = result.exceptionOrNull()?.message
-                                            showToast(message ?: "重复日程同步切换失败", ToastType.ERROR)
-                                        }
-                                    }
-                                },
-                                cardTitleStyle = cardTitleStyle,
-                                cardSubtitleStyle = cardSubtitleStyle
                             )
                         }
                     }
@@ -852,6 +855,61 @@ fun SliderSettingItem(
             valueRange = valueRange,
             steps = steps
         )
+    }
+}
+
+@Composable
+fun VolumeLongPressSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    action: Int,
+    onCheckedChange: (Boolean) -> Unit,
+    onActionChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = cardTitleStyle)
+                Text(subtitle, style = cardSubtitleStyle)
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+
+        AnimatedVisibility(
+            visible = checked,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "无操作", style = cardSubtitleStyle)
+                    Text(text = "识屏", style = cardSubtitleStyle)
+                    Text(text = "悬浮窗", style = cardSubtitleStyle)
+                }
+                Slider(
+                    value = action.toFloat(),
+                    onValueChange = { onActionChange(it.toInt()) },
+                    valueRange = 0f..2f,
+                    steps = 1
+                )
+            }
+        }
     }
 }
 

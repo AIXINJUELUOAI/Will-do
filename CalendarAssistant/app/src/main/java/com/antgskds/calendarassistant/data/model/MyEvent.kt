@@ -14,9 +14,13 @@ object EventType {
 
 object EventTags {
     const val GENERAL = "general"  // 普通日程、会议、约会
-    const val PICKUP = "pickup"  // 取件、取餐、核销码
-    const val TRAIN = "train"     // 火车、高铁、飞机
+    const val PICKUP = "pickup"  // 取件、核销码
+    const val FOOD = "food"      // 取餐、外卖
+    const val TRAIN = "train"     // 火车、高铁
     const val TAXI = "taxi"       // 网约车、出租车
+    const val FLIGHT = "flight"   // 航班、飞机
+    const val TICKET = "ticket"   // 取票
+    const val SENDER = "sender"   // 寄件
 }
 
 @Serializable

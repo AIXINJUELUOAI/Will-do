@@ -70,7 +70,10 @@ class TextAccessibilityService : AccessibilityService() {
         @Volatile var instance: TextAccessibilityService? = null
             private set
         private val isAnalyzing = AtomicBoolean(false)
-        private const val LONG_PRESS_THRESHOLD = 500L
+        private const val LONG_PRESS_THRESHOLD = 400L
+        private const val ACTION_VOLUME_LONG_PRESS_NONE = 0
+        private const val ACTION_VOLUME_LONG_PRESS_SCREENSHOT = 1
+        private const val ACTION_VOLUME_LONG_PRESS_FLOATING = 2
     }
 
     private var launcherPackageName: String? = null
@@ -92,40 +95,63 @@ class TextAccessibilityService : AccessibilityService() {
             return super.onKeyEvent(event)
         }
 
-        if (!currentSettings.isFloatingWindowEnabled) {
+        val longPressAction = currentSettings.volumeUpLongPressAction
+        val shouldHandleLongPress = currentSettings.volumeUpLongPressEnabled && when (longPressAction) {
+            ACTION_VOLUME_LONG_PRESS_NONE -> false
+            ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
+            ACTION_VOLUME_LONG_PRESS_FLOATING -> currentSettings.isFloatingWindowEnabled
+            else -> false
+        }
+
+        if (!shouldHandleLongPress) {
             return super.onKeyEvent(event)
         }
 
         // 1. 如果悬浮窗已显示，完全放行所有按键，确保用户可以正常调节音量或进行其他操作
         if (FloatingScheduleService.isShowing) {
             Log.d(TAG, "悬浮窗已显示，放行按键")
-            return super.onKeyEvent(event)
+            return false
         }
 
         // 2. 监听音量加键 (KEYCODE_VOLUME_UP)
-        // 采用“完全拦截 + 手动补偿”策略，解决长按时音量暴增的问题
+        // 采用“完全拦截 + 手动补偿”策略，避免长按弹出系统音量条
         if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
-                    // 如果是重复的 DOWN 事件（物理按住不放时系统会发送多个 DOWN），只处理第一次
-                    if (event.repeatCount == 0) {
-                        isLongPressTriggered = false
-                        volumeLongPressJob?.cancel()
+                    // 如果是重复的 DOWN 事件（物理按住不放时系统会发送多个 DOWN），直接拦截
+                    if (event.repeatCount > 0) {
+                        return true
+                    }
 
-                        // 启动计时协程
-                        volumeLongPressJob = serviceScope.launch {
-                            delay(LONG_PRESS_THRESHOLD)
-                            // 延时结束，说明用户按住超过了阈值，触发长按逻辑
-                            isLongPressTriggered = true
-                            Log.d(TAG, "长按音量+ 已确认，触发悬浮窗")
+                    isLongPressTriggered = false
+                    volumeLongPressJob?.cancel()
 
-                            // 触发轻微震动反馈，告诉用户“功能已激活，可以松手了”
-                            performHapticFeedback()
+                    // 启动计时协程
+                    volumeLongPressJob = serviceScope.launch {
+                        delay(LONG_PRESS_THRESHOLD)
+                        // 延时结束，说明用户按住超过了阈值，触发长按逻辑
+                        isLongPressTriggered = true
+                        val actionLabel = when (longPressAction) {
+                            ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> "识屏"
+                            ACTION_VOLUME_LONG_PRESS_FLOATING -> "悬浮窗"
+                            else -> "无操作"
+                        }
+                        Log.d(TAG, "长按音量+ 已确认，触发 $actionLabel")
 
-                            startFloatingService()
+                        // 触发轻微震动反馈，告诉用户“功能已激活，可以松手了”
+                        performHapticFeedback()
+
+                        when (longPressAction) {
+                            ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> {
+                                startAnalysis(currentSettings.screenshotDelayMs.milliseconds)
+                            }
+                            ACTION_VOLUME_LONG_PRESS_FLOATING -> {
+                                startFloatingService()
+                            }
                         }
                     }
-                    // 拦截事件：告诉系统“我处理了”，系统就不会增加音量
+
+                    // 拦截事件：告诉系统“我处理了”，系统就不会弹出音量条
                     return true
                 }
 
@@ -134,16 +160,16 @@ class TextAccessibilityService : AccessibilityService() {
                     volumeLongPressJob?.cancel()
 
                     if (isLongPressTriggered) {
-                        // 如果之前已经触发了长按逻辑（悬浮窗已打开），这里什么都不做
+                        // 如果之前已经触发了长按逻辑，这里什么都不做
                         Log.d(TAG, "音量+ 抬起 (长按处理完毕)")
                     } else {
                         // 如果没触发长按，说明这是一次短按
-                        // 手动补偿：调用系统 API 增加音量
+                        // 手动补偿：调用系统 API 增加音量并显示音量条
                         Log.d(TAG, "音量+ 抬起 (短按)，模拟系统音量增加")
                         try {
-                            audioManager.adjustStreamVolume(
-                                AudioManager.STREAM_MUSIC,
+                            audioManager.adjustSuggestedStreamVolume(
                                 AudioManager.ADJUST_RAISE,
+                                AudioManager.USE_DEFAULT_STREAM_TYPE,
                                 AudioManager.FLAG_SHOW_UI
                             )
                         } catch (e: Exception) {
@@ -154,6 +180,12 @@ class TextAccessibilityService : AccessibilityService() {
                     // 重置状态
                     isLongPressTriggered = false
                     // 拦截事件：防止系统处理 UP 事件导致意外行为
+                    return true
+                }
+
+                else -> {
+                    volumeLongPressJob?.cancel()
+                    isLongPressTriggered = false
                     return true
                 }
             }
