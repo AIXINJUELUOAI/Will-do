@@ -108,7 +108,9 @@ class SettingsViewModel(
         autoArchive: Boolean? = null,
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
-        floatingEventRange: Int? = null
+        floatingEventRange: Int? = null,
+        volumeUpLongPressEnabled: Boolean? = null,
+        volumeUpLongPressAction: Int? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -125,6 +127,8 @@ class SettingsViewModel(
             if (useMultimodalAi != null) current = current.copy(useMultimodalAi = useMultimodalAi)
             if (disableThinking != null) current = current.copy(disableThinking = disableThinking)
             if (floatingEventRange != null) current = current.copy(floatingEventRange = floatingEventRange)
+            if (volumeUpLongPressEnabled != null) current = current.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
+            if (volumeUpLongPressAction != null) current = current.copy(volumeUpLongPressAction = volumeUpLongPressAction)
 
             repository.updateSettings(current)
         }
@@ -144,13 +148,6 @@ class SettingsViewModel(
     fun updateThemeMode(mode: Int) {
         viewModelScope.launch {
             repository.updateSettings(settings.value.copy(themeMode = mode))
-        }
-    }
-
-    fun toggleRecurringCalendarSync(enabled: Boolean, callback: suspend (Result<Int>) -> Unit = {}) {
-        viewModelScope.launch {
-            val result = repository.setRecurringCalendarSyncEnabled(enabled)
-            callback(result)
         }
     }
 
