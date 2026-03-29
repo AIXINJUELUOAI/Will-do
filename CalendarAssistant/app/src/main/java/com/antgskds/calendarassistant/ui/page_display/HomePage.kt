@@ -465,6 +465,7 @@ fun HomePage(
         ) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0),
                 topBar = {
                     CenterAlignedTopAppBar(
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -480,7 +481,6 @@ fun HomePage(
                         actions = {}
                     )
                 },
-                bottomBar = {}
             ) { innerPadding ->
                 Box(
                     modifier = Modifier
