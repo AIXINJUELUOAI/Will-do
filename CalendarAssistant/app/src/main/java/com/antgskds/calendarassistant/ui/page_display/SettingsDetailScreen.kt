@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -160,6 +161,7 @@ private fun SettingsPageContent(
         )
 
         else -> Scaffold(
+            contentWindowInsets = WindowInsets(0),
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text(settingsTitle(destination)) },

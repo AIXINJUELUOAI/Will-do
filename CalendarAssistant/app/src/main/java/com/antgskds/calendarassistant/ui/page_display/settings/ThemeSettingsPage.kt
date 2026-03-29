@@ -119,8 +119,9 @@ fun ThemeSettingsPage(
             }
         }
 
-        // 底部留白
+        // 底部留白 + 导航栏避让
         Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 

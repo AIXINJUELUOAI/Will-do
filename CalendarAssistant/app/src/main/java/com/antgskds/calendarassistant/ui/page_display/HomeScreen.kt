@@ -252,7 +252,8 @@ fun HomeScreen(
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = IntegratedFloatingBarBottomSpacing + bottomInset)
+                .navigationBarsPadding()
+                .padding(bottom = IntegratedFloatingBarBottomSpacing)
                 .offset { IntOffset(0, scheduleOffsetPx.roundToInt()) }
                 .graphicsLayer {
                     val clamped = scheduleProgress.coerceIn(0f, 1f)
