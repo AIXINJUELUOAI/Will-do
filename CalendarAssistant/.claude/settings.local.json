@@ -15,7 +15,8 @@
       "Read(//c/Users/ASUS/.claude/file-history/9823da47-4a23-4e20-beca-08a2aa6fa666/**)",
       "Bash(done)",
       "Bash(ANDROID_HOME=\"C:/Users/ASUS/AppData/Local/Android/Sdk\" JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" ./gradlew assembleDebug)",
-      "Bash(grep \"\\\\.kt$\")"
+      "Bash(grep \"\\\\.kt$\")",
+      "Read(//c/Program Files/**)"
     ]
   }
 }
