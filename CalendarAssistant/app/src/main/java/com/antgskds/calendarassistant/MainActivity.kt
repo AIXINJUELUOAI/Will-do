@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -99,6 +100,11 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
+        // 小窗模式：显式关闭导航栏对比度保护，防止系统自动加白色底色
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+
         val app = application as App
         val repository = app.repository
 
@@ -153,10 +159,12 @@ class MainActivity : ComponentActivity() {
             ) {
                 val view = LocalView.current
                 if (!view.isInEditMode) {
+                    val bgColor = MaterialTheme.colorScheme.background.toArgb()
                     SideEffect {
                         val window = (view.context as Activity).window
                         window.statusBarColor = Color.Transparent.toArgb()
                         window.navigationBarColor = Color.Transparent.toArgb()
+                        window.setBackgroundDrawable(ColorDrawable(bgColor))
                         WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
                         WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !isDarkTheme
                     }
@@ -165,7 +173,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
 
                 // 最外层容器（包裹 NavHost 和所有弹窗）
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     NavHost(
                         modifier = Modifier.background(MaterialTheme.colorScheme.background),
                         navController = navController,

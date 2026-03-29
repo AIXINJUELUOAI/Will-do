@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.ui.page_display.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -198,6 +199,9 @@ fun AboutPage(
         )
 
         Spacer(modifier = Modifier.height(32.dp))
+
+        // 导航栏避让
+        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
