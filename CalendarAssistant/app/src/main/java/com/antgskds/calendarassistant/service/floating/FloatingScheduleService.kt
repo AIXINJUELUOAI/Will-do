@@ -236,8 +236,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     FloatingScheduleScreen(
                         events = filteredEvents,
                         onClose = { requestClose() },
-                        onManualInput = { text, onComplete ->
-                            handleManualInput(text = text, sourceImagePath = null, onComplete = onComplete)
+                        onManualInput = { text, isNote, onComplete ->
+                            handleManualInput(text = text, isNote = isNote, sourceImagePath = null, onComplete = onComplete)
                         },
                         onPickImageRequest = { onComplete ->
                             startImagePickFlow(onComplete)
@@ -405,6 +405,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private fun handleManualInput(
         text: String,
+        isNote: Boolean = false,
         sourceImagePath: String? = null,
         onComplete: () -> Unit = {}
     ) {

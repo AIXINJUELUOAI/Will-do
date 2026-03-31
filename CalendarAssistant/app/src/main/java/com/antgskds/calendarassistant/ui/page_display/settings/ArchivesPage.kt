@@ -105,20 +105,13 @@ fun ArchivesPage(
                     ) {
                         groupedEvents.forEach { (date, events) ->
                             item(key = "header_${date}") {
-                                Column {
-                                    HorizontalDivider(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                        thickness = 1.dp
-                                    )
-                                    Text(
-                                        text = "—— ${date.format(dateFormatter)}",
-                                        modifier = Modifier.padding(vertical = 16.dp),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
+                                Text(
+                                    text = "—— ${date.format(dateFormatter)}",
+                                    modifier = Modifier.padding(vertical = 16.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                             }
 
                             items(events, key = { it.id }) { event ->
