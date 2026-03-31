@@ -43,6 +43,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
@@ -453,12 +456,15 @@ fun HomePage(
                 .fillMaxSize()
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .graphicsLayer { alpha = 1f - progress }
-                .pointerInput(isActionExpanded) {
+                .pointerInput(isActionExpanded, isSearchMode) {
                     detectTapGestures(onTap = {
-                        if (isActionExpanded) {
-                            onActionExpandedChange(false)
-                        } else {
-                            viewModel.onRevealEvent(null)
+                        when {
+                            isActionExpanded -> onActionExpandedChange(false)
+                            isSearchMode -> {
+                                isSearchMode = false
+                                if (currentTab == 1) allSearchQuery = "" else todaySearchQuery = ""
+                            }
+                            else -> viewModel.onRevealEvent(null)
                         }
                     })
                 }
@@ -646,48 +652,86 @@ fun HomePage(
                     }
 
                     if (showSearchBar) {
-                        OutlinedTextField(
-                            value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
-                            onValueChange = {
-                                if (currentTab == 1) {
-                                    allSearchQuery = it
-                                } else {
-                                    todaySearchQuery = it
-                                }
-                            },
+                        val searchFocusRequester = remember { FocusRequester() }
+                        val keyboardController = LocalSoftwareKeyboardController.current
+
+                        LaunchedEffect(isSearchMode) {
+                            if (isSearchMode) {
+                                searchFocusRequester.requestFocus()
+                            }
+                        }
+
+                        // 实时获取键盘高度
+                        val imePaddingDp = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+
+                        // 悬浮栏基础高度（键盘完全收起时，搜索框应该待的最低位置）
+                        val baseBottomPadding = floatingBarOffset + 36.dp
+
+                        // 动态计算：coerceAtLeast 保证搜索框永远不会低于基础高度
+                        val searchBarBottomPadding = (imePaddingDp + 12.dp).coerceAtLeast(baseBottomPadding)
+
+                        // 触摸屏障：防止点击穿透到后面的列表
+                        Box(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = floatingBarOffset + 36.dp)
-                                .fillMaxWidth(0.75f)
-                                .height(searchBarHeight),
-                            placeholder = { Text("搜索标题、备注或地点...") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = "搜索",
-                                    modifier = Modifier.size(topBarIconSize)
-                                )
-                            },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = { isSearchMode = false },
-                                    modifier = Modifier.padding(end = 4.dp)
-                                ) {
+                                .fillMaxWidth()
+                                .padding(bottom = searchBarBottomPadding)
+                                .height(searchBarHeight + 36.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { /* 消费触摸，防止穿透 */ }
+                                ),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            OutlinedTextField(
+                                value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
+                                onValueChange = {
+                                    if (currentTab == 1) {
+                                        allSearchQuery = it
+                                    } else {
+                                        todaySearchQuery = it
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.75f)
+                                    .height(searchBarHeight)
+                                    .focusRequester(searchFocusRequester)
+                                    .pointerInput(Unit) {
+                                        detectTapGestures {
+                                            searchFocusRequester.requestFocus()
+                                            keyboardController?.show()
+                                        }
+                                    },
+                                placeholder = { Text("搜索标题、备注或地点...") },
+                                leadingIcon = {
                                     Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "关闭",
+                                        Icons.Default.Search,
+                                        contentDescription = "搜索",
                                         modifier = Modifier.size(topBarIconSize)
                                     )
-                                }
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(24.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { isSearchMode = false },
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "关闭",
+                                            modifier = Modifier.size(topBarIconSize)
+                                        )
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(24.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }

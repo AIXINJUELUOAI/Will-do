@@ -2,28 +2,29 @@ package com.antgskds.calendarassistant.ui.floating
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -39,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -56,6 +58,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -67,8 +70,8 @@ import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
@@ -77,12 +80,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -93,8 +95,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
@@ -103,9 +108,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
+import com.antgskds.calendarassistant.R
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -125,16 +134,15 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.runtime.CompositionLocalProvider // 需要确保有这个导入
-import androidx.compose.ui.unit.Density // 需要确保有这个导入
+
+// --- 定义输入模式 ---
+enum class FloatingInputMode { SCHEDULE, NOTE }
 
 @Composable
 fun FloatingScheduleScreen(
     events: List<MyEvent>,
     onClose: () -> Unit,
-    onManualInput: (String, () -> Unit) -> Unit,
+    onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
     onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onEventAction: (String, String) -> Unit = { _, _ -> },
@@ -153,7 +161,7 @@ fun FloatingScheduleScreen(
     val animateClose = {
         scope.launch {
             isAppearing = false
-            delay(250) // 等待退出动画播完
+            delay(250)
             onClose()
         }
     }
@@ -165,8 +173,8 @@ fun FloatingScheduleScreen(
 
     // 动画曲线定义
     val fastOutSlowIn = remember { CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f) }
-    val enterDuration = 280 // 毫秒
-    val exitDuration = 200 // 毫秒
+    val enterDuration = 280
+    val exitDuration = 200
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
@@ -208,13 +216,13 @@ fun FloatingScheduleScreen(
                 animationSpec = tween(enterDuration, easing = fastOutSlowIn)
             ) + slideInHorizontally(
                 animationSpec = tween(enterDuration, easing = fastOutSlowIn),
-                initialOffsetX = { it }  // 从屏幕右侧滑入
+                initialOffsetX = { it }
             ),
             exit = fadeOut(
                 animationSpec = tween(exitDuration, easing = fastOutSlowIn)
             ) + slideOutHorizontally(
                 animationSpec = tween(exitDuration, easing = fastOutSlowIn),
-                targetOffsetX = { it }  // 向屏幕右侧滑出
+                targetOffsetX = { it }
             ),
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
@@ -236,50 +244,26 @@ fun FloatingScheduleScreen(
             )
         }
 
-        // 顶部遮罩
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(80.dp)
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = bgAlpha), Color.Transparent)))
-        )
+        // 顶部与底部遮罩
+        Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(80.dp).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = bgAlpha), Color.Transparent))))
+        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = bgAlpha)))))
 
-        // 底部遮罩
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(150.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = bgAlpha))))
-        )
-
-        // 底部输入框：从下方滑入滑出
+        // 底部输入框
         AnimatedVisibility(
             visible = isAppearing,
-            enter = fadeIn(
-                animationSpec = tween(enterDuration, easing = fastOutSlowIn)
-            ) + slideInVertically(
-                animationSpec = tween(enterDuration, easing = fastOutSlowIn),
-                initialOffsetY = { it }  // 从屏幕下方滑入
-            ),
-            exit = fadeOut(
-                animationSpec = tween(exitDuration, easing = fastOutSlowIn)
-            ) + slideOutVertically(
-                animationSpec = tween(exitDuration, easing = fastOutSlowIn),
-                targetOffsetY = { it }  // 向屏幕下方滑出
-            ),
+            enter = fadeIn(tween(enterDuration, easing = fastOutSlowIn)) + slideInVertically(tween(enterDuration, easing = fastOutSlowIn), initialOffsetY = { it }),
+            exit = fadeOut(tween(exitDuration, easing = fastOutSlowIn)) + slideOutVertically(tween(exitDuration, easing = fastOutSlowIn), targetOffsetY = { it }),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             BottomInteractionArea(
                 modifier = Modifier,
                 text = manualInputText,
                 onTextChange = { manualInputText = it },
-                onManualSubmit = { text ->
+                onManualSubmit = { text, isNote ->
                     if (text.isNotBlank()) {
                         isLoading = true
                         onLoadingChange(true)
-                        onManualInput(text) {
+                        onManualInput(text, isNote) {
                             isLoading = false
                             onLoadingChange(false)
                         }
@@ -302,22 +286,8 @@ fun FloatingScheduleScreen(
 
         pickerRequest?.let { request ->
             when (request) {
-                is FloatingPickerRequest.Date -> FloatingDatePickerOverlay(
-                    initialDate = request.initialDate,
-                    onDismiss = { pickerRequest = null },
-                    onConfirm = { date ->
-                        request.onConfirm(date)
-                        pickerRequest = null
-                    }
-                )
-                is FloatingPickerRequest.Time -> FloatingTimePickerOverlay(
-                    initialTime = request.initialTime,
-                    onDismiss = { pickerRequest = null },
-                    onConfirm = { time ->
-                        request.onConfirm(time)
-                        pickerRequest = null
-                    }
-                )
+                is FloatingPickerRequest.Date -> FloatingDatePickerOverlay(request.initialDate, { pickerRequest = null }, { date -> request.onConfirm(date); pickerRequest = null })
+                is FloatingPickerRequest.Time -> FloatingTimePickerOverlay(request.initialTime, { pickerRequest = null }, { time -> request.onConfirm(time); pickerRequest = null })
             }
         }
     }
@@ -328,11 +298,22 @@ fun BottomInteractionArea(
     modifier: Modifier = Modifier,
     text: String,
     onTextChange: (String) -> Unit,
-    onManualSubmit: (String) -> Unit,
+    onManualSubmit: (String, Boolean) -> Unit, // Boolean true 表示便签
     onPickImage: () -> Unit,
     onSwipeUpClose: () -> Unit,
     isLoading: Boolean = false
 ) {
+    // 状态与颜色主题定义
+    var currentMode by remember { mutableStateOf(FloatingInputMode.SCHEDULE) }
+    val isNote = currentMode == FloatingInputMode.NOTE
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val noteColor = Color(0xFFF57C00) // 橙色调代表便签
+
+    val activeColor by animateColorAsState(targetValue = if (isNote) noteColor else primaryColor, label = "modeColor")
+    val modeIconRes = if (isNote) R.drawable.ic_stat_note else R.drawable.ic_stat_event
+    val modeTitle = if (isNote) "便签" else "日程"
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -355,66 +336,133 @@ fun BottomInteractionArea(
                         }
                     )
                 }
+                .padding(horizontal = 28.dp, vertical = 16.dp)
         ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
+            Surface(
+                // 【核心修改】：将原本的 RoundedCornerShape(26.dp) 改为纯粹的 CircleShape
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                placeholder = { Text(text = "输入日程...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                shape = RoundedCornerShape(28.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    disabledContainerColor = MaterialTheme.colorScheme.surface,
-                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                    disabledBorderColor = Color.Transparent,
-                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onManualSubmit(text) }),
-                singleLine = true,
-                enabled = !isLoading,
-                trailingIcon = {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .padding(end = 8.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .height(56.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. 左侧：模式切换开关 (保持原样，带透明度底色)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(activeColor.copy(alpha = 0.15f))
+                            .clickable(enabled = !isLoading) {
+                                currentMode = if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Crossfade(targetState = modeIconRes, label = "ModeSwitch") { iconRes ->
+                            Icon(
+                                painter = painterResource(id = iconRes),
+                                contentDescription = modeTitle,
+                                tint = activeColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // 2. 中间：多行自适应输入区 (保持原样)
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 10.dp),
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp
+                        ),
+                        singleLine = false,
+                        maxLines = 4,
+                        enabled = !isLoading,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                        cursorBrush = SolidColor(activeColor),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (text.isEmpty()) {
+                                    Text(
+                                        text = "一句话安排$modeTitle...",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        fontSize = 15.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+
+                    // 3. 右侧：功能区 (保持原样，包含扫码和发送按钮)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = onPickImage,
+                            enabled = !isLoading,
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            IconButton(onClick = onPickImage) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Image,
-                                    contentDescription = "上传图片",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_stat_scan),
+                                contentDescription = "扫描图片",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(2.dp))
+
+                        if (isLoading) {
+                            Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = activeColor
                                 )
                             }
-                            IconButton(
-                                onClick = { onManualSubmit(text) },
-                                enabled = text.isNotBlank()
+                        } else {
+                            val isTextNotBlank = text.isNotBlank()
+                            val sendBtnContainerColor by animateColorAsState(
+                                targetValue = if (isTextNotBlank) activeColor else activeColor.copy(alpha = 0.15f),
+                                animationSpec = tween(150), label = "send_bg"
+                            )
+                            val sendBtnIconColor by animateColorAsState(
+                                targetValue = if (isTextNotBlank) Color.White else activeColor.copy(alpha = 0.6f),
+                                animationSpec = tween(150), label = "send_icon"
+                            )
+
+                            Surface(
+                                onClick = { if (isTextNotBlank) onManualSubmit(text, isNote) },
+                                shape = CircleShape,
+                                color = sendBtnContainerColor,
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Send,
-                                    contentDescription = "发送",
-                                    tint = if (text.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ArrowUpward,
+                                        contentDescription = "发送",
+                                        tint = sendBtnIconColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            )
+            }
         }
 
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))

@@ -112,22 +112,13 @@ fun AllEventsPage(
                 groupedEvents.forEach { (date, events) ->
                     // 日期分割线头部
                     item(key = "header_${date}") {
-                        Column {
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                thickness = 1.dp
-                            )
-                            Text(
-                                text = "—— ${date.format(dateFormatter)}",
-                                modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        Text(
+                            text = "—— ${date.format(dateFormatter)}",
+                            modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     // 该日期下的所有事件
