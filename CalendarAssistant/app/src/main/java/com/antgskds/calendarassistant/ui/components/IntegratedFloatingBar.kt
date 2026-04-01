@@ -25,10 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,9 +40,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.R
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
@@ -115,7 +115,10 @@ fun IntegratedFloatingBar(
 
     val isMenuSelected = isSidebarOpen
     val isTabHighlightEnabled = !isSidebarOpen
-    val currentTabIcon = if (selectedTab == 0) Icons.Default.Home else Icons.Default.List
+    val menuIcon = painterResource(R.drawable.floatingbar_menu)
+    val todayIcon = painterResource(R.drawable.floatingbar_today)
+    val allIcon = painterResource(R.drawable.floatingbar_all)
+    val currentTabIcon = if (selectedTab == 0) todayIcon else allIcon
     val currentTabClick = if (selectedTab == 0) onHomeClick else onListClick
 
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
@@ -149,7 +152,7 @@ fun IntegratedFloatingBar(
                         contentAlignment = Alignment.Center
                     ) {
                         HydrogenNavIcon(
-                            icon = if (isSidebarOpen) Icons.Default.Menu else currentTabIcon,
+                            icon = if (isSidebarOpen) menuIcon else currentTabIcon,
                             isSelected = true,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
@@ -170,7 +173,7 @@ fun IntegratedFloatingBar(
                         horizontalArrangement = Arrangement.spacedBy(navItemSpacing)
                     ) {
                         HydrogenNavIcon(
-                            icon = Icons.Default.Menu,
+                            icon = menuIcon,
                             isSelected = isMenuSelected,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
@@ -178,7 +181,7 @@ fun IntegratedFloatingBar(
                         )
 
                         HydrogenNavIcon(
-                            icon = Icons.Default.Home,
+                            icon = todayIcon,
                             isSelected = isTabHighlightEnabled && selectedTab == 0,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
@@ -186,7 +189,7 @@ fun IntegratedFloatingBar(
                         )
 
                         HydrogenNavIcon(
-                            icon = Icons.Default.List,
+                            icon = allIcon,
                             isSelected = isTabHighlightEnabled && selectedTab == 1,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
@@ -258,7 +261,7 @@ fun IntegratedFloatingBar(
 
 @Composable
 private fun HydrogenNavIcon(
-    icon: ImageVector,
+    icon: Painter,
     isSelected: Boolean,
     indicatorColor: Color,
     contentColor: Color,
@@ -288,7 +291,7 @@ private fun HydrogenNavIcon(
                 )
             }
             Icon(
-                imageVector = icon,
+                painter = icon,
                 contentDescription = null,
                 tint = contentColor,
                 modifier = Modifier.size(28.dp)

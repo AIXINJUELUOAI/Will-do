@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,7 +50,7 @@ fun ArchivesPage(
             .toSortedMap(reverseOrder())
     }
 
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年M月d日") }
+    val currentYear = remember { LocalDate.now().year }
 
     // 最外层容器
     Box(modifier = Modifier.fillMaxSize()) {
@@ -105,8 +106,13 @@ fun ArchivesPage(
                     ) {
                         groupedEvents.forEach { (date, events) ->
                             item(key = "header_${date}") {
+                                val headerText = if (date.year == currentYear) {
+                                    date.format(DateTimeFormatter.ofPattern("M月d日"))
+                                } else {
+                                    date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
+                                }
                                 Text(
-                                    text = "—— ${date.format(dateFormatter)}",
+                                    text = "—— $headerText",
                                     modifier = Modifier.padding(vertical = 16.dp),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,

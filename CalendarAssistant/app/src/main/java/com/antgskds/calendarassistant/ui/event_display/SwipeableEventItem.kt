@@ -208,7 +208,7 @@ fun SwipeableEventItem(
                 )
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 20.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 左侧彩色条
@@ -252,19 +252,27 @@ fun SwipeableEventItem(
                             }
                         }
 
-                                // 2. 日期范围（仅多日事件显示）
-                                if (event.startDate != event.endDate) {
-                                    Text(
-                                        text = "${event.startDate.monthValue}/${event.startDate.dayOfMonth} - ${event.endDate.monthValue}/${event.endDate.dayOfMonth}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                // 2. 时间信息（跨天日程融合日期）
+                                val isSingleDay = event.startDate == event.endDate
+                                val timeDisplayText = if (isSingleDay) {
+                                    "${event.startTime} - ${event.endTime}"
+                                } else {
+                                    val crossYear = event.startDate.year != event.endDate.year
+                                    val startFmt = if (crossYear) {
+                                        String.format("%02d-%02d-%02d", event.startDate.year % 100, event.startDate.monthValue, event.startDate.dayOfMonth)
+                                    } else {
+                                        String.format("%02d-%02d", event.startDate.monthValue, event.startDate.dayOfMonth)
+                                    }
+                                    val endFmt = if (crossYear) {
+                                        String.format("%02d-%02d-%02d", event.endDate.year % 100, event.endDate.monthValue, event.endDate.dayOfMonth)
+                                    } else {
+                                        String.format("%02d-%02d", event.endDate.monthValue, event.endDate.dayOfMonth)
+                                    }
+                                    "$startFmt ${event.startTime} - $endFmt ${event.endTime}"
                                 }
-
-                                // 3. 时间信息
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "${event.startTime} - ${event.endTime}",
+                                        text = timeDisplayText,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = when {
                                             isExpired -> Color.Gray
