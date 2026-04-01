@@ -511,7 +511,8 @@ class CalendarManager(private val context: Context) {
             Events.DESCRIPTION,
             Events.EVENT_COLOR,
             Events.ALL_DAY,
-            Events.RRULE
+            Events.RRULE,
+            Events.HAS_EXTENDED_PROPERTIES
         )
 
         val selection = if (eventId != null) {
@@ -542,6 +543,7 @@ class CalendarManager(private val context: Context) {
                 val colorIndex = cursor.getColumnIndex(Events.EVENT_COLOR)
                 val allDayIndex = cursor.getColumnIndex(Events.ALL_DAY)
                 val rruleIndex = cursor.getColumnIndex(Events.RRULE)
+                val hasExtPropsIndex = cursor.getColumnIndex(Events.HAS_EXTENDED_PROPERTIES)
 
                 while (cursor.moveToNext()) {
                     val eventId = cursor.getLong(eventIdIndex)
@@ -549,6 +551,10 @@ class CalendarManager(private val context: Context) {
                     val end = cursor.getLong(endIndex)
                     val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val rrule = if (rruleIndex >= 0) cursor.getString(rruleIndex) else null
+
+                    // 跳过生日/纪念日/倒数日等特殊日程
+                    val hasExtendedProperties = if (hasExtPropsIndex >= 0) cursor.getInt(hasExtPropsIndex) else 0
+                    if (hasExtendedProperties > 0) continue
 
                     if (rrule.isNullOrBlank()) continue
 
@@ -692,9 +698,9 @@ class CalendarManager(private val context: Context) {
             Events.DTEND,
             Events.EVENT_COLOR,
             Events.ALL_DAY,
-            Events.RRULE
+            Events.RRULE,
+            Events.HAS_EXTENDED_PROPERTIES
         )
-
         try {
             contentResolver.query(
                 Events.CONTENT_URI,
@@ -713,10 +719,16 @@ class CalendarManager(private val context: Context) {
                 val colorIndex = cursor.getColumnIndex(Events.EVENT_COLOR)
                 val allDayIndex = cursor.getColumnIndex(Events.ALL_DAY)
                 val rruleIndex = cursor.getColumnIndex(Events.RRULE)
+                val hasExtPropsIndex = cursor.getColumnIndex(Events.HAS_EXTENDED_PROPERTIES)
 
                 while (cursor.moveToNext()) {
                     val eventId = cursor.getLong(idIndex)
                     val calendarId = cursor.getLong(calendarIdIndex)
+
+                    // 跳过生日/纪念日/倒数日等特殊日程
+                    val hasExtendedProperties = if (hasExtPropsIndex >= 0) cursor.getInt(hasExtPropsIndex) else 0
+                    if (hasExtendedProperties > 0) continue
+
                     val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
                     val rrule = if (rruleIndex >= 0) cursor.getString(rruleIndex) else null

@@ -98,7 +98,7 @@ fun AllEventsPage(
                 }
             }
         } else {
-            val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", java.util.Locale.CHINA) }
+            val currentYear = remember { LocalDate.now().year }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -112,8 +112,13 @@ fun AllEventsPage(
                 groupedEvents.forEach { (date, events) ->
                     // 日期分割线头部
                     item(key = "header_${date}") {
+                        val headerText = if (date.year == currentYear) {
+                            date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", java.util.Locale.CHINA))
+                        } else {
+                            date.format(DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", java.util.Locale.CHINA))
+                        }
                         Text(
-                            text = "—— ${date.format(dateFormatter)}",
+                            text = "—— $headerText",
                             modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
@@ -124,17 +129,15 @@ fun AllEventsPage(
                     // 该日期下的所有事件
                     items(events, key = { it.id }) { event ->
                         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                            // 头部日期信息
-                            Text(
-                                text = if (event.isRecurringParent) {
-                                    "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}"
-                                } else {
-                                    "${event.startDate} ~ ${event.endDate}"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
+                            // 重复日程显示下次发生时间
+                            if (event.isRecurringParent) {
+                                Text(
+                                    text = "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
 
                             // 滑动组件
                             SwipeableEventItem(
