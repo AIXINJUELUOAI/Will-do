@@ -85,52 +85,6 @@
 | **数据存储** | **Kotlinx Serialization** | JSON 文件存储，轻量且易于迁移 |
 | **系统服务** | **Accessibility & Tile** | 无障碍服务截屏，快捷设置磁贴 |
 
-## 🚀 快速开始
-
-### 环境要求
-*   Android Studio Ladybug | 2024.2.1+
-*   JDK 17+
-*   Android SDK API 35 (Compile SDK 36)
-
-### 配置 AI 模型
-应用运行需要连接 LLM 服务，支持以下厂商：
-1.  **DeepSeek** (推荐)
-2.  **OpenAI** (GPT-3.5/4)
-3.  **Google Gemini**
-4.  **自定义兼容 OpenAI 格式的 API**
-
-请在 `设置 -> AI 模型设置` 中填入您的 `API Key` 和 `Base URL`。
-如需多模态识别，请在 `设置 -> 偏好设置` 打开“使用多模态 AI”，并配置支持图片输入的模型。
-
-### 编译运行
-1.  克隆仓库：
-    ```bash
-    git clone https://github.com/AIXINJUELUOAI/Will-do.git
-    ```
-2.  在 Android Studio 中打开项目，等待 Gradle Sync 完成。
-3.  连接设备或模拟器（建议 Android 11+ 以获得完整体验）。
-4.  运行 `app` 模块。
-
-## ☕ 支持开发者 
-
-如果您觉得 Will do 帮助到了您，或者您喜欢这个项目，欢迎请作者喝一杯咖啡，这将鼓励我继续维护和完善项目！
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="./CalendarAssistant/docs/wechat-pay.png" width="200" /><br>
-        <b>WeChat Pay / 微信</b>
-      </td>
-      <td width="50"></td>
-      <td align="center">
-        <img src="./CalendarAssistant/docs/alipay.png" width="200" /><br>
-        <b>AliPay / 支付宝</b>
-      </td>
-    </tr>
-  </table>
-</div>
-
 ## 📜 开源协议
 
 Copyright (C) 2024-2026 AIXINJUELUOAI
