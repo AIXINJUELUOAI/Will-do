@@ -29,6 +29,9 @@ data class MySettings(
     // 【新增】取件码聚合开关 (Beta)
     val isPickupAggregationEnabled: Boolean = false,
 
+    // 【实验室】短信自动解析取件码
+    val isSmsMonitoringEnabled: Boolean = false,
+
     // 【新增】归档配置
     val autoArchiveEnabled: Boolean = false, // 自动归档总开关
     val archiveDaysThreshold: Int = 0, // 归档阈值天数（过期多少天后归档，0=立即归档）
