@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import android.Manifest
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -23,9 +24,12 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -33,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.RulePatchPrefs
 import com.antgskds.calendarassistant.core.rule.RuleActionDefaults
 import com.antgskds.calendarassistant.core.rule.RuleActionSeeder
@@ -55,15 +63,17 @@ import com.antgskds.calendarassistant.data.db.entity.EventRuleEntity
 import com.antgskds.calendarassistant.ui.components.RuleIconPickerDialog
 import com.antgskds.calendarassistant.ui.components.RuleIconPreview
 import com.antgskds.calendarassistant.ui.components.resolveRuleIconResName
+import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun LaboratoryPage(uiSize: Int = 2) {
+fun LaboratoryPage(uiSize: Int = 2, settingsViewModel: SettingsViewModel? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val database = remember { AppDatabase.getInstance(context.applicationContext) }
+    val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
     val ruleDao = remember { database.eventRuleDao() }
     val stateDao = remember { database.eventStateDao() }
     val scrollState = rememberScrollState()
@@ -217,12 +227,84 @@ fun LaboratoryPage(uiSize: Int = 2) {
                 if (!ruleEditEnabled) {
                     Text(
                         text = "开启后可编辑规则并参与识别",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
             }
+        }
+
+        // ================== 短信自动解析取件码 ==================
+        if (settings != null) {
+            val smsPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { granted ->
+                val allGranted = granted.all { it.value }
+                if (!allGranted) {
+                    settingsViewModel?.updatePreference(smsMonitoring = false)
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "短信自动解析取件码",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "监听短信自动识别快递取件码并入库",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings!!.isSmsMonitoringEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    smsPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.RECEIVE_SMS,
+                                            Manifest.permission.READ_SMS
+                                        )
+                                    )
+                                }
+                                settingsViewModel?.updatePreference(smsMonitoring = enabled)
+                            }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "需要短信权限，仅处理106开头号码",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
         }
 
         // 导航栏避让

@@ -31,7 +31,7 @@ object RuleActionDefaults {
                 undoLabel = "撤销检票"
             )
             RuleMatchingEngine.RULE_TAXI -> RuleDefaults(
-                pending = StateDefinition(STATE_PENDING, "待用车", false, "目的地"),
+                pending = StateDefinition(STATE_PENDING, "待用车", false, "车牌"),
                 terminal = StateDefinition(STATE_DONE, "已用车", true, "标题"),
                 actionLabel = "已用车",
                 undoLabel = "撤销用车"

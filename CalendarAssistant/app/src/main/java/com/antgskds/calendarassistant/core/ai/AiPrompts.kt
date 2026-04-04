@@ -20,7 +20,7 @@ object AiPrompts {
     private const val KEY_PROMPTS_JSON = "cached_prompts_json"
     private const val KEY_IGNORED_VERSION = "ignored_prompt_version"
     private const val KEY_PROMPT_SOURCE = "prompt_source"
-    private const val MIN_PROMPT_VERSION = 5
+    private const val MIN_PROMPT_VERSION = 6
     private const val PROMPT_SOURCE_LOCAL = "local"
     private const val PROMPT_SOURCE_CLOUD = "cloud"
 
@@ -107,7 +107,7 @@ object AiPrompts {
     """.trimIndent()
 
     private val defaultPrompts = RemotePrompts(
-        version = MIN_PROMPT_VERSION,
+        version = 6,
         promptHeader = defaultPromptHeader,
         userTextPrompt = defaultMmUnifiedPrompt,
         mmUnifiedPrompt = defaultMmUnifiedPrompt,
