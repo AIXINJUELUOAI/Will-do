@@ -331,11 +331,11 @@ object EventPresenter {
     ): String? {
         return when {
             event.isRecurringParent -> "重复"
+            isExpired -> "已结束"
             event.isCheckedIn -> "已检票"
             event.isCompleted -> RuleActionDefaults.defaultsFor(ruleId).terminal.name
             isInProgress -> "进行中"
             isComingSoon -> "即将开始"
-            isExpired -> "已结束"
             else -> null
         }
     }
@@ -346,11 +346,11 @@ object EventPresenter {
     ): StatusColor {
         return when {
             event.isRecurringParent -> StatusColor.PRIMARY
+            isExpired -> StatusColor.MUTED
             event.isCheckedIn -> StatusColor.SUCCESS
             event.isCompleted -> StatusColor.MUTED
             isInProgress -> StatusColor.PRIMARY
             isComingSoon -> StatusColor.WARNING
-            isExpired -> StatusColor.MUTED
             else -> StatusColor.PRIMARY
         }
     }
