@@ -63,8 +63,18 @@ object RuleActionSeeder {
         // --- 状态 ---
         val desiredStates = RuleActionDefaults.buildStates(rule.ruleId, defaults)
         if (isBuiltIn) {
-            // 内置规则：强制同步为最新默认模板
-            stateDao.insertAll(desiredStates)
+            // 内置规则：同步结构性字段（name, isTerminal），但保留用户自定义的 displayTemplate
+            val existingStates = stateDao.getByRuleId(rule.ruleId).associateBy { it.stateId }
+            val merged = desiredStates.map { desired ->
+                val existing = existingStates[desired.stateId]
+                if (existing != null) {
+                    // 已存在：保留用户的 displayTemplate，更新其他字段
+                    desired.copy(displayTemplate = existing.displayTemplate)
+                } else {
+                    desired
+                }
+            }
+            stateDao.insertAll(merged)
         } else {
             // 自定义规则：仅补缺失，保留用户修改
             val existingStateIds = stateDao.getByRuleId(rule.ruleId).map { it.stateId }.toSet()

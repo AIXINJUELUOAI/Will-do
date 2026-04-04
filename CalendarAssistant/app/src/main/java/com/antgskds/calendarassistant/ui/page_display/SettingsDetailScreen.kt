@@ -210,7 +210,7 @@ private fun SettingsPageContent(
                         settingsViewModel = settingsViewModel
                     )
                     SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
-                    SettingsDestination.Laboratory -> LaboratoryPage(uiSize)
+                    SettingsDestination.Laboratory -> LaboratoryPage(uiSize, settingsViewModel)
                     SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Archives,
                     SettingsDestination.Logout -> Unit

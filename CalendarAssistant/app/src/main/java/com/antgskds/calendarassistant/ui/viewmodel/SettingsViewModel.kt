@@ -110,7 +110,8 @@ class SettingsViewModel(
         disableThinking: Boolean? = null,
         floatingEventRange: Int? = null,
         volumeUpLongPressEnabled: Boolean? = null,
-        volumeUpLongPressAction: Int? = null
+        volumeUpLongPressAction: Int? = null,
+        smsMonitoring: Boolean? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -129,6 +130,7 @@ class SettingsViewModel(
             if (floatingEventRange != null) current = current.copy(floatingEventRange = floatingEventRange)
             if (volumeUpLongPressEnabled != null) current = current.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
             if (volumeUpLongPressAction != null) current = current.copy(volumeUpLongPressAction = volumeUpLongPressAction)
+            if (smsMonitoring != null) current = current.copy(isSmsMonitoringEnabled = smsMonitoring)
 
             repository.updateSettings(current)
         }
