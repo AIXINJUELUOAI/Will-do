@@ -31,6 +31,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,12 +55,20 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.RulePatchPrefs
+import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.RuleActionDefaults
 import com.antgskds.calendarassistant.core.rule.RuleActionSeeder
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
 import com.antgskds.calendarassistant.core.rule.RuleRegistry
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.data.db.AppDatabase
 import com.antgskds.calendarassistant.data.db.entity.EventRuleEntity
+import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.RuleIconPickerDialog
 import com.antgskds.calendarassistant.ui.components.RuleIconPreview
 import com.antgskds.calendarassistant.ui.components.resolveRuleIconResName
@@ -67,16 +76,21 @@ import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 @Composable
 fun LaboratoryPage(uiSize: Int = 2, settingsViewModel: SettingsViewModel? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val database = remember { AppDatabase.getInstance(context.applicationContext) }
+    val repository = remember { (context.applicationContext as App).repository }
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
+    val syncStatus by settingsViewModel?.syncStatus?.collectAsState()
+        ?: remember { mutableStateOf<CalendarSyncManager.SyncStatus?>(null) }
     val ruleDao = remember { database.eventRuleDao() }
     val stateDao = remember { database.eventStateDao() }
     val scrollState = rememberScrollState()
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     var ruleEditEnabled by remember { mutableStateOf(RulePatchPrefs.isEnabled(context)) }
     var rules by remember { mutableStateOf<List<EventRuleEntity>>(emptyList()) }
@@ -85,6 +99,7 @@ fun LaboratoryPage(uiSize: Int = 2, settingsViewModel: SettingsViewModel? = null
     var showIconPicker by remember { mutableStateOf(false) }
     var editingRuleState by remember { mutableStateOf<EventRuleEntity?>(null) }
     var currentIconResName by remember { mutableStateOf<String?>(null) }
+    var verificationResult by remember { mutableStateOf("点击下方按钮开始验证") }
 
     fun loadRules() {
         scope.launch(Dispatchers.IO) {
@@ -111,6 +126,141 @@ fun LaboratoryPage(uiSize: Int = 2, settingsViewModel: SettingsViewModel? = null
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary
         )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Text(
+                    text = "验证工具",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "快速检查无障碍、权限、同步和胶囊模板渲染状态",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val status = AccessibilityGuardian.getServiceStatus(context)
+                                    verificationResult = buildString {
+                                        appendLine("无障碍状态检查")
+                                        appendLine("- 设置启用: ${status.enabledInSettings}")
+                                        appendLine("- 服务在线: ${status.connected}")
+                                        append("- 实际可用: ${status.operational}")
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("检查无障碍")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val privilege = PrivilegeManager.refreshPrivilege()
+                                    verificationResult = buildString {
+                                        appendLine("权限状态检查")
+                                        appendLine("- 当前权限: $privilege")
+                                        appendLine("- hasPrivilege: ${PrivilegeManager.hasPrivilege}")
+                                        append("- 服务实例在线: ${TextAccessibilityService.isConnected()}")
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("检查权限")
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    settingsViewModel?.refreshSyncStatus()
+                                    val status = runCatching { repository.getSyncStatus() }.getOrNull() ?: syncStatus
+                                    verificationResult = buildString {
+                                        appendLine("同步状态检查")
+                                        if (status == null) {
+                                            append("- 暂无同步状态")
+                                        } else {
+                                            appendLine("- 已启用: ${status.isEnabled}")
+                                            appendLine("- 已授权: ${status.hasPermission}")
+                                            appendLine("- 映射数量: ${status.mappedEventCount}")
+                                            append("- 目标日历ID: ${status.targetCalendarId}")
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("检查同步")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val sampleEvent = MyEvent(
+                                    title = "G1234 次列车",
+                                    startDate = LocalDate.now(),
+                                    endDate = LocalDate.now(),
+                                    startTime = "10:00",
+                                    endTime = "12:00",
+                                    location = "虹桥火车站",
+                                    description = "【列车】G1234|A8|05A",
+                                    color = primaryColor,
+                                    reminders = listOf(0),
+                                    eventType = EventType.EVENT,
+                                    tag = EventTags.TRAIN
+                                )
+                                val title = EventTimelinePresenter.present(context, sampleEvent).title
+                                verificationResult = buildString {
+                                    appendLine("列车模板渲染检查")
+                                    appendLine("- 输入: 【列车】G1234|A8|05A")
+                                    appendLine("- 输出: $title")
+                                    append("- 模板直出: ${title.contains("检票口 检票")}")
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("验证列车模板")
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Text(
+                        text = verificationResult,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+                    )
+                }
+
+                Text(
+                    text = "提示：未开启自启动或电池无限制时，部分系统在滑卡后可能拦截提醒，这是系统后台限制，不一定是 App 故障。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),

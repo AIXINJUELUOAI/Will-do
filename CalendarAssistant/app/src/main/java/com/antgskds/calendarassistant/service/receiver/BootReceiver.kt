@@ -13,8 +13,9 @@ import kotlinx.coroutines.SupervisorJob
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.d("BootReceiver", "Boot completed, rescheduling alarms...")
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            Log.d("BootReceiver", "System/package restore trigger received, rescheduling alarms...")
 
             // 1. 恢复数据相关的闹钟 (AppRepository 内部会调 NotificationScheduler)
             val repository = AppRepository.getInstance(context)

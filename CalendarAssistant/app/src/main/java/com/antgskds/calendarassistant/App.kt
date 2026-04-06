@@ -15,6 +15,9 @@ import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncWorker
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
+import com.antgskds.calendarassistant.core.content.ContentDefinition
+import com.antgskds.calendarassistant.core.content.ContentRegistry
+import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
@@ -61,6 +64,40 @@ class App : Application() {
         
         // 初始化通知渠道
         createNotificationChannels()
+
+        // 注册内容源定义，后续便签/天气/语音可平滑接入统一时间轴和胶囊框架
+        ContentRegistry.register(
+            ContentDefinition(
+                sourceType = ContentSourceType.SCHEDULE,
+                displayName = "日程",
+                supportsTimeline = true,
+                supportsCapsule = true
+            )
+        )
+        ContentRegistry.register(
+            ContentDefinition(
+                sourceType = ContentSourceType.NOTE,
+                displayName = "便签",
+                supportsTimeline = true,
+                supportsCapsule = false
+            )
+        )
+        ContentRegistry.register(
+            ContentDefinition(
+                sourceType = ContentSourceType.WEATHER,
+                displayName = "天气",
+                supportsTimeline = true,
+                supportsCapsule = true
+            )
+        )
+        ContentRegistry.register(
+            ContentDefinition(
+                sourceType = ContentSourceType.VOICE_CAPTURE,
+                displayName = "语音输入",
+                supportsTimeline = true,
+                supportsCapsule = false
+            )
+        )
 
         // 初始化日历内容观察者（仅在已有权限时）
         initCalendarObserverIfPermissionGranted()

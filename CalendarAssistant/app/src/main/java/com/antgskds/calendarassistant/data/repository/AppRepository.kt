@@ -1,32 +1,25 @@
 package com.antgskds.calendarassistant.data.repository
 
-import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.core.rule.RuleActionDefaults
+import com.antgskds.calendarassistant.core.rule.EventActionResolver
+import com.antgskds.calendarassistant.core.rule.RuleActionType
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.rule.RuleRegistry
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.source.ArchiveJsonDataSource
-import com.antgskds.calendarassistant.data.source.CourseJsonDataSource
-import com.antgskds.calendarassistant.data.source.EventJsonDataSource
-import com.antgskds.calendarassistant.data.source.SettingsDataSource
-import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.core.calendar.CalendarSyncGateway
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.EventDeduplicator
 import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
-import com.antgskds.calendarassistant.core.calendar.CalendarSyncManagerV2
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncV2Prefs
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
 import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
 import com.antgskds.calendarassistant.core.importer.ImportMode
@@ -60,11 +53,11 @@ class AppRepository private constructor(private val context: Context) {
     val appContext: Context = context.applicationContext
 
     // 数据源
-    private val eventSource = EventJsonDataSource(context)
-    private val courseSource = CourseJsonDataSource(context)
-    private val settingsSource = SettingsDataSource(context)
-    private val archiveSource = ArchiveJsonDataSource(context)
-    private val syncDataSource = SyncJsonDataSource.getInstance(context)
+    private val eventRepository = EventRepository(context)
+    private val courseRepository = CourseRepository(context)
+    private val settingsRepository = SettingsRepository(context)
+    private val archiveRepository = ArchiveRepository(context)
+    private val syncMappingRepository = SyncMappingRepository(context)
 
     private val database by lazy { AppDatabase.getInstance(context.applicationContext) }
     private val migrationPrefs by lazy { MigrationPrefs(context.applicationContext) }
@@ -73,13 +66,6 @@ class AppRepository private constructor(private val context: Context) {
     private val legacyRecurringMigrator by lazy { LegacyRecurringMigrator(database, migrationPrefs) }
     private val roomShadowWriter by lazy { RoomEventShadowWriter(database) }
     private val roomEventReader by lazy { RoomEventReader(database) }
-    private val roomReadPrefs by lazy {
-        context.getSharedPreferences(ROOM_READ_PREFS, Context.MODE_PRIVATE)
-    }
-    private val roomMainPrefs by lazy {
-        context.getSharedPreferences(ROOM_MAIN_PREFS, Context.MODE_PRIVATE)
-    }
-
     // StateFlows
     private val _events = MutableStateFlow<List<MyEvent>>(emptyList())
     val events: StateFlow<List<MyEvent>> = _events.asStateFlow()
@@ -97,8 +83,7 @@ class AppRepository private constructor(private val context: Context) {
     val capsuleStateManager: CapsuleStateManager = CapsuleStateManager(this, scope, context.applicationContext)
 
     // 【新增】日历同步管理器
-    private val syncManager = CalendarSyncManager(context.applicationContext)
-    private val syncManagerV2 = CalendarSyncManagerV2(context.applicationContext)
+    private val syncGateway = CalendarSyncGateway(context.applicationContext)
 
     private val eventMutex = Mutex()
     private val courseMutex = Mutex()
@@ -106,6 +91,15 @@ class AppRepository private constructor(private val context: Context) {
 
     @Volatile
     private var syncSeedAttempted = false
+
+    private data class ArchivedLoadResult(
+        val mergedArchived: List<MyEvent>
+    )
+
+    private data class CalendarSyncSnapshot(
+        val activeEvents: List<MyEvent>,
+        val archivedEvents: List<MyEvent>
+    )
 
     init {
         refreshData()
@@ -121,7 +115,7 @@ class AppRepository private constructor(private val context: Context) {
             if (isRoomMainEnabled() && migrationPrefs.isEventsMigrated() && migrationPrefs.isRecurringMigrated()) {
                 return@launch
             }
-            val events = eventSource.loadEvents()
+                val events = eventRepository.loadEvents()
             val needMigration = events.any { it.eventType == "temp" || it.eventType == "pickup" }
             if (needMigration) {
                 val migratedEvents = events.map {
@@ -133,7 +127,7 @@ class AppRepository private constructor(private val context: Context) {
                         else -> it
                     }
                 }
-                eventSource.saveEvents(migratedEvents)
+                eventRepository.saveEvents(migratedEvents)
                 _events.value = migratedEvents
                 Log.i("Migration", "已迁移 ${events.size} 条旧数据: temp/pickup -> event + tag=pickup")
             }
@@ -145,7 +139,7 @@ class AppRepository private constructor(private val context: Context) {
             if (isRoomMainEnabled() && migrationPrefs.isEventsMigrated() && migrationPrefs.isRecurringMigrated()) {
                 return@launch
             }
-            val events = eventSource.loadEvents()
+            val events = eventRepository.loadEvents()
             val needMigration = events.any { it.tag.isBlank() || it.tag.isEmpty() }
 
             // 第一步：只对 tag 为空的事件进行迁移
@@ -175,7 +169,7 @@ class AppRepository private constructor(private val context: Context) {
             }
 
             // 保存并更新
-            eventSource.saveEvents(calibratedEvents)
+            eventRepository.saveEvents(calibratedEvents)
             _events.value = calibratedEvents
 
             if (needMigration) {
@@ -190,7 +184,6 @@ class AppRepository private constructor(private val context: Context) {
 
     private fun refreshData() {
         scope.launch {
-            val loadedSettings = settingsSource.loadSettings()
             val useRoomMain = isRoomMainEnabled()
             val roomHasData = if (useRoomMain) {
                 runCatching { database.eventMasterDao().count() > 0 }.getOrElse { false }
@@ -199,18 +192,19 @@ class AppRepository private constructor(private val context: Context) {
             }
             val shouldLoadJson = !useRoomMain || !migrationPrefs.isEventsMigrated() || !migrationPrefs.isRecurringMigrated() || !roomHasData
             val rawEvents = if (shouldLoadJson) {
-                eventSource.loadEvents()
+                eventRepository.loadEvents()
             } else {
                 emptyList()
             }
-            val loadedCourses = courseSource.loadCourses()
+            val loadedCourses = courseRepository.loadCourses()
+            val loadedSettings = settingsRepository.loadSettings()
             
             val eventCleanupInfo = if (shouldLoadJson) {
-                eventSource.getAndClearCleanupInfo()
+                eventRepository.getAndClearCleanupInfo()
             } else {
                 ""
             }
-            val courseCleanupInfo = courseSource.getAndClearCleanupInfo()
+            val courseCleanupInfo = courseRepository.getAndClearCleanupInfo()
             
             val cleanupInfo = listOf(eventCleanupInfo, courseCleanupInfo)
                 .filter { it.isNotEmpty() }
@@ -223,10 +217,10 @@ class AppRepository private constructor(private val context: Context) {
             
             val loadedEvents = rawEvents
             // 🔥 修复：移除归档加载，改为懒加载（冷启动性能优化）
-            // val loadedArchives = archiveSource.loadArchivedEvents()
+            // val loadedArchives = archiveRepository.loadArchivedEvents()
 
             if (rawEvents.isNotEmpty() && loadedEvents.size != rawEvents.size) {
-                eventSource.saveEvents(loadedEvents)
+                eventRepository.saveEvents(loadedEvents)
             }
 
             if (shouldLoadJson) {
@@ -235,10 +229,10 @@ class AppRepository private constructor(private val context: Context) {
             }
 
             if (!migrationPrefs.isArchivesMigrated()) {
-                val rawArchived = archiveSource.loadArchivedEvents()
+                val rawArchived = archiveRepository.loadArchivedEvents()
                 val archivedForMigration = sanitizeRecurringEvents(rawArchived)
                 if (archivedForMigration.size != rawArchived.size) {
-                    archiveSource.saveArchivedEvents(archivedForMigration)
+                    archiveRepository.saveArchivedEvents(archivedForMigration)
                 }
                 legacyArchiveMigrator.migrateIfNeeded(archivedForMigration)
             }
@@ -297,14 +291,11 @@ class AppRepository private constructor(private val context: Context) {
 
             _events.value = activeEvents
             _courses.value = loadedCourses
-            val normalizedSettings = ensureTimeTableConfig(loadedSettings)
-            _settings.value = normalizedSettings
+            _settings.value = loadedSettings
             // _archivedEvents 保持初始为空，直到用户查看时加载
 
-            loadedEvents.forEach { event ->
-                if (shouldScheduleReminders(event)) {
-                    NotificationScheduler.scheduleReminders(context, event)
-                }
+            activeEvents.forEach { event ->
+                scheduleRemindersIfNeeded(event)
             }
 
             // 启动后尝试自动归档（建议延迟执行，不阻塞启动）
@@ -314,21 +305,6 @@ class AppRepository private constructor(private val context: Context) {
         }
     }
 
-    private fun ensureTimeTableConfig(settings: MySettings): MySettings {
-        if (settings.timeTableConfigJson.isNotBlank() || settings.timeTableJson.isBlank()) {
-            return settings
-        }
-
-        val resolvedConfig = TimeTableLayoutUtils.resolveLayoutConfig(
-            configJsonString = "",
-            timeTableJson = settings.timeTableJson
-        )
-        val configJson = TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig)
-        val updated = settings.copy(timeTableConfigJson = configJson)
-        settingsSource.saveSettings(updated)
-        return updated
-    }
-
     /**
      * 🔥 修复：懒加载归档数据
      * 仅在进入归档页面时调用
@@ -336,39 +312,7 @@ class AppRepository private constructor(private val context: Context) {
     fun fetchArchivedEvents() {
         scope.launch {
             archiveMutex.withLock {
-                val useRoomRead = isRoomReadEnabled()
-                val useRoomMain = isRoomMainEnabled()
-                val roomArchived = if (useRoomRead || useRoomMain) {
-                    roomEventReader.loadArchivedEvents()
-                } else {
-                    emptyList()
-                }
-                val shouldLoadJson = !useRoomMain || !migrationPrefs.isArchivesMigrated()
-                val rawLoaded = if (shouldLoadJson) {
-                    archiveSource.loadArchivedEvents()
-                } else {
-                    emptyList()
-                }
-                val loaded = sanitizeRecurringEvents(rawLoaded)
-                if (shouldLoadJson && loaded.size != rawLoaded.size) {
-                    archiveSource.saveArchivedEvents(loaded)
-                }
-                if (shouldLoadJson) {
-                    legacyArchiveMigrator.migrateIfNeeded(loaded)
-                }
-                val archivedEvents = when {
-                    useRoomMain && (roomArchived.isNotEmpty() || loaded.isEmpty()) -> roomArchived
-                    useRoomMain -> {
-                        Log.w("AppRepository", "Room 主存开启但未读取到归档数据，回退 JSON")
-                        loaded
-                    }
-                    useRoomRead -> roomArchived
-                    else -> loaded
-                }
-                if ((useRoomRead || useRoomMain) && shouldLoadJson) {
-                    logRoomDiff("archived", loaded, roomArchived)
-                }
-                _archivedEvents.value = archivedEvents
+                _archivedEvents.value = loadArchivedEventsForState().mergedArchived
             }
         }
     }
@@ -384,58 +328,62 @@ class AppRepository private constructor(private val context: Context) {
                 // 双重检查，防止并发加载
                 if (_archivedEvents.value.isEmpty()) {
                     Log.d("AppRepository", "触发归档数据懒加载...")
-                    val useRoomRead = isRoomReadEnabled()
-                    val useRoomMain = isRoomMainEnabled()
-                    val roomArchived = if (useRoomRead || useRoomMain) {
-                        roomEventReader.loadArchivedEvents()
-                    } else {
-                        emptyList()
-                    }
-                    val shouldLoadJson = !useRoomMain || !migrationPrefs.isArchivesMigrated()
-                    val rawLoaded = if (shouldLoadJson) {
-                        archiveSource.loadArchivedEvents()
-                    } else {
-                        emptyList()
-                    }
-                    val loaded = sanitizeRecurringEvents(rawLoaded)
-                    if (shouldLoadJson && loaded.size != rawLoaded.size) {
-                        archiveSource.saveArchivedEvents(loaded)
-                    }
-                    if (shouldLoadJson) {
-                        legacyArchiveMigrator.migrateIfNeeded(loaded)
-                    }
-                    val archivedEvents = when {
-                        useRoomMain && (roomArchived.isNotEmpty() || loaded.isEmpty()) -> roomArchived
-                        useRoomMain -> {
-                            Log.w("AppRepository", "Room 主存开启但未读取到归档数据，回退 JSON")
-                            loaded
-                        }
-                        useRoomRead -> roomArchived
-                        else -> loaded
-                    }
-                    if ((useRoomRead || useRoomMain) && shouldLoadJson) {
-                        logRoomDiff("archived", loaded, roomArchived)
-                    }
-                    _archivedEvents.value = archivedEvents
+                    _archivedEvents.value = loadArchivedEventsForState().mergedArchived
                 }
             }
         }
     }
 
+    private suspend fun loadArchivedEventsForState(): ArchivedLoadResult {
+        val useRoomRead = isRoomReadEnabled()
+        val useRoomMain = isRoomMainEnabled()
+        val roomArchived = if (useRoomRead || useRoomMain) {
+            roomEventReader.loadArchivedEvents()
+        } else {
+            emptyList()
+        }
+        val shouldLoadJson = !useRoomMain || !migrationPrefs.isArchivesMigrated()
+        val rawLoaded = if (shouldLoadJson) {
+            archiveRepository.loadArchivedEvents()
+        } else {
+            emptyList()
+        }
+        val loaded = sanitizeRecurringEvents(rawLoaded)
+        if (shouldLoadJson && loaded.size != rawLoaded.size) {
+            archiveRepository.saveArchivedEvents(loaded)
+        }
+        if (shouldLoadJson) {
+            legacyArchiveMigrator.migrateIfNeeded(loaded)
+        }
+        val mergedArchived = when {
+            useRoomMain && (roomArchived.isNotEmpty() || loaded.isEmpty()) -> roomArchived
+            useRoomMain -> {
+                Log.w("AppRepository", "Room 主存开启但未读取到归档数据，回退 JSON")
+                loaded
+            }
+            useRoomRead -> roomArchived
+            else -> loaded
+        }
+        if ((useRoomRead || useRoomMain) && shouldLoadJson) {
+            logRoomDiff("archived", loaded, roomArchived)
+        }
+        return ArchivedLoadResult(mergedArchived = mergedArchived)
+    }
+
     fun setRoomReadEnabled(enabled: Boolean) {
-        roomReadPrefs.edit().putBoolean(ROOM_READ_KEY, enabled).apply()
+        settingsRepository.setRoomReadEnabled(enabled)
     }
 
     fun isRoomReadEnabled(): Boolean {
-        return roomReadPrefs.getBoolean(ROOM_READ_KEY, false)
+        return settingsRepository.isRoomReadEnabled()
     }
 
     fun setRoomMainEnabled(enabled: Boolean) {
-        roomMainPrefs.edit().putBoolean(ROOM_MAIN_KEY, enabled).apply()
+        settingsRepository.setRoomMainEnabled(enabled)
     }
 
     fun isRoomMainEnabled(): Boolean {
-        return true
+        return settingsRepository.isRoomMainEnabled()
     }
 
     private fun isCalendarSyncV2Enabled(): Boolean {
@@ -562,12 +510,10 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：增加 triggerSync 参数，避免反向同步时触发死循环
      */
     suspend fun addEvent(event: MyEvent, triggerSync: Boolean = true) = eventMutex.withLock {
-        val currentList = _events.value.toMutableList()
+        val currentList = loadCurrentActiveMutableList()
         currentList.add(event)
         updateEvents(currentList)
-        if (shouldScheduleReminders(event)) {
-            NotificationScheduler.scheduleReminders(context, event)
-        }
+        scheduleRemindersIfNeeded(event)
         if (triggerSync) {
             triggerAutoSync()
         }
@@ -581,17 +527,15 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：增加 triggerSync 参数，避免反向同步时触发死循环
      */
     suspend fun updateEvent(event: MyEvent, triggerSync: Boolean = true) = eventMutex.withLock {
-        val currentList = _events.value.toMutableList()
+        val currentList = loadCurrentActiveMutableList()
         val index = currentList.indexOfFirst { it.id == event.id }
         if (index != -1) {
             val oldEvent = currentList[index]
-            NotificationScheduler.cancelReminders(context, oldEvent)
+            cancelReminders(oldEvent)
             currentList[index] = event
             updateEvents(currentList)
             Log.d("Undo", "updateEvent后: id=${event.id}, isCheckedIn=${event.isCheckedIn}")
-            if (shouldScheduleReminders(event)) {
-                NotificationScheduler.scheduleReminders(context, event)
-            }
+            scheduleRemindersIfNeeded(event)
             if (triggerSync) {
                 triggerAutoSync()
             }
@@ -610,14 +554,14 @@ class AppRepository private constructor(private val context: Context) {
         triggerSync: Boolean = true,
         removeFromRoom: Boolean = true
     ) = eventMutex.withLock {
-        val currentList = _events.value.toMutableList()
+        val currentList = loadCurrentActiveMutableList()
         val eventToDelete = currentList.find { it.id == eventId }
 
         if (eventToDelete != null) {
             if (!removeFromRoom && eventToDelete.isRecurring && !eventToDelete.isRecurringParent) {
                 markRecurringInstanceCancelled(eventId)
             }
-            NotificationScheduler.cancelReminders(context, eventToDelete)
+            cancelReminders(eventToDelete)
             currentList.remove(eventToDelete)
             updateEvents(currentList)
             if (removeFromRoom) {
@@ -632,28 +576,41 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     private suspend fun updateEvents(newList: List<MyEvent>) {
-        val normalizedList = newList.asReversed().distinctBy { it.id }.asReversed()
+        val normalizedList = normalizeEventsById(newList)
         if (normalizedList.size != newList.size) {
             Log.w("AppRepository", "检测到重复事件ID，已自动去重: ${newList.size} -> ${normalizedList.size}")
         }
 
         _events.value = normalizedList
+        persistActiveEvents(normalizedList)
+    }
+
+    private fun shouldScheduleReminders(event: MyEvent): Boolean {
+        return !event.isRecurringParent
+    }
+
+    private suspend fun persistActiveEvents(events: List<MyEvent>) {
         if (isRoomMainEnabled()) {
-            eventSource.saveEventsBackup(normalizedList)
+            eventRepository.saveEventsBackup(events)
         } else {
-            eventSource.saveEvents(normalizedList)
+            eventRepository.saveEvents(events)
         }
 
-        // 影子写入：同步到 Room 数据库
         try {
-            roomShadowWriter.syncEvents(normalizedList, RoomEventShadowWriter.SyncMode.ACTIVE)
+            roomShadowWriter.syncEvents(events, RoomEventShadowWriter.SyncMode.ACTIVE)
         } catch (e: Exception) {
             Log.e("AppRepository", "Room 影子写入失败", e)
         }
     }
 
-    private fun shouldScheduleReminders(event: MyEvent): Boolean {
-        return !event.isRecurringParent
+    private fun scheduleRemindersIfNeeded(event: MyEvent) {
+        if (shouldScheduleReminders(event)) {
+            NotificationScheduler.scheduleReminders(context, event)
+        }
+    }
+
+    private fun cancelReminders(event: MyEvent) {
+        NotificationScheduler.cancelReminders(context, event)
     }
 
     private fun normalizeEventsById(events: List<MyEvent>): List<MyEvent> {
@@ -744,7 +701,7 @@ class AppRepository private constructor(private val context: Context) {
         sourceInstanceKey: String,
         detachedEvent: MyEvent
     ) = eventMutex.withLock {
-        val currentList = _events.value.toMutableList()
+        val currentList = loadCurrentActiveMutableList()
         val parentIndex = currentList.indexOfFirst { it.id == parentEventId && it.isRecurringParent }
         if (parentIndex == -1) return@withLock
 
@@ -757,7 +714,7 @@ class AppRepository private constructor(private val context: Context) {
 
         val sourceInstance = currentList.find { it.id == sourceInstanceId }
         if (sourceInstance != null) {
-            NotificationScheduler.cancelReminders(context, sourceInstance)
+            cancelReminders(sourceInstance)
             currentList.remove(sourceInstance)
         }
 
@@ -776,7 +733,7 @@ class AppRepository private constructor(private val context: Context) {
 
         currentList.add(detachedLocalEvent)
         updateEvents(currentList)
-        NotificationScheduler.scheduleReminders(context, detachedLocalEvent)
+        scheduleRemindersIfNeeded(detachedLocalEvent)
         capsuleStateManager.forceRefresh()
     }
 
@@ -785,7 +742,7 @@ class AppRepository private constructor(private val context: Context) {
      * 点击"已完成"后，保存原始时间，设置已完成状态
      */
     suspend fun completeScheduleEvent(id: String) {
-        val event = _events.value.find { it.id == id }
+        val event = findActiveEventById(id)
         if (event != null && (event.eventType == EventType.EVENT || event.eventType == EventType.COURSE) && !event.isCompleted) {
             val now = java.time.LocalDateTime.now()
             val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
@@ -801,12 +758,7 @@ class AppRepository private constructor(private val context: Context) {
 
             updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
-            // 单事件同步到系统日历（用于在 APP 外修改状态后立即同步）
-            if (isCalendarSyncV2Enabled()) {
-                syncManagerV2.syncEventToCalendar(updatedEvent)
-            } else {
-                syncManager.syncEventToCalendar(updatedEvent)
-            }
+            syncSingleEventToCalendar(updatedEvent)
         }
     }
 
@@ -827,7 +779,7 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun checkInTransport(id: String) {
         Log.d("Undo", "checkInTransport: id=$id")
-        val event = _events.value.find { it.id == id }
+        val event = findActiveEventById(id)
         Log.d("Undo", "checkInTransport: event=$event, isCheckedIn=${event?.isCheckedIn}")
         if (event != null && !event.isCheckedIn) {
             val updatedEvent = event.copy(
@@ -836,12 +788,7 @@ class AppRepository private constructor(private val context: Context) {
             )
             updateEvent(updatedEvent, triggerSync = false)
             capsuleStateManager.forceRefresh()
-            // 单事件同步到系统日历（用于在 APP 外修改状态后立即同步）
-            if (isCalendarSyncV2Enabled()) {
-                syncManagerV2.syncEventToCalendar(updatedEvent)
-            } else {
-                syncManager.syncEventToCalendar(updatedEvent)
-            }
+            syncSingleEventToCalendar(updatedEvent)
         }
     }
 
@@ -849,7 +796,7 @@ class AppRepository private constructor(private val context: Context) {
      * 撤销已完成事件（检查1分钟内）
      */
     suspend fun undoCompleteEvent(id: String): Boolean {
-        val event = _events.value.find { it.id == id }
+        val event = findActiveEventById(id)
         if (event != null && event.isCompleted && event.completedAt != null) {
             val elapsed = System.currentTimeMillis() - event.completedAt
             if (elapsed <= 60000) { // 1分钟内
@@ -874,7 +821,7 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun undoCheckInTransport(id: String): Boolean {
         Log.d("Undo", "undoCheckInTransport: id=$id")
-        val event = _events.value.find { it.id == id }
+        val event = findActiveEventById(id)
         Log.d("Undo", "event=$event, isCheckedIn=${event?.isCheckedIn}, completedAt=${event?.completedAt}")
         if (event != null && event.isCheckedIn && event.completedAt != null) {
             val elapsed = System.currentTimeMillis() - event.completedAt
@@ -892,22 +839,10 @@ class AppRepository private constructor(private val context: Context) {
         return false
     }
 
-    private enum class RuleActionType {
-        COMPLETE,
-        CHECKIN,
-        UNDO
-    }
-
-    private data class RuleActionDecision(
-        val ruleId: String,
-        val actionLabel: String,
-        val actionType: RuleActionType
-    )
-
     suspend fun performPrimaryRuleAction(eventId: String): Boolean {
-        val event = _events.value.find { it.id == eventId } ?: return false
+        val event = findActiveEventById(eventId) ?: return false
         if (event.isRecurringParent) return false
-        val decision = resolveRuleActionDecision(event) ?: return false
+        val decision = EventActionResolver.resolve(event) ?: return false
         when (decision.actionType) {
             RuleActionType.UNDO -> {
                 if (decision.ruleId == RuleMatchingEngine.RULE_TRAIN) {
@@ -922,47 +857,11 @@ class AppRepository private constructor(private val context: Context) {
         return true
     }
 
-    private fun resolveRuleActionDecision(event: MyEvent): RuleActionDecision? {
-        val resolvedRuleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
-        val ruleId = resolvedRuleId?.ifBlank { null } ?: event.tag.ifBlank { RuleMatchingEngine.RULE_GENERAL }
-
-        val defaults = RuleActionDefaults.defaultsFor(ruleId)
-        val currentStateId = RuleRegistry.resolveCurrentStateId(ruleId, event.isCompleted, event.isCheckedIn)
-
-        val chosenTransition = RuleRegistry.getPrimaryTransition(ruleId, currentStateId)
-        if (chosenTransition == null) {
-            val isUndo = currentStateId != RuleActionDefaults.stateId(ruleId, RuleActionDefaults.STATE_PENDING)
-            val actionType = if (isUndo) {
-                RuleActionType.UNDO
-            } else if (ruleId == RuleMatchingEngine.RULE_TRAIN) {
-                RuleActionType.CHECKIN
-            } else {
-                RuleActionType.COMPLETE
-            }
-            val label = if (isUndo) defaults.undoLabel else defaults.actionLabel
-            return RuleActionDecision(ruleId, label, actionType)
-        }
-
-        val targetState = RuleRegistry.getState(chosenTransition.toStateId)
-        val isUndo = targetState?.isTerminal == false
-        val actionType = if (isUndo) {
-            RuleActionType.UNDO
-        } else if (ruleId == RuleMatchingEngine.RULE_TRAIN) {
-            RuleActionType.CHECKIN
-        } else {
-            RuleActionType.COMPLETE
-        }
-        val label = chosenTransition.actionLabel.ifBlank {
-            if (isUndo) defaults.undoLabel else defaults.actionLabel
-        }
-        return RuleActionDecision(ruleId, label, actionType)
-    }
-
     /**
      * 根据 ID 获取事件
      */
     suspend fun getEventById(id: String): MyEvent? {
-        return _events.value.find { it.id == id }
+        return findActiveEventById(id)
     }
 
     // --- Courses 操作 ---
@@ -989,8 +888,7 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：增加 triggerSync 参数，避免反向同步时触发死循环
      */
     suspend fun addCourse(course: Course, triggerSync: Boolean = true) = courseMutex.withLock {
-        val currentList = _courses.value.toMutableList()
-        currentList.add(course)
+        val currentList = courseRepository.addCourse(_courses.value, course)
         updateCourses(currentList)
         if (triggerSync) {
             triggerAutoSync()
@@ -1006,18 +904,7 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：增加 triggerSync 参数，避免反向同步时触发死循环
      */
     suspend fun deleteCourse(course: Course, triggerSync: Boolean = true) = courseMutex.withLock {
-        val currentList = _courses.value.toMutableList()
-
-        // 1. 删除目标课程
-        val removed = currentList.remove(course)
-
-        // 2. 连坐：如果删除成功且不是影子课程，把它的"孩子"全删了
-        if (removed && !course.isTemp) {
-            val childrenToRemove = currentList.filter { it.parentCourseId == course.id }
-            currentList.removeAll(childrenToRemove)
-            Log.d("AppRepository", "Cascade deleted ${childrenToRemove.size} shadow courses.")
-        }
-
+        val currentList = courseRepository.deleteCourse(_courses.value, course)
         updateCourses(currentList)
         if (triggerSync) {
             triggerAutoSync()
@@ -1032,10 +919,8 @@ class AppRepository private constructor(private val context: Context) {
      * 🔥 修复：增加 triggerSync 参数，避免反向同步时触发死循环
      */
     suspend fun updateCourse(course: Course, triggerSync: Boolean = true) = courseMutex.withLock {
-        val currentList = _courses.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == course.id }
-        if (index != -1) {
-            currentList[index] = course
+        val currentList = courseRepository.updateCourse(_courses.value, course)
+        if (currentList.any { it.id == course.id }) {
             updateCourses(currentList)
             if (triggerSync) {
                 triggerAutoSync()
@@ -1045,13 +930,13 @@ class AppRepository private constructor(private val context: Context) {
 
     private suspend fun updateCourses(newList: List<Course>) {
         _courses.value = newList
-        courseSource.saveCourses(newList)
+        courseRepository.saveCourses(newList)
     }
 
     // --- Settings 操作 ---
     private fun applySettingsNow(newSettings: MySettings) {
         _settings.value = newSettings
-        settingsSource.saveSettings(newSettings)
+        settingsRepository.saveSettings(newSettings)
     }
 
     fun updateSettings(newSettings: MySettings) {
@@ -1082,11 +967,6 @@ class AppRepository private constructor(private val context: Context) {
     companion object {
         @Volatile
         private var INSTANCE: AppRepository? = null
-
-        private const val ROOM_READ_PREFS = "room_read_prefs"
-        private const val ROOM_READ_KEY = "room_read_enabled"
-        private const val ROOM_MAIN_PREFS = "room_main_prefs"
-        private const val ROOM_MAIN_KEY = "room_main_enabled"
 
         private val LEGACY_JSON_FILES = listOf(
             "events.json",
@@ -1170,17 +1050,10 @@ class AppRepository private constructor(private val context: Context) {
                     // 导入课程
                     saveCourses(importResult.courses)
 
-                    // 导入设置（如果有）
-                    if (importResult.semesterStartDate != null || importResult.totalWeeks != null) {
-                        val currentSettings = _settings.value
-                        // 标准化日期格式
-                        val normalizedDate = importResult.semesterStartDate?.let { normalizeDateFormat(it) }
-                        val newSettings = currentSettings.copy(
-                            semesterStartDate = normalizedDate ?: currentSettings.semesterStartDate,
-                            totalWeeks = importResult.totalWeeks ?: currentSettings.totalWeeks
-                        )
-                        updateSettings(newSettings)
-                    }
+                    applyImportedSemesterSettings(
+                        semesterStartDate = importResult.semesterStartDate,
+                        totalWeeks = importResult.totalWeeks
+                    )
 
                     Log.d("AppRepository", "WakeUp 课表导入成功，共 ${importResult.courses.size} 门课程")
                     Result.success(Unit)
@@ -1201,15 +1074,7 @@ class AppRepository private constructor(private val context: Context) {
             // 导入课程
             saveCourses(data.courses)
 
-            // 导入设置
-            val currentSettings = _settings.value
-            val newSettings = currentSettings.copy(
-                semesterStartDate = data.semesterStartDate,
-                totalWeeks = data.totalWeeks,
-                timeTableJson = data.timeTableJson,
-                timeTableConfigJson = data.timeTableConfigJson
-            )
-            updateSettings(newSettings)
+            applyImportedCourseBackupSettings(data)
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -1250,17 +1115,12 @@ class AppRepository private constructor(private val context: Context) {
                     Log.d("AppRepository", "追加模式：从 ${existingCourses.size} 门增加到 ${mergedCourses.size} 门课程")
                 }
 
-                // 导入设置（如果需要）
                 if (importSettings) {
-                    if (importResult.semesterStartDate != null || importResult.totalWeeks != null) {
-                        val currentSettings = _settings.value
-                        // 标准化日期格式
-                        val normalizedDate = importResult.semesterStartDate?.let { normalizeDateFormat(it) }
-                        val newSettings = currentSettings.copy(
-                            semesterStartDate = normalizedDate ?: currentSettings.semesterStartDate,
-                            totalWeeks = importResult.totalWeeks ?: currentSettings.totalWeeks
-                        )
-                        updateSettings(newSettings)
+                    val normalizedDate = applyImportedSemesterSettings(
+                        semesterStartDate = importResult.semesterStartDate,
+                        totalWeeks = importResult.totalWeeks
+                    )
+                    if (normalizedDate != null || importResult.totalWeeks != null) {
                         Log.d("AppRepository", "设置已更新，日期: $normalizedDate")
                     }
                 }
@@ -1316,22 +1176,7 @@ class AppRepository private constructor(private val context: Context) {
             val allImportEvents = data.events + data.archivedEvents
 
             // 2. 确保 archivedAt 字段正确性
-            val normalizedImportEvents = allImportEvents.map { event ->
-                when {
-                    data.archivedEvents.any { it.id == event.id } -> {
-                        if (event.archivedAt == null) {
-                            Log.d("AppRepository", "修正归档事件缺少 archivedAt 字段: ${event.title}")
-                            event.copy(archivedAt = System.currentTimeMillis())
-                        } else {
-                            event
-                        }
-                    }
-                    data.events.any { it.id == event.id } -> {
-                        event.copy(archivedAt = null)
-                    }
-                    else -> event
-                }
-            }
+            val normalizedImportEvents = normalizeImportedEvents(data, allImportEvents)
 
             // 3. 执行去重
             val deduplicationResult = EventDeduplicator.deduplicateForImport(
@@ -1348,38 +1193,8 @@ class AppRepository private constructor(private val context: Context) {
                 val newActiveEvents = eventsToAdd.filter { it.archivedAt == null }
                 val newArchivedEvents = eventsToAdd.filter { it.archivedAt != null }
 
-                // 添加活跃事件（防止 ID 重复）
-                if (newActiveEvents.isNotEmpty()) {
-                    val currentActive = _events.value.toMutableList()
-                    // 过滤掉已存在的 ID，防止重复添加
-                    val existingIds = currentActive.map { it.id }.toSet()
-                    val uniqueNewActive = newActiveEvents.filter { it.id !in existingIds }
-                    if (uniqueNewActive.size < newActiveEvents.size) {
-                        Log.w("Import", "跳过 ${newActiveEvents.size - uniqueNewActive.size} 个重复 ID 的活跃事件")
-                    }
-                    currentActive.addAll(uniqueNewActive)
-                    updateEvents(currentActive)
-
-                    // 重新设置提醒
-                    uniqueNewActive.forEach { event ->
-                        if (shouldScheduleReminders(event)) {
-                            NotificationScheduler.scheduleReminders(context, event)
-                        }
-                    }
-                }
-
-                // 添加归档事件（防止 ID 重复）
-                if (newArchivedEvents.isNotEmpty()) {
-                    val currentArchived = _archivedEvents.value.toMutableList()
-                    // 过滤掉已存在的 ID，防止重复添加
-                    val existingIds = currentArchived.map { it.id }.toSet()
-                    val uniqueNewArchived = newArchivedEvents.filter { it.id !in existingIds }
-                    if (uniqueNewArchived.size < newArchivedEvents.size) {
-                        Log.w("Import", "跳过 ${newArchivedEvents.size - uniqueNewArchived.size} 个重复 ID 的归档事件")
-                    }
-                    currentArchived.addAll(uniqueNewArchived)
-                    updateArchivedEvents(currentArchived)
-                }
+                appendImportedActiveEvents(newActiveEvents)
+                appendImportedArchivedEvents(newArchivedEvents)
 
                 // 导入的重复事件写入 Room
                 legacyRecurringMigrator.upsertRecurringEvents(eventsToAdd)
@@ -1422,6 +1237,79 @@ class AppRepository private constructor(private val context: Context) {
         }
     }
 
+    private fun normalizeImportedEvents(
+        data: EventsBackupData,
+        allImportEvents: List<MyEvent>
+    ): List<MyEvent> {
+        val archivedIds = data.archivedEvents.map { it.id }.toSet()
+        val activeIds = data.events.map { it.id }.toSet()
+        return allImportEvents.map { event ->
+            when {
+                event.id in archivedIds -> {
+                    if (event.archivedAt == null) {
+                        Log.d("AppRepository", "修正归档事件缺少 archivedAt 字段: ${event.title}")
+                        event.copy(archivedAt = System.currentTimeMillis())
+                    } else {
+                        event
+                    }
+                }
+                event.id in activeIds -> event.copy(archivedAt = null)
+                else -> event
+            }
+        }
+    }
+
+    private fun applyImportedSemesterSettings(
+        semesterStartDate: String?,
+        totalWeeks: Int?
+    ): String? {
+        if (semesterStartDate == null && totalWeeks == null) return null
+        val currentSettings = _settings.value
+        val normalizedDate = normalizeDateFormat(semesterStartDate)
+        val newSettings = currentSettings.copy(
+            semesterStartDate = normalizedDate ?: currentSettings.semesterStartDate,
+            totalWeeks = totalWeeks ?: currentSettings.totalWeeks
+        )
+        updateSettings(newSettings)
+        return normalizedDate
+    }
+
+    private fun applyImportedCourseBackupSettings(data: CoursesBackupData) {
+        val currentSettings = _settings.value
+        val newSettings = currentSettings.copy(
+            semesterStartDate = data.semesterStartDate,
+            totalWeeks = data.totalWeeks,
+            timeTableJson = data.timeTableJson,
+            timeTableConfigJson = data.timeTableConfigJson
+        )
+        updateSettings(newSettings)
+    }
+
+    private suspend fun appendImportedActiveEvents(newActiveEvents: List<MyEvent>) {
+        if (newActiveEvents.isEmpty()) return
+        val currentActive = loadCurrentActiveMutableList()
+        val existingIds = currentActive.map { it.id }.toSet()
+        val uniqueNewActive = newActiveEvents.filter { it.id !in existingIds }
+        if (uniqueNewActive.size < newActiveEvents.size) {
+            Log.w("Import", "跳过 ${newActiveEvents.size - uniqueNewActive.size} 个重复 ID 的活跃事件")
+        }
+        currentActive.addAll(uniqueNewActive)
+        updateEvents(currentActive)
+        uniqueNewActive.forEach(::scheduleRemindersIfNeeded)
+    }
+
+    private suspend fun appendImportedArchivedEvents(newArchivedEvents: List<MyEvent>) {
+        if (newArchivedEvents.isEmpty()) return
+        val currentArchived = loadCurrentArchivedMutableList()
+        val existingIds = currentArchived.map { it.id }.toSet()
+        val uniqueNewArchived = newArchivedEvents.filter { it.id !in existingIds }
+        if (uniqueNewArchived.size < newArchivedEvents.size) {
+            Log.w("Import", "跳过 ${newArchivedEvents.size - uniqueNewArchived.size} 个重复 ID 的归档事件")
+        }
+        currentArchived.addAll(uniqueNewArchived)
+        updateArchivedEvents(currentArchived)
+    }
+
     /**
      * 获取当前事件列表（用于导出前检查）
      */
@@ -1445,30 +1333,30 @@ class AppRepository private constructor(private val context: Context) {
      */
     private suspend fun triggerAutoSync() {
         try {
-            val settings = _settings.value
-            val timeNodes = parseTimeTable(settings.timeTableJson)
-
-            if (isCalendarSyncV2Enabled()) {
-                seedSyncMappingIfNeeded()
-                syncManagerV2.syncAllToCalendar(
-                    events = _events.value,
-                    courses = _courses.value,
-                    semesterStart = settings.semesterStartDate,
-                    totalWeeks = settings.totalWeeks,
-                    timeNodes = timeNodes
-                )
-            } else {
-                syncManager.syncAllToCalendar(
-                    events = _events.value,
-                    courses = _courses.value,
-                    semesterStart = settings.semesterStartDate,
-                    totalWeeks = settings.totalWeeks,
-                    timeNodes = timeNodes
-                )
-            }
+            syncAllToCalendar(seedMapping = true)
         } catch (e: Exception) {
             Log.e("AppRepository", "自动同步失败", e)
         }
+    }
+
+    private suspend fun syncAllToCalendar(seedMapping: Boolean) {
+        val settings = _settings.value
+        val timeNodes = parseTimeTable(settings.timeTableJson)
+        val useV2 = isCalendarSyncV2Enabled()
+
+        if (useV2) {
+            if (seedMapping) {
+                seedSyncMappingIfNeeded()
+            }
+        }
+        syncGateway.syncAllToCalendar(
+            useV2 = useV2,
+            events = _events.value,
+            courses = _courses.value,
+            semesterStart = settings.semesterStartDate,
+            totalWeeks = settings.totalWeeks,
+            timeNodes = timeNodes
+        )
     }
 
     /**
@@ -1487,7 +1375,7 @@ class AppRepository private constructor(private val context: Context) {
     private suspend fun seedSyncMappingIfNeeded() {
         if (syncSeedAttempted) return
 
-        val status = syncManagerV2.getSyncStatus()
+        val status = syncGateway.getV2Status()
         if (!status.isEnabled || !status.hasPermission) return
 
         if (_events.value.isEmpty() && _archivedEvents.value.isEmpty()) {
@@ -1509,26 +1397,8 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun manualSync(): Result<Unit> {
         return try {
-            val settings = _settings.value
-            val timeNodes = parseTimeTable(settings.timeTableJson)
-
-            if (isCalendarSyncV2Enabled()) {
-                syncManagerV2.syncAllToCalendar(
-                    events = _events.value,
-                    courses = _courses.value,
-                    semesterStart = settings.semesterStartDate,
-                    totalWeeks = settings.totalWeeks,
-                    timeNodes = timeNodes
-                )
-            } else {
-                syncManager.syncAllToCalendar(
-                    events = _events.value,
-                    courses = _courses.value,
-                    semesterStart = settings.semesterStartDate,
-                    totalWeeks = settings.totalWeeks,
-                    timeNodes = timeNodes
-                )
-            }
+            syncAllToCalendar(seedMapping = false)
+            Result.success(Unit)
         } catch (e: Exception) {
             Log.e("AppRepository", "手动同步失败", e)
             Result.failure(e)
@@ -1540,40 +1410,25 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun enableCalendarSync(): Result<Unit> {
         syncSeedAttempted = false
-        return if (isCalendarSyncV2Enabled()) {
-            syncManagerV2.enableSync()
-        } else {
-            syncManager.enableSync()
-        }
+        return syncGateway.enableSync(isCalendarSyncV2Enabled())
     }
 
     /**
      * 禁用日历同步
      */
     suspend fun disableCalendarSync(): Result<Unit> {
-        return if (isCalendarSyncV2Enabled()) {
-            syncManagerV2.disableSync()
-        } else {
-            syncManager.disableSync()
-        }
+        return syncGateway.disableSync(isCalendarSyncV2Enabled())
     }
 
     /**
      * 获取同步状态
      */
     suspend fun getSyncStatus(): CalendarSyncManager.SyncStatus {
-        return if (isCalendarSyncV2Enabled()) {
-            val status = syncManagerV2.getSyncStatus()
-            CalendarSyncManager.SyncStatus(
-                isEnabled = status.isEnabled,
-                hasPermission = status.hasPermission,
-                targetCalendarId = status.targetCalendarId,
-                lastSyncTime = status.lastSyncTime,
-                mappedEventCount = status.mappedEventCount
-            )
-        } else {
-            syncManager.getSyncStatus()
-        }
+        return syncGateway.getSyncStatus(isCalendarSyncV2Enabled())
+    }
+
+    private suspend fun syncSingleEventToCalendar(event: MyEvent) {
+        syncGateway.syncEventToCalendar(isCalendarSyncV2Enabled(), event)
     }
 
     /**
@@ -1592,9 +1447,10 @@ class AppRepository private constructor(private val context: Context) {
             // ✅ 修复第一步：强制加载归档数据，防止"僵尸事件"复活
             ensureArchivesLoaded()
 
-            // 获取活跃和归档事件快照 (此时 archivedEventsSnapshot 一定有数据了)
-            val activeEventsSnapshot = _events.value
-            val archivedEventsSnapshot = _archivedEvents.value
+            val snapshot = CalendarSyncSnapshot(
+                activeEvents = _events.value,
+                archivedEvents = _archivedEvents.value
+            )
 
             val allowRecurringSync = true
             val useV2 = isCalendarSyncV2Enabled()
@@ -1604,98 +1460,60 @@ class AppRepository private constructor(private val context: Context) {
                 suspend (MyEvent) -> Unit,
                 suspend (String) -> Unit
             ) -> Result<Int> = { onAdded, onUpdated, onDeleted ->
-                if (useV2) {
-                    syncManagerV2.syncFromCalendar(
-                        onEventAdded = onAdded,
-                        onEventUpdated = onUpdated,
-                        onEventDeleted = onDeleted,
-                        allowRecurringSync = allowRecurringSync,
-                        activeEvents = activeEventsSnapshot,
-                        archivedEvents = archivedEventsSnapshot
-                    )
-                } else {
-                    syncManager.syncFromCalendar(
-                        onEventAdded = onAdded,
-                        onEventUpdated = onUpdated,
-                        onEventDeleted = onDeleted,
-                        allowRecurringSync = allowRecurringSync,
-                        activeEvents = activeEventsSnapshot,
-                        archivedEvents = archivedEventsSnapshot
-                    )
-                }
+                syncGateway.syncFromCalendar(
+                    useV2 = useV2,
+                    onEventAdded = onAdded,
+                    onEventUpdated = onUpdated,
+                    onEventDeleted = onDeleted,
+                    allowRecurringSync = allowRecurringSync,
+                    activeEvents = snapshot.activeEvents,
+                    archivedEvents = snapshot.archivedEvents
+                )
             }
 
             syncTask(
-            { incomingEvent ->
-                // 【场景：新增事件】
-                // 策略：
-                // 1. 先检查本地是否已存在（根据 ID 匹配）
-                // 2. ID 不存在时，用标题+时间+地点+备注判断是否重复
-                val existingById = activeEventsSnapshot.find { it.id == incomingEvent.id }
-                
-                if (existingById != null) {
-                    // ID 存在：以系统日历为准
-                    // 系统日历更新：以系统为准，保留APP内部状态
-                    val finalEvent = mergeIncomingCalendarEvent(existingById, incomingEvent)
-                    if (!isNoopCalendarMerge(existingById, finalEvent)) {
-                        updateEvent(finalEvent, triggerSync = false)
-                    }
-                } else if (incomingEvent.isRecurring) {
-                    addEvent(incomingEvent, triggerSync = false)
-                } else {
-                    // ID 不存在：判断是否重复（根据标题+时间+地点+备注）
-                    val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
-                    if (!isDup) {
-                        // 不重复：新增事件
-                        val eventWithRandomColor = if (incomingEvent.isRecurring) {
-                            incomingEvent
-                        } else {
-                            incomingEvent.copy(color = getRandomEventColor())
-                        }
-                        addEvent(eventWithRandomColor, triggerSync = false)
-                    }
-                }
-            },
-            { incomingEvent ->
-                // 【场景：更新事件】
-                // 策略：以 ID 为主，比较时间戳
-                val oldEvent = activeEventsSnapshot.find { it.id == incomingEvent.id }
-
-                if (oldEvent != null) {
-                    // ID 存在：以系统日历为准
-                    // 系统日历更新：以系统为准，保留APP内部状态
-                    val finalEvent = mergeIncomingCalendarEvent(oldEvent, incomingEvent)
-                    if (!isNoopCalendarMerge(oldEvent, finalEvent)) {
-                        updateEvent(finalEvent, triggerSync = false)  // 不触发正向同步
-                    }
-                } else if (incomingEvent.isRecurring) {
-                    addEvent(incomingEvent, triggerSync = false)
-                } else {
-                    // ID 不存在：可能是之前没映射到，现在发现重复
-                    val isDup = isDuplicateEvent(incomingEvent, activeEventsSnapshot, archivedEventsSnapshot)
-                    if (!isDup) {
-                        // 不重复：新增事件
-                        val eventWithRandomColor = if (incomingEvent.isRecurring) {
-                            incomingEvent
-                        } else {
-                            incomingEvent.copy(color = getRandomEventColor())
-                        }
-                        addEvent(eventWithRandomColor, triggerSync = false)
-                    }
-                }
-            },
-            { eventId ->
-                // 【场景：删除事件】
-                // 重复实例：保留 Room 记录以便标记取消
-                val target = activeEventsSnapshot.find { it.id == eventId }
-                    ?: archivedEventsSnapshot.find { it.id == eventId }
-                val removeFromRoom = !(target?.isRecurring == true && !target.isRecurringParent)
-                deleteEvent(eventId, triggerSync = false, removeFromRoom = removeFromRoom)
-            }
-        )
+                { incomingEvent -> handleCalendarAddedOrUpdated(incomingEvent, snapshot) },
+                { incomingEvent -> handleCalendarAddedOrUpdated(incomingEvent, snapshot) },
+                { eventId -> handleCalendarDeleted(eventId, snapshot) }
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun handleCalendarAddedOrUpdated(
+        incomingEvent: MyEvent,
+        snapshot: CalendarSyncSnapshot
+    ) {
+        val existingById = snapshot.activeEvents.find { it.id == incomingEvent.id }
+        if (existingById != null) {
+            val finalEvent = mergeIncomingCalendarEvent(existingById, incomingEvent)
+            if (!isNoopCalendarMerge(existingById, finalEvent)) {
+                updateEvent(finalEvent, triggerSync = false)
+            }
+            return
+        }
+
+        if (incomingEvent.isRecurring) {
+            addEvent(incomingEvent, triggerSync = false)
+            return
+        }
+
+        val isDup = isDuplicateEvent(incomingEvent, snapshot.activeEvents, snapshot.archivedEvents)
+        if (!isDup) {
+            addEvent(withRandomColorIfNeeded(incomingEvent), triggerSync = false)
+        }
+    }
+
+    private suspend fun handleCalendarDeleted(eventId: String, snapshot: CalendarSyncSnapshot) {
+        val target = snapshot.activeEvents.find { it.id == eventId }
+            ?: snapshot.archivedEvents.find { it.id == eventId }
+        val removeFromRoom = !(target?.isRecurring == true && !target.isRecurringParent)
+        deleteEvent(eventId, triggerSync = false, removeFromRoom = removeFromRoom)
+    }
+
+    private fun withRandomColorIfNeeded(event: MyEvent): MyEvent {
+        return if (event.isRecurring) event else event.copy(color = getRandomEventColor())
     }
 
     private fun isDuplicateEvent(
@@ -1722,7 +1540,7 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun archiveEvent(eventId: String) {
         // 1. 类型安全检查与获取对象
-        val event = _events.value.find { it.id == eventId } ?: return
+        val event = findActiveEventById(eventId) ?: return
 
         // 🛡️ 拦截规则：课程不可归档
         if (event.eventType == EventType.COURSE) {
@@ -1741,11 +1559,7 @@ class AppRepository private constructor(private val context: Context) {
         try {
             archiveMutex.withLock {
                 // 如果内存中还没有加载归档数据，先加载（防止覆盖）
-                val currentArchived = if (_archivedEvents.value.isEmpty()) {
-                    archiveSource.loadArchivedEvents().toMutableList()
-                } else {
-                    _archivedEvents.value.toMutableList()
-                }
+                val currentArchived = loadCurrentArchivedMutableList()
 
                 currentArchived.add(archivedEvent)
                 // 这一步可能会抛出 IO 异常
@@ -1775,7 +1589,7 @@ class AppRepository private constructor(private val context: Context) {
         val archivedEvent: MyEvent?
 
         archiveMutex.withLock {
-            archivedEvent = _archivedEvents.value.find { it.id == archivedEventId }
+            archivedEvent = findArchivedEventById(archivedEventId)
         }
 
         if (archivedEvent == null) return
@@ -1788,7 +1602,7 @@ class AppRepository private constructor(private val context: Context) {
 
         // 3. 从归档中移除 (持有 archiveMutex)
         archiveMutex.withLock {
-            val currentArchived = _archivedEvents.value.toMutableList()
+            val currentArchived = loadCurrentArchivedMutableList()
             currentArchived.remove(archivedEvent)
             updateArchivedEvents(currentArchived)
         }
@@ -1801,39 +1615,14 @@ class AppRepository private constructor(private val context: Context) {
      * 同时删除系统日历中的对应事件
      */
     suspend fun deleteArchivedEvent(archivedEventId: String) = archiveMutex.withLock {
-        val currentArchived = _archivedEvents.value.toMutableList()
+        val currentArchived = loadCurrentArchivedMutableList()
         val event = currentArchived.find { it.id == archivedEventId }
         if (event != null) {
             currentArchived.remove(event)
             updateArchivedEvents(currentArchived)
             roomShadowWriter.deleteEvents(listOf(event.id))
 
-            // 同步删除系统日历中的事件
-            try {
-                Log.d("AppRepository", "deleteArchivedEvent: 开始同步删除, event.id=${event.id}")
-                val syncData = syncDataSource.loadSyncData()
-                Log.d("AppRepository", "deleteArchivedEvent: syncData.mapping=${syncData.mapping}")
-                val calendarEventIdStr = syncData.mapping[event.id]
-                Log.d("AppRepository", "deleteArchivedEvent: calendarEventIdStr=$calendarEventIdStr for event.id=${event.id}")
-                if (calendarEventIdStr != null) {
-                    val calendarEventId = calendarEventIdStr.toLongOrNull()
-                    Log.d("AppRepository", "deleteArchivedEvent: calendarEventId=$calendarEventId")
-                    if (calendarEventId != null) {
-                        val calendarManager = CalendarManager(context)
-                        val success = calendarManager.deleteEvent(calendarEventId)
-                        Log.d("AppRepository", "deleteArchivedEvent: deleteEvent result=$success")
-                        // 更新映射
-                        val updatedMapping = syncData.mapping.toMutableMap()
-                        updatedMapping.remove(event.id)
-                        syncDataSource.saveSyncData(syncData.copy(mapping = updatedMapping))
-                        Log.d("AppRepository", "已同步删除系统日历事件: ${event.id} -> $calendarEventId")
-                    }
-                } else {
-                    Log.d("AppRepository", "deleteArchivedEvent: 未找到映射，event.id=${event.id}")
-                }
-            } catch (e: Exception) {
-                Log.e("AppRepository", "同步删除系统日历事件失败", e)
-            }
+            removeCalendarMappingsForEvents(listOf(event), "deleteArchivedEvent")
         }
     }
 
@@ -1842,48 +1631,85 @@ class AppRepository private constructor(private val context: Context) {
      * 同时删除系统日历中的对应事件
      */
     suspend fun clearAllArchives() = archiveMutex.withLock {
-        val currentArchived = _archivedEvents.value
+        val currentArchived = loadCurrentArchivedMutableList()
         if (currentArchived.isEmpty()) return@withLock
 
-        // 同步删除系统日历中的所有归档事件
-        try {
-            val syncData = syncDataSource.loadSyncData()
-            val calendarManager = CalendarManager(context)
-            val updatedMapping = syncData.mapping.toMutableMap()
-
-            currentArchived.forEach { event ->
-                val calendarEventIdStr = syncData.mapping[event.id]
-                if (calendarEventIdStr != null) {
-                    val calendarEventId = calendarEventIdStr.toLongOrNull()
-                    if (calendarEventId != null) {
-                        calendarManager.deleteEvent(calendarEventId)
-                        updatedMapping.remove(event.id)
-                        Log.d("AppRepository", "清空归档: 已删除系统日历事件 ${event.id} -> $calendarEventId")
-                    }
-                }
-            }
-
-            syncDataSource.saveSyncData(syncData.copy(mapping = updatedMapping))
-        } catch (e: Exception) {
-            Log.e("AppRepository", "清空归档: 同步删除系统日历事件失败", e)
-        }
+        removeCalendarMappingsForEvents(currentArchived, "clearAllArchives")
 
         updateArchivedEvents(emptyList())
         roomShadowWriter.deleteEvents(currentArchived.map { it.id })
     }
 
+    private suspend fun removeCalendarMappingsForEvents(events: List<MyEvent>, reason: String) {
+        if (events.isEmpty()) return
+        try {
+            val syncData = syncMappingRepository.load()
+            val calendarManager = CalendarManager(context)
+            val updatedMapping = syncData.mapping.toMutableMap()
+
+            events.forEach { event ->
+                val calendarEventIdStr = syncData.mapping[event.id]
+                if (calendarEventIdStr == null) {
+                    Log.d("AppRepository", "$reason: 未找到映射，event.id=${event.id}")
+                    return@forEach
+                }
+
+                val calendarEventId = calendarEventIdStr.toLongOrNull()
+                if (calendarEventId == null) {
+                    Log.w("AppRepository", "$reason: 非法日历映射，event.id=${event.id}, value=$calendarEventIdStr")
+                    updatedMapping.remove(event.id)
+                    return@forEach
+                }
+
+                val success = calendarManager.deleteEvent(calendarEventId)
+                Log.d("AppRepository", "$reason: deleteEvent result=$success, ${event.id} -> $calendarEventId")
+                updatedMapping.remove(event.id)
+            }
+
+            if (updatedMapping != syncData.mapping) {
+                syncMappingRepository.save(syncData.copy(mapping = updatedMapping))
+            }
+        } catch (e: Exception) {
+            Log.e("AppRepository", "$reason: 同步删除系统日历事件失败", e)
+        }
+    }
+
     private suspend fun updateArchivedEvents(newList: List<MyEvent>) {
         _archivedEvents.value = newList
+        persistArchivedEvents(newList)
+    }
+
+    private suspend fun persistArchivedEvents(events: List<MyEvent>) {
         if (isRoomMainEnabled()) {
-            archiveSource.saveArchivedEventsBackup(newList)
+            archiveRepository.saveArchivedEventsBackup(events)
         } else {
-            archiveSource.saveArchivedEvents(newList)
+            archiveRepository.saveArchivedEvents(events)
         }
         try {
-            roomShadowWriter.syncEvents(newList, RoomEventShadowWriter.SyncMode.ARCHIVED)
+            roomShadowWriter.syncEvents(events, RoomEventShadowWriter.SyncMode.ARCHIVED)
         } catch (e: Exception) {
             Log.e("AppRepository", "Room 归档影子写入失败", e)
         }
+    }
+
+    private suspend fun loadCurrentArchivedMutableList(): MutableList<MyEvent> {
+        return if (_archivedEvents.value.isEmpty()) {
+            archiveRepository.loadArchivedEvents().toMutableList()
+        } else {
+            _archivedEvents.value.toMutableList()
+        }
+    }
+
+    private fun loadCurrentActiveMutableList(): MutableList<MyEvent> {
+        return _events.value.toMutableList()
+    }
+
+    private fun findActiveEventById(eventId: String): MyEvent? {
+        return _events.value.find { it.id == eventId }
+    }
+
+    private fun findArchivedEventById(eventId: String): MyEvent? {
+        return _archivedEvents.value.find { it.id == eventId }
     }
 
     /**
@@ -1910,11 +1736,7 @@ class AppRepository private constructor(private val context: Context) {
 
         // 2. 批量处理 - 归档部分
         archiveMutex.withLock {
-            val currentArchived = if (_archivedEvents.value.isEmpty()) {
-                archiveSource.loadArchivedEvents().toMutableList()
-            } else {
-                _archivedEvents.value.toMutableList()
-            }
+            val currentArchived = loadCurrentArchivedMutableList()
 
             // ✅ 修复：只添加不在归档列表中的事件，避免重复
             val existingIds = currentArchived.map { it.id }.toSet()
@@ -1929,9 +1751,9 @@ class AppRepository private constructor(private val context: Context) {
 
         // 3. 批量处理 - 删除部分 (使用 eventMutex)
         eventMutex.withLock {
-            val currentEvents = _events.value.toMutableList()
+            val currentEvents = loadCurrentActiveMutableList()
             // 取消通知
-            toArchiveEvents.forEach { NotificationScheduler.cancelReminders(context, it) }
+            toArchiveEvents.forEach(::cancelReminders)
             // 移除
             currentEvents.removeAll { event -> toArchiveEvents.any { it.id == event.id } }
             updateEvents(currentEvents)

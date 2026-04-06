@@ -30,7 +30,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.launch
@@ -96,7 +96,7 @@ fun SwipeableEventItem(
     val context = LocalContext.current
 
     val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn) {
-        EventPresenter.present(context, event)
+        EventTimelinePresenter.present(context, event).renderModel
     }
 
     val displayDescription = model.subtitle ?: model.detail
