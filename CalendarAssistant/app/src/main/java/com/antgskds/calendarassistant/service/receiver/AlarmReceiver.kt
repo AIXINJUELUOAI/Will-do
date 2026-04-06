@@ -15,7 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
@@ -91,7 +91,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification_small)
-                .setContentTitle(EventPresenter.present(context, event).title)
+                .setContentTitle(EventTimelinePresenter.present(context, event).title)
                 .setContentText(finalContentText)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(finalContentText))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -273,10 +273,15 @@ class AlarmReceiver : BroadcastReceiver() {
         return try {
             val repository = (context.applicationContext as App).repository
 
+            val events = repository.events.value
+            if (events.isEmpty()) {
+                Log.w(TAG, "事件列表尚未加载完成，跳过存在性校验: eventId=$eventId")
+                return true
+            }
+
             // 使用协程带超时检查，避免阻塞主线程太久
             var isValid = false
             val checkJob = CoroutineScope(Dispatchers.IO).launch {
-                val events = repository.events.value
                 isValid = events.any { it.id == eventId }
             }
 

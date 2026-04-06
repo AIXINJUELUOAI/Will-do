@@ -121,7 +121,7 @@ import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.core.rule.ActionIconType
-import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.StatusColor
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
@@ -841,7 +841,7 @@ fun ScheduleCard(
     val elevation = if (isInProgress) 6.dp else 2.dp
 
     val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn, event.isRecurringParent, event.eventType) {
-        EventPresenter.present(context, event)
+        EventTimelinePresenter.present(context, event).renderModel
     }
     val resolvedRuleId = model.ruleId
 
