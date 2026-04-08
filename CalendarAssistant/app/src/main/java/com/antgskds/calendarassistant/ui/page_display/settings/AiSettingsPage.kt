@@ -21,11 +21,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -442,11 +445,21 @@ private fun TextInputItem(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val interactionSource = remember { MutableInteractionSource() }
+    var fieldValue by remember(value) {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
     val isPasswordField = title == "API Key"
     val visualTransformation = if (isPasswordField && !isFocused && value.isNotEmpty()) {
         PasswordVisualTransformation()
     } else {
         VisualTransformation.None
+    }
+
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+        }
     }
 
     Row(
@@ -461,42 +474,45 @@ private fun TextInputItem(
             modifier = Modifier.width(100.dp)
         )
 
-        Box(
+        BasicTextField(
+            value = fieldValue,
+            onValueChange = { newValue ->
+                fieldValue = newValue
+                onValueChange(newValue.text)
+            },
+            readOnly = readOnly,
+            textStyle = cardValueStyle.copy(
+                color = if (readOnly) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End
+            ),
+            visualTransformation = visualTransformation,
+            singleLine = true,
+            interactionSource = interactionSource,
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .weight(1f)
-                .clickable(
-                    enabled = !readOnly,
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
+                .focusRequester(focusRequester)
+                .onFocusChanged { focusState -> isFocused = focusState.isFocused },
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 24.dp),
+                    contentAlignment = Alignment.CenterEnd
                 ) {
-                    focusRequester.requestFocus()
-                },
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            if (value.isEmpty()) {
-                Text(
-                    text = placeholder,
-                    style = cardSubtitleStyle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = cardSubtitleStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    innerTextField()
+                }
             }
-
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                readOnly = readOnly,
-                textStyle = cardValueStyle.copy(
-                    color = if (readOnly) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.End
-                ),
-                visualTransformation = visualTransformation,
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState -> isFocused = focusState.isFocused }
-            )
-        }
+        )
     }
 }

@@ -2,8 +2,7 @@ package com.antgskds.calendarassistant.core.ai
 
 import android.util.Base64
 import android.util.Log
-import com.antgskds.calendarassistant.data.model.ModelRequest // 假设在 data.model 中定义了
-import com.antgskds.calendarassistant.data.model.ModelResponse // 假设在 data.model 中定义了
+import com.antgskds.calendarassistant.data.model.ModelRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -22,6 +21,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -150,6 +150,10 @@ object ApiModelProvider {
             }
 
             Log.d("ApiModelProvider", "Requesting (vision): $baseUrl (Model: $modelName)")
+            Log.d(
+                "DEBUG_HTTP_VISION",
+                "vision request summary: model=$modelName, url=$baseUrl, mimeType=$mimeType, imageBytes=${imageBytes.size}, promptChars=${prompt.length}"
+            )
 
             if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
                 return generateGeminiWithImage(client, baseUrl, apiKey, prompt, imageBytes, mimeType)
@@ -163,6 +167,10 @@ object ApiModelProvider {
                 prompt = prompt,
                 dataUrl = dataUrl,
                 reasoningEffort = if (shouldAttemptReasoning) "low" else null
+            )
+            Log.d(
+                "DEBUG_HTTP_VISION",
+                "vision request envelope: reasoning=${if (shouldAttemptReasoning) "low" else "off"}, dataUrlPrefix=${dataUrl.take(32)}..., payloadChars=${requestBody.toString().length}"
             )
 
             val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
@@ -229,13 +237,41 @@ object ApiModelProvider {
 
     private fun parseModelResponse(rawBody: String): ApiCallResult {
         return try {
-            val json = Json { ignoreUnknownKeys = true }
-            val modelResponse = json.decodeFromString<ModelResponse>(rawBody)
-            val content = modelResponse.choices.firstOrNull()?.message?.content
-            if (content.isNullOrBlank()) {
+            val root = JSONObject(rawBody)
+
+            val outputText = extractResponsesApiText(root)
+            if (!outputText.isNullOrBlank()) {
+                Log.d("DEBUG_HTTP_VISION", "parsed response via responses-style output")
+                return ApiCallResult.Success(outputText)
+            }
+
+            val choices = root.optJSONArray("choices")
+            if (choices == null || choices.length() == 0) {
+                Log.w("DEBUG_HTTP_VISION", "parseModelResponse: no choices field, rootKeys=${root.names()}")
+                return ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Choices", rawBody = rawBody)
+            }
+
+            val firstChoice = choices.optJSONObject(0)
+            val message = firstChoice?.optJSONObject("message")
+            val contentField = message?.opt("content")
+            val normalizedContent = when {
+                contentField is String && contentField.isNotBlank() -> contentField
+                contentField is JSONArray -> extractTextFromContentParts(contentField)
+                else -> firstChoice?.optString("text")
+            }?.trim()
+
+            if (normalizedContent.isNullOrBlank()) {
+                val finishReason = firstChoice?.optString("finish_reason")
+                val nativeFinishReason = firstChoice?.optString("native_finish_reason")
+                val reasoningContent = message?.opt("reasoning_content")
+                val refusal = message?.opt("refusal")
+                Log.w(
+                    "DEBUG_HTTP_VISION",
+                    "parseModelResponse: empty content, finishReason=$finishReason, nativeFinishReason=$nativeFinishReason, reasoningContent=$reasoningContent, refusal=$refusal, message=$message"
+                )
                 ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
             } else {
-                ApiCallResult.Success(content)
+                ApiCallResult.Success(normalizedContent)
             }
         } catch (e: Exception) {
             ApiCallResult.Failure(
@@ -244,6 +280,53 @@ object ApiModelProvider {
                 rawBody = rawBody
             )
         }
+    }
+
+    private fun extractTextFromContentParts(parts: JSONArray?): String? {
+        if (parts == null || parts.length() == 0) return null
+
+        val text = buildString {
+            for (index in 0 until parts.length()) {
+                val item = parts.opt(index)
+                when (item) {
+                    is String -> append(item)
+                    is JSONObject -> {
+                        val value = when (item.optString("type")) {
+                            "text", "output_text" -> item.optString("text")
+                            else -> item.optString("text")
+                        }
+                        if (value.isNotBlank()) {
+                            if (isNotEmpty()) append('\n')
+                            append(value)
+                        }
+                    }
+                }
+            }
+        }.trim()
+
+        return text.ifBlank { null }
+    }
+
+    private fun extractResponsesApiText(root: JSONObject): String? {
+        val output = root.optJSONArray("output") ?: return null
+        val text = buildString {
+            for (i in 0 until output.length()) {
+                val item = output.optJSONObject(i) ?: continue
+                val content = item.optJSONArray("content") ?: continue
+                for (j in 0 until content.length()) {
+                    val part = content.optJSONObject(j) ?: continue
+                    val partText = when (part.optString("type")) {
+                        "output_text", "text" -> part.optString("text")
+                        else -> part.optString("text")
+                    }
+                    if (partText.isNotBlank()) {
+                        if (isNotEmpty()) append('\n')
+                        append(partText)
+                    }
+                }
+            }
+        }.trim()
+        return text.ifBlank { null }
     }
 
     private fun isOpenAiEndpoint(baseUrl: String): Boolean {
