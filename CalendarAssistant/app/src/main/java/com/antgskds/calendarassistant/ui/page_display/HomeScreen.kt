@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
-import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -172,7 +173,11 @@ fun HomeScreen(
     
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
+    val floatingBarOffset =
+        IntegratedFloatingBarVisualHeight +
+            IntegratedFloatingBarToastGap +
+            IntegratedFloatingBarBottomSpacing +
+            bottomInset
 
     Box(modifier = Modifier) {
         // 核心布局
