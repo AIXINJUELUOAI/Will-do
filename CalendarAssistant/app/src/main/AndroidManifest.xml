@@ -184,6 +184,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
@@ -200,12 +201,6 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
-        <!-- 日历定期同步接收器 -->
-        <receiver
-            android:name=".App$CalendarSyncReceiver"
-            android:enabled="true"
-            android:exported="false" />
 
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver

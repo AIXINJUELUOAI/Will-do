@@ -4,8 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
-import com.antgskds.calendarassistant.R
+import androidx.lifecycle.lifecycleScope
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -20,27 +22,25 @@ class ShortcutHandleActivity : AppCompatActivity() {
         // 去除入场动画
         overridePendingTransition(0, 0)
 
-        // 检查无障碍服务是否开启
-        val service = TextAccessibilityService.instance
-        if (service == null) {
-            // 服务未开启，跳转到无障碍设置页面
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        lifecycleScope.launch {
+            var service = TextAccessibilityService.instance
+            if (service == null) {
+                AccessibilityGuardian.restoreIfNeeded(this@ShortcutHandleActivity)
+                service = TextAccessibilityService.instance
             }
-            startActivity(intent)
+
+            if (service == null) {
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+            } else {
+                service.startAnalysis(delayDuration = 400.milliseconds, fromShortcut = true)
+            }
+
             finish()
             overridePendingTransition(0, 0)
-            return
         }
-
-        // 服务已开启，触发截图分析
-        // 延迟 400ms 给透明 Activity 销毁和侧滑动画消失的时间，确保截图画面纯净
-        service.startAnalysis(delayDuration = 400.milliseconds, fromShortcut = true)
-
-        // 立即销毁当前 Activity
-        finish()
-        // 去除退场动画
-        overridePendingTransition(0, 0)
     }
 
     override fun onDestroy() {

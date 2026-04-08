@@ -6,6 +6,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
 import kotlinx.coroutines.CoroutineScope
@@ -53,7 +54,12 @@ class FloatingTileService : TileService() {
 
         serviceScope.launch {
             // 获取无障碍服务实例（用于关闭控制中心）
-            val service = TextAccessibilityService.instance
+            var service = TextAccessibilityService.instance
+
+            if (service == null) {
+                AccessibilityGuardian.restoreIfNeeded(this@FloatingTileService)
+                service = TextAccessibilityService.instance
+            }
 
             if (service != null) {
                 Log.d(TAG, "无障碍服务实例存在，关闭控制中心并启动悬浮窗")
