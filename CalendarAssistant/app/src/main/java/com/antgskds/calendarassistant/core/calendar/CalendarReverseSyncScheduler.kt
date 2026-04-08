@@ -11,7 +11,7 @@ import com.antgskds.calendarassistant.CalendarSyncReceiver
 object CalendarReverseSyncScheduler {
     private const val TAG = "CalendarReverseSyncScheduler"
     private const val REQUEST_CODE = 0
-    private const val INTERVAL_MILLIS = 1_000L
+    private const val INTERVAL_MILLIS = 60_000L
 
     fun schedule(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -34,7 +34,7 @@ object CalendarReverseSyncScheduler {
                     triggerAt,
                     pendingIntent
                 )
-                Log.w(TAG, "Exact alarms not allowed, scheduled inexact (1s)")
+                Log.w(TAG, "Exact alarms not allowed, scheduled inexact (60s)")
             }
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
                 alarmManager.setExactAndAllowWhileIdle(
@@ -42,7 +42,7 @@ object CalendarReverseSyncScheduler {
                     triggerAt,
                     pendingIntent
                 )
-                Log.d(TAG, "Exact reverse sync scheduled (1s)")
+                Log.d(TAG, "Exact reverse sync scheduled (60s)")
             }
             else -> {
                 alarmManager.setExact(
@@ -50,7 +50,7 @@ object CalendarReverseSyncScheduler {
                     triggerAt,
                     pendingIntent
                 )
-                Log.d(TAG, "Reverse sync scheduled (1s)")
+                Log.d(TAG, "Reverse sync scheduled (60s)")
             }
         }
     }

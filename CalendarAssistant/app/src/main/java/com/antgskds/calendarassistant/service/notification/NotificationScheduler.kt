@@ -17,7 +17,7 @@ import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -144,7 +144,7 @@ object NotificationScheduler {
         }
 
         // 6. 胶囊关闭时，日程开始时发送普通通知
-        if (!isLiveCapsuleEnabled) {
+        if (!isLiveCapsuleEnabled && 0 !in event.reminders) {
             if (startMillis > now) {
                 scheduleSingleAlarm(
                     context, event, 0, startMillis, "日程开始",
@@ -262,7 +262,9 @@ object NotificationScheduler {
         val notificationManager = NotificationManagerCompat.from(context)
 
         // 1. 取消普通提醒（包括全局提前提醒）
-        event.reminders.forEach { minutesBefore ->
+        val reminderMinutes = event.reminders.toMutableSet()
+        reminderMinutes.add(0)
+        reminderMinutes.forEach { minutesBefore ->
             cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
         }
 
@@ -326,7 +328,7 @@ object NotificationScheduler {
         )
 
         // 构建通知
-        val model = EventPresenter.present(context, event)
+        val model = EventTimelinePresenter.present(context, event).renderModel
         val notification = NotificationCompat.Builder(context, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(model.title)

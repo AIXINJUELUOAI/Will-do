@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +57,12 @@ class CaptureTileService : TileService() {
         }
 
         serviceScope.launch {
-            val service = TextAccessibilityService.instance
+            var service = TextAccessibilityService.instance
+
+            if (service == null) {
+                AccessibilityGuardian.restoreIfNeeded(this@CaptureTileService)
+                service = TextAccessibilityService.instance
+            }
 
             if (service != null) {
                 Log.d(TAG, "无障碍服务实例存在，准备调用 startAnalysis")

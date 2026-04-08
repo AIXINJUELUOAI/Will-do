@@ -5,17 +5,25 @@ import com.antgskds.calendarassistant.data.db.AppDatabase
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
 
 object RuleDisplayTemplateResolver {
-    private val templateMap = ConcurrentHashMap<String, String>()
+    @Volatile
+    private var templateMap: Map<String, String> = emptyMap()
+
+    private val builtInFieldNames = mapOf(
+        RuleMatchingEngine.RULE_TRAIN to listOf("车次", "检票口", "座位号"),
+        RuleMatchingEngine.RULE_TAXI to listOf("颜色", "车型", "车牌"),
+        RuleMatchingEngine.RULE_FLIGHT to listOf("航班号", "登机口", "座位号"),
+        RuleMatchingEngine.RULE_PICKUP to listOf("取件码", "品牌", "位置"),
+        RuleMatchingEngine.RULE_FOOD to listOf("取餐码", "品牌", "位置"),
+        RuleMatchingEngine.RULE_TICKET to listOf("取票码", "取票地点", "取票时间"),
+        RuleMatchingEngine.RULE_SENDER to listOf("寄件码", "品牌", "地点")
+    )
 
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
             val states = AppDatabase.getInstance(context.applicationContext).eventStateDao().getAll()
-            val updated = states.associate { it.stateId to it.displayTemplate }
-            templateMap.clear()
-            templateMap.putAll(updated)
+            templateMap = states.associate { it.stateId to it.displayTemplate }
         }
     }
 
@@ -33,7 +41,8 @@ object RuleDisplayTemplateResolver {
         }
         val resolvedTemplate = if (template.isNotBlank()) template else fallback
         val rendered = applyTemplate(resolvedTemplate, event)
-        return rendered.trim().ifBlank { null }
+        val title = rendered.trim().ifBlank { null } ?: return null
+        return title.takeUnless { looksUnresolved(it, resolvedTemplate, ruleId) }
     }
 
     private fun applyTemplate(template: String, event: MyEvent): String {
@@ -76,20 +85,30 @@ object RuleDisplayTemplateResolver {
         result = result.replace("标题", "{title}")
 
         // 从规则的 aiPrompt 解析字段名映射
-        if (ruleId != null) {
-            val rule = RuleRegistry.getRule(ruleId)
-            val aiPrompt = rule?.aiPrompt?.trim()
-            if (!aiPrompt.isNullOrBlank()) {
-                val fieldNames = aiPrompt.split("|").map { it.trim() }
-                fieldNames.forEachIndexed { index, name ->
-                    if (name.isNotBlank()) {
-                        val fieldKey = "{field${index + 1}}"
-                        result = result.replace(name, fieldKey)
-                    }
-                }
+        resolveFieldNames(ruleId).forEachIndexed { index, name ->
+            if (name.isNotBlank()) {
+                val fieldKey = "{field${index + 1}}"
+                result = result.replace(name, fieldKey)
             }
         }
 
         return result
+    }
+
+    private fun resolveFieldNames(ruleId: String?): List<String> {
+        if (ruleId == null) return emptyList()
+        val aiPrompt = RuleRegistry.getRule(ruleId)?.aiPrompt?.trim()
+        if (!aiPrompt.isNullOrBlank()) {
+            return aiPrompt.split("|").map { it.trim() }
+        }
+        return builtInFieldNames[ruleId].orEmpty()
+    }
+
+    private fun looksUnresolved(rendered: String, template: String, ruleId: String?): Boolean {
+        if (rendered != template.trim()) return false
+        if (template.contains("标题")) return true
+        return resolveFieldNames(ruleId).any { fieldName ->
+            fieldName.isNotBlank() && template.contains(fieldName)
+        }
     }
 }

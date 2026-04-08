@@ -69,11 +69,19 @@ class TextAccessibilityService : AccessibilityService() {
         const val ACTION_CLOSE_FLOATING = "com.antgskds.calendarassistant.ACTION_CLOSE_FLOATING"
         @Volatile var instance: TextAccessibilityService? = null
             private set
+        @Volatile private var lastConnectedAt: Long = 0L
+        @Volatile private var lastDisconnectedAt: Long = 0L
         private val isAnalyzing = AtomicBoolean(false)
         private const val LONG_PRESS_THRESHOLD = 400L
         private const val ACTION_VOLUME_LONG_PRESS_NONE = 0
         private const val ACTION_VOLUME_LONG_PRESS_SCREENSHOT = 1
         private const val ACTION_VOLUME_LONG_PRESS_FLOATING = 2
+
+        fun isConnected(): Boolean = instance != null
+
+        fun lastConnectedAt(): Long = lastConnectedAt
+
+        fun lastDisconnectedAt(): Long = lastDisconnectedAt
     }
 
     private var launcherPackageName: String? = null
@@ -84,6 +92,7 @@ class TextAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        lastConnectedAt = System.currentTimeMillis()
         launcherPackageName = getLauncherPackageName()
         Log.d(TAG, "无障碍服务已连接")
     }
@@ -239,11 +248,13 @@ class TextAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        lastDisconnectedAt = System.currentTimeMillis()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
+        lastDisconnectedAt = System.currentTimeMillis()
         serviceScope.cancel()
         super.onDestroy()
     }

@@ -11,7 +11,6 @@ import com.antgskds.calendarassistant.data.db.entity.EventTransitionEntity
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 统一规则查询中心。
@@ -22,16 +21,16 @@ object RuleRegistry {
     private const val TAG = "RuleRegistry"
 
     // --- 缓存 ---
-    private val rules = ConcurrentHashMap<String, EventRuleEntity>()
-    private val statesByRule = ConcurrentHashMap<String, List<EventStateEntity>>()
-    private val allStates = ConcurrentHashMap<String, EventStateEntity>()
-    private val transitionsByRule = ConcurrentHashMap<String, List<EventTransitionEntity>>()
-    private val transitionsByFromState = ConcurrentHashMap<String, List<EventTransitionEntity>>()
-    private val iconCache = ConcurrentHashMap<String, Int>()
+    @Volatile private var rules: Map<String, EventRuleEntity> = emptyMap()
+    @Volatile private var statesByRule: Map<String, List<EventStateEntity>> = emptyMap()
+    @Volatile private var allStates: Map<String, EventStateEntity> = emptyMap()
+    @Volatile private var transitionsByRule: Map<String, List<EventTransitionEntity>> = emptyMap()
+    @Volatile private var transitionsByFromState: Map<String, List<EventTransitionEntity>> = emptyMap()
+    @Volatile private var iconCache: Map<String, Int> = emptyMap()
     // 用户通过 IconPicker 选择的图标（优先于 iconCache 中的默认值）
-    private val customCapsuleIconCache = ConcurrentHashMap<String, Int>()
+    @Volatile private var customCapsuleIconCache: Map<String, Int> = emptyMap()
     // 用户选择的图标资源名（用于 UI 预览）
-    private val customCapsuleIconNameCache = ConcurrentHashMap<String, String>()
+    @Volatile private var customCapsuleIconNameCache: Map<String, String> = emptyMap()
 
     // --- 生命周期 ---
 
@@ -50,17 +49,14 @@ object RuleRegistry {
             // 2. 加载规则
             val loadedRules = db.eventRuleDao().getAll()
             val newRules = loadedRules.associateBy { it.ruleId }
-            rules.clear()
-            rules.putAll(newRules)
+            rules = newRules
 
             // 3. 加载状态
             val loadedStates = db.eventStateDao().getAll()
             val newStatesByRule = loadedStates.groupBy { it.ruleId }
             val newAllStates = loadedStates.associateBy { it.stateId }
-            statesByRule.clear()
-            statesByRule.putAll(newStatesByRule)
-            allStates.clear()
-            allStates.putAll(newAllStates)
+            statesByRule = newStatesByRule
+            allStates = newAllStates
 
             // 4. 加载转换（一次查询替代 N+1）
             val newTransitionsByRule = mutableMapOf<String, List<EventTransitionEntity>>()
@@ -72,12 +68,8 @@ object RuleRegistry {
                 }
                 newTransitionsByFrom.getOrPut(t.fromStateId) { mutableListOf() }.add(t)
             }
-            transitionsByRule.clear()
-            transitionsByRule.putAll(newTransitionsByRule)
-            transitionsByFromState.clear()
-            transitionsByFromState.putAll(
-                newTransitionsByFrom.mapValues { it.value.toList() }
-            )
+            transitionsByRule = newTransitionsByRule
+            transitionsByFromState = newTransitionsByFrom.mapValues { it.value.toList() }
 
             // 5. 加载图标
             val newIcons = mutableMapOf<String, Int>()
@@ -100,12 +92,9 @@ object RuleRegistry {
                     }
                 }
             }
-            iconCache.clear()
-            iconCache.putAll(newIcons)
-            customCapsuleIconCache.clear()
-            customCapsuleIconCache.putAll(newCustomIcons)
-            customCapsuleIconNameCache.clear()
-            customCapsuleIconNameCache.putAll(newCustomNames)
+            iconCache = newIcons
+            customCapsuleIconCache = newCustomIcons
+            customCapsuleIconNameCache = newCustomNames
 
             // 6. 刷新模板缓存 (供 RuleDisplayTemplateResolver.renderTitle 使用)
             RuleDisplayTemplateResolver.refresh(appCtx)
