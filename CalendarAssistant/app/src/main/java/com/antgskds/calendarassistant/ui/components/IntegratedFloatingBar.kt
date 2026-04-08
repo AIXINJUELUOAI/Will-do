@@ -49,7 +49,12 @@ import com.antgskds.calendarassistant.R
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
-// 注意：这个值通常用于外部布局，现在组件内部也自带了阴影缓冲
+val IntegratedFloatingBarExtraHeight = 4.dp
+val IntegratedFloatingBarShadowPadding = 20.dp
+val IntegratedFloatingBarToastGap = 12.dp
+val IntegratedFloatingBarVisualHeight =
+    IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight + IntegratedFloatingBarShadowPadding
+// 注意：这个值通常用于外部布局
 val IntegratedFloatingBarBottomSpacing = 0.dp
 
 // --- Hydrogen 核心配色 ---
@@ -91,8 +96,8 @@ fun IntegratedFloatingBar(
     val fabShape = RoundedCornerShape(22.dp)
     val navElevation = 6.dp
     val fabElevation = 6.dp
-    val navHeight = IntegratedFloatingBarHeight + 4.dp
-    val fabSize = IntegratedFloatingBarHeight + 4.dp
+    val navHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
+    val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val navItemWidth = 76.dp
     val navItemSpacing = 4.dp
     val navPaddingHorizontal = 6.dp
@@ -126,12 +131,10 @@ fun IntegratedFloatingBar(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // 修改点 2：在 Row 上增加底部内边距 padding(bottom = 20.dp)
-        // 这一步非常关键：它为 Card 下方的阴影留出了 20dp 的“安全区”
         Row(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 20.dp) // 新增：给底部阴影留出空间
+                .padding(bottom = IntegratedFloatingBarShadowPadding)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center

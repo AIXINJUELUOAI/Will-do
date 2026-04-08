@@ -25,6 +25,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.Json
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -150,19 +152,7 @@ object RecognitionProcessor {
                     Log.d(TAG, "[AI文本输入] 原始响应(${response.content.length} chars): ${response.content}")
                     val cleanJson = cleanJsonString(response.content)
                     Log.d(TAG, "[AI文本输入] 清洗后 JSON(${cleanJson.length} chars): $cleanJson")
-                    val hasEventsField = Regex("\"events\"\\s*:").containsMatchIn(cleanJson)
-                    val parsedEvent = if (hasEventsField) {
-                        val wrapper = jsonParser.decodeFromString<AiResponse>(cleanJson)
-                        Log.d(TAG, "[AI文本输入] 解析为事件列表: size=${wrapper.events.size}")
-                        wrapper.events.firstOrNull()
-                    } else {
-                        val event = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
-                        Log.d(
-                            TAG,
-                            "[AI文本输入] 解析为单事件: title=${event.title}, start=${event.startTime}, end=${event.endTime}, type=${event.type}, tag=${event.tag}"
-                        )
-                        event
-                    }
+                    val parsedEvent = parseCalendarEvents(cleanJson).firstOrNull()
                     if (parsedEvent == null || parsedEvent.title.isBlank()) {
                         Log.d(TAG, "[AI文本输入] 解析结果为空")
                         AnalysisResult.Empty()
@@ -357,13 +347,13 @@ object RecognitionProcessor {
             )) {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
-                    val aiResponse = jsonParser.decodeFromString<AiResponse>(cleanJson)
+                    val parsedEvents = parseCalendarEvents(cleanJson)
 
-                    Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${aiResponse.events.size} 个事件")
-                    if (aiResponse.events.isEmpty()) {
+                    Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${parsedEvents.size} 个事件")
+                    if (parsedEvents.isEmpty()) {
                         AnalysisResult.Empty()
                     } else {
-                        AnalysisResult.Success(enforceRuleHeaders(aiResponse.events))
+                        AnalysisResult.Success(enforceRuleHeaders(parsedEvents))
                     }
                 }
                 is ApiCallResult.Failure -> {
@@ -429,12 +419,8 @@ object RecognitionProcessor {
             )) {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
-                        val events = try {
-                            jsonParser.decodeFromString<AiResponse>(cleanJson).events
-                        } catch (_: Exception) {
-                            val single = jsonParser.decodeFromString<CalendarEventData>(cleanJson)
-                            listOf(single)
-                        }
+                        Log.d(TAG, "[多模态识别] 清洗后内容(${cleanJson.length} chars): $cleanJson")
+                        val events = parseCalendarEvents(cleanJson)
                         val normalizedEvents = enforceRuleHeaders(events)
 
                         val pickupEvents = normalizedEvents.filter {
@@ -455,6 +441,10 @@ object RecognitionProcessor {
                     }
                 }
                 is ApiCallResult.Failure -> {
+                    Log.e(
+                        TAG,
+                        "[多模态识别] API 失败: kind=${response.kind}, status=${response.statusCode}, message=${response.message}, rawBody=${response.rawBody}"
+                    )
                     val failure = mapApiFailure(response)
                     AnalysisResult.Failure(failure)
                 }
@@ -470,47 +460,57 @@ object RecognitionProcessor {
     }
 
     private fun cleanJsonString(response: String): String {
-        var json = response.trim()
-        if (json.contains("```")) {
-            json = json.substringAfter("json").substringAfter("\n").substringBeforeLast("```")
+        val trimmed = response.trim().removePrefix("\uFEFF")
+        if (trimmed.contains("```")) {
+            val fenced = Regex("```(?:json)?\\s*(.*?)```", RegexOption.DOT_MATCHES_ALL)
+                .find(trimmed)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
+            if (!fenced.isNullOrBlank()) return fenced
         }
-        return json
+
+        val objectStart = trimmed.indexOf('{')
+        val arrayStart = trimmed.indexOf('[')
+        val start = listOf(objectStart, arrayStart)
+            .filter { it >= 0 }
+            .minOrNull() ?: return trimmed
+
+        val objectEnd = trimmed.lastIndexOf('}')
+        val arrayEnd = trimmed.lastIndexOf(']')
+        val end = maxOf(objectEnd, arrayEnd)
+        return if (end >= start) trimmed.substring(start, end + 1).trim() else trimmed
+    }
+
+    private fun parseCalendarEvents(cleanJson: String): List<CalendarEventData> {
+        val parsed = jsonParser.parseToJsonElement(cleanJson)
+        return when (parsed) {
+            is JsonObject -> parseCalendarEventsFromObject(parsed)
+            is JsonArray -> parseCalendarEventsFromArray(parsed)
+            else -> emptyList()
+        }
+    }
+
+    private fun parseCalendarEventsFromObject(jsonObject: JsonObject): List<CalendarEventData> {
+        val eventsElement = jsonObject["events"]
+        return when (eventsElement) {
+            is JsonArray -> parseCalendarEventsFromArray(eventsElement)
+            null -> listOf(jsonParser.decodeFromJsonElement(CalendarEventData.serializer(), jsonObject))
+            else -> emptyList()
+        }
+    }
+
+    private fun parseCalendarEventsFromArray(jsonArray: JsonArray): List<CalendarEventData> {
+        return jsonArray.mapNotNull { element ->
+            runCatching {
+                jsonParser.decodeFromJsonElement(CalendarEventData.serializer(), element)
+            }.getOrNull()
+        }
     }
 
     private fun mapApiFailure(failure: ApiCallResult.Failure): AnalysisFailure {
-        val title = "分析失败"
-        return when (failure.kind) {
-            ApiErrorKind.CONFIG -> AnalysisFailure(title, "AI 配置缺失")
-            ApiErrorKind.PARSE -> AnalysisFailure(title, "返回格式错误")
-            ApiErrorKind.NETWORK -> {
-                val detail = buildNetworkDetail(failure.message)
-                AnalysisFailure(title, detail)
-            }
-            ApiErrorKind.HTTP -> {
-                val code = failure.statusCode
-                val detail = when (code) {
-                    401, 403 -> "API Key 无效或无权限 (${code})"
-                    404 -> "服务地址(URL)无效或模型不存在 (404)"
-                    400, 422 -> "请求参数错误/模型不支持该参数 (${code})"
-                    null -> "请求失败"
-                    else -> "HTTP $code"
-                }
-                AnalysisFailure(title, detail)
-            }
-            ApiErrorKind.UNKNOWN -> AnalysisFailure(title, failure.message.ifBlank { "请求失败" })
-        }
-    }
-
-    private fun buildNetworkDetail(message: String): String {
-        val lower = message.lowercase()
-        val tag = when {
-            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeoutexception") -> "timeout"
-            lower.contains("unknownhost") -> "unknown host"
-            lower.contains("unreachable") -> "unreachable"
-            lower.contains("network") -> "network"
-            else -> ""
-        }
-        return if (tag.isBlank()) "网络连接失败" else "网络连接失败 ($tag)"
+        val mapped = AiFailureMapper.map(failure)
+        return AnalysisFailure(mapped.title, mapped.detail)
     }
 
     private fun enforceRuleHeaders(events: List<CalendarEventData>): List<CalendarEventData> {
