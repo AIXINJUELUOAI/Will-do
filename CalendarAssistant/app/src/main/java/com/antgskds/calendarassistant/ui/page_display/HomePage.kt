@@ -42,6 +42,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.FocusRequester
@@ -55,23 +56,22 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
+import com.antgskds.calendarassistant.core.ai.convertAiEventToMyEvent
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
-import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
 import kotlinx.coroutines.CancellationException
@@ -84,7 +84,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
-import java.util.UUID
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,8 +112,12 @@ fun HomePage(
 
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
+    var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
+
+    val noteTabIndex = if (uiState.settings.noteEnabled) 1 else -1
+    val allTabIndex = if (uiState.settings.noteEnabled) 2 else 1
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -310,10 +313,14 @@ fun HomePage(
 
     BackHandler(enabled = isSearchMode) {
         isSearchMode = false
-        if (currentTab == 1) {
-            allSearchQuery = ""
-        } else {
-            todaySearchQuery = ""
+        when (currentTab) {
+            noteTabIndex -> noteSearchQuery = ""
+            allTabIndex -> {
+                allSearchQuery = ""
+            }
+            else -> {
+                todaySearchQuery = ""
+            }
         }
     }
 
@@ -346,6 +353,7 @@ fun HomePage(
         mutableStateOf(notificationManager.areNotificationsEnabled())
     }
     var editingCourse by remember { mutableStateOf<Pair<Course, LocalDate>?>(null) }
+    var pendingDeleteNote by remember { mutableStateOf<MyEvent?>(null) }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
@@ -462,7 +470,11 @@ fun HomePage(
                             isActionExpanded -> onActionExpandedChange(false)
                             isSearchMode -> {
                                 isSearchMode = false
-                                if (currentTab == 1) allSearchQuery = "" else todaySearchQuery = ""
+                                when (currentTab) {
+                                    noteTabIndex -> noteSearchQuery = ""
+                                    allTabIndex -> allSearchQuery = ""
+                                    else -> todaySearchQuery = ""
+                                }
                             }
                             else -> viewModel.onRevealEvent(null)
                         }
@@ -482,7 +494,12 @@ fun HomePage(
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
                         title = {
-                            Text(if (currentTab == 0) "今日日程" else "全部日程")
+                            val title = when (currentTab) {
+                                0 -> "今日日程"
+                                noteTabIndex -> "便签"
+                                else -> "全部日程"
+                            }
+                            Text(title)
                         },
                         actions = {}
                     )
@@ -493,7 +510,7 @@ fun HomePage(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == 1)
+                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == noteTabIndex || currentTab == allTabIndex)
                     val searchBarHeight = 64.dp
                     val searchBarOffset = searchBarHeight + 12.dp
                     val contentBottomPadding = if (showSearchBar) {
@@ -539,6 +556,8 @@ fun HomePage(
                             // 日期卡片
                             item {
                                 val isToday = uiState.selectedDate == LocalDate.now()
+                                val weatherData = uiState.weatherData
+                                val topBaseColor = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                 Card(
                                     modifier = Modifier
                                         .padding(horizontal = 24.dp)
@@ -568,10 +587,42 @@ fun HomePage(
                                 ) {
                                     Column(modifier = Modifier.fillMaxSize()) {
                                         Box(
-                                            modifier = Modifier.weight(0.2f).fillMaxWidth()
-                                                .background(if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                            modifier = Modifier
+                                                .weight(0.2f)
+                                                .fillMaxWidth()
+                                                .background(topBaseColor)
                                                 .clickable { viewModel.updateSelectedDate(LocalDate.now()) }
-                                        )
+                                        ) {
+                                            if (weatherData != null) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .align(Alignment.CenterStart)
+                                                        .padding(horizontal = 22.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
+                                                        contentDescription = weatherData.text.ifBlank { "天气" },
+                                                        modifier = Modifier.size(30.dp),
+                                                        tint = MaterialTheme.colorScheme.onPrimary
+                                                    )
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Text(
+                                                        text = buildString {
+                                                            append(weatherData.temperature.ifBlank { "--" })
+                                                            append("°C")
+                                                            if (weatherData.text.isNotBlank()) {
+                                                                append(" · ")
+                                                                append(weatherData.text)
+                                                            }
+                                                        },
+                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
                                         Column(
                                             modifier = Modifier.weight(0.8f).fillMaxWidth(),
                                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -639,6 +690,14 @@ fun HomePage(
                                 }
                             }
                         }
+                    } else if (currentTab == noteTabIndex) {
+                        NotePage(
+                            viewModel = viewModel,
+                            searchQuery = noteSearchQuery,
+                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
+                            onEditNote = { onEditEvent(it) },
+                            onPendingDeleteChange = { pendingDeleteNote = it }
+                        )
                     } else {
                         AllEventsPage(
                             viewModel = viewModel,
@@ -685,12 +744,16 @@ fun HomePage(
                             contentAlignment = Alignment.BottomCenter
                         ) {
                             OutlinedTextField(
-                                value = if (currentTab == 1) allSearchQuery else todaySearchQuery,
+                                value = when (currentTab) {
+                                    noteTabIndex -> noteSearchQuery
+                                    allTabIndex -> allSearchQuery
+                                    else -> todaySearchQuery
+                                },
                                 onValueChange = {
-                                    if (currentTab == 1) {
-                                        allSearchQuery = it
-                                    } else {
-                                        todaySearchQuery = it
+                                    when (currentTab) {
+                                        noteTabIndex -> noteSearchQuery = it
+                                        allTabIndex -> allSearchQuery = it
+                                        else -> todaySearchQuery = it
                                     }
                                 },
                                 modifier = Modifier
@@ -770,52 +833,42 @@ fun HomePage(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = floatingBarOffset + 16.dp)
         )
+
+        AnimatedVisibility(
+            visible = pendingDeleteNote != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { pendingDeleteNote = null }
+                    )
+            )
+        }
+
+        FloatingActionCard(
+            visible = pendingDeleteNote != null,
+            title = "删除便签",
+            content = "删除后无法恢复，确认删除这条便签吗？",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            onConfirm = {
+                pendingDeleteNote?.let(viewModel::deleteEvent)
+                pendingDeleteNote = null
+            },
+            onDismiss = { pendingDeleteNote = null },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = floatingBarOffset + 16.dp)
+        )
     }
-}
-
-private fun convertAiEventToMyEvent(
-    eventData: CalendarEventData,
-    currentEventsCount: Int,
-    sourceImagePath: String?
-): MyEvent {
-    val now = LocalDateTime.now()
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
-    val startDateTime = try {
-        if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
-    } catch (e: Exception) { now }
-
-    val endDateTime = try {
-        if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
-    } catch (e: Exception) { startDateTime.plusHours(1) }
-
-    val resolvedTag = when {
-        eventData.tag.isNotBlank() && eventData.tag != EventTags.GENERAL -> eventData.tag
-        eventData.type == "pickup" -> EventTags.PICKUP
-        else -> eventData.tag
-    }.ifBlank { EventTags.GENERAL }
-
-    val color = if (EventColors.isNotEmpty()) {
-        EventColors[currentEventsCount % EventColors.size]
-    } else {
-        Color.Gray
-    }
-
-    return MyEvent(
-        id = UUID.randomUUID().toString(),
-        title = eventData.title.trim(),
-        startDate = startDateTime.toLocalDate(),
-        endDate = endDateTime.toLocalDate(),
-        startTime = startDateTime.format(timeFormatter),
-        endTime = endDateTime.format(timeFormatter),
-        location = eventData.location,
-        description = eventData.description,
-        color = color,
-        sourceImagePath = sourceImagePath,
-        eventType = EventType.EVENT,
-        tag = resolvedTag
-    )
 }
 
 @Composable

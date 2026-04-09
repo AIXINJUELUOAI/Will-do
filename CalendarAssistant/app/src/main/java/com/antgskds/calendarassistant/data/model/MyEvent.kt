@@ -21,6 +21,7 @@ object EventTags {
     const val FLIGHT = "flight"   // 航班、飞机
     const val TICKET = "ticket"   // 取票
     const val SENDER = "sender"   // 寄件
+    const val NOTE = "note"       // 便签
 }
 
 @Serializable

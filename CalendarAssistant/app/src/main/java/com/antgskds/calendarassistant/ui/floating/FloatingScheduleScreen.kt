@@ -28,6 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -118,11 +121,21 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Context
+import com.antgskds.calendarassistant.core.note.noteMarkdown
+import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
+import com.antgskds.calendarassistant.core.note.markdownWithoutTasks
+import com.antgskds.calendarassistant.core.note.toggleMarkdownTask
+import com.antgskds.calendarassistant.core.note.withNoteMarkdown
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.core.rule.ActionIconType
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.StatusColor
+import com.antgskds.calendarassistant.ui.components.MarkdownText
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.delay
@@ -132,6 +145,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -141,12 +155,17 @@ enum class FloatingInputMode { SCHEDULE, NOTE }
 @Composable
 fun FloatingScheduleScreen(
     events: List<MyEvent>,
+    noteEvents: List<MyEvent> = emptyList(),
+    weatherData: WeatherData? = null,
+    noteEnabled: Boolean = false,
     onClose: () -> Unit,
     onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
     onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onEventAction: (String, String) -> Unit = { _, _ -> },
     onUndo: (String, String) -> Unit = { _, _ -> },
+    onDeleteNote: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onRestoreNote: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onLoadingChange: (Boolean) -> Unit = {}
 ) {
     var manualInputText by remember { mutableStateOf("") }
@@ -182,6 +201,41 @@ fun FloatingScheduleScreen(
     val density = LocalDensity.current
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("floating_ui", Context.MODE_PRIVATE) }
+    var currentMode by remember(noteEnabled) {
+        mutableStateOf(
+            if (noteEnabled) {
+                FloatingInputMode.valueOf(
+                    prefs.getString("last_mode", FloatingInputMode.SCHEDULE.name) ?: FloatingInputMode.SCHEDULE.name
+                )
+            } else {
+                FloatingInputMode.SCHEDULE
+            }
+        )
+    }
+    var deletedNote by remember { mutableStateOf<MyEvent?>(null) }
+    var showUndoDelete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentMode, noteEnabled) {
+        if (noteEnabled) {
+            prefs.edit().putString("last_mode", currentMode.name).apply()
+        }
+    }
+
+    LaunchedEffect(noteEnabled) {
+        if (!noteEnabled && currentMode != FloatingInputMode.SCHEDULE) {
+            currentMode = FloatingInputMode.SCHEDULE
+        }
+    }
+
+    LaunchedEffect(showUndoDelete, deletedNote?.id) {
+        if (showUndoDelete) {
+            delay(5000)
+            showUndoDelete = false
+            deletedNote = null
+        }
+    }
 
     // 背景透明度动画
     val bgAlpha by animateFloatAsState(
@@ -228,6 +282,9 @@ fun FloatingScheduleScreen(
         ) {
             TimeWheelList(
                 events = events,
+                noteEvents = noteEvents,
+                weatherData = weatherData,
+                currentMode = currentMode,
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(),
@@ -235,6 +292,12 @@ fun FloatingScheduleScreen(
                 onUpdateEvent = onUpdateEvent,
                 onEventAction = onEventAction,
                 onUndo = { id, tag -> onUndo(id, tag) },
+                onDeleteNote = { note ->
+                    onDeleteNote(note) {
+                        deletedNote = note
+                        showUndoDelete = true
+                    }
+                },
                 onRequestDatePicker = { initialDate, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
                 },
@@ -280,8 +343,41 @@ fun FloatingScheduleScreen(
                     }
                 },
                 onSwipeUpClose = { animateClose() },
-                isLoading = isLoading
+                isLoading = isLoading,
+                noteEnabled = noteEnabled,
+                currentMode = currentMode,
+                onModeChange = { currentMode = it }
             )
+        }
+
+        AnimatedVisibility(
+            visible = showUndoDelete && deletedNote != null,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("已删除便签", color = MaterialTheme.colorScheme.onSurface)
+                    TextButton(onClick = {
+                        val note = deletedNote ?: return@TextButton
+                        onRestoreNote(note) {
+                            showUndoDelete = false
+                            deletedNote = null
+                        }
+                    }) {
+                        Text("撤销")
+                    }
+                }
+            }
         }
 
         pickerRequest?.let { request ->
@@ -301,10 +397,11 @@ fun BottomInteractionArea(
     onManualSubmit: (String, Boolean) -> Unit, // Boolean true 表示便签
     onPickImage: () -> Unit,
     onSwipeUpClose: () -> Unit,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    noteEnabled: Boolean = false,
+    currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
+    onModeChange: (FloatingInputMode) -> Unit = {}
 ) {
-    // 状态与颜色主题定义
-    var currentMode by remember { mutableStateOf(FloatingInputMode.SCHEDULE) }
     val isNote = currentMode == FloatingInputMode.NOTE
 
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -360,8 +457,8 @@ fun BottomInteractionArea(
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(activeColor.copy(alpha = 0.15f))
-                            .clickable(enabled = !isLoading) {
-                                currentMode = if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE
+                            .clickable(enabled = noteEnabled && !isLoading) {
+                                onModeChange(if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE)
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -472,11 +569,15 @@ fun BottomInteractionArea(
 @Composable
 fun TimeWheelList(
     events: List<MyEvent>,
+    noteEvents: List<MyEvent> = emptyList(),
+    weatherData: WeatherData? = null,
+    currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onEventAction: (String, String) -> Unit = { _, _ -> },
     onUndo: (String, String) -> Unit = { _, _ -> },
+    onDeleteNote: (MyEvent) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
@@ -508,7 +609,43 @@ fun TimeWheelList(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.ime)
         ) {
-            items(sortedEvents, key = { it.id }) { event ->
+            if (weatherData != null) {
+                item(key = "weather_header") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        FloatingWeatherCard(
+                            weatherData = weatherData,
+                            modifier = Modifier.padding(end = 20.dp).width(260.dp)
+                        )
+                    }
+                }
+            }
+            if (currentMode == FloatingInputMode.NOTE && noteEvents.isNotEmpty()) {
+                items(noteEvents, key = { "note_${it.id}" }) { note ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        FloatingNoteCard(
+                            note = note,
+                            modifier = Modifier.padding(end = 20.dp).width(260.dp),
+                            onDelete = onDeleteNote,
+                            onToggleTodo = { task ->
+                                onUpdateEvent(
+                                    note.withNoteMarkdown(
+                                        markdown = toggleMarkdownTask(note.noteMarkdown(), task.lineIndex)
+                                    )
+                                ) {}
+                            },
+                            onSave = { updated -> onUpdateEvent(updated) {} }
+                        )
+                    }
+                }
+            }
+            if (currentMode == FloatingInputMode.SCHEDULE) {
+                items(sortedEvents, key = { it.id }) { event ->
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterEnd
@@ -523,6 +660,346 @@ fun TimeWheelList(
                         onRequestDatePicker = onRequestDatePicker,
                         onRequestTimePicker = onRequestTimePicker
                     )
+                }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingWeatherCard(
+    weatherData: WeatherData,
+    modifier: Modifier = Modifier
+) {
+    val now = remember { LocalDateTime.now() }
+    val weekText = remember(now) {
+        now.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.CHINESE)
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
+                    contentDescription = weatherData.text.ifBlank { "天气" },
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = weatherData.text.ifBlank { "天气" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${weatherData.temperature.ifBlank { "--" }}°C",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = "${now.dayOfMonth}号 $weekText · ${weatherData.windDir.ifBlank { "--" }}${weatherData.windScale.ifBlank { "--" }}级 · 湿度 ${weatherData.humidity.ifBlank { "--" }}%",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingNoteCard(
+    note: MyEvent,
+    modifier: Modifier = Modifier,
+    onToggleTodo: (com.antgskds.calendarassistant.core.note.MarkdownTaskItem) -> Unit,
+    onDelete: (MyEvent) -> Unit,
+    onSave: (MyEvent) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(false) }
+    var draftTitle by remember { mutableStateOf(note.title) }
+    var draftMarkdown by remember { mutableStateOf(note.noteMarkdown()) }
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val actionButtonSize = 46.dp
+    val actionButtonSpacing = 10.dp
+    val actionAreaEndPadding = 14.dp
+    val cardToButtonGap = 12.dp
+    val actionAreaWidthDp = actionAreaEndPadding + actionButtonSize + cardToButtonGap
+    val revealOffsetPx = with(density) { -actionAreaWidthDp.toPx() }
+    val revealSnapThresholdPx = revealOffsetPx * 0.35f
+    val deleteTriggerPx = with(density) { 110.dp.toPx() }
+    val screenWidthPx = with(density) { 400.dp.toPx() }
+    val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
+    val tasks = remember(note.description, note.lastModified) { extractMarkdownTasks(note.noteMarkdown()) }
+    val bodyMarkdown = remember(note.description, note.lastModified) { markdownWithoutTasks(note.noteMarkdown()) }
+    val floatingBodyMarkdown = remember(bodyMarkdown) {
+        bodyMarkdown.lines().joinToString("\n") { line ->
+            line.replaceFirst(Regex("^#{1,6}\\s+"), "")
+        }
+    }
+    val maxExpandedLines = 6
+    val maxTaskLinesBeforeHideBody = 5
+    val progressLabel = when {
+        tasks.isEmpty() -> null
+        tasks.all { it.isDone } -> "已完成"
+        else -> "${tasks.count { it.isDone }}/${tasks.size}"
+    }
+    val previewTasks = when {
+        tasks.size > maxExpandedLines -> tasks.take(maxTaskLinesBeforeHideBody)
+        else -> tasks.take(maxExpandedLines.coerceAtMost(maxTaskLinesBeforeHideBody))
+    }
+    val remainingTaskCount = (tasks.size - previewTasks.size).coerceAtLeast(0)
+    val remainingBodyLines = if (remainingTaskCount > 0) {
+        0
+    } else if (previewTasks.size >= maxTaskLinesBeforeHideBody) {
+        0
+    } else {
+        (maxExpandedLines - previewTasks.size).coerceAtLeast(0)
+    }
+
+    LaunchedEffect(note.id, note.lastModified) {
+        if (!isEditing) {
+            draftTitle = note.title
+            draftMarkdown = note.noteMarkdown()
+        }
+    }
+
+    Box(modifier = modifier) {
+        if (offsetX.value < -1f) {
+            val revealProgress = ((-offsetX.value) / abs(revealOffsetPx)).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(end = actionAreaEndPadding),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .size(actionButtonSize)
+                        .alpha(revealProgress),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        draftTitle = note.title
+                        draftMarkdown = note.noteMarkdown()
+                        isExpanded = true
+                        isEditing = true
+                        scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
+                    }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .then(
+                    if (!isEditing) {
+                        Modifier.pointerInput(note.id) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { scope.launch { offsetX.stop() } },
+                                onDragEnd = {
+                                    val shouldRevealLeft = offsetX.value <= revealSnapThresholdPx
+                                    val fullSwipeRight = offsetX.value >= deleteTriggerPx
+                                    scope.launch {
+                                        when {
+                                            fullSwipeRight -> {
+                                                offsetX.animateTo(screenWidthPx, tween(200))
+                                                onDelete(note)
+                                            }
+                                            shouldRevealLeft -> offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                            else -> offsetX.animateTo(0f, swipeSpringSpec)
+                                        }
+                                    }
+                                },
+                                onDragCancel = {
+                                    scope.launch {
+                                        if (offsetX.value <= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                        else offsetX.animateTo(0f, swipeSpringSpec)
+                                    }
+                                },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    scope.launch {
+                                        val current = offsetX.value
+                                        val resistance = when {
+                                            dragAmount < 0 && current <= revealOffsetPx -> 0.45f
+                                            dragAmount > 0 && current >= deleteTriggerPx -> 0.95f
+                                            else -> 0.85f
+                                        }
+                                        offsetX.snapTo((current + dragAmount * resistance).coerceAtLeast(revealOffsetPx - 40f))
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    scope.launch {
+                        if (offsetX.value < -10f) offsetX.animateTo(0f, swipeSpringSpec)
+                        else if (!isEditing) isExpanded = !isExpanded
+                    }
+                },
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 2.dp
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = note.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (progressLabel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        StatusLabel(
+                            progressLabel,
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.lastModified)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
+                    exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
+                ) {
+                    Column(modifier = Modifier.padding(top = 10.dp)) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+                        Spacer(Modifier.height(8.dp))
+                        AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editingState ->
+                            if (editingState) {
+                                Column {
+                                    CompactTextField(
+                                        value = draftTitle,
+                                        onValueChange = { draftTitle = it },
+                                        placeholder = "标题",
+                                        singleLine = true,
+                                        maxLines = 1
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    CompactTextField(
+                                        value = draftMarkdown,
+                                        onValueChange = { draftMarkdown = it },
+                                        placeholder = "Markdown 内容",
+                                        singleLine = false,
+                                        maxLines = 6
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(onClick = {
+                                            draftTitle = note.title
+                                            draftMarkdown = note.noteMarkdown()
+                                            isEditing = false
+                                        }) { Text("取消", fontSize = 13.sp) }
+                                        Spacer(Modifier.width(8.dp))
+                                        Button(onClick = {
+                                            val updated = note.withNoteMarkdown(
+                                                title = draftTitle.trim().ifBlank { "无标题" },
+                                                markdown = draftMarkdown
+                                            )
+                                            onSave(updated)
+                                            isEditing = false
+                                        }) { Text("保存", fontSize = 13.sp) }
+                                    }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    previewTasks.forEach { task ->
+                                        Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+                                            Checkbox(
+                                                checked = task.isDone,
+                                                onCheckedChange = { onToggleTodo(task) },
+                                                modifier = Modifier.size(22.dp),
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = MaterialTheme.colorScheme.primary,
+                                                    uncheckedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                                )
+                                            )
+                                            Spacer(Modifier.width(10.dp))
+                                            Text(
+                                                text = task.text,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (task.isDone) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
+                                                textDecoration = if (task.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                    if (remainingBodyLines > 0 && bodyMarkdown.isNotBlank()) {
+                                        MarkdownText(
+                                            markdown = floatingBodyMarkdown,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            linkColor = MaterialTheme.colorScheme.primary,
+                                            enableLinkClicks = true,
+                                            maxLines = remainingBodyLines,
+                                            textSizeSp = MaterialTheme.typography.bodySmall.fontSize.value,
+                                            lineSpacingExtraPx = 4f
+                                        )
+                                    }
+                                    if (remainingTaskCount > 0) {
+                                        Text(
+                                            text = "+$remainingTaskCount 项",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -663,51 +1140,51 @@ private fun FloatingPickerOverlay(
                     .fillMaxWidth()
                     .pointerInput(Unit) { detectTapGestures(onTap = { }) }
             ) {
-            Column(
-                modifier = Modifier.padding(top = 20.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // 【高度压制】：把整体高度压回 170dp
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(170.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.padding(top = 20.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // 让里面的内容使用缩小的密度进行渲染，完美解决重叠问题！
-                    CompositionLocalProvider(LocalDensity provides customDensity) {
-                        content()
+                    // 【高度压制】：把整体高度压回 170dp
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 让里面的内容使用缩小的密度进行渲染，完美解决重叠问题！
+                        CompositionLocalProvider(LocalDensity provides customDensity) {
+                            content()
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // 底部按钮也做得稍微紧凑一点，呼应整体的精致感
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = { animateDismiss() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                .height(32.dp)
+                        ) {
+                            Text("取消", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Button(
+                            onClick = { animateConfirm() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                                .height(32.dp)
+                        ) {
+                            Text("确定", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-
-                Spacer(Modifier.height(8.dp))
-
-                // 底部按钮也做得稍微紧凑一点，呼应整体的精致感
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(
-                        onClick = { animateDismiss() },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
-                            .height(32.dp)
-                    ) {
-                        Text("取消", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Button(
-                        onClick = { animateConfirm() },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
-                            .height(32.dp)
-                    ) {
-                        Text("确定", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
             }
         }
     }
@@ -967,13 +1444,13 @@ fun ScheduleCard(
                                     val fullSwipeRight = offsetX.value >= archiveTriggerPx
 
                                     scope.launch {
-                                        if (fullSwipeLeft) { 
+                                        if (fullSwipeLeft) {
                                             onUndo(event.id, resolvedRuleId)
-                                            offsetX.animateTo(0f, swipeSpringSpec) 
+                                            offsetX.animateTo(0f, swipeSpringSpec)
                                         } else if (fullSwipeRight) {
                                             // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
                                             offsetX.animateTo(
-                                                targetValue = screenWidthPx, 
+                                                targetValue = screenWidthPx,
                                                 animationSpec = tween(durationMillis = 200)
                                             )
                                             onEventAction(event.id, "archive")
@@ -995,11 +1472,11 @@ fun ScheduleCard(
                                     scope.launch {
                                         val current = offsetX.value
                                         // 【阻尼感调校】向右滑过阈值后瞬间解除阻力，鼓励直接飞出去
-                                        val resistance = when { 
+                                        val resistance = when {
                                             dragAmount < 0 && current <= fullSwipeTriggerPx -> 0.25f
                                             dragAmount < 0 && current <= revealOffsetPx -> 0.45f
                                             dragAmount > 0 && current >= archiveTriggerPx -> 0.95f
-                                            else -> 0.85f 
+                                            else -> 0.85f
                                         }
                                         // 【修改】去除了上限 0f，允许卡片向右无限制拖拽
                                         offsetX.snapTo((current + (dragAmount * resistance)).coerceAtLeast(dragLimitPx))
@@ -1070,15 +1547,15 @@ fun ScheduleCard(
                     AnimatedVisibility(
                         visible = isExpanded,
                         enter = fadeIn(tween(durationMillis = 120)) +
-                            expandVertically(
-                                animationSpec = tween(durationMillis = 180),
-                                expandFrom = Alignment.Top
-                            ),
+                                expandVertically(
+                                    animationSpec = tween(durationMillis = 180),
+                                    expandFrom = Alignment.Top
+                                ),
                         exit = fadeOut(tween(durationMillis = 90)) +
-                            shrinkVertically(
-                                animationSpec = tween(durationMillis = 160),
-                                shrinkTowards = Alignment.Top
-                            )
+                                shrinkVertically(
+                                    animationSpec = tween(durationMillis = 160),
+                                    shrinkTowards = Alignment.Top
+                                )
                     ) {
                         Column {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)

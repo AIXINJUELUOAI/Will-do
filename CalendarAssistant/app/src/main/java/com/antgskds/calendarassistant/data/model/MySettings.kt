@@ -32,6 +32,9 @@ data class MySettings(
     // 【实验室】短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
 
+    // 【实验室】便签功能
+    val noteEnabled: Boolean = false,
+
     // 【新增】归档配置
     val autoArchiveEnabled: Boolean = false, // 自动归档总开关
     val archiveDaysThreshold: Int = 0, // 归档阈值天数（过期多少天后归档，0=立即归档）
@@ -60,6 +63,15 @@ data class MySettings(
     // 悬浮窗功能开关
     val isFloatingWindowEnabled: Boolean = false,
     val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
+
+    // 天气配置
+    val weatherEnabled: Boolean = false,
+    val weatherApiUrl: String = "",
+    val weatherApiKey: String = "",
+    val weatherCity: String = "",
+    val weatherProvider: String = "qweather",
+    val weatherRefreshInterval: Int = 3,
+    val showWeatherInFloating: Boolean = true,
 
     // 长按音量+动作
     val volumeUpLongPressEnabled: Boolean = false,

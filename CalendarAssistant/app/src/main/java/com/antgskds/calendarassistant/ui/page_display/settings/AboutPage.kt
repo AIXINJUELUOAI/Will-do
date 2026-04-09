@@ -105,6 +105,11 @@ fun AboutPage(
             name = "zz1812",
             contribution = "关于小米的超级岛代码"
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        ContributorLine(
+            name = "shareven",
+            contribution = "短信取件码解析正则表达式"
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
