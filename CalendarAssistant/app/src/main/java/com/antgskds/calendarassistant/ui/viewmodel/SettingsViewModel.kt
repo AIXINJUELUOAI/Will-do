@@ -111,7 +111,8 @@ class SettingsViewModel(
         floatingEventRange: Int? = null,
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
-        smsMonitoring: Boolean? = null
+        smsMonitoring: Boolean? = null,
+        noteEnabled: Boolean? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -131,8 +132,33 @@ class SettingsViewModel(
             if (volumeUpLongPressEnabled != null) current = current.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
             if (volumeUpLongPressAction != null) current = current.copy(volumeUpLongPressAction = volumeUpLongPressAction)
             if (smsMonitoring != null) current = current.copy(isSmsMonitoringEnabled = smsMonitoring)
+            if (noteEnabled != null) current = current.copy(noteEnabled = noteEnabled)
 
             repository.updateSettings(current)
+        }
+    }
+
+    fun updateWeatherSettings(
+        enabled: Boolean,
+        provider: String,
+        apiUrl: String,
+        apiKey: String,
+        city: String,
+        refreshInterval: Int,
+        showInFloating: Boolean
+    ) {
+        viewModelScope.launch {
+            repository.updateSettings(
+                settings.value.copy(
+                    weatherEnabled = enabled,
+                    weatherProvider = provider,
+                    weatherApiUrl = apiUrl,
+                    weatherApiKey = apiKey,
+                    weatherCity = city,
+                    weatherRefreshInterval = refreshInterval,
+                    showWeatherInFloating = showInFloating
+                )
+            )
         }
     }
 

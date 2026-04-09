@@ -20,6 +20,7 @@ object RuleMatchingEngine {
     )
 
     fun resolvePayload(event: MyEvent): RulePayload? {
+        if (event.tag == EventTags.NOTE) return null
         val fallbackRuleId = when (event.tag) {
             EventTags.PICKUP -> RULE_PICKUP
             EventTags.FOOD -> RULE_FOOD

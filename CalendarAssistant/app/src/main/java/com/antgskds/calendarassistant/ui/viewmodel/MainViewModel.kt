@@ -10,10 +10,14 @@ import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.CourseManager
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.RemotePrompts
+import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
+import com.antgskds.calendarassistant.core.weather.WeatherRepository
 import com.antgskds.calendarassistant.ui.components.ToastType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -27,10 +31,12 @@ data class MainUiState(
     val selectedDate: LocalDate = LocalDate.now(),
     val revealedEventId: String? = null,
     val allEvents: List<MyEvent> = emptyList(),
+    val noteEvents: List<MyEvent> = emptyList(),
     val courses: List<Course> = emptyList(),
     val settings: MySettings = MySettings(),
     val currentDateEvents: List<MyEvent> = emptyList(),
-    val tomorrowEvents: List<MyEvent> = emptyList()
+    val tomorrowEvents: List<MyEvent> = emptyList(),
+    val weatherData: WeatherData? = null
 )
 
 data class PromptUpdateDialogState(
@@ -46,6 +52,7 @@ data class PromptCheckFeedback(
 class MainViewModel(
     private val repository: AppRepository
 ) : ViewModel() {
+    private val weatherRepository = WeatherRepository.getInstance(repository.appContext)
 
     // ✅ 精确过期触发器：仅在事件实际过期时触发 UI 刷新，避免无效轮询
     private val _timeTrigger = MutableStateFlow(System.currentTimeMillis())
@@ -83,6 +90,12 @@ class MainViewModel(
             }
         }
 
+        viewModelScope.launch {
+            repository.settings.collectLatest { settings ->
+                weatherRepository.refreshIfNeeded(settings)
+            }
+        }
+
         checkPromptUpdatesSilently()
     }
 
@@ -96,6 +109,7 @@ class MainViewModel(
 
         for (event in repository.events.value) {
             if (event.isRecurringParent) continue
+            if (event.tag == EventTags.NOTE) continue
             try {
                 val timeParts = event.endTime.split(":")
                 val hour = timeParts.getOrElse(0) { "23" }.toIntOrNull() ?: 23
@@ -125,6 +139,7 @@ class MainViewModel(
         repository.events,
         repository.courses,
         repository.settings,
+        weatherRepository.weatherData,
         _timeTrigger  // ✅ 添加时间触发器
     ) { values ->
         val date = values[0] as LocalDate
@@ -132,9 +147,13 @@ class MainViewModel(
         val events = values[2] as List<MyEvent>
         val courses = values[3] as List<Course>
         val settings = values[4] as MySettings
-        // values[5] 是 _timeTrigger，不需要使用
+        val weatherData = values[5] as WeatherData?
+        // values[6] 是 _timeTrigger，不需要使用
 
-        val todayNormal = events.filter { event ->
+        val scheduleEvents = events.filter { it.tag != EventTags.NOTE }
+        val noteEvents = events.filter { it.tag == EventTags.NOTE }
+
+        val todayNormal = scheduleEvents.filter { event ->
             !event.isRecurringParent &&
             DateCalculator.overlapsDate(event, date)
         }.distinctBy { it.id }
@@ -163,7 +182,7 @@ class MainViewModel(
         val tomorrowMerged = if (settings.showTomorrowEvents) {
             val tomorrow = date.plusDays(1)
             val todayEventIds = todayMerged.map { it.id }.toSet()
-            val tomorrowNormal = events.filter { event ->
+            val tomorrowNormal = scheduleEvents.filter { event ->
                 !event.isRecurringParent &&
                 DateCalculator.overlapsDate(event, tomorrow)
             }.distinctBy { it.id }
@@ -195,10 +214,12 @@ class MainViewModel(
             selectedDate = date,
             revealedEventId = revealedId,
             allEvents = events,
+            noteEvents = noteEvents,
             courses = courses,
             settings = settings,
             currentDateEvents = todayMerged,
-            tomorrowEvents = tomorrowMerged
+            tomorrowEvents = tomorrowMerged,
+            weatherData = if (settings.hasWeatherConfig()) weatherData else null
         )
     }.flowOn(Dispatchers.Default)  // ✅ 将计算移到后台线程，避免主线程 ANR
     .stateIn(
