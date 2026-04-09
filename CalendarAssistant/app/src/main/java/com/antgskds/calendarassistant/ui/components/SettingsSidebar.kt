@@ -36,6 +36,7 @@ enum class SettingsDestination {
 
     // 其他设置
     AI,                // 模型配置
+    Weather,           // 天气设置
     Preference,        // 偏好设置
     Archives,          // 日程归档
     Backup,            // 数据备份
@@ -223,6 +224,12 @@ private fun SidebarOtherSettingsCard(onNavigate: (SettingsDestination) -> Unit) 
                 title = "模型配置",
                 subtitle = "API Key 与模型",
                 onClick = { onNavigate(SettingsDestination.AI) }
+            )
+            SidebarActionItem(
+                icon = Icons.Default.WbSunny,
+                title = "天气",
+                subtitle = "天气 API 与展示设置",
+                onClick = { onNavigate(SettingsDestination.Weather) }
             )
             // 偏好设置
             SidebarActionItem(

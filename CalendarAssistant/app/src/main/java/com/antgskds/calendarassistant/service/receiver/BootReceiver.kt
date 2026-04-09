@@ -6,7 +6,9 @@ import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.core.weather.WeatherSyncWorker
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.data.repository.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +31,9 @@ class BootReceiver : BroadcastReceiver() {
 
             // 4. 恢复定期反向同步
             CalendarReverseSyncScheduler.schedule(context)
+
+            // 5. 恢复天气定时刷新
+            WeatherSyncWorker.syncForSettings(context, SettingsRepository(context).loadSettings())
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             AccessibilityGuardian.checkAndRestoreIfNeeded(

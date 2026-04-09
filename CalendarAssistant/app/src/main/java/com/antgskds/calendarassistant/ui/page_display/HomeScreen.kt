@@ -14,6 +14,7 @@ import kotlin.math.roundToInt
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
@@ -67,25 +68,40 @@ fun HomeScreen(
     // 状态管理
     var isSidebarOpen by remember { mutableStateOf(false) }
     // 【修改 2】初始 Tab 状态不需要依赖参数了，默认为 0 即可，依靠 LaunchedEffect 来跳转
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=All
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=Note, 2=All
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
     var scheduleProgress by remember { mutableFloatStateOf(0f) }
     var scheduleOffsetPx by remember { mutableFloatStateOf(0f) }
     var isActionExpanded by remember { mutableStateOf(false) }
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
+    var previousNoteEnabled by remember { mutableStateOf(settings.noteEnabled) }
 
     // 【修改 3】新增：监听时间戳变化
     // 只要 timestamp 变化且大于 0，就强制切到"全部"Tab
     LaunchedEffect(pickupTimestamp) {
         if (pickupTimestamp > 0) {
-            selectedTab = 1
+            selectedTab = if (settings.noteEnabled) 2 else 1
+        }
+    }
+
+    LaunchedEffect(settings.noteEnabled) {
+        if (settings.noteEnabled != previousNoteEnabled) {
+            if (settings.noteEnabled && selectedTab == 1) {
+                selectedTab = 2
+            } else if (!settings.noteEnabled && selectedTab > 1) {
+                selectedTab = 1
+            }
+            previousNoteEnabled = settings.noteEnabled
         }
     }
 
     // 弹窗状态管理
     var showAddEventDialog by remember { mutableStateOf(false) }
     var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
+    var draftEventToAdd by remember { mutableStateOf<MyEvent?>(null) }
+    var noteToEdit by remember { mutableStateOf<MyEvent?>(null) }
+    var showNoteEditor by remember { mutableStateOf(false) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -103,9 +119,18 @@ fun HomeScreen(
 
     fun beginEdit(event: MyEvent) {
         pendingAddDialog = false
+        draftEventToAdd = null
+        noteToEdit = null
+        showNoteEditor = false
         if (event.eventType == "course") {
             editingVirtualCourse = event
             eventToEdit = null
+            recurringEditSession = null
+        } else if (event.tag == EventTags.NOTE) {
+            noteToEdit = event
+            showNoteEditor = true
+            eventToEdit = null
+            editingVirtualCourse = null
             recurringEditSession = null
         } else if (event.isRecurringParent) {
             val nextInstance = mainViewModel.findNextRecurringInstance(event)
@@ -165,9 +190,28 @@ fun HomeScreen(
         isActionExpanded = false
         addDialogRequestId += 1
         recurringEditSession = null
+        draftEventToAdd = null
+        noteToEdit = null
+        showNoteEditor = false
         eventToEdit = null
         showAddEventDialog = false
         pendingAddDialog = true
+    }
+
+    fun openPrimaryCreateDialog() {
+        isActionExpanded = false
+        if (settings.noteEnabled && selectedTab == 1) {
+            recurringEditSession = null
+            draftEventToAdd = null
+            eventToEdit = null
+            editingVirtualCourse = null
+            noteToEdit = null
+            showNoteEditor = true
+            showAddEventDialog = false
+            pendingAddDialog = false
+        } else {
+            openAddEventDialog()
+        }
     }
 
     
@@ -212,7 +256,7 @@ fun HomeScreen(
                         isSidebarOpen = isSidebarOpen,
                         onTabChange = { selectedTab = it },
                         onCourseClick = { _, _ -> },
-                        onAddEventClick = { openAddEventDialog() },
+                        onAddEventClick = { openPrimaryCreateDialog() },
                         onEditEvent = { event -> beginEdit(event) },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
@@ -225,6 +269,7 @@ fun HomeScreen(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
             isSidebarOpen = isSidebarOpen,
+            noteEnabled = settings.noteEnabled,
             selectedTab = selectedTab,
             onMenuClick = {
                 isActionExpanded = false
@@ -235,10 +280,17 @@ fun HomeScreen(
                 isSidebarOpen = false
                 selectedTab = 0
             },
+            onNoteClick = {
+                isActionExpanded = false
+                isSidebarOpen = false
+                if (settings.noteEnabled) {
+                    selectedTab = 1
+                }
+            },
             onListClick = {
                 isActionExpanded = false
                 isSidebarOpen = false
-                selectedTab = 1
+                selectedTab = if (settings.noteEnabled) 2 else 1
             },
             onSearchClick = {
                 isActionExpanded = false
@@ -253,7 +305,7 @@ fun HomeScreen(
             onEditClick = {
                 isActionExpanded = false
                 isSidebarOpen = false
-                openAddEventDialog()
+                openPrimaryCreateDialog()
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -282,12 +334,13 @@ fun HomeScreen(
     // --- 全局弹窗处理 (仅保留日常操作) ---
 
     // 1. 普通日程编辑/添加
-    val isDialogVisible = showAddEventDialog || eventToEdit != null
-    val dialogKey = eventToEdit?.id ?: "add_$addDialogRequestId"
+    val mergedEventDraft = eventToEdit ?: draftEventToAdd
+    val isDialogVisible = showAddEventDialog || mergedEventDraft != null
+    val dialogKey = mergedEventDraft?.id ?: "add_$addDialogRequestId"
     key(dialogKey) {
         AddEventDialog(
             visible = isDialogVisible,
-            eventToEdit = eventToEdit,
+            eventToEdit = mergedEventDraft,
             currentEventsCount = uiState.allEvents.size,
             settings = settings,
             recurringNextOccurrenceText = recurringEditSession?.nextOccurrenceText,
@@ -297,6 +350,7 @@ fun HomeScreen(
                 pendingAddDialog = false
                 showAddEventDialog = false
                 eventToEdit = null
+                draftEventToAdd = null
                 recurringEditSession = null
             },
             onConfirm = { newEvent ->
@@ -317,7 +371,44 @@ fun HomeScreen(
                 pendingAddDialog = false
                 showAddEventDialog = false
                 eventToEdit = null
+                draftEventToAdd = null
                 recurringEditSession = null
+            }
+        )
+    }
+
+    if (showNoteEditor || noteToEdit != null) {
+        NoteEditorScreen(
+            initialNote = noteToEdit,
+            currentEventsCount = uiState.allEvents.size,
+            settings = settings,
+            onDismiss = {
+                showNoteEditor = false
+                noteToEdit = null
+            },
+            onSave = { note ->
+                if (noteToEdit == null) {
+                    mainViewModel.addEvent(note)
+                } else {
+                    mainViewModel.updateEvent(note)
+                }
+            },
+            onDelete = { note ->
+                mainViewModel.deleteEvent(note)
+                showNoteEditor = false
+                noteToEdit = null
+            },
+            onAnalyzeResult = { eventDraft ->
+                showNoteEditor = false
+                noteToEdit = null
+                pendingAddDialog = false
+                showAddEventDialog = false
+                eventToEdit = null
+                recurringEditSession = null
+                draftEventToAdd = eventDraft
+            },
+            onShowMessage = { message, type ->
+                showToast(message, type)
             }
         )
     }

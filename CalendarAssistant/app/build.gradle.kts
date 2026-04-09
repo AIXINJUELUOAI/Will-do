@@ -34,8 +34,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.2.4 Beta2"
+        versionCode = 25
+        versionName = "1.2.5 Beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -137,5 +137,13 @@ dependencies {
 
     // === WorkManager ===
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // === Markdown (便签渲染) ===
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:editor:4.6.2")
+    implementation("io.noties.markwon:ext-strikethrough:4.6.2")
+    implementation("io.noties.markwon:ext-tables:4.6.2")
+    implementation("io.noties.markwon:ext-tasklist:4.6.2")
+    implementation("io.noties.markwon:linkify:4.6.2")
 
 }

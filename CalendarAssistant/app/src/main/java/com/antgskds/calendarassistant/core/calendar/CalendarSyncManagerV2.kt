@@ -216,10 +216,10 @@ class CalendarSyncManagerV2(private val context: Context) {
             }
 
             val fingerprintToActive = activeEvents
-                .filter { it.eventType == EventType.EVENT }
+                .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
                 .associateBy { EventDeduplicator.generateFingerprint(it) }
             val fingerprintToArchived = archivedEvents
-                .filter { it.eventType == EventType.EVENT }
+                .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
                 .associateBy { EventDeduplicator.generateFingerprint(it) }
 
             rangeEvents.forEach { systemEvent ->
@@ -662,7 +662,7 @@ class CalendarSyncManagerV2(private val context: Context) {
         syncData: SyncData
     ): SyncData {
         val eventsToSync = events.filter {
-            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring
+            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring && it.tag != EventTags.NOTE
         }
         val existingMaps = syncMapDao.getByCalendarId(calendarId).associateBy { it.localMasterId }
         val seenIds = mutableSetOf<String>()

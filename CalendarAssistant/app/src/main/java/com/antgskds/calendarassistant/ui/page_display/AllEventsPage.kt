@@ -15,6 +15,7 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomS
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.util.DateCalculator
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import java.time.LocalDate
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
@@ -36,6 +37,7 @@ fun AllEventsPage(
     val filteredEvents by remember(uiState.allEvents, searchQuery) {
         derivedStateOf {
             uiState.allEvents
+                .filter { it.tag != EventTags.NOTE }
                 .filter { event -> !event.isRecurring || event.isRecurringParent }
                 .distinctBy { it.id }
                 .filter { event ->

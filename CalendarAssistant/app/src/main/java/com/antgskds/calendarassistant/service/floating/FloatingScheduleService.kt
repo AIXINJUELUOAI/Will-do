@@ -34,6 +34,9 @@ import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.note.createNoteEvent
+import com.antgskds.calendarassistant.core.weather.WeatherRepository
+import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
@@ -207,17 +210,26 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val events by repository.events.collectAsState()
                 val settings by repository.settings.collectAsState()
                 val context = LocalContext.current
+                val weatherData by WeatherRepository.getInstance(context).weatherData.collectAsState()
 
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
+                val noteEvents = if (settings.noteEnabled) {
+                    events.filter { it.tag == EventTags.NOTE && it.archivedAt == null }
+                        .sortedWith(compareBy<MyEvent> { it.isCompleted }.thenByDescending { it.lastModified })
+                } else {
+                    emptyList()
+                }
                 val filteredEvents = when (settings.floatingEventRange) {
-                    1 -> events.filter { it.startDate == today || it.endDate == today }
+                    1 -> events.filter { it.tag != EventTags.NOTE && (it.startDate == today || it.endDate == today) }
                     2 -> events.filter {
-                        it.startDate == today || it.startDate == tomorrow ||
-                        it.endDate == today || it.endDate == tomorrow
+                        it.tag != EventTags.NOTE && (
+                            it.startDate == today || it.startDate == tomorrow ||
+                                it.endDate == today || it.endDate == tomorrow
+                        )
                     }
-                    else -> events // 0 = 全部日程
+                    else -> events.filter { it.tag != EventTags.NOTE } // 0 = 全部日程
                 }
 
                 val isDarkTheme = when (settings.themeMode) {
@@ -235,6 +247,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 ) {
                     FloatingScheduleScreen(
                         events = filteredEvents,
+                        noteEvents = noteEvents,
+                        weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
+                        noteEnabled = settings.noteEnabled,
                         onClose = { requestClose() },
                         onManualInput = { text, isNote, onComplete ->
                             handleManualInput(text = text, isNote = isNote, sourceImagePath = null, onComplete = onComplete)
@@ -261,6 +276,24 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUndo = { eventId, _ ->
                             serviceScope.launch {
                                 repository.performPrimaryRuleAction(eventId)
+                            }
+                        },
+                        onDeleteNote = { note, onComplete ->
+                            serviceScope.launch {
+                                try {
+                                    repository.deleteEvent(note.id)
+                                } finally {
+                                    onComplete()
+                                }
+                            }
+                        },
+                        onRestoreNote = { note, onComplete ->
+                            serviceScope.launch {
+                                try {
+                                    repository.addEvent(note)
+                                } finally {
+                                    onComplete()
+                                }
                             }
                         },
                         onLoadingChange = { loading -> 
@@ -416,7 +449,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         serviceScope.launch {
             try {
                 val settings = repository.settings.value
-                when (val result = withContext(Dispatchers.IO) {
+                if (isNote) {
+                    val note = convertToNote(text)
+                    repository.addEvent(note)
+                    Toast.makeText(applicationContext, "便签已添加", Toast.LENGTH_SHORT).show()
+                } else when (val result = withContext(Dispatchers.IO) {
                     RecognitionProcessor.parseUserText(text, settings, applicationContext)
                 }) {
                     is AnalysisResult.Success -> {
@@ -502,6 +539,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             sourceImagePath = sourceImagePath,
             eventType = EventType.EVENT,
             tag = resolvedTag
+        )
+    }
+
+    private fun convertToNote(text: String): MyEvent {
+        val clean = text.trim()
+        val lines = clean.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val titleSeed = lines.firstOrNull().orEmpty().ifBlank { clean }
+        val title = titleSeed.take(24).ifBlank { "便签" }
+        return createNoteEvent(
+            title = title,
+            markdown = clean,
+            color = EventColors[repository.events.value.size % EventColors.size],
         )
     }
 
