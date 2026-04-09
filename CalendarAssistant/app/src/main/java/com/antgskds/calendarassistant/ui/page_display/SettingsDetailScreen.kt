@@ -47,6 +47,7 @@ import com.antgskds.calendarassistant.ui.page_display.settings.PreferenceSetting
 import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ThemeSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.TimeTableEditorScreen
+import com.antgskds.calendarassistant.ui.page_display.settings.WeatherSettingsPage
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
@@ -54,6 +55,7 @@ private const val SettingsHistoryLimit = 3
 
 private object SettingsRoutes {
     const val Ai = "settings_ai"
+    const val Weather = "settings_weather"
     const val Schedule = "settings_schedule"
     const val CourseManage = "settings_course_manage"
     const val TimeTableManage = "settings_timetable_manage"
@@ -78,6 +80,7 @@ private fun parseSettingsDestination(value: String): SettingsDestination {
 private fun SettingsDestination.toSettingsRoute(): String? {
     return when (this) {
         SettingsDestination.AI -> SettingsRoutes.Ai
+        SettingsDestination.Weather -> SettingsRoutes.Weather
         SettingsDestination.Schedule -> SettingsRoutes.Schedule
         SettingsDestination.CourseManage -> SettingsRoutes.CourseManage
         SettingsDestination.TimeTableManage -> SettingsRoutes.TimeTableManage
@@ -96,6 +99,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
 private fun routeToSettingsDestination(route: String): SettingsDestination {
     return when (route.substringBefore('?')) {
         SettingsRoutes.Ai -> SettingsDestination.AI
+        SettingsRoutes.Weather -> SettingsDestination.Weather
         SettingsRoutes.Schedule -> SettingsDestination.Schedule
         SettingsRoutes.CourseManage -> SettingsDestination.CourseManage
         SettingsRoutes.TimeTableManage -> SettingsDestination.TimeTableManage
@@ -114,6 +118,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
 private fun settingsTitle(destination: SettingsDestination): String {
     return when (destination) {
         SettingsDestination.AI -> "模型配置"
+        SettingsDestination.Weather -> "天气"
         SettingsDestination.Schedule -> "课表设置"
         SettingsDestination.CourseManage -> "课程管理"
         SettingsDestination.TimeTableManage -> "作息表管理"
@@ -194,6 +199,7 @@ private fun SettingsPageContent(
                         mainViewModel = mainViewModel,
                         uiSize = uiSize
                     )
+                    SettingsDestination.Weather -> WeatherSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Schedule,
                     SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
                         viewModel = settingsViewModel,
@@ -309,6 +315,16 @@ fun SettingsDetailScreen(
                     settingsPageComposable(SettingsRoutes.Ai) {
                         SettingsPageContent(
                             destination = SettingsDestination.AI,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.Weather) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.Weather,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,

@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 
@@ -69,9 +70,11 @@ fun IntegratedFloatingBar(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     isSidebarOpen: Boolean = false,
+    noteEnabled: Boolean = false,
     selectedTab: Int,
     onMenuClick: () -> Unit,
     onHomeClick: () -> Unit,
+    onNoteClick: () -> Unit = {},
     onListClick: () -> Unit,
     onSearchClick: () -> Unit,
     onImageClick: () -> Unit,
@@ -98,11 +101,12 @@ fun IntegratedFloatingBar(
     val fabElevation = 6.dp
     val navHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
-    val navItemWidth = 76.dp
-    val navItemSpacing = 4.dp
+    val navItemWidth = 72.dp
+    val navItemSpacing = if (noteEnabled) 0.dp else 4.dp
     val navPaddingHorizontal = 6.dp
+    val navItemCount = if (noteEnabled) 4f else 3f
 
-    val navExpandedWidth = navItemWidth * 3f + navItemSpacing * 2f + navPaddingHorizontal * 2f
+    val navExpandedWidth = navItemWidth * navItemCount + navItemSpacing * (navItemCount - 1f) + navPaddingHorizontal * 2f
     val navCollapsedWidth = navHeight
     val fabCollapsedWidth = fabSize
 
@@ -122,9 +126,18 @@ fun IntegratedFloatingBar(
     val isTabHighlightEnabled = !isSidebarOpen
     val menuIcon = painterResource(R.drawable.floatingbar_menu)
     val todayIcon = painterResource(R.drawable.floatingbar_today)
+    val noteIcon = painterResource(R.drawable.ic_stat_note)
     val allIcon = painterResource(R.drawable.floatingbar_all)
-    val currentTabIcon = if (selectedTab == 0) todayIcon else allIcon
-    val currentTabClick = if (selectedTab == 0) onHomeClick else onListClick
+    val currentTabIcon = when {
+        selectedTab == 0 -> todayIcon
+        noteEnabled && selectedTab == 1 -> noteIcon
+        else -> allIcon
+    }
+    val currentTabClick = when {
+        selectedTab == 0 -> onHomeClick
+        noteEnabled && selectedTab == 1 -> onNoteClick
+        else -> onListClick
+    }
 
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
     Box(
@@ -166,7 +179,8 @@ fun IntegratedFloatingBar(
                                 } else {
                                     currentTabClick()
                                 }
-                            }
+                            },
+                            width = navHeight
                         )
                     }
                 } else {
@@ -180,7 +194,8 @@ fun IntegratedFloatingBar(
                             isSelected = isMenuSelected,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
-                            onClick = onMenuClick
+                            onClick = onMenuClick,
+                            width = navItemWidth
                         )
 
                         HydrogenNavIcon(
@@ -188,15 +203,28 @@ fun IntegratedFloatingBar(
                             isSelected = isTabHighlightEnabled && selectedTab == 0,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
-                            onClick = onHomeClick
+                            onClick = onHomeClick,
+                            width = navItemWidth
                         )
+
+                        if (noteEnabled) {
+                            HydrogenNavIcon(
+                                icon = noteIcon,
+                                isSelected = isTabHighlightEnabled && selectedTab == 1,
+                                indicatorColor = navIndicator,
+                                contentColor = navContent,
+                                onClick = onNoteClick,
+                                width = navItemWidth
+                            )
+                        }
 
                         HydrogenNavIcon(
                             icon = allIcon,
-                            isSelected = isTabHighlightEnabled && selectedTab == 1,
+                            isSelected = isTabHighlightEnabled && selectedTab == if (noteEnabled) 2 else 1,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
-                            onClick = onListClick
+                            onClick = onListClick,
+                            width = navItemWidth
                         )
                     }
                 }
@@ -268,12 +296,13 @@ private fun HydrogenNavIcon(
     isSelected: Boolean,
     indicatorColor: Color,
     contentColor: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    width: Dp
 ) {
     Box(
         modifier = Modifier
             .fillMaxHeight()
-            .width(76.dp),
+            .width(width),
         contentAlignment = Alignment.Center
     ) {
         Box(

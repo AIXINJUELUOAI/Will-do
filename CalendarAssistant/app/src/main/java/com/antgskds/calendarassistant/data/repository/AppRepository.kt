@@ -16,6 +16,7 @@ import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncGateway
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.EventDeduplicator
+import com.antgskds.calendarassistant.core.weather.WeatherSyncWorker
 import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
@@ -511,9 +512,10 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun addEvent(event: MyEvent, triggerSync: Boolean = true) = eventMutex.withLock {
         val currentList = loadCurrentActiveMutableList()
-        currentList.add(event)
+        val normalizedEvent = normalizeEventForPersistence(event)
+        currentList.add(normalizedEvent)
         updateEvents(currentList)
-        scheduleRemindersIfNeeded(event)
+        scheduleRemindersIfNeeded(normalizedEvent)
         if (triggerSync) {
             triggerAutoSync()
         }
@@ -528,14 +530,15 @@ class AppRepository private constructor(private val context: Context) {
      */
     suspend fun updateEvent(event: MyEvent, triggerSync: Boolean = true) = eventMutex.withLock {
         val currentList = loadCurrentActiveMutableList()
-        val index = currentList.indexOfFirst { it.id == event.id }
+        val normalizedEvent = normalizeEventForPersistence(event)
+        val index = currentList.indexOfFirst { it.id == normalizedEvent.id }
         if (index != -1) {
             val oldEvent = currentList[index]
             cancelReminders(oldEvent)
-            currentList[index] = event
+            currentList[index] = normalizedEvent
             updateEvents(currentList)
-            Log.d("Undo", "updateEvent后: id=${event.id}, isCheckedIn=${event.isCheckedIn}")
-            scheduleRemindersIfNeeded(event)
+            Log.d("Undo", "updateEvent后: id=${normalizedEvent.id}, isCheckedIn=${normalizedEvent.isCheckedIn}")
+            scheduleRemindersIfNeeded(normalizedEvent)
             if (triggerSync) {
                 triggerAutoSync()
             }
@@ -586,7 +589,19 @@ class AppRepository private constructor(private val context: Context) {
     }
 
     private fun shouldScheduleReminders(event: MyEvent): Boolean {
-        return !event.isRecurringParent
+        return !event.isRecurringParent && event.tag != EventTags.NOTE
+    }
+
+    private fun normalizeEventForPersistence(event: MyEvent): MyEvent {
+        return if (event.tag == EventTags.NOTE) {
+            event.copy(
+                skipCalendarSync = true,
+                reminders = emptyList(),
+                eventType = EventType.EVENT
+            )
+        } else {
+            event
+        }
     }
 
     private suspend fun persistActiveEvents(events: List<MyEvent>) {
@@ -937,6 +952,7 @@ class AppRepository private constructor(private val context: Context) {
     private fun applySettingsNow(newSettings: MySettings) {
         _settings.value = newSettings
         settingsRepository.saveSettings(newSettings)
+        WeatherSyncWorker.syncForSettings(appContext, newSettings)
     }
 
     fun updateSettings(newSettings: MySettings) {
@@ -1726,6 +1742,7 @@ class AppRepository private constructor(private val context: Context) {
         val eventsSnapshot = _events.value // 获取快照
         val toArchiveEvents = eventsSnapshot.filter { event ->
             event.eventType != EventType.COURSE &&
+            event.tag != EventTags.NOTE &&
             !event.isRecurring &&
             com.antgskds.calendarassistant.core.util.DateCalculator.isEventExpired(event)
         }

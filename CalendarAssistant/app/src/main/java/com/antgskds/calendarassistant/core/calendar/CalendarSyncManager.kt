@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.calendar
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.SyncData
@@ -214,7 +215,7 @@ class CalendarSyncManager(private val context: Context) {
 
         // 过滤：只同步 eventType == EventType.EVENT 的普通事件
         val eventsToSync = events.filter {
-            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring
+            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring && it.tag != EventTags.NOTE
         }
 
         Log.d(TAG, "普通事件: ${events.size} 个，过滤后: ${eventsToSync.size} 个")
