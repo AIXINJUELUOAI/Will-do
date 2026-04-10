@@ -90,7 +90,8 @@ fun SettingsSidebar(
         // 第五块：数据管理卡片（日程归档、数据备份）
         SidebarDataManagementCard(onNavigate)
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 为浮动底栏预留空间，避免底部板块被遮挡
+        Spacer(modifier = Modifier.height(IntegratedFloatingBarVisualHeight + 16.dp))
     }
 }
 
