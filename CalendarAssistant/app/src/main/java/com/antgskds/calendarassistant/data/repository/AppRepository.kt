@@ -12,6 +12,7 @@ import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.SyncData
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncGateway
 import com.antgskds.calendarassistant.core.util.CrashHandler
@@ -31,6 +32,7 @@ import com.antgskds.calendarassistant.data.migration.LegacyArchiveMigrator
 import com.antgskds.calendarassistant.data.migration.LegacyEventMigrator
 import com.antgskds.calendarassistant.data.migration.MigrationPrefs
 import com.antgskds.calendarassistant.data.migration.LegacyRecurringMigrator
+import com.antgskds.calendarassistant.data.source.SyncJsonDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,6 +63,8 @@ class AppRepository private constructor(private val context: Context) {
     private val syncMappingRepository = SyncMappingRepository(context)
 
     private val database by lazy { AppDatabase.getInstance(context.applicationContext) }
+    private val calendarSyncMapDao by lazy { database.calendarSyncMapDao() }
+    private val eventMasterDao by lazy { database.eventMasterDao() }
     private val migrationPrefs by lazy { MigrationPrefs(context.applicationContext) }
     private val legacyEventMigrator by lazy { LegacyEventMigrator(database, migrationPrefs) }
     private val legacyArchiveMigrator by lazy { LegacyArchiveMigrator(database, migrationPrefs) }
@@ -85,6 +89,8 @@ class AppRepository private constructor(private val context: Context) {
 
     // 【新增】日历同步管理器
     private val syncGateway = CalendarSyncGateway(context.applicationContext)
+    private val syncDataSource by lazy { SyncJsonDataSource.getInstance(context.applicationContext) }
+    private val systemCalendarManager by lazy { CalendarManager(context.applicationContext) }
 
     private val eventMutex = Mutex()
     private val courseMutex = Mutex()
@@ -1443,8 +1449,118 @@ class AppRepository private constructor(private val context: Context) {
         return syncGateway.getSyncStatus(isCalendarSyncV2Enabled())
     }
 
+    suspend fun getSelectableSyncCalendars(): List<CalendarManager.CalendarInfo> {
+        return try {
+            systemCalendarManager.getReadableCalendars(visibleOnly = false, syncEnabledOnly = false)
+        } catch (e: SecurityException) {
+            Log.w("AppRepository", "获取同步来源日历失败：缺少权限", e)
+            emptyList()
+        } catch (e: Exception) {
+            Log.e("AppRepository", "获取同步来源日历失败", e)
+            emptyList()
+        }
+    }
+
+    suspend fun updateSourceCalendars(calendarIds: List<Long>): Result<Unit> {
+        return try {
+            val syncData = syncDataSource.loadSyncData()
+            val availableIds = getSelectableSyncCalendars().map { it.id }.toSet()
+            val normalizedIds = calendarIds
+                .asSequence()
+                .filter { availableIds.contains(it) }
+                .distinct()
+                .toList()
+
+            val previousIds = resolveSourceCalendarIds(syncData).toSet()
+            val removedSourceIds = previousIds - normalizedIds.toSet()
+
+            Log.d(
+                "AppRepository",
+                "updateSourceCalendars: previous=$previousIds, requested=$calendarIds, normalized=$normalizedIds, removed=$removedSourceIds"
+            )
+
+            if (normalizedIds == syncData.sourceCalendarIds) {
+                Log.d("AppRepository", "updateSourceCalendars: no changes")
+                return Result.success(Unit)
+            }
+
+            syncDataSource.saveSyncData(syncData.copy(sourceCalendarIds = normalizedIds))
+            pruneSourceMappings(removedSourceIds)
+
+            if (syncData.isSyncEnabled) {
+                Log.d("AppRepository", "updateSourceCalendars: trigger reverse sync")
+                val reverseResult = syncFromCalendar()
+                if (reverseResult.isFailure) {
+                    return Result.failure(reverseResult.exceptionOrNull() ?: Exception("更新同步来源失败"))
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("AppRepository", "更新同步来源日历失败", e)
+            Result.failure(e)
+        }
+    }
+
     private suspend fun syncSingleEventToCalendar(event: MyEvent) {
         syncGateway.syncEventToCalendar(isCalendarSyncV2Enabled(), event)
+    }
+
+    private suspend fun pruneSourceMappings(calendarIds: Set<Long>) {
+        val validCalendarIds = calendarIds.filter { it != -1L }
+        if (validCalendarIds.isEmpty()) return
+
+        val mappings = calendarSyncMapDao.getByCalendarIds(validCalendarIds)
+        if (mappings.isEmpty()) return
+
+        val localEventsById = (_events.value + _archivedEvents.value).associateBy { it.id }
+        val targetCalendarId = syncDataSource.loadSyncData().targetCalendarId
+        val mappingsToRemove = mutableListOf<com.antgskds.calendarassistant.data.db.entity.CalendarSyncMapEntity>()
+        mappings.forEach { mapping ->
+            if (mapping.calendarId != targetCalendarId) {
+                mappingsToRemove += mapping
+                return@forEach
+            }
+
+            val localEvent = localEventsById[mapping.localMasterId]
+            if (localEvent?.skipCalendarSync == true) {
+                mappingsToRemove += mapping
+                return@forEach
+            }
+
+            if (localEvent == null && eventMasterDao.getById(mapping.localMasterId) == null) {
+                mappingsToRemove += mapping
+            }
+        }
+
+        if (mappingsToRemove.isEmpty()) return
+
+        Log.d(
+            "AppRepository",
+            "pruneSourceMappings: calendars=$validCalendarIds, removeMappings=${mappingsToRemove.size}"
+        )
+
+        mappingsToRemove.forEach { mapping ->
+            calendarSyncMapDao.deleteByLocalMasterId(mapping.localMasterId)
+        }
+        syncMappingRepository.removeMappings(mappingsToRemove.map { it.localMasterId })
+    }
+
+    private fun resolveSourceCalendarIds(syncData: SyncData): List<Long> {
+        val configured = syncData.sourceCalendarIds
+            .asSequence()
+            .filter { it != -1L }
+            .distinct()
+            .toList()
+
+        if (configured.isNotEmpty()) {
+            return configured
+        }
+
+        return syncData.targetCalendarId
+            .takeIf { it != -1L }
+            ?.let(::listOf)
+            ?: emptyList()
     }
 
     /**

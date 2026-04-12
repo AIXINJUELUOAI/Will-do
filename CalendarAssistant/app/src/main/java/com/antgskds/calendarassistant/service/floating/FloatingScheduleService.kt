@@ -54,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -255,7 +256,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                             handleManualInput(text = text, isNote = isNote, sourceImagePath = null, onComplete = onComplete)
                         },
                         onPickImageRequest = { onComplete ->
-                            startImagePickFlow(onComplete)
+                            startScreenshotAnalysisFlow(onComplete)
                         },
                         onUpdateEvent = { updatedEvent, onComplete ->
                             serviceScope.launch {
@@ -369,20 +370,36 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     
 
-    private fun startImagePickFlow(onComplete: () -> Unit) {
+    private fun startScreenshotAnalysisFlow(onComplete: () -> Unit) {
         if (pendingImagePickCompletion != null) return
         pendingImagePickCompletion = onComplete
         hideFloatingWindow()
-        try {
-            val intent = Intent(this, ImagePickHandleActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+
+        serviceScope.launch {
+            var accessibilityService = TextAccessibilityService.instance
+            if (accessibilityService == null) {
+                com.antgskds.calendarassistant.core.util.AccessibilityGuardian.restoreIfNeeded(this@FloatingScheduleService)
+                accessibilityService = TextAccessibilityService.instance
             }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start image picker", e)
-            showFloatingWindow()
-            finishPendingImagePick()
+
+            if (accessibilityService != null) {
+                Log.d(TAG, "无障碍服务可用，开始截屏识屏")
+                accessibilityService.startAnalysis(500.milliseconds)
+                finishPendingImagePick()
+            } else {
+                Log.w(TAG, "无障碍服务不可用，回退到图片选择")
+                Toast.makeText(applicationContext, "未开启无障碍服务，使用图片选择", Toast.LENGTH_SHORT).show()
+                try {
+                    val intent = Intent(this@FloatingScheduleService, ImagePickHandleActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start image picker", e)
+                    finishPendingImagePick()
+                }
+            }
         }
     }
 

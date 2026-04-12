@@ -77,6 +77,7 @@ class CalendarSyncGateway(context: Context) {
             isEnabled = isEnabled,
             hasPermission = hasPermission,
             targetCalendarId = targetCalendarId,
+            sourceCalendarIds = sourceCalendarIds,
             lastSyncTime = lastSyncTime,
             mappedEventCount = mappedEventCount
         )

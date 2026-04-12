@@ -20,6 +20,12 @@ data class SyncData(
     val targetCalendarId: Long = -1L,
 
     /**
+     * 作为系统日历反向同步来源的日历 ID 列表
+     * 为空时兼容旧版本，默认回落到 targetCalendarId
+     */
+    val sourceCalendarIds: List<Long> = emptyList(),
+
+    /**
      * 应用内事件 ID 到系统日历事件 ID 的映射
      * Key: 应用内事件 ID (MyEvent.id 或 Course.id)
      * Value: 系统日历事件 ID (Long 转字符串)

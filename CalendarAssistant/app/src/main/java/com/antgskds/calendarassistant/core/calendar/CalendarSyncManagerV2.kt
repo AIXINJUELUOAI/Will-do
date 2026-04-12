@@ -26,6 +26,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 
 class CalendarSyncManagerV2(private val context: Context) {
 
@@ -38,6 +39,9 @@ class CalendarSyncManagerV2(private val context: Context) {
         private const val SOURCE_SYSTEM_RECURRING = "system_recurring"
         private const val DEFAULT_SYNC_COLOR = 0xFFA2B5BB.toInt()
     }
+
+    /** 并发守卫：防止 ContentObserver 触发和定时同步同时执行导致重复 */
+    private val _isSyncing = AtomicBoolean(false)
 
     private val calendarManager = CalendarManager(context)
     private val syncDataSource = SyncJsonDataSource.getInstance(context)
@@ -98,6 +102,10 @@ class CalendarSyncManagerV2(private val context: Context) {
         activeEvents: List<MyEvent> = emptyList(),
         archivedEvents: List<MyEvent> = emptyList()
     ): Result<Int> = withContext(Dispatchers.IO) {
+        if (!_isSyncing.compareAndSet(false, true)) {
+            Log.d(TAG, "反向同步已在执行，跳过")
+            return@withContext Result.success(0)
+        }
         try {
             if (!CalendarPermissionHelper.hasAllPermissions(context)) {
                 return@withContext Result.failure(SecurityException("Missing calendar permissions"))
@@ -109,280 +117,106 @@ class CalendarSyncManagerV2(private val context: Context) {
                 return@withContext Result.success(0)
             }
 
-            val calendarId = syncData.targetCalendarId
-            if (calendarId == -1L) {
-                return@withContext Result.failure(Exception("Target calendar not configured"))
+            val sourceCalendarIds = resolveSourceCalendarIds(syncData)
+            Log.d(TAG, "Reverse sync requested: sourceCalendars=$sourceCalendarIds")
+            if (sourceCalendarIds.isEmpty()) {
+                Log.d(TAG, "No source calendars configured, skip reverse sync")
+                return@withContext Result.success(0)
             }
 
-            val calendarMeta = loadCalendarMeta(calendarId)
-            val eventsById = (activeEvents + archivedEvents).associateBy { it.id }
-            val seededSyncData = ensureSyncMapSeeded(syncData, calendarId, calendarMeta, eventsById)
+            val mutableActiveEvents = activeEvents.toMutableList()
+            val mutableArchivedEvents = archivedEvents.toMutableList()
+            var totalAdded = 0
+            var totalUpdated = 0
+            var totalDeleted = 0
+            var syncDataChanged = false
 
-            val existingMappings = syncMapDao.getByCalendarId(calendarId)
-            val mappingByLocal = existingMappings.associateBy { it.localMasterId }
-            val mappingBySystem = existingMappings.associateBy { it.systemEventId }
-
-            var hasChanges = seededSyncData.mapping != syncData.mapping
-            syncData = seededSyncData
-            val syncMapping = syncData.mapping.toMutableMap()
-            var addedCount = 0
-            var updatedCount = 0
-            var deletedCount = 0
-
-            val localIds = eventsById.keys
-            val staleLocalIds = mappingByLocal.keys - localIds
-            staleLocalIds.forEach { localId ->
-                syncMapDao.deleteByLocalMasterId(localId)
-                if (syncMapping.remove(localId) != null) {
-                    hasChanges = true
-                }
-            }
-
-            val now = System.currentTimeMillis()
-            val syncWindowStart = now - SYNC_LOOK_BACK_DAYS * 24 * 60 * 60 * 1000
-            val syncWindowEnd = now + SYNC_LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000
-            val rangeEvents = calendarManager.queryEventsInRange(calendarId, syncWindowStart, syncWindowEnd)
-            val fingerprintToSystemEvent = rangeEvents
-                .filter { !it.isRecurring }
-                .associateBy { EventDeduplicator.generateFingerprintFromSystemEvent(it) }
-
-            val mappedSystemIds = existingMappings.map { it.systemEventId }.toMutableSet()
-            val existingSystemEvents = calendarManager.queryEventsByIds(mappedSystemIds, calendarId)
-            val foundSystemIds = existingSystemEvents.map { it.eventId }.toSet()
-
-            if (foundSystemIds.isEmpty() && mappedSystemIds.isNotEmpty()) {
-                val recurringEventsForCheck = if (allowRecurringSync) {
-                    calendarManager.queryRecurringInstancesInRangeLimited(
-                        calendarId = calendarId,
-                        startMillis = syncWindowStart,
-                        endMillis = syncWindowEnd,
-                        limit = 1
-                    ).events
+            suspend fun trackAdded(event: MyEvent) {
+                onEventAdded(event)
+                mutableArchivedEvents.removeAll { it.id == event.id }
+                val existingIndex = mutableActiveEvents.indexOfFirst { it.id == event.id }
+                if (existingIndex >= 0) {
+                    mutableActiveEvents[existingIndex] = event
                 } else {
-                    emptyList()
-                }
-                if (rangeEvents.isEmpty() && recurringEventsForCheck.isEmpty()) {
-                    Log.d(TAG, "System calendar empty, skip reverse sync")
-                    return@withContext Result.success(0)
+                    mutableActiveEvents.add(event)
                 }
             }
 
-            val missingSystemIds = mappedSystemIds - foundSystemIds
-            missingSystemIds.forEach { systemId ->
-                val mapping = mappingBySystem[systemId] ?: return@forEach
-                val localEvent = eventsById[mapping.localMasterId]
-                val localFingerprint = localEvent?.let { EventDeduplicator.generateFingerprint(it) }
-                val remapCandidate = localFingerprint?.let { fingerprintToSystemEvent[it] }
-                if (remapCandidate != null && !mappedSystemIds.contains(remapCandidate.eventId)) {
-                    syncMapDao.update(
-                        mapping.copy(
-                            systemEventId = remapCandidate.eventId,
-                            lastSyncHash = computeLastSyncHash(remapCandidate)
-                        )
-                    )
-                    syncMapping[mapping.localMasterId] = remapCandidate.eventId.toString()
-                    mappedSystemIds.remove(systemId)
-                    mappedSystemIds.add(remapCandidate.eventId)
-                    hasChanges = true
-                    return@forEach
+            suspend fun trackUpdated(event: MyEvent) {
+                onEventUpdated(event)
+                val activeIndex = mutableActiveEvents.indexOfFirst { it.id == event.id }
+                if (activeIndex >= 0) {
+                    mutableActiveEvents[activeIndex] = event
+                    return
                 }
-                onEventDeleted(mapping.localMasterId)
-                syncMapDao.deleteByLocalMasterId(mapping.localMasterId)
-                if (syncMapping.remove(mapping.localMasterId) != null) {
-                    hasChanges = true
-                }
-                deletedCount++
-            }
 
-            existingSystemEvents.forEach { systemEvent ->
-                if (systemEvent.isRecurring) return@forEach
-                val mapping = mappingBySystem[systemEvent.eventId] ?: return@forEach
-
-                val systemHash = computeLastSyncHash(systemEvent)
-                val systemIdStr = systemEvent.eventId.toString()
-                if (syncMapping[mapping.localMasterId] != systemIdStr) {
-                    syncMapping[mapping.localMasterId] = systemIdStr
-                    hasChanges = true
-                }
-                if (mapping.lastSyncHash == systemHash) return@forEach
-
-                val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent, fixedId = mapping.localMasterId)
-                if (myEvent != null) {
-                    onEventUpdated(myEvent)
-                    syncMapDao.update(mapping.copy(lastSyncHash = systemHash))
-                    hasChanges = true
-                    updatedCount++
+                val archivedIndex = mutableArchivedEvents.indexOfFirst { it.id == event.id }
+                if (archivedIndex >= 0) {
+                    mutableArchivedEvents[archivedIndex] = event
+                } else {
+                    mutableActiveEvents.add(event)
                 }
             }
 
-            val fingerprintToActive = activeEvents
-                .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
-                .associateBy { EventDeduplicator.generateFingerprint(it) }
-            val fingerprintToArchived = archivedEvents
-                .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
-                .associateBy { EventDeduplicator.generateFingerprint(it) }
-
-            rangeEvents.forEach { systemEvent ->
-                if (systemEvent.isRecurring) return@forEach
-                if (mappedSystemIds.contains(systemEvent.eventId)) return@forEach
-                if (systemEvent.isManaged) return@forEach
-
-                val systemFingerprint = EventDeduplicator.generateFingerprintFromSystemEvent(systemEvent)
-                val duplicateActive = fingerprintToActive[systemFingerprint]
-                val duplicateArchived = fingerprintToArchived[systemFingerprint]
-
-                if (duplicateActive != null) {
-                    syncMapDao.insert(
-                        CalendarSyncMapEntity(
-                            localMasterId = duplicateActive.id,
-                            systemEventId = systemEvent.eventId,
-                            calendarId = calendarId,
-                            accountName = calendarMeta.accountName,
-                            accountType = calendarMeta.accountType,
-                            displayName = calendarMeta.displayName,
-                            lastSyncHash = computeLastSyncHash(systemEvent)
-                        )
-                    )
-                    if (syncMapping[duplicateActive.id] != systemEvent.eventId.toString()) {
-                        syncMapping[duplicateActive.id] = systemEvent.eventId.toString()
-                        hasChanges = true
-                    }
-                    return@forEach
-                }
-
-                if (duplicateArchived != null) {
-                    return@forEach
-                }
-
-                val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent)
-                if (myEvent != null) {
-                    onEventAdded(myEvent)
-                    syncMapDao.insert(
-                        CalendarSyncMapEntity(
-                            localMasterId = myEvent.id,
-                            systemEventId = systemEvent.eventId,
-                            calendarId = calendarId,
-                            accountName = calendarMeta.accountName,
-                            accountType = calendarMeta.accountType,
-                            displayName = calendarMeta.displayName,
-                            lastSyncHash = computeLastSyncHash(systemEvent)
-                        )
-                    )
-                    if (syncMapping[myEvent.id] != systemEvent.eventId.toString()) {
-                        syncMapping[myEvent.id] = systemEvent.eventId.toString()
-                        hasChanges = true
-                    }
-                    addedCount++
-                }
+            suspend fun trackDeleted(eventId: String) {
+                onEventDeleted(eventId)
+                mutableActiveEvents.removeAll { it.id == eventId }
+                mutableArchivedEvents.removeAll { it.id == eventId }
             }
 
-            val activeRecurringEvents = activeEvents.filter { it.isRecurring }
+            sourceCalendarIds.forEach { calendarId ->
+                val calendarMeta = loadCalendarMeta(calendarId)
+                Log.d(
+                    TAG,
+                    "Reverse sync calendar start: calendarId=$calendarId, displayName=${calendarMeta.displayName}, accountName=${calendarMeta.accountName}, accountType=${calendarMeta.accountType}"
+                )
+                val eventsById = (mutableActiveEvents + mutableArchivedEvents).associateBy { it.id }
+                val seededSyncData = ensureSyncMapSeeded(syncData, calendarId, calendarMeta, eventsById)
+                syncDataChanged = syncDataChanged || seededSyncData.mapping != syncData.mapping
+                syncData = seededSyncData
 
-            if (allowRecurringSync) {
-                val recurringSeries = calendarManager.queryRecurringSeries(calendarId)
-                val recurringInstancesResult = calendarManager.queryRecurringInstancesInRangeLimited(
+                val result = syncFromSingleCalendar(
                     calendarId = calendarId,
-                    startMillis = syncWindowStart,
-                    endMillis = syncWindowEnd,
-                    limit = RECURRING_INSTANCES_SYNC_LIMIT
-                )
-                if (recurringInstancesResult.isTruncated) {
-                    val message = "Recurring instances exceeded limit ($RECURRING_INSTANCES_SYNC_LIMIT)"
-                    Log.w(TAG, message)
-                    return@withContext Result.failure(RecurringSyncLimitException(message))
-                }
-                val recurringInstances = recurringInstancesResult.events
-
-                val recurringParents = (activeEvents + archivedEvents)
-                    .filter { it.isRecurring && it.isRecurringParent && !it.recurringSeriesKey.isNullOrBlank() }
-                    .associateBy { it.id }
-
-                val desiredRecurringEvents = buildRecurringEvents(
-                    calendarId = calendarId,
-                    recurringSeries = recurringSeries,
-                    recurringInstances = recurringInstances,
-                    existingRecurringParents = recurringParents,
-                    now = now
+                    calendarMeta = calendarMeta,
+                    syncData = syncData,
+                    allowRecurringSync = allowRecurringSync,
+                    activeEvents = mutableActiveEvents,
+                    archivedEvents = mutableArchivedEvents,
+                    onEventAdded = ::trackAdded,
+                    onEventUpdated = ::trackUpdated,
+                    onEventDeleted = ::trackDeleted
                 )
 
-                val activeRecurringById = activeRecurringEvents.associateBy { it.id }
-                val desiredRecurringById = desiredRecurringEvents.associateBy { it.id }
+                syncData = result.syncData
+                syncDataChanged = syncDataChanged || result.hasChanges
+                totalAdded += result.addedCount
+                totalUpdated += result.updatedCount
+                totalDeleted += result.deletedCount
 
-                val parentEventsById = (activeEvents + archivedEvents)
-                    .filter { it.isRecurringParent }
-                    .associateBy { it.id }
-                val masterIdBySeriesKey = buildMasterIdBySeriesKey(calendarId, mappingBySystem, recurringSeries)
-
-                desiredRecurringEvents.forEach { incomingEvent ->
-                    val existingEvent = activeRecurringById[incomingEvent.id]
-                    if (existingEvent == null) {
-                        onEventAdded(incomingEvent)
-                        addedCount++
-                    } else {
-                        val mergedEvent = mergeRecurringEvent(existingEvent, incomingEvent)
-                        if (mergedEvent != existingEvent) {
-                            onEventUpdated(mergedEvent.copy(lastModified = System.currentTimeMillis()))
-                            updatedCount++
-                        }
-                    }
-                }
-
-                activeRecurringEvents.forEach { existingEvent ->
-                    val shouldDelete = if (existingEvent.isRecurringParent) {
-                        existingEvent.id !in desiredRecurringById
-                    } else {
-                        existingEvent.id !in desiredRecurringById &&
-                            isWithinSyncWindow(existingEvent, syncWindowStart, syncWindowEnd)
-                    }
-
-                    if (shouldDelete) {
-                        onEventDeleted(existingEvent.id)
-                        deletedCount++
-                    }
-                }
-
-                recordMissingRecurringInstances(
-                    activeRecurringEvents = activeRecurringEvents,
-                    recurringInstances = recurringInstances,
-                    parentEventsById = parentEventsById,
-                    masterIdBySeriesKey = masterIdBySeriesKey,
-                    syncWindowStart = syncWindowStart,
-                    syncWindowEnd = syncWindowEnd,
-                    onEventUpdated = onEventUpdated
-                )
-
-                syncExternalRecurringSeriesToRoom(
-                    recurringSeries = recurringSeries,
-                    recurringInstances = recurringInstances
-                )
-            } else {
-                activeRecurringEvents.forEach { existingEvent ->
-                    onEventDeleted(existingEvent.id)
-                    deletedCount++
-                }
-            }
-
-            if (hasChanges) {
-                syncDataSource.saveSyncData(
-                    syncData.copy(
-                        mapping = syncMapping,
-                        lastSyncTime = System.currentTimeMillis()
-                    )
+                Log.d(
+                    TAG,
+                    "Reverse sync calendar done: calendarId=$calendarId, +${result.addedCount}, ~${result.updatedCount}, -${result.deletedCount}, changed=${result.hasChanges}"
                 )
             }
 
-            Log.d(TAG, "Reverse sync done: +$addedCount, ~$updatedCount, -$deletedCount")
-            Result.success(addedCount + updatedCount + deletedCount)
+            if (syncDataChanged) {
+                syncDataSource.saveSyncData(syncData.copy(lastSyncTime = System.currentTimeMillis()))
+            }
+
+            Log.d(TAG, "Reverse sync done: +$totalAdded, ~$totalUpdated, -$totalDeleted")
+            Result.success(totalAdded + totalUpdated + totalDeleted)
         } catch (e: Exception) {
             Log.e(TAG, "Reverse sync failed", e)
             Result.failure(e)
+        } finally {
+            _isSyncing.set(false)
         }
     }
 
     suspend fun syncEventToCalendar(event: MyEvent): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (event.skipCalendarSync || event.isRecurring) {
-                Log.d(TAG, "Skip single sync for readonly/recurring event id=${event.id}")
+            if (event.isRecurring) {
+                Log.d(TAG, "Skip single sync for recurring event id=${event.id}")
                 return@withContext Result.success(Unit)
             }
 
@@ -403,10 +237,18 @@ class CalendarSyncManagerV2(private val context: Context) {
                 return@withContext Result.success(Unit)
             }
 
-            val calendarMeta = loadCalendarMeta(calendarId)
-            syncData = ensureSyncMapSeeded(syncData, calendarId, calendarMeta, mapOf(event.id to event))
+            val existingMapping = syncMapDao.getByLocalMasterId(event.id)
+            val resolvedCalendarId = existingMapping?.calendarId ?: calendarId
 
-            val mapping = syncMapDao.getByLocalMasterId(event.id)
+            if (event.skipCalendarSync && existingMapping == null) {
+                Log.d(TAG, "Skip single sync for imported event without mapping id=${event.id}")
+                return@withContext Result.success(Unit)
+            }
+
+            val calendarMeta = loadCalendarMeta(resolvedCalendarId)
+            syncData = ensureSyncMapSeeded(syncData, resolvedCalendarId, calendarMeta, mapOf(event.id to event))
+
+            val mapping = existingMapping ?: syncMapDao.getByLocalMasterId(event.id)
             if (mapping == null) {
                 Log.w(TAG, "Single sync mapping missing: ${event.id}")
                 return@withContext Result.success(Unit)
@@ -415,7 +257,7 @@ class CalendarSyncManagerV2(private val context: Context) {
             val updated = calendarManager.updateEvent(
                 eventId = mapping.systemEventId,
                 event = event,
-                calendarId = calendarId
+                calendarId = mapping.calendarId
             )
             if (updated) {
                 val lastSyncHash = computeLastSyncHash(event)
@@ -449,6 +291,9 @@ class CalendarSyncManagerV2(private val context: Context) {
             val syncData = SyncData(
                 isSyncEnabled = true,
                 targetCalendarId = calendarId,
+                sourceCalendarIds = existingSyncData.sourceCalendarIds.ifEmpty {
+                    listOf(calendarId)
+                },
                 mapping = existingSyncData.mapping,
                 lastSyncTime = System.currentTimeMillis(),
                 lastSemesterHash = existingSyncData.lastSemesterHash
@@ -475,18 +320,14 @@ class CalendarSyncManagerV2(private val context: Context) {
     suspend fun getSyncStatus(): SyncStatus = withContext(Dispatchers.IO) {
         val syncData = syncDataSource.loadSyncData()
         val hasPermission = CalendarPermissionHelper.hasAllPermissions(context)
-        val mappedCount = if (syncData.targetCalendarId == -1L) {
-            0
-        } else {
-            syncMapDao.getByCalendarId(syncData.targetCalendarId).size
-        }
 
         SyncStatus(
             isEnabled = syncData.isSyncEnabled,
             hasPermission = hasPermission,
             targetCalendarId = syncData.targetCalendarId,
+            sourceCalendarIds = resolveSourceCalendarIds(syncData),
             lastSyncTime = syncData.lastSyncTime,
-            mappedEventCount = mappedCount
+            mappedEventCount = syncData.mapping.size
         )
     }
 
@@ -494,8 +335,331 @@ class CalendarSyncManagerV2(private val context: Context) {
         val isEnabled: Boolean,
         val hasPermission: Boolean,
         val targetCalendarId: Long,
+        val sourceCalendarIds: List<Long>,
         val lastSyncTime: Long,
         val mappedEventCount: Int
+    )
+
+    private suspend fun syncFromSingleCalendar(
+        calendarId: Long,
+        calendarMeta: CalendarMeta,
+        syncData: SyncData,
+        allowRecurringSync: Boolean,
+        activeEvents: List<MyEvent>,
+        archivedEvents: List<MyEvent>,
+        onEventAdded: suspend (MyEvent) -> Unit,
+        onEventUpdated: suspend (MyEvent) -> Unit,
+        onEventDeleted: suspend (String) -> Unit
+    ): ReverseSyncResult {
+        val eventsById = (activeEvents + archivedEvents).associateBy { it.id }
+        val existingMappings = syncMapDao.getByCalendarId(calendarId)
+        val mappingByLocal = existingMappings.associateBy { it.localMasterId }
+        val mappingBySystem = existingMappings.associateBy { it.systemEventId }
+
+        var hasChanges = false
+        val syncMapping = syncData.mapping.toMutableMap()
+        var addedCount = 0
+        var updatedCount = 0
+        var deletedCount = 0
+
+        val localIds = eventsById.keys
+        val staleLocalIds = mappingByLocal.keys - localIds
+        staleLocalIds.forEach { localId ->
+            syncMapDao.deleteByLocalMasterId(localId)
+            if (syncMapping.remove(localId) != null) {
+                hasChanges = true
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        val syncWindowStart = now - SYNC_LOOK_BACK_DAYS * 24 * 60 * 60 * 1000
+        val syncWindowEnd = now + SYNC_LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000
+        val rangeEvents = calendarManager.queryEventsInRange(calendarId, syncWindowStart, syncWindowEnd)
+        Log.d(
+            TAG,
+            "syncFromSingleCalendar: calendarId=$calendarId, displayName=${calendarMeta.displayName}, mappings=${existingMappings.size}, active=${activeEvents.size}, archived=${archivedEvents.size}, rangeEvents=${rangeEvents.size}"
+        )
+        val fingerprintToSystemEvent = rangeEvents
+            .filter { !it.isRecurring }
+            .associateBy { EventDeduplicator.generateFingerprintFromSystemEvent(it) }
+
+        val mappedSystemIds = existingMappings.map { it.systemEventId }.toMutableSet()
+        val existingSystemEvents = calendarManager.queryEventsByIds(mappedSystemIds, calendarId)
+        val foundSystemIds = existingSystemEvents.map { it.eventId }.toSet()
+        Log.d(
+            TAG,
+            "syncFromSingleCalendar: calendarId=$calendarId, mappedSystemIds=${mappedSystemIds.size}, foundSystemIds=${foundSystemIds.size}"
+        )
+
+        if (foundSystemIds.isEmpty() && mappedSystemIds.isNotEmpty()) {
+            val recurringEventsForCheck = if (allowRecurringSync) {
+                calendarManager.queryRecurringInstancesInRangeLimited(
+                    calendarId = calendarId,
+                    startMillis = syncWindowStart,
+                    endMillis = syncWindowEnd,
+                    limit = 1
+                ).events
+            } else {
+                emptyList()
+            }
+            if (rangeEvents.isEmpty() && recurringEventsForCheck.isEmpty()) {
+                Log.d(TAG, "System calendar empty, skip reverse sync for calendarId=$calendarId")
+                return ReverseSyncResult(syncData, hasChanges, addedCount, updatedCount, deletedCount)
+            }
+        }
+
+        val missingSystemIds = mappedSystemIds - foundSystemIds
+        missingSystemIds.forEach { systemId ->
+            val mapping = mappingBySystem[systemId] ?: return@forEach
+            val localEvent = eventsById[mapping.localMasterId]
+            val localFingerprint = localEvent?.let { EventDeduplicator.generateFingerprint(it) }
+            val remapCandidate = localFingerprint?.let { fingerprintToSystemEvent[it] }
+            if (remapCandidate != null && !mappedSystemIds.contains(remapCandidate.eventId)) {
+                syncMapDao.update(
+                    mapping.copy(
+                        systemEventId = remapCandidate.eventId,
+                        lastSyncHash = computeLastSyncHash(remapCandidate)
+                    )
+                )
+                syncMapping[mapping.localMasterId] = remapCandidate.eventId.toString()
+                mappedSystemIds.remove(systemId)
+                mappedSystemIds.add(remapCandidate.eventId)
+                hasChanges = true
+                return@forEach
+            }
+            onEventDeleted(mapping.localMasterId)
+            syncMapDao.deleteByLocalMasterId(mapping.localMasterId)
+            if (syncMapping.remove(mapping.localMasterId) != null) {
+                hasChanges = true
+            }
+            deletedCount++
+        }
+
+        existingSystemEvents.forEach { systemEvent ->
+            if (systemEvent.isRecurring) return@forEach
+            val mapping = mappingBySystem[systemEvent.eventId] ?: return@forEach
+
+            val systemHash = computeLastSyncHash(systemEvent)
+            val systemIdStr = systemEvent.eventId.toString()
+            if (syncMapping[mapping.localMasterId] != systemIdStr) {
+                syncMapping[mapping.localMasterId] = systemIdStr
+                hasChanges = true
+            }
+            if (mapping.lastSyncHash == systemHash) return@forEach
+
+            val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent, fixedId = mapping.localMasterId)
+            if (myEvent != null) {
+                onEventUpdated(myEvent)
+                syncMapDao.update(mapping.copy(lastSyncHash = systemHash))
+                hasChanges = true
+                updatedCount++
+            }
+        }
+
+        val fingerprintToActive = activeEvents
+            .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
+            .associateBy { EventDeduplicator.generateFingerprint(it) }
+        val fingerprintToArchived = archivedEvents
+            .filter { it.eventType == EventType.EVENT && it.tag != EventTags.NOTE }
+            .associateBy { EventDeduplicator.generateFingerprint(it) }
+
+        rangeEvents.forEach { systemEvent ->
+            if (systemEvent.isRecurring) return@forEach
+            if (mappedSystemIds.contains(systemEvent.eventId)) return@forEach
+            if (systemEvent.isManaged) return@forEach
+
+            val systemFingerprint = EventDeduplicator.generateFingerprintFromSystemEvent(systemEvent)
+            val duplicateActive = fingerprintToActive[systemFingerprint]
+            val duplicateArchived = fingerprintToArchived[systemFingerprint]
+
+            if (duplicateActive != null) {
+                val existingLocalMapping = syncMapDao.getByLocalMasterId(duplicateActive.id)
+                if (existingLocalMapping != null) {
+                    Log.d(
+                        TAG,
+                        "skip import duplicate active event: calendarId=$calendarId, systemEventId=${systemEvent.eventId}, localId=${duplicateActive.id}, existingMappingCalendar=${existingLocalMapping.calendarId}, title=${systemEvent.title}"
+                    )
+                    return@forEach
+                }
+
+                syncMapDao.insert(
+                    CalendarSyncMapEntity(
+                        localMasterId = duplicateActive.id,
+                        systemEventId = systemEvent.eventId,
+                        calendarId = calendarId,
+                        accountName = calendarMeta.accountName,
+                        accountType = calendarMeta.accountType,
+                        displayName = calendarMeta.displayName,
+                        lastSyncHash = computeLastSyncHash(systemEvent)
+                    )
+                )
+                if (syncMapping[duplicateActive.id] != systemEvent.eventId.toString()) {
+                    syncMapping[duplicateActive.id] = systemEvent.eventId.toString()
+                    hasChanges = true
+                }
+                return@forEach
+            }
+
+            if (duplicateArchived != null) {
+                Log.d(
+                    TAG,
+                    "skip import archived duplicate: calendarId=$calendarId, systemEventId=${systemEvent.eventId}, archivedId=${duplicateArchived.id}, title=${systemEvent.title}"
+                )
+                return@forEach
+            }
+
+            val myEvent = CalendarEventMapper.mapSystemEventToMyEvent(systemEvent)
+            if (myEvent != null) {
+                Log.d(
+                    TAG,
+                    "import new system event: calendarId=$calendarId, systemEventId=${systemEvent.eventId}, localId=${myEvent.id}, title=${systemEvent.title}"
+                )
+                onEventAdded(myEvent)
+                syncMapDao.insert(
+                    CalendarSyncMapEntity(
+                        localMasterId = myEvent.id,
+                        systemEventId = systemEvent.eventId,
+                        calendarId = calendarId,
+                        accountName = calendarMeta.accountName,
+                        accountType = calendarMeta.accountType,
+                        displayName = calendarMeta.displayName,
+                        lastSyncHash = computeLastSyncHash(systemEvent)
+                    )
+                )
+                if (syncMapping[myEvent.id] != systemEvent.eventId.toString()) {
+                    syncMapping[myEvent.id] = systemEvent.eventId.toString()
+                    hasChanges = true
+                }
+                addedCount++
+            }
+        }
+
+        val recurringSeriesPrefix = "${calendarId}_"
+        val activeRecurringEvents = activeEvents.filter {
+            it.isRecurring && it.recurringSeriesKey?.startsWith(recurringSeriesPrefix) == true
+        }
+
+        if (allowRecurringSync) {
+            val recurringSeries = calendarManager.queryRecurringSeries(calendarId)
+            val recurringInstancesResult = calendarManager.queryRecurringInstancesInRangeLimited(
+                calendarId = calendarId,
+                startMillis = syncWindowStart,
+                endMillis = syncWindowEnd,
+                limit = RECURRING_INSTANCES_SYNC_LIMIT
+            )
+            if (recurringInstancesResult.isTruncated) {
+                val message = "Recurring instances exceeded limit ($RECURRING_INSTANCES_SYNC_LIMIT)"
+                Log.w(TAG, message)
+                throw RecurringSyncLimitException(message)
+            }
+            val recurringInstances = recurringInstancesResult.events
+
+            val recurringParents = (activeEvents + archivedEvents)
+                .filter {
+                    it.isRecurring &&
+                        it.isRecurringParent &&
+                        !it.recurringSeriesKey.isNullOrBlank() &&
+                        it.recurringSeriesKey?.startsWith(recurringSeriesPrefix) == true
+                }
+                .associateBy { it.id }
+
+            val desiredRecurringEvents = buildRecurringEvents(
+                calendarId = calendarId,
+                recurringSeries = recurringSeries,
+                recurringInstances = recurringInstances,
+                existingRecurringParents = recurringParents,
+                now = now
+            )
+
+            val activeRecurringById = activeRecurringEvents.associateBy { it.id }
+            val desiredRecurringById = desiredRecurringEvents.associateBy { it.id }
+
+            val parentEventsById = (activeEvents + archivedEvents)
+                .filter { it.isRecurringParent && it.recurringSeriesKey?.startsWith(recurringSeriesPrefix) == true }
+                .associateBy { it.id }
+            val masterIdBySeriesKey = buildMasterIdBySeriesKey(calendarId, mappingBySystem, recurringSeries)
+
+            desiredRecurringEvents.forEach { incomingEvent ->
+                val existingEvent = activeRecurringById[incomingEvent.id]
+                if (existingEvent == null) {
+                    onEventAdded(incomingEvent)
+                    addedCount++
+                } else {
+                    val mergedEvent = mergeRecurringEvent(existingEvent, incomingEvent)
+                    if (mergedEvent != existingEvent) {
+                        onEventUpdated(mergedEvent.copy(lastModified = System.currentTimeMillis()))
+                        updatedCount++
+                    }
+                }
+            }
+
+            activeRecurringEvents.forEach { existingEvent ->
+                val shouldDelete = if (existingEvent.isRecurringParent) {
+                    existingEvent.id !in desiredRecurringById
+                } else {
+                    existingEvent.id !in desiredRecurringById &&
+                        isWithinSyncWindow(existingEvent, syncWindowStart, syncWindowEnd)
+                }
+
+                if (shouldDelete) {
+                    onEventDeleted(existingEvent.id)
+                    deletedCount++
+                }
+            }
+
+            recordMissingRecurringInstances(
+                activeRecurringEvents = activeRecurringEvents,
+                recurringInstances = recurringInstances,
+                parentEventsById = parentEventsById,
+                masterIdBySeriesKey = masterIdBySeriesKey,
+                syncWindowStart = syncWindowStart,
+                syncWindowEnd = syncWindowEnd,
+                onEventUpdated = onEventUpdated
+            )
+
+            syncExternalRecurringSeriesToRoom(
+                recurringSeries = recurringSeries,
+                recurringInstances = recurringInstances
+            )
+        } else {
+            activeRecurringEvents.forEach { existingEvent ->
+                onEventDeleted(existingEvent.id)
+                deletedCount++
+            }
+        }
+
+        val updatedSyncData = if (hasChanges) {
+            syncData.copy(mapping = syncMapping)
+        } else {
+            syncData
+        }
+
+        return ReverseSyncResult(updatedSyncData, hasChanges, addedCount, updatedCount, deletedCount)
+    }
+
+    private fun resolveSourceCalendarIds(syncData: SyncData): List<Long> {
+        val configured = syncData.sourceCalendarIds
+            .asSequence()
+            .filter { it != -1L }
+            .distinct()
+            .toList()
+
+        if (configured.isNotEmpty()) {
+            return configured
+        }
+
+        return syncData.targetCalendarId
+            .takeIf { it != -1L }
+            ?.let(::listOf)
+            ?: emptyList()
+    }
+
+    private data class ReverseSyncResult(
+        val syncData: SyncData,
+        val hasChanges: Boolean,
+        val addedCount: Int,
+        val updatedCount: Int,
+        val deletedCount: Int
     )
 
     private suspend fun buildRecurringEvents(
@@ -664,6 +828,7 @@ class CalendarSyncManagerV2(private val context: Context) {
         val eventsToSync = events.filter {
             it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring && it.tag != EventTags.NOTE
         }
+        val eventsById = events.associateBy { it.id }
         val existingMaps = syncMapDao.getByCalendarId(calendarId).associateBy { it.localMasterId }
         val seenIds = mutableSetOf<String>()
 
@@ -713,7 +878,15 @@ class CalendarSyncManagerV2(private val context: Context) {
             seenIds.add(event.id)
         }
 
-        val staleIds = existingMaps.keys - seenIds
+        val staleIds = mutableListOf<String>()
+        existingMaps.keys.forEach { localId ->
+            if (seenIds.contains(localId)) return@forEach
+            val localEvent = eventsById[localId]
+            when {
+                localEvent != null && !localEvent.skipCalendarSync -> staleIds += localId
+                localEvent == null && masterDao.getById(localId) == null -> staleIds += localId
+            }
+        }
         staleIds.forEach { localId ->
             val mapping = existingMaps[localId] ?: return@forEach
             calendarManager.deleteEvent(mapping.systemEventId)
@@ -1177,46 +1350,6 @@ class CalendarSyncManagerV2(private val context: Context) {
                 updatedMapping[mapping.localMasterId] = systemId
                 mappingChanged = true
             }
-        }
-
-        val missing = syncData.mapping.filterKeys { it !in existing }
-        if (missing.isEmpty()) {
-            return if (mappingChanged) {
-                syncData.copy(mapping = updatedMapping)
-            } else {
-                syncData
-            }
-        }
-
-        val toInsert = mutableListOf<CalendarSyncMapEntity>()
-
-        missing.forEach { (localId, systemIdStr) ->
-            val systemId = systemIdStr.toLongOrNull()
-            if (systemId == null) {
-                updatedMapping.remove(localId)
-                mappingChanged = true
-                return@forEach
-            }
-            val lastSyncHash = eventsById[localId]?.let { computeLastSyncHash(it) } ?: 0
-            toInsert.add(
-                CalendarSyncMapEntity(
-                    localMasterId = localId,
-                    systemEventId = systemId,
-                    calendarId = calendarId,
-                    accountName = calendarMeta.accountName,
-                    accountType = calendarMeta.accountType,
-                    displayName = calendarMeta.displayName,
-                    lastSyncHash = lastSyncHash
-                )
-            )
-            if (updatedMapping[localId] != systemIdStr) {
-                updatedMapping[localId] = systemIdStr
-                mappingChanged = true
-            }
-        }
-
-        if (toInsert.isNotEmpty()) {
-            syncMapDao.insertAll(toInsert)
         }
 
         return if (mappingChanged) {

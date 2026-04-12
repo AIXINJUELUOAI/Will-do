@@ -866,15 +866,15 @@ private fun FloatingNoteCard(
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         text = note.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -892,7 +892,7 @@ private fun FloatingNoteCard(
                 }
 
                 Row(
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
@@ -909,7 +909,7 @@ private fun FloatingNoteCard(
                     enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
                     exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
                 ) {
-                    Column(modifier = Modifier.padding(top = 10.dp)) {
+                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
                         Spacer(Modifier.height(8.dp))
                         AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editingState ->

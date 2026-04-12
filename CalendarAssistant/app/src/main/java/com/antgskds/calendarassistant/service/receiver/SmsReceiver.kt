@@ -8,6 +8,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.sms.SmsAnalysis
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.CoroutineScope
@@ -32,30 +33,54 @@ class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != "android.provider.Telephony.SMS_RECEIVED") return
 
-        val app = context.applicationContext as App
-        val repository = app.repository
-        val settings = repository.settings.value
+        Log.d(TAG, "====== [探针] 收到 SMS_RECEIVED 广播 ======")
 
-        if (!settings.isSmsMonitoringEnabled) return
+        // 修复：直接从 SharedPreferences 同步读取设置，
+        // 避免 App 冷启动时 StateFlow 尚未加载导致 isSmsMonitoringEnabled 读到默认 false
+        val settings = SettingsDataSource(context).loadSettings()
+        Log.d(TAG, "[探针] Settings 同步读取完成, isSmsMonitoringEnabled=${settings.isSmsMonitoringEnabled}")
+
+        if (!settings.isSmsMonitoringEnabled) {
+            Log.d(TAG, "[探针] 短信监控未开启，跳过")
+            return
+        }
 
         val messages = getSmsMessages(intent)
+        Log.d(TAG, "[探针] 解析到 ${messages.size} 条短信 PDU")
+
+        val app = context.applicationContext as App
+        val repository = app.repository
         val pendingResult = goAsync()
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         scope.launch {
             try {
                 for (msg in messages) {
-                    val sender = msg.originatingAddress ?: continue
-                    val body = msg.messageBody ?: continue
+                    val sender = msg.originatingAddress ?: run {
+                        Log.w(TAG, "[探针] 短信 originatingAddress 为空，跳过")
+                        continue
+                    }
+                    val body = msg.messageBody ?: run {
+                        Log.w(TAG, "[探针] 短信 messageBody 为空，跳过")
+                        continue
+                    }
+
+                    Log.d(TAG, "[探针] 收到短信 from=$sender, body=${body.take(80)}...")
 
                     // 仅处理 106 开头的号码
                     if (!sender.startsWith("106")) continue
 
                     // 解析 → CalendarEventData（与 AI 识屏输出格式一致）
-                    val eventData = SmsAnalysis.parse(sender, body) ?: continue
+                    val eventData = SmsAnalysis.parse(sender, body)
+                    if (eventData == null) {
+                        Log.d(TAG, "[探针] SmsAnalysis.parse 返回 null，未识别到取件码")
+                        continue
+                    }
+                    Log.d(TAG, "[探针] 解析成功: title=${eventData.title}, tag=${eventData.tag}, desc=${eventData.description}")
 
                     // CalendarEventData → MyEvent（复用识屏逻辑）
                     val event = eventDataToMyEvent(eventData, repository.events.value.size)
+                    Log.d(TAG, "[探针] 转换为 MyEvent: ${event.title}")
 
                     // 去重：同一天相同 description
                     val isDuplicate = repository.events.value.any { existing ->
@@ -64,16 +89,16 @@ class SmsReceiver : BroadcastReceiver() {
                                 !existing.endDate.isBefore(java.time.LocalDate.now())
                     }
                     if (isDuplicate) {
-                        Log.d(TAG, "重复取件码已跳过: ${eventData.title}")
+                        Log.d(TAG, "[探针] 重复取件码已跳过: ${eventData.title}")
                         continue
                     }
 
                     repository.addEvent(event)
                     NotificationScheduler.scheduleReminders(context, event)
-                    Log.d(TAG, "取件码已入库: ${eventData.title} from $sender")
+                    Log.d(TAG, "[探针] ✅ 取件码已入库: ${eventData.title} from $sender")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "短信处理异常", e)
+                Log.e(TAG, "[探针] 短信处理异常", e)
             } finally {
                 pendingResult.finish()
             }
