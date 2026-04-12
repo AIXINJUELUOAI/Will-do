@@ -51,6 +51,7 @@ fun PreferenceSettingsPage(
 ) {
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
+    val availableSyncCalendars by viewModel.availableSyncCalendars.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
@@ -58,6 +59,18 @@ fun PreferenceSettingsPage(
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    var showSourceCalendarSheet by remember { mutableStateOf(false) }
+
+    val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
+        derivedStateOf {
+            availableSyncCalendars.filter { syncStatus.sourceCalendarIds.contains(it.id) }
+        }
+    }
+    val selectedSourceSummary by remember(syncStatus.sourceCalendarIds, selectedSourceCalendars) {
+        derivedStateOf {
+            formatSelectedCalendarSummary(syncStatus.sourceCalendarIds, selectedSourceCalendars)
+        }
+    }
 
     // Toast 辅助函数
     fun showToast(message: String, type: ToastType = ToastType.INFO) {
@@ -85,6 +98,8 @@ fun PreferenceSettingsPage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshOverlayPermission()
+                viewModel.refreshSyncStatus()
+                viewModel.refreshSyncCalendars()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -135,6 +150,7 @@ fun PreferenceSettingsPage(
         if (allGranted) {
             viewModel.enableCalendarSyncAndSyncNow { result ->
                 (context.applicationContext as? App)?.initCalendarObserver()
+                viewModel.refreshSyncCalendars()
                 if (result.isSuccess) {
                     snackbarHostState.showSnackbar("日历同步已开启，并已立即同步")
                 } else {
@@ -697,6 +713,27 @@ fun PreferenceSettingsPage(
                                 thickness = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
+
+                            ActionSettingItem(
+                                title = "同步来源日历",
+                                subtitle = selectedSourceSummary,
+                                value = if (syncStatus.sourceCalendarIds.isEmpty()) {
+                                    "未选择"
+                                } else {
+                                    "${syncStatus.sourceCalendarIds.size} 个"
+                                },
+                                enabled = syncStatus.hasPermission,
+                                onClick = {
+                                    if (syncStatus.hasPermission) {
+                                        showSourceCalendarSheet = true
+                                    } else {
+                                        showPermissionDialog = true
+                                    }
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
                         }
                     }
 
@@ -783,6 +820,24 @@ fun PreferenceSettingsPage(
             onDismiss = { showPermissionDialog = false },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        if (showSourceCalendarSheet) {
+            SourceCalendarPickerSheet(
+                calendars = availableSyncCalendars,
+                initialSelection = syncStatus.sourceCalendarIds.toSet(),
+                onDismiss = { showSourceCalendarSheet = false },
+                onConfirm = { selectedIds ->
+                    viewModel.updateSourceCalendars(selectedIds) { result ->
+                        if (result.isSuccess) {
+                            showToast("同步来源日历已更新")
+                            showSourceCalendarSheet = false
+                        } else {
+                            showToast("更新同步来源失败", ToastType.ERROR)
+                        }
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -806,6 +861,184 @@ fun SwitchSettingItem(
             Text(subtitle, style = cardSubtitleStyle)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun ActionSettingItem(
+    title: String,
+    subtitle: String,
+    value: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = cardTitleStyle)
+            Text(subtitle, style = cardSubtitleStyle)
+        }
+        Text(value, style = cardValueStyle)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourceCalendarPickerSheet(
+    calendars: List<com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo>,
+    initialSelection: Set<Long>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<Long>) -> Unit
+) {
+    var selectedIds by remember(initialSelection, calendars) {
+        mutableStateOf(initialSelection.intersect(calendars.map { it.id }.toSet()))
+    }
+    val groupedCalendars = remember(calendars) {
+        calendars.groupBy { calendar ->
+            buildAccountGroupTitle(calendar)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp)
+        ) {
+            Text("同步来源日历", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "勾选后，这些系统日历中的日程会同步到 APP；在 APP 中修改导入日程时，会回写到原日历。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (calendars.isEmpty()) {
+                Text(
+                    text = "当前没有可读取的系统日历。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                TextButton(onClick = { selectedIds = calendars.map { it.id }.toSet() }) {
+                    Text("全选")
+                }
+
+                groupedCalendars.forEach { (groupTitle, groupCalendars) ->
+                    Text(
+                        text = groupTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+
+                    groupCalendars.forEach { calendar ->
+                        val checked = selectedIds.contains(calendar.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedIds = if (checked) {
+                                        selectedIds - calendar.id
+                                    } else {
+                                        selectedIds + calendar.id
+                                    }
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { isChecked ->
+                                    selectedIds = if (isChecked) {
+                                        selectedIds + calendar.id
+                                    } else {
+                                        selectedIds - calendar.id
+                                    }
+                                }
+                            )
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(calendar.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    text = buildCalendarMetaLine(calendar),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
+                enabled = calendars.isNotEmpty() && selectedIds.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("保存")
+            }
+        }
+    }
+}
+
+private fun formatSelectedCalendarSummary(
+    selectedIds: List<Long>,
+    selectedCalendars: List<com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo>
+): String {
+    if (selectedIds.isEmpty()) {
+        return "请选择需要从系统同步进 APP 的日历"
+    }
+
+    if (selectedCalendars.isEmpty()) {
+        return "已选择 ${selectedIds.size} 个日历"
+    }
+
+    val names = selectedCalendars.map { it.name }.distinct()
+    return if (names.size <= 2) {
+        names.joinToString("、")
+    } else {
+        names.take(2).joinToString("、") + " 等 ${names.size} 个日历"
+    }
+}
+
+private fun buildAccountGroupTitle(
+    calendar: com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo
+): String {
+    val accountName = calendar.accountName?.takeIf { it.isNotBlank() } ?: "本地账户"
+    val accountType = calendar.accountType?.takeIf { it.isNotBlank() }
+    return if (accountType != null) {
+        "$accountName  ($accountType)"
+    } else {
+        accountName
+    }
+}
+
+private fun buildCalendarMetaLine(
+    calendar: com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo
+): String {
+    val tags = mutableListOf<String>()
+    if (!calendar.isVisible) tags += "已隐藏"
+    if (!calendar.syncEvents) tags += "未启用系统同步"
+    if (!calendar.isWritable) tags += "只读"
+    return if (tags.isEmpty()) {
+        "ID: ${calendar.id}"
+    } else {
+        "ID: ${calendar.id}  ${tags.joinToString(" · ")}"
     }
 }
 

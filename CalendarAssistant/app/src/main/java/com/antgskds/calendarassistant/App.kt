@@ -19,6 +19,7 @@ import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
@@ -48,6 +49,9 @@ class App : Application() {
 
     // 日历内容观察者（可选，仅在有权限时初始化）
     private var calendarObserver: CalendarContentObserver? = null
+
+    // 短信内容观察者
+    private var smsObserver: SmsContentObserver? = null
 
     // 网速监控协程
     private val networkSpeedScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -102,6 +106,9 @@ class App : Application() {
         // 初始化日历内容观察者（仅在已有权限时）
         initCalendarObserverIfPermissionGranted()
 
+        // 初始化短信 ContentObserver（监听短信数据库变化，自动提取取件码）
+        initSmsObserver()
+
         // 启动定期日历同步（每1分钟）
         startPeriodicSync()
 
@@ -155,6 +162,19 @@ class App : Application() {
         } else {
             Log.d(TAG, "日历权限未授予，跳过 Observer 初始化")
         }
+    }
+
+    /**
+     * 初始化短信 ContentObserver
+     * 监听 content://sms 数据库变化，新短信到来时自动提取取件码。
+     * 依赖 READ_SMS 权限，内部已做权限检查。
+     */
+    private fun initSmsObserver() {
+        smsObserver = SmsContentObserver(
+            context = this,
+            getRepository = { try { repository } catch (_: Exception) { null } }
+        )
+        smsObserver?.register()
     }
 
     /**
