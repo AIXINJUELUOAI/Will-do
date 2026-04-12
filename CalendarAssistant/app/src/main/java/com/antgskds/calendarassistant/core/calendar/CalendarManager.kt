@@ -65,52 +65,22 @@ class CalendarManager(private val context: Context) {
      * 获取用户可写的日历列表
      */
     suspend fun getWritableCalendars(): List<CalendarInfo> = withContext(Dispatchers.IO) {
-        val calendars = mutableListOf<CalendarInfo>()
-        val projection = arrayOf(
-            Calendars._ID,
-            Calendars.NAME,
-            Calendars.ACCOUNT_NAME,
-            Calendars.CALENDAR_DISPLAY_NAME
+        queryCalendars(minAccessLevel = Calendars.CAL_ACCESS_CONTRIBUTOR)
+    }
+
+    /**
+     * 获取可作为反向同步来源的日历列表
+     * 默认仅返回可见且已启用同步的可读日历
+     */
+    suspend fun getReadableCalendars(
+        visibleOnly: Boolean = true,
+        syncEnabledOnly: Boolean = true
+    ): List<CalendarInfo> = withContext(Dispatchers.IO) {
+        queryCalendars(
+            minAccessLevel = Calendars.CAL_ACCESS_READ,
+            visibleOnly = visibleOnly,
+            syncEnabledOnly = syncEnabledOnly
         )
-
-        // 只获取可写入的日历（ OWNER 级别或 CONTRIBUTOR 级别）
-        val selection = "${Calendars.CALENDAR_ACCESS_LEVEL} >= ?"
-        val selectionArgs = arrayOf(Calendars.CAL_ACCESS_CONTRIBUTOR.toString())
-
-        try {
-            contentResolver.query(
-                Calendars.CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                "${Calendars._ID} ASC"
-            )?.use { cursor ->
-                val idIndex = cursor.getColumnIndexOrThrow(Calendars._ID)
-                val nameIndex = cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)
-                val accountIndex = cursor.getColumnIndex(Calendars.ACCOUNT_NAME)
-
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idIndex)
-                    val displayName = if (nameIndex >= 0) cursor.getString(nameIndex) else "日历 $id"
-                    val accountName = if (accountIndex >= 0) cursor.getString(accountIndex) else null
-
-                    calendars.add(
-                        CalendarInfo(
-                            id = id,
-                            name = displayName,
-                            accountName = accountName
-                        )
-                    )
-                }
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "缺少日历读取权限", e)
-            throw SecurityException("需要日历读取权限")
-        } catch (e: Exception) {
-            Log.e(TAG, "获取日历列表失败", e)
-        }
-
-        calendars
     }
 
     /**
@@ -136,6 +106,13 @@ class CalendarManager(private val context: Context) {
 
         Log.e(TAG, "未找到可写日历")
         -1L
+    }
+
+    suspend fun getCalendarsByIds(calendarIds: Collection<Long>): List<CalendarInfo> = withContext(Dispatchers.IO) {
+        if (calendarIds.isEmpty()) return@withContext emptyList()
+        val calendarsById = queryCalendars(minAccessLevel = Calendars.CAL_ACCESS_NONE)
+            .associateBy { it.id }
+        calendarIds.distinct().mapNotNull(calendarsById::get)
     }
 
     // ==================== 事件操作（单条） ====================
@@ -448,7 +425,12 @@ class CalendarManager(private val context: Context) {
         )
 
         // 复用查询逻辑
-        executeEventQuery(selection, selectionArgs, "${Events.DTSTART} ASC")
+        executeEventQuery(
+            selection = selection,
+            selectionArgs = selectionArgs,
+            sortOrder = "${Events.DTSTART} ASC",
+            logLabel = "queryEventsInRange(calendarId=$calendarId)"
+        )
     }
 
     /**
@@ -545,7 +527,12 @@ class CalendarManager(private val context: Context) {
                 val rruleIndex = cursor.getColumnIndex(Events.RRULE)
                 val hasExtPropsIndex = cursor.getColumnIndex(Events.HAS_EXTENDED_PROPERTIES)
 
+                var scannedCount = 0
+                var skippedExtendedProperties = 0
+                var skippedNoRule = 0
+
                 while (cursor.moveToNext()) {
+                    scannedCount++
                     val eventId = cursor.getLong(eventIdIndex)
                     val start = cursor.getLong(beginIndex)
                     val end = cursor.getLong(endIndex)
@@ -554,9 +541,15 @@ class CalendarManager(private val context: Context) {
 
                     // 跳过生日/纪念日/倒数日等特殊日程
                     val hasExtendedProperties = if (hasExtPropsIndex >= 0) cursor.getInt(hasExtPropsIndex) else 0
-                    if (hasExtendedProperties > 0) continue
+                    if (hasExtendedProperties > 0) {
+                        skippedExtendedProperties++
+                        continue
+                    }
 
-                    if (rrule.isNullOrBlank()) continue
+                    if (rrule.isNullOrBlank()) {
+                        skippedNoRule++
+                        continue
+                    }
 
                     if (normalizedLimit != null && events.size >= normalizedLimit) {
                         truncated = true
@@ -586,6 +579,11 @@ class CalendarManager(private val context: Context) {
                         )
                     )
                 }
+
+                Log.d(
+                    TAG,
+                    "queryRecurringInstancesInRangeInternal(calendarId=$calendarId, eventId=$eventId): scanned=$scannedCount, returned=${events.size}, skippedExtendedProps=$skippedExtendedProperties, skippedNoRule=$skippedNoRule, truncated=$truncated"
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "查询重复实例失败", e)
@@ -618,7 +616,12 @@ class CalendarManager(private val context: Context) {
             AND ${Events.RRULE} != ''
         """.trimIndent().replace("\n", " ")
 
-        executeEventQuery(selection, arrayOf(calendarId.toString()), "${Events.DTSTART} ASC")
+        executeEventQuery(
+            selection = selection,
+            selectionArgs = arrayOf(calendarId.toString()),
+            sortOrder = "${Events.DTSTART} ASC",
+            logLabel = "queryRecurringSeries(calendarId=$calendarId)"
+        )
             .filter { it.isRecurring }
     }
 
@@ -672,7 +675,14 @@ class CalendarManager(private val context: Context) {
             val idListString = batchIds.joinToString(",")
             val selection = "${Events._ID} IN ($idListString) AND ${Events.CALENDAR_ID} = ? AND ${Events.DELETED} = 0"
             val selectionArgs = arrayOf(calendarId.toString())
-            result.addAll(executeEventQuery(selection, selectionArgs, null))
+            result.addAll(
+                executeEventQuery(
+                    selection = selection,
+                    selectionArgs = selectionArgs,
+                    sortOrder = null,
+                    logLabel = "queryEventsByIds(calendarId=$calendarId,batchSize=${batchIds.size})"
+                )
+            )
         }
         result
     }
@@ -684,7 +694,8 @@ class CalendarManager(private val context: Context) {
     private fun executeEventQuery(
         selection: String,
         selectionArgs: Array<String>?,
-        sortOrder: String?
+        sortOrder: String?,
+        logLabel: String? = null
     ): List<SystemEventInfo> {
         val events = mutableListOf<SystemEventInfo>()
 
@@ -721,13 +732,20 @@ class CalendarManager(private val context: Context) {
                 val rruleIndex = cursor.getColumnIndex(Events.RRULE)
                 val hasExtPropsIndex = cursor.getColumnIndex(Events.HAS_EXTENDED_PROPERTIES)
 
+                var scannedCount = 0
+                var skippedExtendedProperties = 0
+
                 while (cursor.moveToNext()) {
+                    scannedCount++
                     val eventId = cursor.getLong(idIndex)
                     val calendarId = cursor.getLong(calendarIdIndex)
 
                     // 跳过生日/纪念日/倒数日等特殊日程
                     val hasExtendedProperties = if (hasExtPropsIndex >= 0) cursor.getInt(hasExtPropsIndex) else 0
-                    if (hasExtendedProperties > 0) continue
+                    if (hasExtendedProperties > 0) {
+                        skippedExtendedProperties++
+                        continue
+                    }
 
                     val description = if (descIndex >= 0) cursor.getString(descIndex) ?: "" else ""
                     val isManaged = description.contains(MANAGED_EVENT_MARKER)
@@ -757,6 +775,13 @@ class CalendarManager(private val context: Context) {
                             },
                             instanceKey = null
                         )
+                    )
+                }
+
+                if (logLabel != null) {
+                    Log.d(
+                        TAG,
+                        "$logLabel: scanned=$scannedCount, returned=${events.size}, skippedExtendedProps=$skippedExtendedProperties"
                     )
                 }
             }
@@ -879,6 +904,80 @@ class CalendarManager(private val context: Context) {
                 tag = values[EXTENDED_PROPERTY_TAG]
             )
         }
+    }
+
+    private fun queryCalendars(
+        minAccessLevel: Int,
+        visibleOnly: Boolean = false,
+        syncEnabledOnly: Boolean = false
+    ): List<CalendarInfo> {
+        val calendars = mutableListOf<CalendarInfo>()
+        val projection = arrayOf(
+            Calendars._ID,
+            Calendars.ACCOUNT_NAME,
+            Calendars.ACCOUNT_TYPE,
+            Calendars.CALENDAR_DISPLAY_NAME,
+            Calendars.CALENDAR_ACCESS_LEVEL,
+            Calendars.VISIBLE,
+            Calendars.SYNC_EVENTS
+        )
+
+        val conditions = mutableListOf<String>()
+        val args = mutableListOf<String>()
+
+        conditions += "${Calendars.CALENDAR_ACCESS_LEVEL} >= ?"
+        args += minAccessLevel.toString()
+
+        if (visibleOnly) {
+            conditions += "${Calendars.VISIBLE} = 1"
+        }
+        if (syncEnabledOnly) {
+            conditions += "${Calendars.SYNC_EVENTS} = 1"
+        }
+
+        val selection = conditions.joinToString(" AND ")
+
+        try {
+            contentResolver.query(
+                Calendars.CONTENT_URI,
+                projection,
+                selection,
+                args.toTypedArray(),
+                "${Calendars.ACCOUNT_NAME} COLLATE NOCASE ASC, ${Calendars.CALENDAR_DISPLAY_NAME} COLLATE NOCASE ASC"
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow(Calendars._ID)
+                val displayNameIndex = cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)
+                val accountNameIndex = cursor.getColumnIndex(Calendars.ACCOUNT_NAME)
+                val accountTypeIndex = cursor.getColumnIndex(Calendars.ACCOUNT_TYPE)
+                val accessLevelIndex = cursor.getColumnIndex(Calendars.CALENDAR_ACCESS_LEVEL)
+                val visibleIndex = cursor.getColumnIndex(Calendars.VISIBLE)
+                val syncEventsIndex = cursor.getColumnIndex(Calendars.SYNC_EVENTS)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIndex)
+                    val displayName = if (displayNameIndex >= 0) cursor.getString(displayNameIndex) else "日历 $id"
+                    val accessLevel = if (accessLevelIndex >= 0) cursor.getInt(accessLevelIndex) else Calendars.CAL_ACCESS_NONE
+
+                    calendars += CalendarInfo(
+                        id = id,
+                        name = displayName,
+                        accountName = if (accountNameIndex >= 0) cursor.getString(accountNameIndex) else null,
+                        accountType = if (accountTypeIndex >= 0) cursor.getString(accountTypeIndex) else null,
+                        accessLevel = accessLevel,
+                        isVisible = visibleIndex >= 0 && cursor.getInt(visibleIndex) == 1,
+                        syncEvents = syncEventsIndex >= 0 && cursor.getInt(syncEventsIndex) == 1,
+                        isWritable = accessLevel >= Calendars.CAL_ACCESS_CONTRIBUTOR
+                    )
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "缺少日历读取权限", e)
+            throw SecurityException("需要日历读取权限")
+        } catch (e: Exception) {
+            Log.e(TAG, "获取日历列表失败", e)
+        }
+
+        return calendars
     }
 
     // ==================== 辅助方法 ====================
@@ -1071,7 +1170,12 @@ class CalendarManager(private val context: Context) {
     data class CalendarInfo(
         val id: Long,
         val name: String,
-        val accountName: String? = null
+        val accountName: String? = null,
+        val accountType: String? = null,
+        val accessLevel: Int = Calendars.CAL_ACCESS_NONE,
+        val isVisible: Boolean = true,
+        val syncEvents: Boolean = true,
+        val isWritable: Boolean = false
     )
 
     /**

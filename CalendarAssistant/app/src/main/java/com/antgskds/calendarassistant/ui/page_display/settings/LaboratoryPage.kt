@@ -332,7 +332,7 @@ fun LaboratoryPage(uiSize: Int = 2, settingsViewModel: SettingsViewModel? = null
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "需要短信权限，仅处理106开头号码",
+                            text = "需要短信读取权限",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error
                         )

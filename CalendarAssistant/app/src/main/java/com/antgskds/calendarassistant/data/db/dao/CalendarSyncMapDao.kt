@@ -28,6 +28,9 @@ interface CalendarSyncMapDao {
     @Query("SELECT * FROM calendar_sync_map WHERE calendarId = :calendarId")
     suspend fun getByCalendarId(calendarId: Long): List<CalendarSyncMapEntity>
 
+    @Query("SELECT * FROM calendar_sync_map WHERE calendarId IN (:calendarIds)")
+    suspend fun getByCalendarIds(calendarIds: List<Long>): List<CalendarSyncMapEntity>
+
     @Query("DELETE FROM calendar_sync_map WHERE localMasterId = :localMasterId")
     suspend fun deleteByLocalMasterId(localMasterId: String): Int
 

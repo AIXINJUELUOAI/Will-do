@@ -176,15 +176,15 @@ fun NoteEditorScreen(
                 },
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(end = 24.dp, bottom = 28.dp)
-                    .size(60.dp),
+                    .padding(end = 24.dp, bottom = 32.dp)
+                    .size(72.dp),
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 if (isAnalyzing) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(34.dp),
                         strokeWidth = 2.2.dp,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
@@ -192,7 +192,7 @@ fun NoteEditorScreen(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "AI 分析",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(34.dp)
                     )
                 }
             }

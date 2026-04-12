@@ -65,7 +65,7 @@ fun SettingsSidebar(
             .fillMaxHeight()
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            .padding(horizontal = 16.dp)
             .statusBarsPadding()
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(20.dp)
