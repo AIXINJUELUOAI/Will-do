@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.ImportMode
@@ -24,13 +25,18 @@ class SettingsViewModel(
         isEnabled = false,
         hasPermission = false,
         targetCalendarId = -1L,
+        sourceCalendarIds = emptyList(),
         lastSyncTime = 0L,
         mappedEventCount = 0
     ))
     val syncStatus: StateFlow<CalendarSyncManager.SyncStatus> = _syncStatus.asStateFlow()
 
+    private val _availableSyncCalendars = MutableStateFlow<List<CalendarManager.CalendarInfo>>(emptyList())
+    val availableSyncCalendars: StateFlow<List<CalendarManager.CalendarInfo>> = _availableSyncCalendars.asStateFlow()
+
     init {
         refreshSyncStatus()
+        refreshSyncCalendars()
     }
 
     // 更新 AI 设置
@@ -280,6 +286,12 @@ class SettingsViewModel(
         }
     }
 
+    fun refreshSyncCalendars() {
+        viewModelScope.launch {
+            _availableSyncCalendars.value = repository.getSelectableSyncCalendars()
+        }
+    }
+
     /**
      * 切换日历同步开关
      */
@@ -301,6 +313,16 @@ class SettingsViewModel(
         viewModelScope.launch {
             val result = repository.enableCalendarSyncAndSyncNow()
             refreshSyncStatus()
+            refreshSyncCalendars()
+            callback(result)
+        }
+    }
+
+    fun updateSourceCalendars(calendarIds: List<Long>, callback: suspend (Result<Unit>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = repository.updateSourceCalendars(calendarIds)
+            refreshSyncStatus()
+            refreshSyncCalendars()
             callback(result)
         }
     }

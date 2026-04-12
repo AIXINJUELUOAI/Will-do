@@ -755,6 +755,9 @@ class CalendarSyncManager(private val context: Context) {
             val syncData = SyncData(
                 isSyncEnabled = true,
                 targetCalendarId = calendarId,
+                sourceCalendarIds = existingSyncData.sourceCalendarIds.ifEmpty {
+                    listOf(calendarId)
+                },
                 mapping = existingSyncData.mapping,
                 lastSyncTime = System.currentTimeMillis()
             )
@@ -797,6 +800,9 @@ class CalendarSyncManager(private val context: Context) {
             isEnabled = syncData.isSyncEnabled,
             hasPermission = hasPermission,
             targetCalendarId = syncData.targetCalendarId,
+            sourceCalendarIds = syncData.sourceCalendarIds.ifEmpty {
+                syncData.targetCalendarId.takeIf { it != -1L }?.let(::listOf) ?: emptyList()
+            },
             lastSyncTime = syncData.lastSyncTime,
             mappedEventCount = syncData.mapping.size
         )
@@ -809,6 +815,7 @@ class CalendarSyncManager(private val context: Context) {
         val isEnabled: Boolean,
         val hasPermission: Boolean,
         val targetCalendarId: Long,
+        val sourceCalendarIds: List<Long> = emptyList(),
         val lastSyncTime: Long,
         val mappedEventCount: Int
     )

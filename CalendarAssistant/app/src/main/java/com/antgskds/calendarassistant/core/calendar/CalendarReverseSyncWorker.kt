@@ -40,7 +40,7 @@ class CalendarReverseSyncWorker(
 
         fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<CalendarReverseSyncWorker>()
-                .setInitialDelay(5, TimeUnit.SECONDS)
+                .setInitialDelay(8, TimeUnit.SECONDS)
                 .build()
 
             WorkManager.getInstance(context)
