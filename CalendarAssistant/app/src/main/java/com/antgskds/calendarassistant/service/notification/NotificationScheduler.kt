@@ -252,6 +252,8 @@ object NotificationScheduler {
             } else {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             }
+        } catch (e: IllegalStateException) {
+            Log.e("Scheduler", "Alarm quota reached, skip scheduling", e)
         } catch (e: SecurityException) {
             Log.e("Scheduler", "Permission missing for exact alarm", e)
         }
