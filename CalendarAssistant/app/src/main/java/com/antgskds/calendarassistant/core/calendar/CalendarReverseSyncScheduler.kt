@@ -25,33 +25,39 @@ object CalendarReverseSyncScheduler {
 
         val triggerAt = System.currentTimeMillis() + INTERVAL_MILLIS
 
-        alarmManager.cancel(pendingIntent)
+        try {
+            alarmManager.cancel(pendingIntent)
 
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms() -> {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
-                Log.w(TAG, "Exact alarms not allowed, scheduled inexact (60s)")
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms() -> {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                    Log.w(TAG, "Exact alarms not allowed, scheduled inexact (60s)")
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Exact reverse sync scheduled (60s)")
+                }
+                else -> {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Reverse sync scheduled (60s)")
+                }
             }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
-                Log.d(TAG, "Exact reverse sync scheduled (60s)")
-            }
-            else -> {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
-                Log.d(TAG, "Reverse sync scheduled (60s)")
-            }
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Alarm quota reached, skip reverse sync schedule", e)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Missing permission for reverse sync schedule", e)
         }
     }
 }
