@@ -51,13 +51,19 @@ class KeepAliveReceiver : BroadcastReceiver() {
             )
 
             val triggerAt = SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_HALF_HOUR
-            alarmManager.setInexactRepeating(
-                AlarmManager.ELAPSED_REALTIME,
-                triggerAt,
-                AlarmManager.INTERVAL_HALF_HOUR,
-                pendingIntent
-            )
-            Log.d(TAG, "KeepAlive scheduled every 30 minutes")
+            try {
+                alarmManager.setInexactRepeating(
+                    AlarmManager.ELAPSED_REALTIME,
+                    triggerAt,
+                    AlarmManager.INTERVAL_HALF_HOUR,
+                    pendingIntent
+                )
+                Log.d(TAG, "KeepAlive scheduled every 30 minutes")
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "Alarm quota reached, skip keep-alive schedule", e)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Missing permission for keep-alive schedule", e)
+            }
         }
     }
 }

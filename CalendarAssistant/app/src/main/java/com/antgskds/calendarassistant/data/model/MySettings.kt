@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 data class MySettings(
     // AI 模型配置
     val modelKey: String = "",
-    val modelName: String = "gpt-3.5-turbo",
+    val modelName: String = "",
     val modelUrl: String = "",
     val modelProvider: String = "", // 保留旧字段，防止数据丢失
     val useMultimodalAi: Boolean = false,
@@ -34,6 +34,10 @@ data class MySettings(
 
     // 【实验室】便签功能
     val noteEnabled: Boolean = false,
+
+    // 首页入口配置（第 2~4 位，第一位固定侧边栏）
+    val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL),
+    val homeStartPageKey: String = HomeEntryKey.TODAY,
 
     // 【新增】归档配置
     val autoArchiveEnabled: Boolean = false, // 自动归档总开关
