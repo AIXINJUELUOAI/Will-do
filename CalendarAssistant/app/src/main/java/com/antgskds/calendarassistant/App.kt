@@ -19,10 +19,12 @@ import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
+import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -108,6 +110,9 @@ class App : Application() {
 
         // 初始化短信 ContentObserver（监听短信数据库变化，自动提取取件码）
         initSmsObserver()
+
+        // 短信监听开启时，尝试恢复通知监听服务绑定（用于 MIUI 等机型兜底）
+        restoreSmsNotificationListenerIfNeeded()
 
         // 启动定期日历同步（每1分钟）
         startPeriodicSync()
@@ -230,6 +235,17 @@ class App : Application() {
      */
     private fun startPeriodicSync() {
         CalendarReverseSyncScheduler.schedule(this)
+    }
+
+    private fun restoreSmsNotificationListenerIfNeeded() {
+        try {
+            val settings = SettingsDataSource(this).loadSettings()
+            if (settings.isSmsMonitoringEnabled) {
+                SmsNotificationListenerService.rebind(this)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "恢复短信通知监听失败", e)
+        }
     }
 }
 

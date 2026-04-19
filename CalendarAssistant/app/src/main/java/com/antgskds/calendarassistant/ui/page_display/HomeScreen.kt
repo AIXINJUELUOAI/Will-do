@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -15,7 +16,10 @@ import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
+import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
@@ -26,6 +30,8 @@ import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.dialogs.*
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
+import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
+import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -67,8 +73,7 @@ fun HomeScreen(
 
     // 状态管理
     var isSidebarOpen by remember { mutableStateOf(false) }
-    // 【修改 2】初始 Tab 状态不需要依赖参数了，默认为 0 即可，依靠 LaunchedEffect 来跳转
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=Note, 2=All
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=Note/All(无便签), 2=All(有便签)
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
     var scheduleProgress by remember { mutableFloatStateOf(0f) }
     var scheduleOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -76,12 +81,44 @@ fun HomeScreen(
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
     var previousNoteEnabled by remember { mutableStateOf(settings.noteEnabled) }
+    var hasAppliedStartPage by remember { mutableStateOf(false) }
 
-    // 【修改 3】新增：监听时间戳变化
-    // 只要 timestamp 变化且大于 0，就强制切到"全部"Tab
+    val homeBottomItems = remember(settings.homeBottomItems, settings.noteEnabled) {
+        sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
+    }
+    val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
+        sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
+    }
+
+    fun pageKeyToTab(pageKey: String): Int {
+        return when (pageKey) {
+            HomeEntryKey.TODAY -> 0
+            HomeEntryKey.NOTE -> if (settings.noteEnabled) 1 else 0
+            HomeEntryKey.ALL -> if (settings.noteEnabled) 2 else 1
+            else -> 0
+        }
+    }
+
+    fun tabToPageKey(tab: Int): String {
+        return when {
+            tab == 0 -> HomeEntryKey.TODAY
+            settings.noteEnabled && tab == 1 -> HomeEntryKey.NOTE
+            else -> HomeEntryKey.ALL
+        }
+    }
+
+    fun selectPage(pageKey: String) {
+        when (pageKey) {
+            HomeEntryKey.TODAY -> selectedTab = 0
+            HomeEntryKey.NOTE -> if (settings.noteEnabled) selectedTab = 1
+            HomeEntryKey.ALL -> selectedTab = if (settings.noteEnabled) 2 else 1
+        }
+    }
+
+    // 取件码场景保持最高优先级：强制切换到“全部”
     LaunchedEffect(pickupTimestamp) {
         if (pickupTimestamp > 0) {
-            selectedTab = if (settings.noteEnabled) 2 else 1
+            selectPage(HomeEntryKey.ALL)
         }
     }
 
@@ -89,10 +126,36 @@ fun HomeScreen(
         if (settings.noteEnabled != previousNoteEnabled) {
             if (settings.noteEnabled && selectedTab == 1) {
                 selectedTab = 2
-            } else if (!settings.noteEnabled && selectedTab > 1) {
+            } else if (!settings.noteEnabled && selectedTab == 2) {
                 selectedTab = 1
             }
             previousNoteEnabled = settings.noteEnabled
+        }
+    }
+
+    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, settings.noteEnabled) {
+        if (homeBottomItems != settings.homeBottomItems || homeStartPageKey != settings.homeStartPageKey) {
+            settingsViewModel.updatePreference(
+                homeBottomItems = homeBottomItems,
+                homeStartPageKey = homeStartPageKey
+            )
+        }
+    }
+
+    LaunchedEffect(homeBottomItems, homeStartPageKey, settings.noteEnabled) {
+        if (!hasAppliedStartPage) {
+            selectedTab = pageKeyToTab(homeStartPageKey)
+            hasAppliedStartPage = true
+            return@LaunchedEffect
+        }
+
+        val allowedTabs = homeBottomItems.map { pageKeyToTab(it) }.toSet()
+        if (allowedTabs.isEmpty()) {
+            selectedTab = pageKeyToTab(homeStartPageKey)
+            return@LaunchedEffect
+        }
+        if (selectedTab !in allowedTabs) {
+            selectedTab = pageKeyToTab(homeStartPageKey)
         }
     }
 
@@ -102,11 +165,20 @@ fun HomeScreen(
     var draftEventToAdd by remember { mutableStateOf<MyEvent?>(null) }
     var noteToEdit by remember { mutableStateOf<MyEvent?>(null) }
     var showNoteEditor by remember { mutableStateOf(false) }
+    var noteEditorInitialNote by remember { mutableStateOf<MyEvent?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var pendingAddDialog by remember { mutableStateOf(false) }
     var addDialogRequestId by remember { mutableIntStateOf(0) }
     val dialogDelayMs = 240L
+
+    val noteEditorVisible = showNoteEditor || noteToEdit != null
+
+    LaunchedEffect(noteEditorVisible, noteToEdit) {
+        if (noteEditorVisible) {
+            noteEditorInitialNote = noteToEdit
+        }
+    }
 
     LaunchedEffect(pendingAddDialog) {
         if (!pendingAddDialog) return@LaunchedEffect
@@ -265,32 +337,22 @@ fun HomeScreen(
             }
         )
 
+        val selectedPageKey = tabToPageKey(selectedTab)
+
         IntegratedFloatingBar(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
             isSidebarOpen = isSidebarOpen,
-            noteEnabled = settings.noteEnabled,
-            selectedTab = selectedTab,
+            navItems = homeBottomItems,
+            selectedPageKey = selectedPageKey,
             onMenuClick = {
                 isActionExpanded = false
                 isSidebarOpen = !isSidebarOpen
             },
-            onHomeClick = {
+            onPageClick = { pageKey ->
                 isActionExpanded = false
                 isSidebarOpen = false
-                selectedTab = 0
-            },
-            onNoteClick = {
-                isActionExpanded = false
-                isSidebarOpen = false
-                if (settings.noteEnabled) {
-                    selectedTab = 1
-                }
-            },
-            onListClick = {
-                isActionExpanded = false
-                isSidebarOpen = false
-                selectedTab = if (settings.noteEnabled) 2 else 1
+                selectPage(pageKey)
             },
             onSearchClick = {
                 isActionExpanded = false
@@ -377,9 +439,13 @@ fun HomeScreen(
         )
     }
 
-    if (showNoteEditor || noteToEdit != null) {
+    AnimatedVisibility(
+        visible = noteEditorVisible,
+        enter = navForwardEnterTransition(),
+        exit = navBackwardExitTransition()
+    ) {
         NoteEditorScreen(
-            initialNote = noteToEdit,
+            initialNote = noteEditorInitialNote,
             currentEventsCount = uiState.allEvents.size,
             settings = settings,
             onDismiss = {
@@ -387,7 +453,7 @@ fun HomeScreen(
                 noteToEdit = null
             },
             onSave = { note ->
-                if (noteToEdit == null) {
+                if (noteEditorInitialNote == null) {
                     mainViewModel.addEvent(note)
                 } else {
                     mainViewModel.updateEvent(note)
@@ -399,10 +465,8 @@ fun HomeScreen(
                 noteToEdit = null
             },
             onAnalyzeResult = { eventDraft ->
-                showNoteEditor = false
-                noteToEdit = null
                 pendingAddDialog = false
-                showAddEventDialog = false
+                showAddEventDialog = true
                 eventToEdit = null
                 recurringEditSession = null
                 draftEventToAdd = eventDraft

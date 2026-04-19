@@ -7,6 +7,8 @@ import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
+import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
+import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.data.model.ImportResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -118,7 +120,9 @@ class SettingsViewModel(
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
-        noteEnabled: Boolean? = null
+        noteEnabled: Boolean? = null,
+        homeBottomItems: List<String>? = null,
+        homeStartPageKey: String? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -139,6 +143,15 @@ class SettingsViewModel(
             if (volumeUpLongPressAction != null) current = current.copy(volumeUpLongPressAction = volumeUpLongPressAction)
             if (smsMonitoring != null) current = current.copy(isSmsMonitoringEnabled = smsMonitoring)
             if (noteEnabled != null) current = current.copy(noteEnabled = noteEnabled)
+            if (homeBottomItems != null) current = current.copy(homeBottomItems = homeBottomItems)
+            if (homeStartPageKey != null) current = current.copy(homeStartPageKey = homeStartPageKey)
+
+            val sanitizedBottomItems = sanitizeHomeBottomItems(current.homeBottomItems, current.noteEnabled)
+            val sanitizedStartPage = sanitizeHomeStartPageKey(current.homeStartPageKey, sanitizedBottomItems)
+            current = current.copy(
+                homeBottomItems = sanitizedBottomItems,
+                homeStartPageKey = sanitizedStartPage
+            )
 
             repository.updateSettings(current)
         }

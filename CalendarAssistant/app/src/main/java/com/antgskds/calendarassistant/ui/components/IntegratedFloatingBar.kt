@@ -47,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.data.model.HomeEntryKey
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
@@ -70,12 +71,10 @@ fun IntegratedFloatingBar(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     isSidebarOpen: Boolean = false,
-    noteEnabled: Boolean = false,
-    selectedTab: Int,
+    navItems: List<String>,
+    selectedPageKey: String,
     onMenuClick: () -> Unit,
-    onHomeClick: () -> Unit,
-    onNoteClick: () -> Unit = {},
-    onListClick: () -> Unit,
+    onPageClick: (String) -> Unit,
     onSearchClick: () -> Unit,
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
@@ -102,9 +101,12 @@ fun IntegratedFloatingBar(
     val navHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val navItemWidth = 72.dp
-    val navItemSpacing = if (noteEnabled) 0.dp else 4.dp
+    val normalizedNavItems = navItems.distinct().filter {
+        it == HomeEntryKey.TODAY || it == HomeEntryKey.NOTE || it == HomeEntryKey.ALL
+    }
+    val navItemSpacing = if (normalizedNavItems.size >= 3) 0.dp else 4.dp
     val navPaddingHorizontal = 6.dp
-    val navItemCount = if (noteEnabled) 4f else 3f
+    val navItemCount = normalizedNavItems.size.toFloat() + 1f
 
     val navExpandedWidth = navItemWidth * navItemCount + navItemSpacing * (navItemCount - 1f) + navPaddingHorizontal * 2f
     val navCollapsedWidth = navHeight
@@ -128,16 +130,22 @@ fun IntegratedFloatingBar(
     val todayIcon = painterResource(R.drawable.floatingbar_today)
     val noteIcon = painterResource(R.drawable.ic_stat_note)
     val allIcon = painterResource(R.drawable.floatingbar_all)
-    val currentTabIcon = when {
-        selectedTab == 0 -> todayIcon
-        noteEnabled && selectedTab == 1 -> noteIcon
-        else -> allIcon
+
+    fun iconForPageKey(key: String): Painter {
+        return when (key) {
+            HomeEntryKey.TODAY -> todayIcon
+            HomeEntryKey.NOTE -> noteIcon
+            else -> allIcon
+        }
     }
-    val currentTabClick = when {
-        selectedTab == 0 -> onHomeClick
-        noteEnabled && selectedTab == 1 -> onNoteClick
-        else -> onListClick
+
+    val effectiveSelectedKey = if (selectedPageKey in normalizedNavItems) {
+        selectedPageKey
+    } else {
+        normalizedNavItems.firstOrNull() ?: HomeEntryKey.TODAY
     }
+    val currentTabIcon = iconForPageKey(effectiveSelectedKey)
+    val currentTabClick = { onPageClick(effectiveSelectedKey) }
 
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
     Box(
@@ -184,10 +192,10 @@ fun IntegratedFloatingBar(
                         )
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.padding(horizontal = navPaddingHorizontal, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(navItemSpacing)
+                        Row(
+                            modifier = Modifier.padding(horizontal = navPaddingHorizontal, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(navItemSpacing)
                     ) {
                         HydrogenNavIcon(
                             icon = menuIcon,
@@ -198,34 +206,16 @@ fun IntegratedFloatingBar(
                             width = navItemWidth
                         )
 
-                        HydrogenNavIcon(
-                            icon = todayIcon,
-                            isSelected = isTabHighlightEnabled && selectedTab == 0,
-                            indicatorColor = navIndicator,
-                            contentColor = navContent,
-                            onClick = onHomeClick,
-                            width = navItemWidth
-                        )
-
-                        if (noteEnabled) {
+                        normalizedNavItems.forEach { key ->
                             HydrogenNavIcon(
-                                icon = noteIcon,
-                                isSelected = isTabHighlightEnabled && selectedTab == 1,
+                                icon = iconForPageKey(key),
+                                isSelected = isTabHighlightEnabled && effectiveSelectedKey == key,
                                 indicatorColor = navIndicator,
                                 contentColor = navContent,
-                                onClick = onNoteClick,
+                                onClick = { onPageClick(key) },
                                 width = navItemWidth
                             )
                         }
-
-                        HydrogenNavIcon(
-                            icon = allIcon,
-                            isSelected = isTabHighlightEnabled && selectedTab == if (noteEnabled) 2 else 1,
-                            indicatorColor = navIndicator,
-                            contentColor = navContent,
-                            onClick = onListClick,
-                            width = navItemWidth
-                        )
                     }
                 }
             }

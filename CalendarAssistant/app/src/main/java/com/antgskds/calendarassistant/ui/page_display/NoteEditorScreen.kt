@@ -4,11 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -66,6 +69,7 @@ fun NoteEditorScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val savedTitle = initialNote?.title?.takeUnless { it.isBlank() } ?: ""
     val savedMarkdown = initialNote?.noteMarkdown().orEmpty()
     val fallbackColor = MaterialTheme.colorScheme.primary
@@ -102,117 +106,120 @@ fun NoteEditorScreen(
 
     BackHandler(onBack = ::saveAndDismiss)
 
-    Scaffold(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(if (initialNote == null) "新建便签" else "编辑便签") },
-                navigationIcon = {
-                    IconButton(onClick = ::saveAndDismiss) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                },
-                actions = {
-                    if (initialNote != null) {
-                        IconButton(onClick = { onDelete(initialNote) }) {
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text(if (initialNote == null) "新建便签" else "编辑便签") },
+                    navigationIcon = {
+                        IconButton(onClick = ::saveAndDismiss) {
                             Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "删除",
-                                modifier = Modifier.size(26.dp)
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                                modifier = Modifier.size(28.dp)
                             )
                         }
-                    } else {
-                        Box(modifier = Modifier.width(48.dp))
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    val config = settings.activeAiConfig()
-                    if (!config.isConfigured()) {
-                        onShowMessage(config.missingConfigMessage(), ToastType.ERROR)
-                        return@FloatingActionButton
-                    }
-                    val markdown = bodyText.trim()
-                    val text = buildString {
-                        if (titleText.isNotBlank()) appendLine(titleText.trim())
-                        if (markdown.isNotBlank()) append(markdown)
-                    }.trim()
-                    if (text.isBlank()) {
-                        onShowMessage("便签内容为空", ToastType.INFO)
-                        return@FloatingActionButton
-                    }
-                    scope.launch {
-                        isAnalyzing = true
-                        try {
-                            when (val result = withContext(Dispatchers.IO) {
-                                RecognitionProcessor.parseUserText(text, settings, context.applicationContext)
-                            }) {
-                                is AnalysisResult.Success -> {
-                                    onAnalyzeResult(
-                                        convertAiEventToMyEvent(
-                                            eventData = result.data,
-                                            currentEventsCount = currentEventsCount,
-                                            sourceImagePath = null
-                                        )
-                                    )
-                                }
-
-                                is AnalysisResult.Empty -> onShowMessage(result.message, ToastType.INFO)
-                                is AnalysisResult.Failure -> onShowMessage(result.failure.fullMessage(), ToastType.ERROR)
+                    },
+                    actions = {
+                        if (initialNote != null) {
+                            IconButton(onClick = { onDelete(initialNote) }) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "删除",
+                                    modifier = Modifier.size(28.dp)
+                                )
                             }
-                        } finally {
-                            isAnalyzing = false
+                        } else {
+                            Box(modifier = Modifier.width(48.dp))
                         }
                     }
-                },
+                )
+            }
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(end = 24.dp, bottom = 32.dp)
-                    .size(72.dp),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
             ) {
-                if (isAnalyzing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(34.dp),
-                        strokeWidth = 2.2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "AI 分析",
-                        modifier = Modifier.size(34.dp)
-                    )
-                }
+                BlockNoteEditor(
+                    title = titleText,
+                    onTitleChange = { titleText = it },
+                    markdown = bodyText,
+                    onMarkdownChange = { bodyText = it },
+                    controller = editorController,
+                    modifier = Modifier.fillMaxSize(),
+                    textColor = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
-    ) { innerPadding ->
-        Box(
+
+        FloatingActionButton(
+            onClick = {
+                val config = settings.activeAiConfig()
+                if (!config.isConfigured()) {
+                    onShowMessage(config.missingConfigMessage(), ToastType.ERROR)
+                    return@FloatingActionButton
+                }
+                val markdown = bodyText.trim()
+                val text = buildString {
+                    if (titleText.isNotBlank()) appendLine(titleText.trim())
+                    if (markdown.isNotBlank()) append(markdown)
+                }.trim()
+                if (text.isBlank()) {
+                    onShowMessage("便签内容为空", ToastType.INFO)
+                    return@FloatingActionButton
+                }
+                scope.launch {
+                    isAnalyzing = true
+                    try {
+                        when (val result = withContext(Dispatchers.IO) {
+                            RecognitionProcessor.parseUserText(text, settings, context.applicationContext)
+                        }) {
+                            is AnalysisResult.Success -> {
+                                onAnalyzeResult(
+                                    convertAiEventToMyEvent(
+                                        eventData = result.data,
+                                        currentEventsCount = currentEventsCount,
+                                        sourceImagePath = null
+                                    )
+                                )
+                            }
+
+                            is AnalysisResult.Empty -> onShowMessage(result.message, ToastType.INFO)
+                            is AnalysisResult.Failure -> onShowMessage(result.failure.fullMessage(), ToastType.ERROR)
+                        }
+                    } finally {
+                        isAnalyzing = false
+                    }
+                }
+            },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding()
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 32.dp + bottomInset)
+                .size(72.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            BlockNoteEditor(
-                title = titleText,
-                onTitleChange = { titleText = it },
-                markdown = bodyText,
-                onMarkdownChange = { bodyText = it },
-                controller = editorController,
-                modifier = Modifier.fillMaxSize(),
-                textColor = MaterialTheme.colorScheme.onSurface
-            )
+            if (isAnalyzing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(34.dp),
+                    strokeWidth = 2.2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = "AI 分析",
+                    modifier = Modifier.size(34.dp)
+                )
+            }
         }
     }
 }

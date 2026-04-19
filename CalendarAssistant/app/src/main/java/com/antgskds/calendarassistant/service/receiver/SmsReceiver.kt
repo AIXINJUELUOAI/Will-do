@@ -67,9 +67,6 @@ class SmsReceiver : BroadcastReceiver() {
 
                     Log.d(TAG, "[探针] 收到短信 from=$sender, body=${body.take(80)}...")
 
-                    // 仅处理 106 开头的号码
-                    if (!sender.startsWith("106")) continue
-
                     // 解析 → CalendarEventData（与 AI 识屏输出格式一致）
                     val eventData = SmsAnalysis.parse(sender, body)
                     if (eventData == null) {

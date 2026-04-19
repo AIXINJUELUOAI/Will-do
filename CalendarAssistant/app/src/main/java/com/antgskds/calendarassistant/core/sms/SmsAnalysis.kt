@@ -49,6 +49,14 @@ object SmsAnalysis {
         """(?i)(地址|收货地址|送货地址|位于|放至|已到达|到达|已到|送达|已放入|已存放至|已存放|放入)[\s\S]*?([\w\s-]+?(?:门牌|驿站|快递点|门面|柜|,|，|。|$))"""
     )
 
+    private val quickCodePattern: Pattern = Pattern.compile(
+        """(?i)(请用|请凭|凭)\s*([A-Za-z0-9-]{3,12})"""
+    )
+
+    private val strictCodePattern: Pattern = Pattern.compile(
+        """(?i)(取件码|提货号|取货码|提货码|签收码|签收编号|提货编码|收货编码|签收编码)\s*[:：]?\s*\*?([A-Za-z0-9-]{3,12})"""
+    )
+
     // ==================== 平台识别 ====================
 
     private val foodKeywords = setOf(
@@ -144,6 +152,22 @@ object SmsAnalysis {
                     .trim()
             }.ifBlank { null }
         }
+
+        val hasPickupContext = Regex("取件|提货|取货|快递|包裹|驿站|货架").containsMatchIn(body)
+        if (hasPickupContext) {
+            val strict = strictCodePattern.matcher(body)
+            if (strict.find()) {
+                val code = strict.group(2)?.trim()?.trimStart('*')
+                if (!code.isNullOrBlank()) return code
+            }
+
+            val quick = quickCodePattern.matcher(body)
+            if (quick.find()) {
+                val code = quick.group(2)?.trim()?.trimStart('*')
+                if (!code.isNullOrBlank()) return code
+            }
+        }
+
         return null
     }
 

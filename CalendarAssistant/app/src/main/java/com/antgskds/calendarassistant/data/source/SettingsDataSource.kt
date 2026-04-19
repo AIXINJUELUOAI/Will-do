@@ -74,7 +74,7 @@ class SettingsDataSource(context: Context) {
         // 旧版没有 pickupAggregation，这里使用默认值 false
         return MySettings(
             modelKey = prefs.getString("model_key", "") ?: "",
-            modelName = prefs.getString("model_name", "") ?: "gpt-3.5-turbo",
+            modelName = prefs.getString("model_name", "") ?: "",
             modelUrl = prefs.getString("model_url", "") ?: "",
             modelProvider = prefs.getString("model_provider", "") ?: "",
             useMultimodalAi = false,

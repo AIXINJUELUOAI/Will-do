@@ -7,7 +7,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,32 +31,77 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.core.ai.ApiModelProvider
+import com.antgskds.calendarassistant.core.ai.ModelListResult
 import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private const val PROVIDER_DEEPSEEK = "DeepSeek"
+private const val PROVIDER_OPENAI = "OpenAI"
+private const val PROVIDER_GEMINI = "Gemini"
+private const val PROVIDER_CUSTOM = "自定义"
+
+private data class ProviderPreset(
+    val models: List<String>,
+    val endpointBuilder: (String) -> String
+)
+
+private val providerPresets = mapOf(
+    PROVIDER_DEEPSEEK to ProviderPreset(
+        models = listOf("deepseek-chat", "deepseek-reasoner", "deepseek-coder"),
+        endpointBuilder = { "https://api.deepseek.com/chat/completions" }
+    ),
+    PROVIDER_OPENAI to ProviderPreset(
+        models = listOf("gpt-5.4", "gpt-5.4-mini", "gpt-5.3", "gpt-5.2"),
+        endpointBuilder = { "https://api.openai.com/v1/chat/completions" }
+    ),
+    PROVIDER_GEMINI to ProviderPreset(
+        models = listOf("gemini-3.1", "gemini-3.1-flash", "gemini-3-deep-think", "gemini-2.5"),
+        endpointBuilder = { model ->
+            val fallback = if (model.isBlank()) "gemini-3.1-flash" else model
+            "https://generativelanguage.googleapis.com/v1beta/models/$fallback:generateContent"
+        }
+    )
+)
+
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun AiSettingsPage(
     viewModel: SettingsViewModel,
@@ -53,6 +112,7 @@ fun AiSettingsPage(
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
     val isMultimodalEnabled = settings.useMultimodalAi
@@ -60,55 +120,52 @@ fun AiSettingsPage(
     var textModelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
     var textModelName by remember(settings) { mutableStateOf(settings.modelName) }
     var textModelKey by remember(settings) { mutableStateOf(settings.modelKey) }
+    var textProvider by remember(settings) { mutableStateOf(detectProvider(settings.modelUrl)) }
+    var textCustomModels by remember(settings) { mutableStateOf(emptyList<String>()) }
+    var textFetchedSignature by remember(settings) { mutableStateOf<String?>(null) }
 
     var mmModelUrl by remember(settings) { mutableStateOf(settings.mmModelUrl) }
     var mmModelName by remember(settings) { mutableStateOf(settings.mmModelName) }
     var mmModelKey by remember(settings) { mutableStateOf(settings.mmModelKey) }
+    var mmProvider by remember(settings) { mutableStateOf(detectProvider(settings.mmModelUrl)) }
+    var mmCustomModels by remember(settings) { mutableStateOf(emptyList<String>()) }
+    var mmFetchedSignature by remember(settings) { mutableStateOf<String?>(null) }
 
+    var isProviderExpanded by remember { mutableStateOf(false) }
+    var isModelExpanded by remember { mutableStateOf(false) }
+    var actionLoading by remember { mutableStateOf(false) }
+
+    val activeProvider = if (isMultimodalEnabled) mmProvider else textProvider
     val activeModelUrl = if (isMultimodalEnabled) mmModelUrl else textModelUrl
     val activeModelName = if (isMultimodalEnabled) mmModelName else textModelName
     val activeModelKey = if (isMultimodalEnabled) mmModelKey else textModelKey
+    val activeCustomModels = if (isMultimodalEnabled) mmCustomModels else textCustomModels
+    val activeFetchedSignature = if (isMultimodalEnabled) mmFetchedSignature else textFetchedSignature
+    val effectiveModelName = if (
+        activeProvider == PROVIDER_CUSTOM &&
+        activeModelUrl.isBlank() &&
+        activeModelKey.isBlank() &&
+        activeCustomModels.isEmpty() &&
+        activeModelName == "gpt-3.5-turbo"
+    ) "" else activeModelName
 
-    val onModelUrlChange: (String) -> Unit = { newValue ->
-        if (isMultimodalEnabled) mmModelUrl = newValue else textModelUrl = newValue
-    }
-    val onModelNameChange: (String) -> Unit = { newValue ->
-        if (isMultimodalEnabled) mmModelName = newValue else textModelName = newValue
-    }
-    val onModelKeyChange: (String) -> Unit = { newValue ->
-        if (isMultimodalEnabled) mmModelKey = newValue else textModelKey = newValue
-    }
-
-    // 统一 FAB 尺寸为 72.dp，图标 34.dp
-    val fabSize = 72.dp
-    val fabIconSize = 34.dp
-
-    // --- 样式定义优化 (Material 3) ---
-    // 板块标题：加粗 + 主色
-val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )
-    // 卡片标题：中等字重 + 黑色 (OnSurface)
     val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface
     )
-    // 右侧数值/只读状态：常规字重 + 灰色 (OnSurfaceVariant)
     val cardValueStyle = MaterialTheme.typography.bodyLarge.copy(
         fontWeight = FontWeight.Normal,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    // 副标题/提示：Grey + Transparent
     val cardSubtitleStyle = MaterialTheme.typography.bodyLarge.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
-    val contentBodyStyle = MaterialTheme.typography.bodyMedium
 
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val focusManager = LocalFocusManager.current
-
-    fun showToast(message: String, type: ToastType) {
+    fun showToast(message: String, type: ToastType = ToastType.SUCCESS) {
         currentToastType = type
         scope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
@@ -116,11 +173,180 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         }
     }
 
+    fun setActiveProvider(value: String) {
+        if (isMultimodalEnabled) mmProvider = value else textProvider = value
+    }
+
+    fun setActiveUrl(value: String) {
+        if (isMultimodalEnabled) mmModelUrl = value else textModelUrl = value
+    }
+
+    fun setActiveName(value: String) {
+        if (isMultimodalEnabled) mmModelName = value else textModelName = value
+    }
+
+    fun setActiveKey(value: String) {
+        if (isMultimodalEnabled) mmModelKey = value else textModelKey = value
+    }
+
+    fun setActiveCustomModels(value: List<String>) {
+        if (isMultimodalEnabled) mmCustomModels = value else textCustomModels = value
+    }
+
+    fun setActiveFetchedSignature(value: String?) {
+        if (isMultimodalEnabled) mmFetchedSignature = value else textFetchedSignature = value
+    }
+
+    fun applyProviderPreset(provider: String) {
+        setActiveProvider(provider)
+        if (provider == PROVIDER_CUSTOM) {
+            setActiveUrl("")
+            setActiveName("")
+            setActiveFetchedSignature(null)
+            setActiveCustomModels(emptyList())
+            return
+        }
+
+        val preset = providerPresets[provider] ?: return
+        val nextModel = if (effectiveModelName in preset.models) {
+            effectiveModelName
+        } else {
+            preset.models.firstOrNull().orEmpty()
+        }
+        setActiveName(nextModel)
+        setActiveUrl(preset.endpointBuilder(nextModel))
+        setActiveFetchedSignature(null)
+        setActiveCustomModels(emptyList())
+    }
+
+    suspend fun saveCurrent(url: String, name: String, key: String) {
+        if (isMultimodalEnabled) {
+            viewModel.updateMultimodalAiSettings(key.trim(), name.trim(), url.trim())
+        } else {
+            viewModel.updateAiSettings(key.trim(), name.trim(), url.trim())
+        }
+        showToast("配置保存成功")
+    }
+
+    suspend fun fetchCustomModelsThenWaitChoose() {
+        if (activeModelUrl.isBlank() || activeModelKey.isBlank()) {
+            showToast("请先填写 API 地址和 API Key", ToastType.ERROR)
+            return
+        }
+
+        val normalizedUrl = normalizeCustomApiUrl(activeModelUrl)
+        if (normalizedUrl != activeModelUrl) {
+            setActiveUrl(normalizedUrl)
+        }
+
+        val signature = "${normalizedUrl.trim()}|${activeModelKey.trim()}"
+        actionLoading = true
+        when (val result = ApiModelProvider.fetchAvailableModels(activeModelKey.trim(), normalizedUrl.trim())) {
+            is ModelListResult.Success -> {
+                setActiveCustomModels(result.models)
+                setActiveFetchedSignature(signature)
+                if (activeModelName !in result.models) {
+                    setActiveName("")
+                }
+                isModelExpanded = true
+                showToast("连接成功")
+            }
+            is ModelListResult.Failure -> {
+                val errorCode = Regex("\\b(\\d{3})\\b")
+                    .find(result.message)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?: "UNKNOWN"
+                showToast("连接失败 $errorCode", ToastType.ERROR)
+            }
+        }
+        actionLoading = false
+    }
+
+    suspend fun onSaveClick() {
+        if (activeProvider != PROVIDER_CUSTOM) {
+            if (activeModelKey.isBlank()) {
+                showToast("请先填写 API Key", ToastType.ERROR)
+                return
+            }
+            val preset = providerPresets[activeProvider] ?: return
+            val finalModel = if (effectiveModelName.isBlank()) {
+                preset.models.firstOrNull().orEmpty()
+            } else {
+                effectiveModelName
+            }
+            val finalUrl = preset.endpointBuilder(finalModel)
+            setActiveName(finalModel)
+            setActiveUrl(finalUrl)
+            saveCurrent(finalUrl, finalModel, activeModelKey)
+            return
+        }
+
+        if (activeModelUrl.isBlank() || activeModelKey.isBlank()) {
+            showToast("请先填写 API 地址和 API Key", ToastType.ERROR)
+            return
+        }
+
+        val normalizedUrl = normalizeCustomApiUrl(activeModelUrl)
+        val signature = "${normalizedUrl.trim()}|${activeModelKey.trim()}"
+        val fetchedReady = activeFetchedSignature == signature && activeCustomModels.isNotEmpty()
+
+        if (!fetchedReady) {
+            fetchCustomModelsThenWaitChoose()
+            return
+        }
+
+        if (effectiveModelName.isBlank()) {
+            isModelExpanded = true
+            showToast("请先选择模型名称", ToastType.ERROR)
+            return
+        }
+
+        saveCurrent(normalizedUrl, effectiveModelName, activeModelKey)
+    }
+
+    val modelOptions = if (activeProvider == PROVIDER_CUSTOM) {
+        activeCustomModels
+    } else {
+        providerPresets[activeProvider]?.models.orEmpty()
+    }
+    val modelDisplay = when {
+        effectiveModelName.isNotBlank() -> effectiveModelName
+        activeProvider == PROVIDER_CUSTOM -> "点击保存按钮测试并拉取模型"
+        else -> "请选择模型"
+    }
+
+    val onModelUrlChange: (String) -> Unit = { newValue ->
+        setActiveUrl(newValue)
+        if (activeProvider == PROVIDER_CUSTOM) {
+            setActiveFetchedSignature(null)
+            setActiveCustomModels(emptyList())
+
+            val inferredProvider = detectProvider(newValue)
+            if (inferredProvider != PROVIDER_CUSTOM) {
+                applyProviderPreset(inferredProvider)
+                isProviderExpanded = true
+                isModelExpanded = true
+            }
+        }
+    }
+
+    val onModelNameChange: (String) -> Unit = { newValue -> setActiveName(newValue) }
+    val onModelKeyChange: (String) -> Unit = {
+        setActiveKey(it)
+        if (activeProvider == PROVIDER_CUSTOM) {
+            setActiveFetchedSignature(null)
+        }
+    }
+
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val modeLabel = if (isMultimodalEnabled) "多模态AI" else "文本AI"
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) { focusManager.clearFocus() }
     ) {
@@ -132,48 +358,49 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 .padding(bottom = 120.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val modeLabel = if (isMultimodalEnabled) "多模态AI" else "文本AI"
-
-            // 参数配置板块标题
             Text("参数配置", style = sectionTitleStyle)
             Text(
                 text = "当前模式：$modeLabel（在偏好设置中切换）",
                 style = cardSubtitleStyle
             )
 
-
             AiConfigForm(
-                initialUrl = activeModelUrl,
-                initialName = activeModelName,
-                initialKey = activeModelKey,
+                selectedProvider = activeProvider,
+                currentUrl = activeModelUrl,
+                currentModel = modelDisplay,
+                currentApiKey = activeModelKey,
+                modelOptions = modelOptions,
+                modelHint = "",
+                isProviderExpanded = isProviderExpanded,
+                isModelExpanded = isModelExpanded,
+                onProviderExpandedChange = { isProviderExpanded = it },
+                onModelExpandedChange = { isModelExpanded = it },
+                onProviderSelected = { provider ->
+                    applyProviderPreset(provider)
+                    isProviderExpanded = false
+                    isModelExpanded = false
+                },
                 onUrlChange = onModelUrlChange,
-                onNameChange = onModelNameChange,
+                onModelSelected = { model ->
+                    onModelNameChange(model)
+                    if (activeProvider == PROVIDER_GEMINI) {
+                        val endpoint = providerPresets[PROVIDER_GEMINI]?.endpointBuilder?.invoke(model).orEmpty()
+                        if (endpoint.isNotBlank()) onModelUrlChange(endpoint)
+                    }
+                    isModelExpanded = false
+                },
                 onKeyChange = onModelKeyChange,
                 cardTitleStyle = cardTitleStyle,
                 cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle,
-                contentBodyStyle = contentBodyStyle
+                customMode = activeProvider == PROVIDER_CUSTOM
             )
         }
 
         FloatingActionButton(
             onClick = {
-                if (isMultimodalEnabled) {
-                    viewModel.updateMultimodalAiSettings(
-                        mmModelKey.trim(),
-                        mmModelName.trim(),
-                        mmModelUrl.trim()
-                    )
-                } else {
-                    viewModel.updateAiSettings(
-                        textModelKey.trim(),
-                        textModelName.trim(),
-                        textModelUrl.trim()
-                    )
-                }
-                scope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(message = "配置保存成功", duration = SnackbarDuration.Short)
+                if (!actionLoading) {
+                    scope.launch { onSaveClick() }
                 }
             },
             shape = CircleShape,
@@ -182,9 +409,17 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 24.dp, bottom = 32.dp + bottomInset)
-                .size(fabSize)
+                .size(72.dp)
         ) {
-            Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(fabIconSize))
+            if (actionLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(30.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(34.dp))
+            }
         }
 
         SnackbarHost(
@@ -195,55 +430,36 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
     }
+
+    LaunchedEffect(isMultimodalEnabled) {
+        isProviderExpanded = false
+        isModelExpanded = false
+    }
 }
 
 @Composable
 private fun AiConfigForm(
-    initialUrl: String,
-    initialName: String,
-    initialKey: String,
+    selectedProvider: String,
+    currentUrl: String,
+    currentModel: String,
+    currentApiKey: String,
+    modelOptions: List<String>,
+    modelHint: String,
+    isProviderExpanded: Boolean,
+    isModelExpanded: Boolean,
+    onProviderExpandedChange: (Boolean) -> Unit,
+    onModelExpandedChange: (Boolean) -> Unit,
+    onProviderSelected: (String) -> Unit,
     onUrlChange: (String) -> Unit,
-    onNameChange: (String) -> Unit,
+    onModelSelected: (String) -> Unit,
     onKeyChange: (String) -> Unit,
     cardTitleStyle: TextStyle,
-    cardValueStyle: TextStyle, // 传入的是灰色的样式
+    cardValueStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
-    contentBodyStyle: TextStyle
+    customMode: Boolean
 ) {
-    val currentUrl = initialUrl
-    val currentModel = initialName
-
-    val initialProvider = when {
-        currentUrl.contains("deepseek") -> "DeepSeek"
-        currentUrl.contains("openai") -> "OpenAI"
-        currentUrl.contains("googleapis") -> "Gemini"
-        currentUrl.isBlank() && currentModel.isBlank() -> "DeepSeek"
-        else -> "自定义"
-    }
-
-    var selectedProvider by remember { mutableStateOf(initialProvider) }
-    var isProviderExpanded by remember { mutableStateOf(initialKey.isBlank()) }
-    var isModelExpanded by remember { mutableStateOf(initialKey.isBlank()) }
-
-    LaunchedEffect(initialKey) {
-        if (initialKey.isBlank()) {
-            isProviderExpanded = true
-            isModelExpanded = true
-        }
-    }
-
-    LaunchedEffect(selectedProvider) {
-        if (selectedProvider != "自定义") {
-            onUrlChange(
-                when (selectedProvider) {
-                    "DeepSeek" -> "https://api.deepseek.com/chat/completions"
-                    "OpenAI" -> "https://api.openai.com/v1/chat/completions"
-                    "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-                    else -> ""
-                }
-            )
-        }
-    }
+    val canExpandModel = modelOptions.isNotEmpty()
+    val canToggleModel = canExpandModel || isModelExpanded
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -256,71 +472,35 @@ private fun AiConfigForm(
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
         ) {
-            // 1. 服务提供商
             ExpandableSelectionItem(
                 title = "服务提供商",
                 currentValue = selectedProvider,
                 isExpanded = isProviderExpanded,
-                onToggle = { isProviderExpanded = !isProviderExpanded },
-                options = listOf("DeepSeek", "OpenAI", "Gemini", "自定义"),
-                onOptionSelected = {
-                    selectedProvider = it
-                    isProviderExpanded = false
-                    // 切换到"自定义"时自动清空模型名称和 API 地址
-                    if (it == "自定义") {
-                        onNameChange("")
-                        onUrlChange("")
-                    }
-                },
+                onToggle = { onProviderExpandedChange(!isProviderExpanded) },
+                options = listOf(PROVIDER_DEEPSEEK, PROVIDER_OPENAI, PROVIDER_GEMINI, PROVIDER_CUSTOM),
+                onOptionSelected = onProviderSelected,
                 cardTitleStyle = cardTitleStyle,
-                cardValueStyle = cardValueStyle // 灰色显示
+                cardValueStyle = cardValueStyle
             )
 
             MyDivider()
 
-            // 2. 模型名称
-            if (selectedProvider != "自定义") {
-                val models = when(selectedProvider) {
-                    "DeepSeek" -> listOf("deepseek-chat", "deepseek-coder", "deepseek-reasoner")
-                    "OpenAI" -> listOf("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo")
-                    "Gemini" -> listOf("gemini-1.5-flash", "gemini-1.5-pro")
-                    else -> emptyList()
-                }
-
-                ExpandableSelectionItem(
-                    title = "模型名称",
-                    currentValue = initialName.ifBlank { "请选择模型" },
-                    isExpanded = isModelExpanded,
-                    onToggle = { isModelExpanded = !isModelExpanded },
-                    options = models,
-                    onOptionSelected = {
-                        onNameChange(it)
-                        isModelExpanded = false
-                        if (selectedProvider == "Gemini") {
-                            onUrlChange("https://generativelanguage.googleapis.com/v1beta/models/$it:generateContent")
-                        }
-                    },
-                    cardTitleStyle = cardTitleStyle,
-                    cardValueStyle = cardValueStyle
-                )
-            } else {
-                TextInputItem(
-                    title = "模型名称",
-                    value = initialName,
-                    onValueChange = onNameChange,
-                    placeholder = "输入模型名称",
-                    cardTitleStyle = cardTitleStyle,
-                    cardValueStyle = cardValueStyle,
+            TextInputItem(
+                title = "API 地址",
+                value = currentUrl,
+                onValueChange = onUrlChange,
+                placeholder = if (customMode) "输入 API 地址" else "按模板自动生成",
+                readOnly = !customMode,
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle
             )
-        }
 
             MyDivider()
 
-            // 3. API Key
             TextInputItem(
                 title = "API Key",
-                value = initialKey,
+                value = currentApiKey,
                 onValueChange = onKeyChange,
                 placeholder = "点击输入 Key",
                 cardTitleStyle = cardTitleStyle,
@@ -330,16 +510,21 @@ private fun AiConfigForm(
 
             MyDivider()
 
-            // 4. API Endpoint
-            TextInputItem(
-                title = "API 地址",
-                value = initialUrl,
-                onValueChange = onUrlChange,
-                readOnly = selectedProvider != "自定义",
-                placeholder = "API 请求地址",
+            ExpandableSelectionItem(
+                title = "模型名称",
+                currentValue = currentModel,
+                isExpanded = isModelExpanded,
+                onToggle = {
+                    if (canToggleModel) {
+                        onModelExpandedChange(!isModelExpanded)
+                    }
+                },
+                options = modelOptions,
+                emptyHint = modelHint,
+                onOptionSelected = onModelSelected,
                 cardTitleStyle = cardTitleStyle,
                 cardValueStyle = cardValueStyle,
-                cardSubtitleStyle = cardSubtitleStyle
+                toggleEnabled = canToggleModel
             )
         }
     }
@@ -363,21 +548,28 @@ private fun ExpandableSelectionItem(
     options: List<String>,
     onOptionSelected: (String) -> Unit,
     cardTitleStyle: TextStyle,
-    cardValueStyle: TextStyle
+    cardValueStyle: TextStyle,
+    emptyHint: String = "",
+    toggleEnabled: Boolean = true
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
+        val rowModifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .then(
+                if (toggleEnabled) {
+                    Modifier.clickable { onToggle() }
+                } else {
+                    Modifier
+                }
+            )
+
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggle() }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = rowModifier,
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = title,
-                style = cardTitleStyle
-            )
+            Text(text = title, style = cardTitleStyle)
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -385,7 +577,6 @@ private fun ExpandableSelectionItem(
             ) {
                 Text(
                     text = currentValue,
-                    // 右侧显示当前值：如果是展开状态，稍微高亮一下（Primary），否则用灰色（cardValueStyle）
                     style = cardValueStyle,
                     color = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -393,7 +584,8 @@ private fun ExpandableSelectionItem(
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (toggleEnabled) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -404,27 +596,39 @@ private fun ExpandableSelectionItem(
             enter = expandVertically() + fadeIn(),
             exit = shrinkVertically() + fadeOut()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOptionSelected(option) }
-                            .heightIn(min = 48.dp)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = option,
-                            fontWeight = if (option == currentValue) FontWeight.Bold else FontWeight.Normal,
-                            color = if (option == currentValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            style = cardValueStyle
-                        )
+            if (options.isEmpty()) {
+                Text(
+                    text = emptyHint,
+                    style = cardValueStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOptionSelected(option) }
+                                .heightIn(min = 48.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = option,
+                                fontWeight = if (option == currentValue) FontWeight.Bold else FontWeight.Normal,
+                                color = if (option == currentValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                style = cardValueStyle
+                            )
+                        }
                     }
                 }
             }
@@ -515,4 +719,35 @@ private fun TextInputItem(
             }
         )
     }
+}
+
+private fun detectProvider(url: String): String {
+    if (url.isBlank()) return PROVIDER_CUSTOM
+    val lower = url.lowercase()
+    return when {
+        "deepseek" in lower -> PROVIDER_DEEPSEEK
+        "openai" in lower -> PROVIDER_OPENAI
+        "googleapis" in lower || "generativelanguage" in lower || "gemini" in lower -> PROVIDER_GEMINI
+        else -> PROVIDER_CUSTOM
+    }
+}
+
+private fun normalizeCustomApiUrl(rawUrl: String): String {
+    val trimmed = rawUrl.trim().trimEnd('/')
+    if (trimmed.isBlank()) return trimmed
+
+    val lower = trimmed.lowercase()
+    if (lower.contains(":generatecontent")) return trimmed
+    if (lower.endsWith("/v1/models")) return trimmed
+    if (lower.contains("/chat/completions")) return trimmed
+    if (lower.contains("googleapis") || lower.contains("generativelanguage") || lower.contains("gemini")) {
+        return trimmed
+    }
+    if (lower.endsWith("/v1")) {
+        return "$trimmed/chat/completions"
+    }
+    if (lower.contains("/v1/")) {
+        return trimmed
+    }
+    return "$trimmed/v1/chat/completions"
 }
