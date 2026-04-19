@@ -386,6 +386,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 Log.d(TAG, "无障碍服务可用，开始截屏识屏")
                 accessibilityService.startAnalysis(500.milliseconds)
                 finishPendingImagePick()
+                requestClose()
+                return@launch
             } else {
                 Log.w(TAG, "无障碍服务不可用，回退到图片选择")
                 Toast.makeText(applicationContext, "未开启无障碍服务，使用图片选择", Toast.LENGTH_SHORT).show()
@@ -592,6 +594,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        showFloatingWindow()
         return START_NOT_STICKY
     }
 

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
@@ -117,6 +118,7 @@ class EdgeBarService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "addView failed", e)
         }
+        updateGestureExclusion()
         updateVisibility()
     }
 
@@ -142,6 +144,18 @@ class EdgeBarService : Service() {
             windowManager.updateViewLayout(view, params)
         } catch (e: Exception) {
             Log.w(TAG, "updateViewLayout failed", e)
+        }
+        updateGestureExclusion()
+    }
+
+    private fun updateGestureExclusion() {
+        val view = barView ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        view.post {
+            val width = view.width
+            val height = view.height
+            if (width <= 0 || height <= 0) return@post
+            view.systemGestureExclusionRects = listOf(Rect(0, 0, width, height))
         }
     }
 
@@ -295,7 +309,14 @@ class EdgeBarService : Service() {
         hiddenByFloating = true
         updateVisibility()
         val intent = Intent(this, FloatingScheduleService::class.java)
-        startService(intent)
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "start floating failed", e)
+            hiddenByFloating = false
+            updateVisibility()
+            return
+        }
         serviceScope.launch {
             kotlinx.coroutines.delay(500)
             if (!FloatingScheduleService.isShowing) {
