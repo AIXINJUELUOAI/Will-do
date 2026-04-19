@@ -34,6 +34,8 @@ class SmsContentObserver(
 
     companion object {
         private const val TAG = "SmsContentObserver"
+        private const val PREFS_NAME = "sms_observer"
+        private const val KEY_LAST_PROCESSED_ID = "last_processed_id"
         private val SMS_URI: Uri = Telephony.Sms.CONTENT_URI
 
         // 记录上次处理到的短信 ID，避免重复处理（进程存活期间有效）
@@ -43,10 +45,26 @@ class SmsContentObserver(
         @Volatile private var lastOnChangeTs: Long = 0L
     }
 
+    private val pollHandler = Handler(Looper.getMainLooper())
+    private var polling = false
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            if (!polling) return
+            scanNewMessages("poll")
+            pollHandler.postDelayed(this, 4000L)
+        }
+    }
+
+    private val prefs by lazy {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
     fun register() {
         val contentResolver = context.contentResolver
         try {
-            // 初始化 lastProcessedId 为当前最新短信 ID
+            val persistedId = prefs.getLong(KEY_LAST_PROCESSED_ID, -1L)
+
+            // 初始化 lastProcessedId：优先使用持久化值；首次运行回看最近 5 条，减少漏识别
             val cursor = contentResolver.query(
                 SMS_URI,
                 arrayOf(Telephony.Sms._ID),
@@ -55,13 +73,21 @@ class SmsContentObserver(
             )
             cursor?.use {
                 if (it.moveToFirst()) {
-                    lastProcessedId = it.getLong(0)
-                    Log.d(TAG, "[探针] 初始化 lastProcessedId=$lastProcessedId")
+                    val latest = it.getLong(0)
+                    lastProcessedId = when {
+                        persistedId >= 0L -> persistedId
+                        latest > 5L -> latest - 5L
+                        else -> 0L
+                    }
+                    Log.d(TAG, "[探针] 初始化 lastProcessedId=$lastProcessedId (latest=$latest, persisted=$persistedId)")
                 }
             }
 
             contentResolver.registerContentObserver(SMS_URI, true, this)
             Log.d(TAG, "[探针] 短信 ContentObserver 已注册")
+
+            scanNewMessages("register")
+            startPolling()
         } catch (e: SecurityException) {
             Log.e(TAG, "[探针] 注册失败：缺少 READ_SMS 权限", e)
         } catch (e: Exception) {
@@ -71,6 +97,7 @@ class SmsContentObserver(
 
     fun unregister() {
         try {
+            stopPolling()
             context.contentResolver.unregisterContentObserver(this)
             Log.d(TAG, "[探针] 短信 ContentObserver 已注销")
         } catch (_: Exception) {}
@@ -86,6 +113,24 @@ class SmsContentObserver(
 
         Log.d(TAG, "[探针] 检测到短信数据库变化")
 
+        scanNewMessages("onChange")
+    }
+
+    private fun startPolling() {
+        if (polling) return
+        polling = true
+        pollHandler.postDelayed(pollRunnable, 4000L)
+        Log.d(TAG, "[探针] 短信轮询已启动")
+    }
+
+    private fun stopPolling() {
+        if (!polling) return
+        polling = false
+        pollHandler.removeCallbacks(pollRunnable)
+        Log.d(TAG, "[探针] 短信轮询已停止")
+    }
+
+    private fun scanNewMessages(reason: String) {
         val contentResolver = context.contentResolver
         val repository = getRepository() ?: return
 
@@ -115,7 +160,8 @@ class SmsContentObserver(
 
         // 更新 lastProcessedId
         lastProcessedId = newMessages.last().first
-        Log.d(TAG, "[探针] 发现 ${newMessages.size} 条新短信, latestId=$lastProcessedId")
+        prefs.edit().putLong(KEY_LAST_PROCESSED_ID, lastProcessedId).apply()
+        Log.d(TAG, "[探针] 发现 ${newMessages.size} 条新短信, latestId=$lastProcessedId, reason=$reason")
 
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope.launch {
@@ -135,12 +181,6 @@ class SmsContentObserver(
         body: String,
         smsId: Long
     ) {
-        // 仅处理 106 开头的号码
-        if (!sender.startsWith("106")) {
-            Log.d(TAG, "[探针] 跳过非106号码: $sender")
-            return
-        }
-
         Log.d(TAG, "[探针] 处理短信 id=$smsId from=$sender, body=${body.take(80)}...")
 
         val eventData = SmsAnalysis.parse(sender, body)

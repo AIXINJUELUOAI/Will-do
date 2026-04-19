@@ -48,7 +48,8 @@ enum class SettingsDestination {
     Donate,            // 捐赠开发者
 
     // 实验室
-    Laboratory         // 实验室功能
+    Laboratory,        // 实验室功能
+    BottomBarEditor    // 底栏编辑（从实验室入口进入）
 }
 
 @Composable

@@ -222,5 +222,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- 系统短信通知监听（用于 MIUI 等 ROM 对 SMS_RECEIVED 的兜底） -->
+        <service
+            android:name=".service.receiver.SmsNotificationListenerService"
+            android:enabled="true"
+            android:exported="false"
+            android:label="短信通知监听"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
     </application>
 </manifest>

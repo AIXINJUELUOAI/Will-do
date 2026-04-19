@@ -7,6 +7,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
@@ -47,6 +48,11 @@ sealed class ApiCallResult {
         val message: String = "",
         val rawBody: String? = null
     ) : ApiCallResult()
+}
+
+sealed class ModelListResult {
+    data class Success(val models: List<String>) : ModelListResult()
+    data class Failure(val message: String) : ModelListResult()
 }
 
 object ApiModelProvider {
@@ -220,6 +226,25 @@ object ApiModelProvider {
         }
     }
 
+    suspend fun fetchAvailableModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        if (apiKey.isBlank() || baseUrl.isBlank()) {
+            return ModelListResult.Failure("请先填写 API 地址和 API Key")
+        }
+
+        return try {
+            if (isGeminiEndpoint(baseUrl)) {
+                fetchGeminiModels(apiKey, baseUrl)
+            } else {
+                fetchOpenAiCompatibleModels(apiKey, baseUrl)
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("${e.javaClass.simpleName}: ${e.message.orEmpty()}")
+        }
+    }
+
     private suspend fun postJsonWithAuth(
         baseUrl: String,
         apiKey: String,
@@ -334,6 +359,11 @@ object ApiModelProvider {
         return lower.contains("openai.com") || lower.contains("/v1/chat/completions")
     }
 
+    private fun isGeminiEndpoint(baseUrl: String): Boolean {
+        val lower = baseUrl.lowercase()
+        return lower.contains("googleapis") || lower.contains("generativelanguage") || lower.contains("gemini")
+    }
+
     private fun shouldAttemptReasoning(
         disableThinking: Boolean,
         baseUrl: String,
@@ -396,6 +426,120 @@ object ApiModelProvider {
             if (!reasoningEffort.isNullOrBlank()) {
                 put("reasoning_effort", reasoningEffort)
             }
+        }
+    }
+
+    private suspend fun fetchOpenAiCompatibleModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        val modelsUrl = normalizeOpenAiModelsUrl(baseUrl)
+        val response = client.get {
+            url(modelsUrl)
+            bearerAuth(apiKey)
+        }
+        val rawBody = response.bodyAsText()
+
+        if (response.status.value !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val data = root.optJSONArray("data") ?: return ModelListResult.Failure("接口返回中无模型列表")
+            val models = mutableListOf<String>()
+            for (i in 0 until data.length()) {
+                val item = data.optJSONObject(i) ?: continue
+                val id = item.optString("id").trim()
+                if (id.isNotBlank()) {
+                    models += id
+                }
+            }
+
+            if (models.isEmpty()) {
+                ModelListResult.Failure("接口未返回可用模型")
+            } else {
+                ModelListResult.Success(models.distinct().sorted())
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
+        }
+    }
+
+    private suspend fun fetchGeminiModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        val modelsUrl = normalizeGeminiModelsUrl(baseUrl)
+        val finalUrl = if (modelsUrl.contains("?")) "$modelsUrl&key=$apiKey" else "$modelsUrl?key=$apiKey"
+
+        val response = client.get {
+            url(finalUrl)
+        }
+        val rawBody = response.bodyAsText()
+
+        if (response.status.value !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val data = root.optJSONArray("models") ?: return ModelListResult.Failure("接口返回中无模型列表")
+            val models = mutableListOf<String>()
+            for (i in 0 until data.length()) {
+                val item = data.optJSONObject(i) ?: continue
+                val methods = item.optJSONArray("supportedGenerationMethods")
+                val supportsGenerateContent = methods?.let { arr ->
+                    (0 until arr.length()).any { idx -> arr.optString(idx) == "generateContent" }
+                } ?: true
+                if (!supportsGenerateContent) continue
+
+                val rawName = item.optString("name").trim()
+                val cleaned = rawName.removePrefix("models/")
+                if (cleaned.isNotBlank()) {
+                    models += cleaned
+                }
+            }
+
+            if (models.isEmpty()) {
+                ModelListResult.Failure("接口未返回可用模型")
+            } else {
+                ModelListResult.Success(models.distinct().sorted())
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
+        }
+    }
+
+    private fun normalizeOpenAiModelsUrl(baseUrl: String): String {
+        val noQuery = baseUrl.trim().substringBefore("?").trimEnd('/')
+        return when {
+            noQuery.endsWith("/v1/models") -> noQuery
+            noQuery.endsWith("/v1") -> "$noQuery/models"
+            noQuery.endsWith("/chat/completions") -> {
+                noQuery.removeSuffix("/chat/completions") + "/models"
+            }
+            noQuery.contains("/v1/") -> {
+                noQuery.substringBefore("/v1/") + "/v1/models"
+            }
+            else -> "$noQuery/v1/models"
+        }
+    }
+
+    private fun normalizeGeminiModelsUrl(baseUrl: String): String {
+        val noQuery = baseUrl.trim().substringBefore("?").trimEnd('/')
+        return when {
+            noQuery.contains("/v1beta/models/") -> {
+                noQuery.substringBefore("/v1beta/models/") + "/v1beta/models"
+            }
+            noQuery.endsWith("/v1beta/models") -> noQuery
+            noQuery.endsWith(":generateContent") -> {
+                noQuery.substringBefore("/v1beta/models/") + "/v1beta/models"
+            }
+            noQuery.contains("/v1beta/") -> {
+                noQuery.substringBefore("/v1beta/") + "/v1beta/models"
+            }
+            else -> "$noQuery/v1beta/models"
         }
     }
 

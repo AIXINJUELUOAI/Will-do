@@ -40,6 +40,7 @@ import com.antgskds.calendarassistant.ui.page_display.settings.AboutPage
 import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage
 import com.antgskds.calendarassistant.ui.page_display.settings.BackupSettingsPage
+import com.antgskds.calendarassistant.ui.page_display.settings.BottomBarEditorPage
 import com.antgskds.calendarassistant.ui.page_display.settings.CourseManagerScreen
 import com.antgskds.calendarassistant.ui.page_display.settings.DonatePage
 import com.antgskds.calendarassistant.ui.page_display.settings.LaboratoryPage
@@ -67,6 +68,7 @@ private object SettingsRoutes {
     const val About = "settings_about"
     const val Donate = "settings_donate"
     const val Laboratory = "settings_laboratory"
+    const val BottomBarEditor = "settings_bottom_bar_editor"
 }
 
 private fun parseSettingsDestination(value: String): SettingsDestination {
@@ -92,6 +94,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.About -> SettingsRoutes.About
         SettingsDestination.Donate -> SettingsRoutes.Donate
         SettingsDestination.Laboratory -> SettingsRoutes.Laboratory
+        SettingsDestination.BottomBarEditor -> SettingsRoutes.BottomBarEditor
         SettingsDestination.Logout -> null
     }
 }
@@ -111,6 +114,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.About -> SettingsDestination.About
         SettingsRoutes.Donate -> SettingsDestination.Donate
         SettingsRoutes.Laboratory -> SettingsDestination.Laboratory
+        SettingsRoutes.BottomBarEditor -> SettingsDestination.BottomBarEditor
         else -> SettingsDestination.Preference
     }
 }
@@ -130,6 +134,7 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.About -> "关于应用"
         SettingsDestination.Donate -> "捐赠开发者"
         SettingsDestination.Laboratory -> "实验室"
+        SettingsDestination.BottomBarEditor -> "底栏编辑"
         SettingsDestination.Logout -> "退出应用"
     }
 }
@@ -216,7 +221,15 @@ private fun SettingsPageContent(
                         settingsViewModel = settingsViewModel
                     )
                     SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
-                    SettingsDestination.Laboratory -> LaboratoryPage(uiSize, settingsViewModel)
+                    SettingsDestination.Laboratory -> LaboratoryPage(
+                        uiSize = uiSize,
+                        settingsViewModel = settingsViewModel,
+                        onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
+                    )
+                    SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
+                        settingsViewModel = settingsViewModel,
+                        uiSize = uiSize
+                    )
                     SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
                     SettingsDestination.Archives,
                     SettingsDestination.Logout -> Unit
@@ -435,6 +448,16 @@ fun SettingsDetailScreen(
                     settingsPageComposable(SettingsRoutes.Laboratory) {
                         SettingsPageContent(
                             destination = SettingsDestination.Laboratory,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.BottomBarEditor) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.BottomBarEditor,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,

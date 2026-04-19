@@ -1,20 +1,15 @@
 package com.antgskds.calendarassistant.service.receiver
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.sms.SmsAnalysis
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
@@ -38,6 +33,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "SmsNotifyListener"
+        private val DEDUP_LOCK = Any()
 
         /** 去重：同一内容 2 秒内不重复处理 */
         @Volatile private var lastContent: String? = null
@@ -98,28 +94,6 @@ class SmsNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.d(TAG, "[探针] 通知监听服务已连接")
-
-        // Android 8.0+ 需要前台通知
-        if (Build.VERSION.SDK_INT >= 26) {
-            val channelId = "sms_notify_listener"
-            val mgr = getSystemService(NotificationManager::class.java)
-            if (mgr?.getNotificationChannel(channelId) == null) {
-                val ch = NotificationChannel(channelId, "短信通知监听", NotificationManager.IMPORTANCE_MIN).apply {
-                    setShowBadge(false)
-                    enableLights(false)
-                    enableVibration(false)
-                }
-                mgr?.createNotificationChannel(ch)
-            }
-            val notif = NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("短信通知监听")
-                .setContentText("监听已开启")
-                .setPriority(NotificationCompat.PRIORITY_MIN)
-                .setOngoing(true)
-                .build()
-            startForeground(1003, notif)
-        }
     }
 
     override fun onListenerDisconnected() {
@@ -158,7 +132,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
             // 去重：同一内容 2 秒内不重复处理
             val now = System.currentTimeMillis()
-            synchronized(this) {
+            synchronized(DEDUP_LOCK) {
                 if (lastContent == text && now - lastTs < 2000L) {
                     Log.d(TAG, "[探针] 重复通知，跳过: ${text.take(30)}")
                     return
@@ -172,7 +146,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
             // 延迟处理，确保短信已写入数据库（避免与广播通道重复入库）
             Thread {
                 try {
-                    Thread.sleep(1500L)
+                    Thread.sleep(1000L)
                     processNotification(context, text, pkg)
                 } catch (e: Exception) {
                     Log.e(TAG, "[探针] 通知处理异常", e)
@@ -187,12 +161,6 @@ class SmsNotificationListenerService : NotificationListenerService() {
      * 解析通知文本，提取取件码入库
      */
     private fun processNotification(context: Context, text: String, pkg: String) {
-        // 尝试从短信数据库检查是否已存在（避免与广播通道重复）
-        if (isAlreadyInInbox(context, text)) {
-            Log.d(TAG, "[探针] 文本已在短信箱中（可能已被广播通道处理），跳过: ${text.take(30)}")
-            return
-        }
-
         val eventData = SmsAnalysis.parse(pkg, text)
         if (eventData == null) {
             Log.d(TAG, "[探针] SmsAnalysis.parse 返回 null，未识别到取件码")
@@ -256,30 +224,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
         return null
     }
 
-    /**
-     * 检查短信是否已存在于收件箱（避免与广播通道重复）
-     */
-    private fun isAlreadyInInbox(context: Context, text: String): Boolean {
-        return try {
-            val cursor = context.contentResolver.query(
-                android.provider.Telephony.Sms.CONTENT_URI,
-                arrayOf(android.provider.Telephony.Sms.BODY),
-                "${android.provider.Telephony.Sms.BODY} = ?",
-                arrayOf(text),
-                null
-            )
-            val exists = cursor?.count ?: 0 > 0
-            cursor?.close()
-            exists
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     override fun onDestroy() {
-        try {
-            if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
-        } catch (_: Exception) {}
         super.onDestroy()
     }
 }
