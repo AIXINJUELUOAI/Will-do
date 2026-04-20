@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -36,7 +37,9 @@ class EventActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
-        val repository = (context.applicationContext as App).repository
+        val app = context.applicationContext as App
+        val repository = app.repository
+        val scheduleOperationApi = app.scheduleOperationApi
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         when (intent.action) {
@@ -45,10 +48,10 @@ class EventActionReceiver : BroadcastReceiver() {
                 scope.launch {
                     try {
                         if (eventId == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
-                            completeAllActivePickups(repository, context)
+                            completeAllActivePickups(repository, scheduleOperationApi, context)
                         } else {
                             val targetEventId = eventId ?: return@launch
-                            repository.performPrimaryRuleAction(targetEventId)
+                            scheduleOperationApi.performPrimaryRuleAction(targetEventId)
                         }
                     } finally {
                         pendingResult.finish()
@@ -64,6 +67,7 @@ class EventActionReceiver : BroadcastReceiver() {
      */
     private suspend fun completeAllActivePickups(
         repository: com.antgskds.calendarassistant.data.repository.AppRepository,
+        scheduleOperationApi: ScheduleOperationApi,
         context: Context
     ) {
         val now = java.time.LocalDateTime.now()
@@ -76,7 +80,7 @@ class EventActionReceiver : BroadcastReceiver() {
 
         // 批量完成所有活跃取件码
         activePickups.forEach { event ->
-            repository.completeScheduleEvent(event.id)
+            scheduleOperationApi.completeScheduleEvent(event.id)
         }
 
         // 取消聚合胶囊的通知

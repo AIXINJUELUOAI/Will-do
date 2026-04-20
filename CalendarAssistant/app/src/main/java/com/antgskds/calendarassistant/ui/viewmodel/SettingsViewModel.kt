@@ -3,24 +3,32 @@ package com.antgskds.calendarassistant.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.importer.ImportMode
-import com.antgskds.calendarassistant.core.importer.WakeUpCourseImporter
+import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.data.operation.AppRepositorySettingsOperationApi
+import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
+import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.data.repository.AppRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
-    private val repository: AppRepository
+    private val repository: AppRepository,
+    private val settingsOperationApi: SettingsOperationApi = AppRepositorySettingsOperationApi(repository),
+    private val scheduleQueryApi: ScheduleQueryApi = AppRepositoryScheduleQueryApi(repository),
+    private val settingsQueryApi: SettingsQueryApi = AppRepositorySettingsQueryApi(repository)
 ) : ViewModel() {
 
-    // 直接观察 Repository 的数据源
-    val settings = repository.settings
+    // 直接观察 QueryApi 的数据源
+    val settings = settingsQueryApi.settings
 
     // 日历同步状态
     private val _syncStatus = MutableStateFlow(CalendarSyncManager.SyncStatus(
@@ -45,7 +53,7 @@ class SettingsViewModel(
     fun updateAiSettings(key: String, name: String, url: String) {
         viewModelScope.launch {
             val current = settings.value
-            repository.updateSettings(
+            settingsOperationApi.updateSettings(
                 current.copy(
                     modelKey = key,
                     modelName = name,
@@ -58,7 +66,7 @@ class SettingsViewModel(
     fun updateMultimodalAiSettings(key: String, name: String, url: String) {
         viewModelScope.launch {
             val current = settings.value
-            repository.updateSettings(
+            settingsOperationApi.updateSettings(
                 current.copy(
                     mmModelKey = key,
                     mmModelName = name,
@@ -71,14 +79,14 @@ class SettingsViewModel(
     // 更新学期开始日期
     fun updateSemesterStartDate(date: String) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(semesterStartDate = date))
+            settingsOperationApi.updateSettings(settings.value.copy(semesterStartDate = date))
         }
     }
 
     // 更新总周数
     fun updateTotalWeeks(weeks: Int) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(totalWeeks = weeks))
+            settingsOperationApi.updateSettings(settings.value.copy(totalWeeks = weeks))
         }
     }
 
@@ -91,13 +99,13 @@ class SettingsViewModel(
             } else {
                 current.copy(timeTableJson = json)
             }
-            repository.updateSettings(updated)
+            settingsOperationApi.updateSettings(updated)
         }
     }
 
     fun updateTimeTableConfig(json: String) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(timeTableConfigJson = json))
+            settingsOperationApi.updateSettings(settings.value.copy(timeTableConfigJson = json))
         }
     }
 
@@ -153,7 +161,7 @@ class SettingsViewModel(
                 homeStartPageKey = sanitizedStartPage
             )
 
-            repository.updateSettings(current)
+            settingsOperationApi.updateSettings(current)
         }
     }
 
@@ -167,7 +175,7 @@ class SettingsViewModel(
         showInFloating: Boolean
     ) {
         viewModelScope.launch {
-            repository.updateSettings(
+            settingsOperationApi.updateSettings(
                 settings.value.copy(
                     weatherEnabled = enabled,
                     weatherProvider = provider,
@@ -186,7 +194,7 @@ class SettingsViewModel(
         val current = settings.value
         if (current.screenshotDelayMs != delay) {
             viewModelScope.launch {
-                repository.updateSettings(current.copy(screenshotDelayMs = delay))
+                settingsOperationApi.updateSettings(current.copy(screenshotDelayMs = delay))
             }
         }
     }
@@ -194,21 +202,21 @@ class SettingsViewModel(
     // 更新主题模式（1=跟随系统, 2=浅色, 3=深色）
     fun updateThemeMode(mode: Int) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(themeMode = mode))
+            settingsOperationApi.updateSettings(settings.value.copy(themeMode = mode))
         }
     }
 
     // 更新主题配色方案
     fun updateThemeColorScheme(scheme: String) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(themeColorScheme = scheme))
+            settingsOperationApi.updateSettings(settings.value.copy(themeColorScheme = scheme))
         }
     }
 
     // 更新深色模式（兼容旧接口）
     fun updateDarkMode(isDark: Boolean) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(
+            settingsOperationApi.updateSettings(settings.value.copy(
                 isDarkMode = isDark,
                 themeMode = if (isDark) 3 else 2
             ))
@@ -218,7 +226,7 @@ class SettingsViewModel(
     // 更新 UI 大小
     fun updateUiSize(size: Int) {
         viewModelScope.launch {
-            repository.updateSettings(settings.value.copy(uiSize = size))
+            settingsOperationApi.updateSettings(settings.value.copy(uiSize = size))
         }
     }
 
@@ -238,7 +246,7 @@ class SettingsViewModel(
             if (widthDp != null) current = current.copy(edgeBarWidthDp = widthDp)
             if (heightDp != null) current = current.copy(edgeBarHeightDp = heightDp)
             if (alpha != null) current = current.copy(edgeBarAlpha = alpha)
-            repository.updateSettings(current)
+            settingsOperationApi.updateSettings(current)
         }
     }
 
@@ -250,24 +258,30 @@ class SettingsViewModel(
     // --- 导出/导入功能 ---
 
     suspend fun exportCoursesData(): String {
-        return repository.exportCoursesData()
+        return settingsOperationApi.exportCoursesData()
     }
 
     suspend fun importCoursesData(jsonString: String): Result<Unit> {
-        return repository.importCoursesData(jsonString)
+        return settingsOperationApi.importCoursesData(jsonString)
     }
 
     suspend fun exportEventsData(): String {
-        return repository.exportEventsData()
+        return settingsOperationApi.exportEventsData()
     }
 
     suspend fun importEventsData(jsonString: String): Result<ImportResult> {
-        return repository.importEventsData(jsonString)
+        return settingsOperationApi.importEventsData(jsonString)
     }
 
-    fun getCoursesCount(): Int = repository.getCoursesCount()
-    fun getEventsCount(): Int = repository.getEventsCount()
-    fun getTotalEventsCount(): Int = repository.getTotalEventsCount()
+    fun getEventsCount(): Int = scheduleQueryApi.getEventsCount()
+    fun getTotalEventsCount(): Int = scheduleQueryApi.getTotalEventsCount()
+    fun getCoursesCount(): Int = scheduleQueryApi.getCoursesCount()
+
+    fun hasDuplicateAdvanceReminder(minutes: Int): Boolean {
+        return scheduleQueryApi.events.value.any { event ->
+            event.reminders.any { it <= minutes }
+        }
+    }
 
     /**
      * 导入外部课表文件（WakeUp 格式）
@@ -283,7 +297,7 @@ class SettingsViewModel(
         callback: suspend (Result<Int>) -> Unit
     ) {
         viewModelScope.launch {
-            val result = repository.importWakeUpFile(content, mode, importSettings)
+            val result = settingsOperationApi.importWakeUpFile(content, mode, importSettings)
             callback(result)
         }
     }
@@ -295,13 +309,13 @@ class SettingsViewModel(
      */
     fun refreshSyncStatus() {
         viewModelScope.launch {
-            _syncStatus.value = repository.getSyncStatus()
+            _syncStatus.value = settingsQueryApi.getSyncStatus()
         }
     }
 
     fun refreshSyncCalendars() {
         viewModelScope.launch {
-            _availableSyncCalendars.value = repository.getSelectableSyncCalendars()
+            _availableSyncCalendars.value = settingsQueryApi.getSelectableSyncCalendars()
         }
     }
 
@@ -311,9 +325,9 @@ class SettingsViewModel(
     fun toggleCalendarSync(enabled: Boolean) {
         viewModelScope.launch {
             val result = if (enabled) {
-                repository.enableCalendarSync()
+                settingsOperationApi.enableCalendarSync()
             } else {
-                repository.disableCalendarSync()
+                settingsOperationApi.disableCalendarSync()
             }
 
             if (result.isSuccess) {
@@ -324,7 +338,7 @@ class SettingsViewModel(
 
     fun enableCalendarSyncAndSyncNow(callback: suspend (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            val result = repository.enableCalendarSyncAndSyncNow()
+            val result = settingsOperationApi.enableCalendarSyncAndSyncNow()
             refreshSyncStatus()
             refreshSyncCalendars()
             callback(result)
@@ -333,7 +347,7 @@ class SettingsViewModel(
 
     fun updateSourceCalendars(calendarIds: List<Long>, callback: suspend (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            val result = repository.updateSourceCalendars(calendarIds)
+            val result = settingsOperationApi.updateSourceCalendars(calendarIds)
             refreshSyncStatus()
             refreshSyncCalendars()
             callback(result)
@@ -344,7 +358,7 @@ class SettingsViewModel(
      * 手动触发同步
      */
     suspend fun manualSync(): Result<Unit> {
-        val result = repository.manualSync()
+        val result = settingsOperationApi.manualSync()
         if (result.isSuccess) {
             refreshSyncStatus()
         }
@@ -356,8 +370,8 @@ class SettingsViewModel(
      */
     fun updateHasDonated(hasDonated: Boolean) {
         viewModelScope.launch {
-            repository.updateSettings(
-                repository.settings.value.copy(hasDonated = hasDonated)
+            settingsOperationApi.updateSettings(
+                settings.value.copy(hasDonated = hasDonated)
             )
         }
     }

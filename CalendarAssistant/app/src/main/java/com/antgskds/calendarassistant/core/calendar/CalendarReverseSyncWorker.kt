@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.data.operation.AppRepositorySettingsOperationApi
 import java.util.concurrent.TimeUnit
 
 class CalendarReverseSyncWorker(
@@ -19,7 +20,8 @@ class CalendarReverseSyncWorker(
         return try {
             Log.d(TAG, "Reverse sync worker started")
             val repository = AppRepository.getInstance(applicationContext)
-            val result = repository.syncFromCalendar()
+            val settingsOperationApi = AppRepositorySettingsOperationApi(repository)
+            val result = settingsOperationApi.syncFromCalendar()
             if (result.isSuccess) {
                 val count = result.getOrNull() ?: 0
                 Log.d(TAG, "Reverse sync worker success: count=$count")

@@ -6,6 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +59,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -121,15 +126,15 @@ fun AiSettingsPage(
     var textModelName by remember(settings) { mutableStateOf(settings.modelName) }
     var textModelKey by remember(settings) { mutableStateOf(settings.modelKey) }
     var textProvider by remember(settings) { mutableStateOf(detectProvider(settings.modelUrl)) }
-    var textCustomModels by remember(settings) { mutableStateOf(emptyList<String>()) }
-    var textFetchedSignature by remember(settings) { mutableStateOf<String?>(null) }
+    var textCustomModels by remember { mutableStateOf(emptyList<String>()) }
+    var textFetchedSignature by remember { mutableStateOf<String?>(null) }
 
     var mmModelUrl by remember(settings) { mutableStateOf(settings.mmModelUrl) }
     var mmModelName by remember(settings) { mutableStateOf(settings.mmModelName) }
     var mmModelKey by remember(settings) { mutableStateOf(settings.mmModelKey) }
     var mmProvider by remember(settings) { mutableStateOf(detectProvider(settings.mmModelUrl)) }
-    var mmCustomModels by remember(settings) { mutableStateOf(emptyList<String>()) }
-    var mmFetchedSignature by remember(settings) { mutableStateOf<String?>(null) }
+    var mmCustomModels by remember { mutableStateOf(emptyList<String>()) }
+    var mmFetchedSignature by remember { mutableStateOf<String?>(null) }
 
     var isProviderExpanded by remember { mutableStateOf(false) }
     var isModelExpanded by remember { mutableStateOf(false) }
@@ -336,6 +341,7 @@ fun AiSettingsPage(
         setActiveKey(it)
         if (activeProvider == PROVIDER_CUSTOM) {
             setActiveFetchedSignature(null)
+            setActiveCustomModels(emptyList())
         }
     }
 
@@ -345,10 +351,15 @@ fun AiSettingsPage(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { focusManager.clearFocus() }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(pass = PointerEventPass.Final)
+                    val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+                    if (up != null && !down.isConsumed && !up.isConsumed) {
+                        focusManager.clearFocus()
+                    }
+                }
+            }
     ) {
         Column(
             modifier = Modifier
@@ -558,7 +569,10 @@ private fun ExpandableSelectionItem(
             .padding(horizontal = 16.dp, vertical = 14.dp)
             .then(
                 if (toggleEnabled) {
-                    Modifier.clickable { onToggle() }
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onToggle() }
                 } else {
                     Modifier
                 }
@@ -616,7 +630,10 @@ private fun ExpandableSelectionItem(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onOptionSelected(option) }
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onOptionSelected(option) }
                                 .heightIn(min = 48.dp)
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.End,

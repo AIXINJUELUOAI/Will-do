@@ -58,6 +58,20 @@ fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEv
     val normalizedTitle = title.trim().take(28).ifBlank { "无标题" }
     val tasks = extractMarkdownTasks(normalizedMarkdown)
     val allDone = tasks.isNotEmpty() && tasks.all { it.isDone }
+    val nextCompletedAt = if (allDone) completedAt ?: System.currentTimeMillis() else null
+
+    if (
+        this.title == normalizedTitle &&
+        this.description == normalizedMarkdown &&
+        this.tag == EventTags.NOTE &&
+        this.eventType == EventType.EVENT &&
+        this.skipCalendarSync &&
+        this.reminders.isEmpty() &&
+        this.isCompleted == allDone &&
+        this.completedAt == nextCompletedAt
+    ) {
+        return this
+    }
 
     return copy(
         title = normalizedTitle,
@@ -67,7 +81,7 @@ fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEv
         skipCalendarSync = true,
         reminders = emptyList(),
         isCompleted = allDone,
-        completedAt = if (allDone) System.currentTimeMillis() else null,
+        completedAt = nextCompletedAt,
         lastModified = System.currentTimeMillis()
     )
 }

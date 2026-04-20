@@ -171,6 +171,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
         val app = context.applicationContext as? App ?: return
         val repository = app.repository
+        val scheduleOperationApi = app.scheduleOperationApi
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         scope.launch {
@@ -188,7 +189,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
                     return@launch
                 }
 
-                repository.addEvent(event)
+                scheduleOperationApi.addEvent(event)
                 NotificationScheduler.scheduleReminders(context, event)
                 Log.d(TAG, "[探针] ✅ 通知通道取件码已入库: ${eventData.title}")
             } catch (e: Exception) {

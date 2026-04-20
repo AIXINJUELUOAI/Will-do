@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
@@ -93,6 +94,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val repository by lazy { AppRepository.getInstance(applicationContext) }
+    private val scheduleOperationApi by lazy { (applicationContext as App).scheduleOperationApi }
 
     // 广播接收器
     private val closeReceiver = object : BroadcastReceiver() {
@@ -261,7 +263,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUpdateEvent = { updatedEvent, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    repository.updateEvent(updatedEvent)
+                                    scheduleOperationApi.updateEvent(updatedEvent)
                                     Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to update event", e)
@@ -276,13 +278,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         },
                         onUndo = { eventId, _ ->
                             serviceScope.launch {
-                                repository.performPrimaryRuleAction(eventId)
+                                scheduleOperationApi.performPrimaryRuleAction(eventId)
                             }
                         },
                         onDeleteNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    repository.deleteEvent(note.id)
+                                    scheduleOperationApi.deleteEvent(note.id)
                                 } finally {
                                     onComplete()
                                 }
@@ -291,7 +293,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onRestoreNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    repository.addEvent(note)
+                                    scheduleOperationApi.addEvent(note)
                                 } finally {
                                     onComplete()
                                 }
@@ -470,14 +472,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings = repository.settings.value
                 if (isNote) {
                     val note = convertToNote(text)
-                    repository.addEvent(note)
+                    scheduleOperationApi.addEvent(note)
                     Toast.makeText(applicationContext, "便签已添加", Toast.LENGTH_SHORT).show()
                 } else when (val result = withContext(Dispatchers.IO) {
                     RecognitionProcessor.parseUserText(text, settings, applicationContext)
                 }) {
                     is AnalysisResult.Success -> {
                         val event = convertToMyEvent(result.data, sourceImagePath)
-                        repository.addEvent(event)
+                        scheduleOperationApi.addEvent(event)
                         Toast.makeText(applicationContext, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
                     }
                     is AnalysisResult.Empty -> {
@@ -515,12 +517,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             try {
                 when (actionType) {
                     "archive" -> {
-                        repository.archiveEvent(eventId)
+                        scheduleOperationApi.archiveEvent(eventId)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    else -> repository.performPrimaryRuleAction(eventId)
+                    else -> scheduleOperationApi.performPrimaryRuleAction(eventId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)

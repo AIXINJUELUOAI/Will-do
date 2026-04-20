@@ -8,7 +8,13 @@ import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.util.DateCalculator
+import com.antgskds.calendarassistant.data.operation.AppRepositoryScheduleOperationApi
+import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
+import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
@@ -50,7 +56,10 @@ data class PromptCheckFeedback(
 )
 
 class MainViewModel(
-    private val repository: AppRepository
+    private val repository: AppRepository,
+    private val scheduleOperationApi: ScheduleOperationApi = AppRepositoryScheduleOperationApi(repository),
+    private val scheduleQueryApi: ScheduleQueryApi = AppRepositoryScheduleQueryApi(repository),
+    private val settingsQueryApi: SettingsQueryApi = AppRepositorySettingsQueryApi(repository)
 ) : ViewModel() {
     private val weatherRepository = WeatherRepository.getInstance(repository.appContext)
 
@@ -84,14 +93,14 @@ class MainViewModel(
 
         // 自动归档过期事件
         viewModelScope.launch {
-            val archivedCount = repository.autoArchiveExpiredEvents()
+            val archivedCount = scheduleOperationApi.autoArchiveExpiredEvents()
             if (archivedCount > 0) {
                 Log.d("Archive", "自动归档了 $archivedCount 条事件")
             }
         }
 
         viewModelScope.launch {
-            repository.settings.collectLatest { settings ->
+            settingsQueryApi.settings.collectLatest { settings ->
                 weatherRepository.refreshIfNeeded(settings)
             }
         }
@@ -107,7 +116,7 @@ class MainViewModel(
         val now = LocalDateTime.now()
         var nearestEndMillis = Long.MAX_VALUE
 
-        for (event in repository.events.value) {
+        for (event in scheduleQueryApi.events.value) {
             if (event.isRecurringParent) continue
             if (event.tag == EventTags.NOTE) continue
             try {
@@ -128,7 +137,7 @@ class MainViewModel(
     }
 
     // 归档事件（公开访问）
-    val archivedEvents = repository.archivedEvents
+    val archivedEvents = scheduleQueryApi.archivedEvents
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _revealedEventId = MutableStateFlow<String?>(null)
@@ -136,9 +145,9 @@ class MainViewModel(
     val uiState: StateFlow<MainUiState> = combine(
         _selectedDate,
         _revealedEventId,
-        repository.events,
-        repository.courses,
-        repository.settings,
+        scheduleQueryApi.events,
+        scheduleQueryApi.courses,
+        settingsQueryApi.settings,
         weatherRepository.weatherData,
         _timeTrigger  // ✅ 添加时间触发器
     ) { values ->
@@ -317,8 +326,8 @@ class MainViewModel(
     }
 
     // --- 普通事件操作 ---
-    fun addEvent(event: MyEvent) = viewModelScope.launch { repository.addEvent(event) }
-    fun updateEvent(event: MyEvent) = viewModelScope.launch { repository.updateEvent(event) }
+    fun addEvent(event: MyEvent) = viewModelScope.launch { scheduleOperationApi.addEvent(event) }
+    fun updateEvent(event: MyEvent) = viewModelScope.launch { scheduleOperationApi.updateEvent(event) }
 
     fun detachRecurringInstance(
         parentEventId: String,
@@ -326,18 +335,18 @@ class MainViewModel(
         sourceInstanceKey: String,
         detachedEvent: MyEvent
     ) = viewModelScope.launch {
-        repository.detachRecurringInstance(parentEventId, sourceInstanceId, sourceInstanceKey, detachedEvent)
+        scheduleOperationApi.detachRecurringInstance(parentEventId, sourceInstanceId, sourceInstanceKey, detachedEvent)
     }
 
     fun findRecurringParent(event: MyEvent): MyEvent? {
         if (event.isRecurringParent) return event
         val parentId = event.parentRecurringId ?: return null
-        return repository.events.value.find { it.id == parentId && it.isRecurringParent }
+        return scheduleQueryApi.events.value.find { it.id == parentId && it.isRecurringParent }
     }
 
     fun findNextRecurringInstance(parentEvent: MyEvent): MyEvent? {
         val now = System.currentTimeMillis()
-        return repository.events.value
+        return scheduleQueryApi.events.value
             .filter { it.isRecurring && !it.isRecurringParent && it.parentRecurringId == parentEvent.id }
             .mapNotNull { child ->
                 val startMillis = RecurringEventUtils.eventStartMillis(child) ?: return@mapNotNull null
@@ -354,7 +363,7 @@ class MainViewModel(
                 // 如果是课程，走排除逻辑
                 excludeCourse(event.id, event.startDate)
             } else {
-                repository.deleteEvent(event.id)
+                scheduleOperationApi.deleteEvent(event.id)
             }
             _revealedEventId.value = null
         }
@@ -362,15 +371,17 @@ class MainViewModel(
 
     fun toggleImportant(event: MyEvent) {
         viewModelScope.launch {
-            if (event.eventType != "course") repository.updateEvent(event.copy(isImportant = !event.isImportant))
+            if (event.eventType != "course") {
+                scheduleOperationApi.updateEvent(event.copy(isImportant = !event.isImportant))
+            }
             _revealedEventId.value = null
         }
     }
 
     // --- 课程管理 ---
-    fun addCourse(course: Course) = viewModelScope.launch { repository.addCourse(course) }
-    fun updateCourse(course: Course) = viewModelScope.launch { repository.updateCourse(course) }
-    fun deleteCourse(course: Course) = viewModelScope.launch { repository.deleteCourse(course) }
+    fun addCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.addCourse(course) }
+    fun updateCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.updateCourse(course) }
+    fun deleteCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.deleteCourse(course) }
 
     // 删除单次课程逻辑 (通过 ID，用于 SwipeableEventItem)
     fun excludeCourse(virtualEventId: String, date: LocalDate) {
@@ -378,17 +389,17 @@ class MainViewModel(
             val parts = virtualEventId.split("_")
             if (parts.size >= 2) {
                 val courseId = parts[1]
-                val all = repository.courses.value.toMutableList()
+                val all = scheduleQueryApi.courses.value.toMutableList()
                 val target = all.find { it.id == courseId } ?: return@launch
 
                 if (target.isTemp) {
                     // 如果本身是影子课程，直接删
-                    repository.deleteCourse(target)
+                    scheduleOperationApi.deleteCourse(target)
                 } else {
                     // 主课程，加入排除列表
                     val dateStr = date.toString()
                     if (!target.excludedDates.contains(dateStr)) {
-                        repository.updateCourse(target.copy(excludedDates = target.excludedDates + dateStr))
+                        scheduleOperationApi.updateCourse(target.copy(excludedDates = target.excludedDates + dateStr))
                     }
                 }
             }
@@ -401,13 +412,13 @@ class MainViewModel(
         viewModelScope.launch {
             if (course.isTemp) {
                 // 如果是影子课程，物理删除
-                repository.deleteCourse(course)
+                scheduleOperationApi.deleteCourse(course)
             } else {
                 // 如果是主课程，逻辑删除（排除该日）
                 val dateStr = date.toString()
                 if (!course.excludedDates.contains(dateStr)) {
                     val newExcluded = course.excludedDates + dateStr
-                    repository.updateCourse(course.copy(excludedDates = newExcluded))
+                    scheduleOperationApi.updateCourse(course.copy(excludedDates = newExcluded))
                 }
             }
         }
@@ -430,11 +441,11 @@ class MainViewModel(
             val originalCourseId = parts[1]
             val originalDateStr = parts[2] // 这节课原本应该发生的日期
 
-            val allCourses = repository.courses.value
+            val allCourses = scheduleQueryApi.courses.value
             val originalCourse = allCourses.find { it.id == originalCourseId } ?: return@launch
 
             // 1. 计算目标周次
-            val settings = repository.settings.value
+            val settings = settingsQueryApi.settings.value
             val semesterStart = try {
                 if(settings.semesterStartDate.isNotBlank()) LocalDate.parse(settings.semesterStartDate) else LocalDate.now()
             } catch (e: Exception) { LocalDate.now() }
@@ -455,13 +466,13 @@ class MainViewModel(
                     startWeek = targetWeek,
                     endWeek = targetWeek
                 )
-                repository.updateCourse(updatedShadow)
+                scheduleOperationApi.updateCourse(updatedShadow)
             } else {
                 // --- 场景 B：这是主课程 ---
                 // 1. 先把主课程在那天屏蔽掉
                 if (!originalCourse.excludedDates.contains(originalDateStr)) {
                     val newExcluded = originalCourse.excludedDates + originalDateStr
-                    repository.updateCourse(originalCourse.copy(excludedDates = newExcluded))
+                    scheduleOperationApi.updateCourse(originalCourse.copy(excludedDates = newExcluded))
                 }
 
                 // 2. 创建一个新的影子课程
@@ -480,7 +491,7 @@ class MainViewModel(
                     isTemp = true,                     // ⚠️ 标记为影子
                     parentCourseId = originalCourse.id // 🔗 认父，用于级联删除
                 )
-                repository.addCourse(shadowCourse)
+                scheduleOperationApi.addCourse(shadowCourse)
             }
         }
     }
@@ -492,7 +503,7 @@ class MainViewModel(
      * 仅在进入归档页面时调用
      */
     fun fetchArchivedEvents() {
-        repository.fetchArchivedEvents()
+        scheduleQueryApi.fetchArchivedEvents()
     }
 
     /**
@@ -500,7 +511,7 @@ class MainViewModel(
      */
     fun archiveEvent(eventId: String) {
         viewModelScope.launch {
-            repository.archiveEvent(eventId)
+            scheduleOperationApi.archiveEvent(eventId)
             _revealedEventId.value = null
         }
     }
@@ -510,7 +521,7 @@ class MainViewModel(
      */
     fun restoreEvent(archivedEventId: String) {
         viewModelScope.launch {
-            repository.restoreEvent(archivedEventId)
+            scheduleOperationApi.restoreEvent(archivedEventId)
         }
     }
 
@@ -519,7 +530,7 @@ class MainViewModel(
      */
     fun deleteArchivedEvent(archivedEventId: String) {
         viewModelScope.launch {
-            repository.deleteArchivedEvent(archivedEventId)
+            scheduleOperationApi.deleteArchivedEvent(archivedEventId)
         }
     }
 
@@ -528,7 +539,7 @@ class MainViewModel(
      */
     fun clearAllArchives() {
         viewModelScope.launch {
-            repository.clearAllArchives()
+            scheduleOperationApi.clearAllArchives()
         }
     }
 
@@ -539,7 +550,7 @@ class MainViewModel(
     fun refreshData() {
         viewModelScope.launch {
             // 1. 触发自动归档，删除过期事件
-            val archivedCount = repository.autoArchiveExpiredEvents()
+            val archivedCount = scheduleOperationApi.autoArchiveExpiredEvents()
             if (archivedCount > 0) {
                 Log.d("Refresh", "自动归档了 $archivedCount 条事件")
             }

@@ -29,7 +29,8 @@ import java.time.format.DateTimeFormatter
  */
 class SmsContentObserver(
     private val context: Context,
-    private val getRepository: () -> com.antgskds.calendarassistant.data.repository.AppRepository?
+    private val getRepository: () -> com.antgskds.calendarassistant.data.repository.AppRepository?,
+    private val getScheduleOperationApi: () -> com.antgskds.calendarassistant.core.operation.ScheduleOperationApi?
 ) : ContentObserver(Handler(Looper.getMainLooper())) {
 
     companion object {
@@ -133,6 +134,7 @@ class SmsContentObserver(
     private fun scanNewMessages(reason: String) {
         val contentResolver = context.contentResolver
         val repository = getRepository() ?: return
+        val scheduleOperationApi = getScheduleOperationApi() ?: return
 
         val settings = SettingsDataSource(context).loadSettings()
         if (!settings.isSmsMonitoringEnabled) return
@@ -167,7 +169,7 @@ class SmsContentObserver(
         scope.launch {
             for ((id, sender, body) in newMessages) {
                 try {
-                    processSms(repository, sender, body, id)
+                    processSms(repository, scheduleOperationApi, sender, body, id)
                 } catch (e: Exception) {
                     Log.e(TAG, "[探针] 处理短信异常 id=$id", e)
                 }
@@ -177,6 +179,7 @@ class SmsContentObserver(
 
     private suspend fun processSms(
         repository: com.antgskds.calendarassistant.data.repository.AppRepository,
+        scheduleOperationApi: com.antgskds.calendarassistant.core.operation.ScheduleOperationApi,
         sender: String,
         body: String,
         smsId: Long
@@ -204,7 +207,7 @@ class SmsContentObserver(
             return
         }
 
-        repository.addEvent(event)
+        scheduleOperationApi.addEvent(event)
         NotificationScheduler.scheduleReminders(context, event)
         Log.d(TAG, "[探针] ✅ 取件码已入库: ${eventData.title} from $sender")
     }

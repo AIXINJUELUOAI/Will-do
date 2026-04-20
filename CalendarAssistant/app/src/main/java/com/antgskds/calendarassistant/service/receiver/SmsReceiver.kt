@@ -50,6 +50,7 @@ class SmsReceiver : BroadcastReceiver() {
 
         val app = context.applicationContext as App
         val repository = app.repository
+        val scheduleOperationApi = app.scheduleOperationApi
         val pendingResult = goAsync()
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -90,7 +91,7 @@ class SmsReceiver : BroadcastReceiver() {
                         continue
                     }
 
-                    repository.addEvent(event)
+                    scheduleOperationApi.addEvent(event)
                     NotificationScheduler.scheduleReminders(context, event)
                     Log.d(TAG, "[探针] ✅ 取件码已入库: ${eventData.title} from $sender")
                 }

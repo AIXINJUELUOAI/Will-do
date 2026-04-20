@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,23 +30,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 
 private val RegexHeading = Regex("^#{1,6}\\s+.*")
 private val RegexQuote = Regex("^\\s*>.*")
@@ -56,6 +55,7 @@ private val RegexBulletList = Regex("^\\s*[-+*]\\s+(.*)?$")
 private val RegexOrderedList = Regex("^\\s*\\d+\\.\\s+(.*)?$")
 private val RegexHr = Regex("^\\s*([-*_]\\s*){3,}$")
 private val AbandonedMarkerRegex = Regex("^([-+*>]|\\d+\\.|#{1,6})\\s*$")
+private val TaskLineParseRegex = Regex("^\\s*[-+*]\\s+\\[( |x|X)](?:\\s+(.*))?$")
 
 class BlockNoteEditorController {
     internal var commitActiveBlock: (() -> String)? = null
@@ -90,7 +90,7 @@ fun BlockNoteEditor(
     textColor: Color,
     onActiveEditChanged: ((Boolean) -> Unit)? = null
 ) {
-    var workingMarkdown by remember(markdown) { mutableStateOf(markdown) }
+    var workingMarkdown by remember { mutableStateOf(markdown) }
     var activeBlockId by remember { mutableStateOf<Int?>(null) }
     var activeDraft by remember { mutableStateOf("") }
     var isCreatingNewBlock by remember { mutableStateOf(false) }
@@ -98,7 +98,7 @@ fun BlockNoteEditor(
     val blocks = remember(workingMarkdown) { parseNoteBlocks(workingMarkdown) }
 
     LaunchedEffect(markdown) {
-        if (activeBlockId == null && !isCreatingNewBlock) {
+        if (activeBlockId == null && !isCreatingNewBlock && markdown != workingMarkdown) {
             workingMarkdown = markdown
         }
     }
@@ -136,7 +136,8 @@ fun BlockNoteEditor(
         }
 
         val id = activeBlockId ?: return workingMarkdown
-        val block = blocks.firstOrNull { it.id == id } ?: run {
+        val currentBlocks = parseNoteBlocks(workingMarkdown)
+        val block = currentBlocks.firstOrNull { it.id == id } ?: run {
             activeDraft = ""
             activeBlockId = null
             return workingMarkdown
@@ -156,16 +157,23 @@ fun BlockNoteEditor(
         return normalized
     }
 
-    LaunchedEffect(controller, workingMarkdown, activeBlockId, activeDraft, isCreatingNewBlock, blocks) {
+    SideEffect {
         controller?.commitActiveBlock = { commitActive() }
     }
 
     fun beginEdit(block: NoteBlock) {
         if (activeBlockId == block.id && !isCreatingNewBlock) return
+        val targetRaw = block.raw
+        val targetIndex = blocks.indexOfFirst { it.id == block.id }
         commitActive()
-        activeBlockId = block.id
-        activeDraft = block.raw
-        isCreatingNewBlock = false
+        val refreshedBlocks = parseNoteBlocks(workingMarkdown)
+        val located = refreshedBlocks.getOrNull(targetIndex)?.takeIf { it.raw == targetRaw }
+            ?: refreshedBlocks.firstOrNull { it.raw == targetRaw }
+        if (located != null) {
+            activeBlockId = located.id
+            activeDraft = located.raw
+            isCreatingNewBlock = false
+        }
     }
 
     fun beginNewBlock() {
@@ -181,12 +189,13 @@ fun BlockNoteEditor(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(activeBlockId, isCreatingNewBlock, activeDraft) {
-                detectTapGestures(onTap = {
-                    if (activeBlockId != null || isCreatingNewBlock) {
-                        commitActive()
-                    }
-                })
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                if (activeBlockId != null || isCreatingNewBlock) {
+                    commitActive()
+                }
             }
     ) {
         LazyColumn(
@@ -276,10 +285,11 @@ fun BlockNoteEditor(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(300.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(onTap = {
-                                    beginNewBlock()
-                                })
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                beginNewBlock()
                             }
                     )
                 }
@@ -310,13 +320,17 @@ private fun RenderedBlock(
     ) {
         when (block) {
             is NoteBlock.Heading -> {
+                val headingStyle = when (block.level) {
+                    1 -> MaterialTheme.typography.headlineMedium
+                    2 -> MaterialTheme.typography.headlineSmall
+                    3 -> MaterialTheme.typography.titleLarge
+                    4 -> MaterialTheme.typography.titleMedium
+                    5 -> MaterialTheme.typography.titleSmall
+                    else -> MaterialTheme.typography.bodyLarge
+                }
                 Text(
                     text = block.raw.replace(Regex("^#{1,6}\\s+"), ""),
-                    style = if (block.level == 1) {
-                        MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
-                    } else {
-                        MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-                    },
+                    style = headingStyle.copy(fontWeight = FontWeight.Bold),
                     color = textColor,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -363,10 +377,10 @@ private fun RenderedBlock(
             is NoteBlock.TaskList -> {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     block.raw.lines().forEachIndexed { lineIndex, line ->
-                        val match = Regex("^\\s*[-+*]\\s+\\[( |x|X)]\\s*(.*)$").find(line)
+                        val match = TaskLineParseRegex.find(line)
                         if (match != null) {
-                            val isChecked = match.groupValues[1].lowercase() == "x"
-                            val content = match.groupValues[2]
+                            val isChecked = match.groupValues[1].equals("x", ignoreCase = true)
+                            val content = match.groupValues.getOrNull(2).orEmpty()
                             Row(
                                 verticalAlignment = Alignment.Top,
                                 modifier = Modifier.fillMaxWidth()
@@ -500,7 +514,7 @@ private fun BlockEditorField(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
-        delay(50)
+        withFrameNanos {}
         focusRequester.requestFocus()
         keyboardController?.show()
     }
@@ -624,10 +638,12 @@ private fun classifyBlock(raw: String, start: Int = 0, end: Int = raw.length): N
     val trimmed = raw.trimEnd()
     val lines = trimmed.split('\n')
     val first = lines.firstOrNull().orEmpty()
+    if (lines.size == 1 && first.matches(RegexHeading)) {
+        val level = first.takeWhile { it == '#' }.length.coerceIn(1, 6)
+        return NoteBlock.Heading(level, start, trimmed, start, end)
+    }
     return when {
         trimmed.isBlank() -> NoteBlock.Paragraph(start, "", start, end)
-        lines.size == 1 && first.matches(Regex("^#\\s+.*")) -> NoteBlock.Heading(1, start, trimmed, start, end)
-        lines.size == 1 && first.matches(Regex("^##\\s+.*")) -> NoteBlock.Heading(2, start, trimmed, start, end)
         lines.all { it.matches(RegexQuote) } -> NoteBlock.Quote(start, trimmed, start, end)
         lines.all { it.matches(RegexTaskList) } -> NoteBlock.TaskList(start, trimmed, start, end)
         lines.all { it.matches(RegexBulletList) } -> NoteBlock.BulletList(start, trimmed, start, end)

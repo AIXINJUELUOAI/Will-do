@@ -35,7 +35,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
@@ -80,9 +79,6 @@ fun PreferenceSettingsPage(
             snackbarHostState.showSnackbar(message)
         }
     }
-
-    // 用于按需查询 events（避免订阅全量 Flow）
-    val repository = remember { AppRepository.getInstance(context) }
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
@@ -566,9 +562,7 @@ fun PreferenceSettingsPage(
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(advanceReminderEnabled = isChecked)
                             if (isChecked && settings.advanceReminderMinutes > 0) {
-                                val hasDuplicate = repository.events.value.any { event ->
-                                    event.reminders.any { it <= settings.advanceReminderMinutes }
-                                }
+                                val hasDuplicate = viewModel.hasDuplicateAdvanceReminder(settings.advanceReminderMinutes)
                                 if (hasDuplicate) {
                                     showToast("检测到可能存在的重复提醒", ToastType.INFO)
                                 }
