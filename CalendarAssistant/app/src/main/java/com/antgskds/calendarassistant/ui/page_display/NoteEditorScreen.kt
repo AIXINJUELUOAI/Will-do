@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,8 +75,8 @@ fun NoteEditorScreen(
     val savedMarkdown = initialNote?.noteMarkdown().orEmpty()
     val fallbackColor = MaterialTheme.colorScheme.primary
     val editorController = remember { BlockNoteEditorController() }
-    var titleText by remember(initialNote?.id) { mutableStateOf(savedTitle) }
-    var bodyText by remember(initialNote?.id) { mutableStateOf(savedMarkdown) }
+    var titleText by rememberSaveable(initialNote?.id) { mutableStateOf(savedTitle) }
+    var bodyText by rememberSaveable(initialNote?.id) { mutableStateOf(savedMarkdown) }
     var isAnalyzing by remember { mutableStateOf(false) }
 
     fun buildSavedNote(markdownOverride: String? = null): MyEvent {
@@ -161,12 +162,14 @@ fun NoteEditorScreen(
 
         FloatingActionButton(
             onClick = {
+                val committedMarkdown = editorController.commit() ?: bodyText
+                bodyText = committedMarkdown
                 val config = settings.activeAiConfig()
                 if (!config.isConfigured()) {
                     onShowMessage(config.missingConfigMessage(), ToastType.ERROR)
                     return@FloatingActionButton
                 }
-                val markdown = bodyText.trim()
+                val markdown = committedMarkdown.trim()
                 val text = buildString {
                     if (titleText.isNotBlank()) appendLine(titleText.trim())
                     if (markdown.isNotBlank()) append(markdown)

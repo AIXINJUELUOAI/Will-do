@@ -61,6 +61,7 @@ class TextAccessibilityService : AccessibilityService() {
     private val NOTIFICATION_ID_RESULT = 2002
 
     private val repository by lazy { (applicationContext as App).repository }
+    private val scheduleOperationApi by lazy { (applicationContext as App).scheduleOperationApi }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     companion object {
@@ -572,7 +573,7 @@ class TextAccessibilityService : AccessibilityService() {
 
         if (actuallyAdded.isNotEmpty()) {
             actuallyAdded.forEach { event ->
-                repository.addEvent(event)
+                scheduleOperationApi.addEvent(event)
                 NotificationScheduler.scheduleReminders(this, event)
             }
         }

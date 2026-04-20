@@ -18,6 +18,14 @@ import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
 import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
+import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
+import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.data.operation.AppRepositoryScheduleOperationApi
+import com.antgskds.calendarassistant.data.operation.AppRepositorySettingsOperationApi
+import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
+import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
 import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
@@ -47,6 +55,22 @@ class App : Application() {
     // 全局单例 Repository (懒加载)
     val repository: AppRepository by lazy {
         AppRepository.getInstance(this)
+    }
+
+    val scheduleOperationApi: ScheduleOperationApi by lazy {
+        AppRepositoryScheduleOperationApi(repository)
+    }
+
+    val settingsOperationApi: SettingsOperationApi by lazy {
+        AppRepositorySettingsOperationApi(repository)
+    }
+
+    val scheduleQueryApi: ScheduleQueryApi by lazy {
+        AppRepositoryScheduleQueryApi(repository)
+    }
+
+    val settingsQueryApi: SettingsQueryApi by lazy {
+        AppRepositorySettingsQueryApi(repository)
     }
 
     // 日历内容观察者（可选，仅在有权限时初始化）
@@ -177,7 +201,8 @@ class App : Application() {
     private fun initSmsObserver() {
         smsObserver = SmsContentObserver(
             context = this,
-            getRepository = { try { repository } catch (_: Exception) { null } }
+            getRepository = { try { repository } catch (_: Exception) { null } },
+            getScheduleOperationApi = { try { scheduleOperationApi } catch (_: Exception) { null } }
         )
         smsObserver?.register()
     }
@@ -264,11 +289,11 @@ class CalendarSyncReceiver : BroadcastReceiver() {
         CalendarReverseSyncScheduler.schedule(context)
 
         val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        val repository = AppRepository.getInstance(context)
+        val settingsOperationApi = (context.applicationContext as App).settingsOperationApi
 
         syncScope.launch {
             try {
-                val result = repository.syncFromCalendar()
+                val result = settingsOperationApi.syncFromCalendar()
                 if (result.isSuccess) {
                     val count = result.getOrNull() ?: 0
                     if (count > 0) {

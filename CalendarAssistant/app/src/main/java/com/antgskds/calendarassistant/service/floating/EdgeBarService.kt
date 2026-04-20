@@ -44,6 +44,8 @@ class EdgeBarService : Service() {
     private var layoutParams: WindowManager.LayoutParams? = null
     private var hiddenByFloating = false
     private var touchSlop = 0
+    private val repository by lazy { (applicationContext as App).repository }
+    private val settingsOperationApi by lazy { (applicationContext as App).settingsOperationApi }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -80,7 +82,6 @@ class EdgeBarService : Service() {
         }
 
         serviceScope.launch {
-            val repository = (applicationContext as App).repository
             repository.settings.collect { settings ->
                 if (!settings.edgeBarEnabled || !settings.isFloatingWindowEnabled) {
                     removeBarView()
@@ -291,11 +292,10 @@ class EdgeBarService : Service() {
         val params = layoutParams ?: return
         val maxY = (getScreenHeight() - params.height).coerceAtLeast(1)
         val percent = (params.y.toFloat() / maxY * 100f).coerceIn(0f, 100f)
-        val repository = (applicationContext as App).repository
         serviceScope.launch {
             val current = repository.settings.value
             if (kotlin.math.abs(current.edgeBarYPercent - percent) >= 0.5f) {
-                repository.updateSettings(current.copy(edgeBarYPercent = percent))
+                settingsOperationApi.updateSettings(current.copy(edgeBarYPercent = percent))
             }
         }
     }

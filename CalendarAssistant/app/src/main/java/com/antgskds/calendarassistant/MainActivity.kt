@@ -112,8 +112,18 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return when {
-                    modelClass.isAssignableFrom(MainViewModel::class.java) -> MainViewModel(repository) as T
-                    modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository) as T
+                    modelClass.isAssignableFrom(MainViewModel::class.java) -> MainViewModel(
+                        repository = repository,
+                        scheduleOperationApi = app.scheduleOperationApi,
+                        scheduleQueryApi = app.scheduleQueryApi,
+                        settingsQueryApi = app.settingsQueryApi
+                    ) as T
+                    modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(
+                        repository = repository,
+                        settingsOperationApi = app.settingsOperationApi,
+                        scheduleQueryApi = app.scheduleQueryApi,
+                        settingsQueryApi = app.settingsQueryApi
+                    ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }

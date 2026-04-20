@@ -32,13 +32,16 @@ fun AllEventsPage(
     extraBottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val today = LocalDate.now()
+    val futureLimit = today.plusDays(7)
 
     // 核心过滤逻辑
-    val filteredEvents by remember(uiState.allEvents, searchQuery) {
+    val filteredEvents by remember(uiState.allEvents, searchQuery, today) {
         derivedStateOf {
             uiState.allEvents
                 .filter { it.tag != EventTags.NOTE }
-                .filter { event -> !event.isRecurring || event.isRecurringParent }
+                .filter { event -> !event.isRecurringParent }
+                .filter { event -> !event.startDate.isAfter(futureLimit) }
                 .distinctBy { it.id }
                 .filter { event ->
                 // 搜索匹配
@@ -55,7 +58,6 @@ fun AllEventsPage(
                     aExpired != bExpired -> if (aExpired) 1 else -1
                     a.isImportant != b.isImportant -> if (a.isImportant) -1 else 1
                     else -> {
-                        val today = LocalDate.now()
                         fun dateKey(e: MyEvent, expired: Boolean): Long {
                             val started = e.startDate.isBefore(today) || e.startDate == today
                             return when {
