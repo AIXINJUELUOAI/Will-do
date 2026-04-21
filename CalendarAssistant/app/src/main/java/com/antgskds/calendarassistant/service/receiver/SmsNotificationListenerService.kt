@@ -12,14 +12,10 @@ import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.sms.SmsAnalysis
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
-import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 短信通知监听服务
@@ -129,6 +125,10 @@ class SmsNotificationListenerService : NotificationListenerService() {
                 Log.d(TAG, "[探针] 短信通知文本为空, pkg=$pkg")
                 return
             }
+            if (isSystemHintText(text)) {
+                Log.d(TAG, "[探针] 系统提示通知，忽略: ${text.take(40)}")
+                return
+            }
 
             // 去重：同一内容 2 秒内不重复处理
             val now = System.currentTimeMillis()
@@ -170,28 +170,17 @@ class SmsNotificationListenerService : NotificationListenerService() {
         Log.d(TAG, "[探针] 解析成功: title=${eventData.title}, tag=${eventData.tag}")
 
         val app = context.applicationContext as? App ?: return
-        val repository = app.repository
-        val scheduleOperationApi = app.scheduleOperationApi
+        val ingestCommandApi = app.ingestCommandApi
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         scope.launch {
             try {
-                val event = eventDataToMyEvent(eventData, repository.events.value.size)
-
-                // 去重
-                val isDuplicate = repository.events.value.any { existing ->
-                    existing.tag == eventData.tag &&
-                            existing.description == eventData.description &&
-                            !existing.endDate.isBefore(java.time.LocalDate.now())
-                }
-                if (isDuplicate) {
+                val added = ingestCommandApi.ingestSmsPickup(eventData)
+                if (added == null) {
                     Log.d(TAG, "[探针] 重复取件码已跳过: ${eventData.title}")
                     return@launch
                 }
-
-                scheduleOperationApi.addEvent(event)
-                NotificationScheduler.scheduleReminders(context, event)
-                Log.d(TAG, "[探针] ✅ 通知通道取件码已入库: ${eventData.title}")
+                Log.d(TAG, "[探针] ✅ 通知通道取件码已入库: ${added.title}")
             } catch (e: Exception) {
                 Log.e(TAG, "[探针] 入库异常", e)
             }
@@ -202,6 +191,21 @@ class SmsNotificationListenerService : NotificationListenerService() {
      * 从通知 extras 中提取文本，兼容各种通知样式
      */
     private fun extractNotificationText(extras: Bundle): String? {
+        // MessagingStyle 的 android.messages（优先，最接近短信正文）
+        val messages = extras.getParcelableArray("android.messages")
+        val lastMsgText = messages?.lastOrNull()
+            ?.let { it as? Bundle }
+            ?.getCharSequence("text")?.toString()
+        if (!lastMsgText.isNullOrBlank()) return lastMsgText
+
+        // textLines（某些应用多行文本放这里）
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?: extras.getCharSequenceArray("android.textLines")
+        val fromLines = lines
+            ?.mapNotNull { it?.toString()?.trim() }
+            ?.lastOrNull { it.isNotBlank() }
+        if (!fromLines.isNullOrBlank()) return fromLines
+
         // 优先取大文本
         val main = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_TEXT)
@@ -209,56 +213,17 @@ class SmsNotificationListenerService : NotificationListenerService() {
             ?.toString()
         if (!main.isNullOrBlank()) return main
 
-        // textLines（某些应用多行文本放这里）
-        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-            ?: extras.getCharSequenceArray("android.textLines")
-        val fromLines = lines?.mapNotNull { it?.toString() }?.lastOrNull { it.isNotBlank() }
-        if (!fromLines.isNullOrBlank()) return fromLines
-
-        // MessagingStyle 的 android.messages
-        val messages = extras.getParcelableArray("android.messages")
-        val lastMsgText = messages?.lastOrNull()
-            ?.let { it as? Bundle }
-            ?.getCharSequence("text")?.toString()
-        if (!lastMsgText.isNullOrBlank()) return lastMsgText
-
         return null
+    }
+
+    private fun isSystemHintText(text: String): Boolean {
+        val normalized = text.trim()
+        if (normalized.isEmpty()) return true
+        return normalized.contains("点按即可了解详情或停止应用") ||
+            normalized.contains("了解详情或停止应用")
     }
 
     override fun onDestroy() {
         super.onDestroy()
     }
-}
-
-/**
- * CalendarEventData → MyEvent（与 SmsReceiver 中保持一致）
- */
-private fun eventDataToMyEvent(
-    eventData: com.antgskds.calendarassistant.data.model.CalendarEventData,
-    currentEventsCount: Int
-): com.antgskds.calendarassistant.data.model.MyEvent {
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    val now = LocalDateTime.now()
-
-    val startDateTime = try {
-        if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
-    } catch (_: Exception) { now }
-
-    val endDateTime = try {
-        if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
-    } catch (_: Exception) { startDateTime.plusHours(1) }
-
-    return com.antgskds.calendarassistant.data.model.MyEvent(
-        title = eventData.title.trim(),
-        startDate = startDateTime.toLocalDate(),
-        endDate = endDateTime.toLocalDate(),
-        startTime = startDateTime.format(timeFormatter),
-        endTime = endDateTime.format(timeFormatter),
-        location = eventData.location,
-        description = eventData.description,
-        color = EventColors[currentEventsCount % EventColors.size],
-        eventType = com.antgskds.calendarassistant.data.model.EventType.EVENT,
-        tag = eventData.tag.ifBlank { com.antgskds.calendarassistant.data.model.EventTags.GENERAL }
-    )
 }

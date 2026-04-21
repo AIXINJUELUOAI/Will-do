@@ -3,7 +3,6 @@ package com.antgskds.calendarassistant.core.ai
 import androidx.compose.ui.graphics.Color
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import java.time.LocalDateTime
@@ -54,7 +53,6 @@ fun convertAiEventToMyEvent(
         description = eventData.description,
         color = color,
         sourceImagePath = sourceImagePath,
-        eventType = EventType.EVENT,
         tag = resolvedTag
     )
 }

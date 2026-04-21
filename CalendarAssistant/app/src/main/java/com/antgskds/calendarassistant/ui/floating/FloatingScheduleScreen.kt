@@ -128,7 +128,6 @@ import com.antgskds.calendarassistant.core.note.markdownWithoutTasks
 import com.antgskds.calendarassistant.core.note.toggleMarkdownTask
 import com.antgskds.calendarassistant.core.note.withNoteMarkdown
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
@@ -1247,8 +1246,8 @@ fun ScheduleCard(
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val canEdit = remember(event.eventType, event.isRecurring, event.isRecurringParent) {
-        event.eventType != EventType.COURSE && !event.isRecurring && !event.isRecurringParent
+    val canEdit = remember(event.tag, event.isRecurring, event.isRecurringParent) {
+        event.tag != EventTags.COURSE && !event.isRecurring && !event.isRecurringParent
     }
 
     var isEditing by remember { mutableStateOf(false) }
@@ -1317,7 +1316,7 @@ fun ScheduleCard(
     val contentColor = if (isExpired) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation = if (isInProgress) 6.dp else 2.dp
 
-    val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn, event.isRecurringParent, event.eventType) {
+    val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn, event.isRecurringParent) {
         EventTimelinePresenter.present(context, event).renderModel
     }
     val resolvedRuleId = model.ruleId

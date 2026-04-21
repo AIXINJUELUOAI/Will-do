@@ -8,12 +8,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.core.event.DomainEventType
+import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
+import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
+import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
@@ -35,6 +40,7 @@ import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
 private data class RecurringEditSession(
     val parentEventId: String,
@@ -51,6 +57,7 @@ fun HomeScreen(
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
+    val app = LocalContext.current.applicationContext as App
     // 从 settings 读取主题状态
     val settings by settingsViewModel.settings.collectAsState()
     val uiState by mainViewModel.uiState.collectAsState()
@@ -69,6 +76,63 @@ fun HomeScreen(
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(message)
         }
+    }
+
+    LaunchedEffect(app) {
+        app.domainEventBus
+            .eventsOfType<RecognitionFailedEvent>(DomainEventType.RECOGNITION_FAILED)
+            .collect { event ->
+                val payload = event.payload
+                val isHomeSource =
+                    payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
+                val isNoteSource =
+                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
+                if (!isHomeSource && !isNoteSource) return@collect
+
+                val message = payload.message.ifBlank { "识别失败（${payload.errorCode}）" }
+                showToast(message, ToastType.ERROR)
+            }
+    }
+
+    LaunchedEffect(app) {
+        app.domainEventBus
+            .eventsOfType<IngestSucceededEvent>(DomainEventType.INGEST_SUCCEEDED)
+            .collect { event ->
+                val payload = event.payload
+                val isHomeSource =
+                    payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
+                val isNoteSource =
+                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
+                if (!isHomeSource && !isNoteSource) return@collect
+
+                val message = when {
+                    payload.createdCount <= 0 -> "已处理，无新增"
+                    payload.createdCount == 1 -> "已添加 1 个事件"
+                    else -> "已添加 ${payload.createdCount} 个事件"
+                }
+                showToast(message, ToastType.SUCCESS)
+            }
+    }
+
+    LaunchedEffect(app) {
+        app.domainEventBus
+            .eventsOfType<IngestFailedEvent>(DomainEventType.INGEST_FAILED)
+            .collect { event ->
+                val payload = event.payload
+                val isHomeSource =
+                    payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
+                val isNoteSource =
+                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
+                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
+                if (!isHomeSource && !isNoteSource) return@collect
+
+                showToast(payload.message.ifBlank { "保存失败" }, ToastType.ERROR)
+            }
     }
 
     // 状态管理
@@ -194,7 +258,7 @@ fun HomeScreen(
         draftEventToAdd = null
         noteToEdit = null
         showNoteEditor = false
-        if (event.eventType == "course") {
+        if (event.tag == EventTags.COURSE) {
             editingVirtualCourse = event
             eventToEdit = null
             recurringEditSession = null
@@ -463,13 +527,6 @@ fun HomeScreen(
                 mainViewModel.deleteEvent(note)
                 showNoteEditor = false
                 noteToEdit = null
-            },
-            onAnalyzeResult = { eventDraft ->
-                pendingAddDialog = false
-                showAddEventDialog = true
-                eventToEdit = null
-                recurringEditSession = null
-                draftEventToAdd = eventDraft
             },
             onShowMessage = { message, type ->
                 showToast(message, type)

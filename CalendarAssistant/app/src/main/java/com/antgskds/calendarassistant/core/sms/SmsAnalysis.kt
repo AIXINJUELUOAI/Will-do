@@ -22,7 +22,6 @@ package com.antgskds.calendarassistant.core.sms
 
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
@@ -132,7 +131,7 @@ object SmsAnalysis {
             endTime = now.plusHours(1).format(dtf),
             location = locationPart,
             description = description,
-            type = EventType.EVENT,
+            type = "event",
             tag = tag
         )
     }

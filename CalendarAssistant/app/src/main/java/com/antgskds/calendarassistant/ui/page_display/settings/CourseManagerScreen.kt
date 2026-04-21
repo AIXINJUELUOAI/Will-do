@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.dialogs.CourseEditDialog
@@ -24,7 +25,9 @@ fun CourseManagerScreen(
     uiSize: Int = 2 // 1=小, 2=中, 3=大
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val courses = uiState.courses
+    val courses = remember(uiState.allEvents, uiState.settings) {
+        CourseEventMapper.extractCourses(uiState.allEvents, uiState.settings)
+    }
     val maxNodes = remember(uiState.settings.timeTableJson) {
         TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
     }

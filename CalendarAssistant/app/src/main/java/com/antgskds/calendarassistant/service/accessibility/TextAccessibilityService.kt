@@ -13,7 +13,6 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
 import android.util.Log
 import android.view.Display
 import android.view.KeyEvent
@@ -23,26 +22,23 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.event.DomainEventType
+import com.antgskds.calendarassistant.core.event.EventIdentity
+import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
+import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
+import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -60,12 +56,20 @@ class TextAccessibilityService : AccessibilityService() {
     private val NOTIFICATION_ID_PROGRESS = 1001
     private val NOTIFICATION_ID_RESULT = 2002
 
-    private val repository by lazy { (applicationContext as App).repository }
-    private val scheduleOperationApi by lazy { (applicationContext as App).scheduleOperationApi }
+    private val app by lazy { applicationContext as App }
+    private val capsuleCenter by lazy { app.capsuleCenter }
+    private val floatingCenter by lazy { app.floatingCenter }
+    private val domainEventBus by lazy { app.domainEventBus }
+    private val settingsQueryApi by lazy { app.settingsQueryApi }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private var recognitionFailedSubscriptionJob: Job? = null
+    private var ingestSucceededSubscriptionJob: Job? = null
+    private var ingestFailedSubscriptionJob: Job? = null
 
     companion object {
         private const val TAG = "TextAccessibilityService"
+        private const val RECOGNITION_SOURCE_TYPE = "accessibility"
+        private const val RECOGNITION_SOURCE_ID = "accessibility.screenshot"
         private const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
         const val ACTION_CLOSE_FLOATING = "com.antgskds.calendarassistant.ACTION_CLOSE_FLOATING"
         @Volatile var instance: TextAccessibilityService? = null
@@ -95,12 +99,85 @@ class TextAccessibilityService : AccessibilityService() {
         instance = this
         lastConnectedAt = System.currentTimeMillis()
         launcherPackageName = getLauncherPackageName()
+        subscribeRecognitionFailedEvents()
+        subscribeIngestEvents()
         Log.d(TAG, "无障碍服务已连接")
+    }
+
+    private fun subscribeRecognitionFailedEvents() {
+        recognitionFailedSubscriptionJob?.cancel()
+        recognitionFailedSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<RecognitionFailedEvent>(DomainEventType.RECOGNITION_FAILED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    cancelProgressNotification()
+                    showResultNotification(
+                        title = "识别失败",
+                        content = payload.message.ifBlank { "分析失败" },
+                        useOcrCapsule = true,
+                        durationMs = 8000L
+                    )
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cancelResultNotification()
+                    }, 8000)
+                }
+        }
+    }
+
+    private fun subscribeIngestEvents() {
+        ingestSucceededSubscriptionJob?.cancel()
+        ingestSucceededSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<IngestSucceededEvent>(DomainEventType.INGEST_SUCCEEDED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    val title = "新增 ${payload.createdCount} 个事件"
+                    val content = when {
+                        payload.createdEventIds.size == 1 -> "识别结果已保存"
+                        payload.createdEventIds.isNotEmpty() -> "识别结果已批量保存"
+                        else -> "识别完成"
+                    }
+                    cancelProgressNotification()
+                    showResultNotification(title, content, useOcrCapsule = true, durationMs = 8000L)
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cancelResultNotification()
+                    }, 8000)
+                }
+        }
+
+        ingestFailedSubscriptionJob?.cancel()
+        ingestFailedSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<IngestFailedEvent>(DomainEventType.INGEST_FAILED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    cancelProgressNotification()
+                    showResultNotification(
+                        title = "保存失败",
+                        content = payload.message.ifBlank { "入库失败" },
+                        useOcrCapsule = true,
+                        durationMs = 8000L
+                    )
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cancelResultNotification()
+                    }, 8000)
+                }
+        }
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val currentSettings = try {
-            repository.settings.value
+            settingsQueryApi.settings.value
         } catch (e: Exception) {
             return super.onKeyEvent(event)
         }
@@ -228,15 +305,13 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     private fun startFloatingService() {
-        if (!Settings.canDrawOverlays(this)) {
+        if (!floatingCenter.canDrawOverlays(this)) {
             Log.w(TAG, "悬浮窗权限未授予，无法启动悬浮窗")
             showResultNotification("悬浮窗权限未授予", "请在设置中开启悬浮窗权限")
             return
         }
         serviceScope.launch {
-            val intent = Intent(this@TextAccessibilityService, FloatingScheduleService::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startService(intent)
+            floatingCenter.startFloatingService()
         }
     }
 
@@ -250,12 +325,24 @@ class TextAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
         lastDisconnectedAt = System.currentTimeMillis()
+        recognitionFailedSubscriptionJob?.cancel()
+        recognitionFailedSubscriptionJob = null
+        ingestSucceededSubscriptionJob?.cancel()
+        ingestSucceededSubscriptionJob = null
+        ingestFailedSubscriptionJob?.cancel()
+        ingestFailedSubscriptionJob = null
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
         lastDisconnectedAt = System.currentTimeMillis()
+        recognitionFailedSubscriptionJob?.cancel()
+        recognitionFailedSubscriptionJob = null
+        ingestSucceededSubscriptionJob?.cancel()
+        ingestSucceededSubscriptionJob = null
+        ingestFailedSubscriptionJob?.cancel()
+        ingestFailedSubscriptionJob = null
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -414,7 +501,7 @@ class TextAccessibilityService : AccessibilityService() {
                 softwareBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
             }
 
-            val settings = repository.settings.value
+            val settings = settingsQueryApi.settings.value
             val config = settings.activeAiConfig()
             if (!config.isConfigured()) {
                 withContext(Dispatchers.Main) {
@@ -431,7 +518,17 @@ class TextAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val analysisResult = RecognitionProcessor.analyzeImage(softwareBitmap, settings, applicationContext)
+            val traceId = EventIdentity.newTraceId("accessibility")
+            val analysisResult = app.recognitionCenter.analyzeImage(
+                bitmap = softwareBitmap,
+                settings = settings,
+                context = applicationContext,
+                sourceType = RECOGNITION_SOURCE_TYPE,
+                sourceId = RECOGNITION_SOURCE_ID,
+                sourceImagePath = imageFile.absolutePath,
+                ingestRequested = true,
+                traceId = traceId
+            )
             softwareBitmap.recycle()
 
             withContext(Dispatchers.Main) {
@@ -439,12 +536,6 @@ class TextAccessibilityService : AccessibilityService() {
                 when (analysisResult) {
                     is AnalysisResult.Success -> {
                         val validEvents = analysisResult.data.filter { it.title.isNotBlank() }
-                        val addedEvents = if (validEvents.isNotEmpty()) {
-                            saveEventsLocally(validEvents, imageFile.absolutePath)
-                        } else {
-                            emptyList()
-                        }
-
                         if (validEvents.isEmpty()) {
                             showResultNotification(
                                 "分析完成",
@@ -457,48 +548,15 @@ class TextAccessibilityService : AccessibilityService() {
                             }, 5000)
                             return@withContext
                         }
-                        if (addedEvents.isNotEmpty()) {
-                            val count = addedEvents.size
-                            val title = "新增 $count 个事件"
-                            val content = if (count == 1) {
-                                val e = addedEvents.first()
-                                "${e.description}(${e.startTime})"
-                            } else {
-                                addedEvents.joinToString("，") { it.title }
-                            }
-                            showResultNotification(
-                                title,
-                                content,
-                                useOcrCapsule = true,
-                                durationMs = 8000L
-                            )
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                cancelResultNotification()
-                            }, 8000)
-                        }
-                    }
-                    is AnalysisResult.Empty -> {
                         showResultNotification(
                             "分析完成",
-                            analysisResult.message,
+                            "识别到 ${validEvents.size} 条候选，正在保存...",
                             useOcrCapsule = true,
-                            durationMs = 5000L
+                            durationMs = 6000L
                         )
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            cancelResultNotification()
-                        }, 5000)
                     }
-                    is AnalysisResult.Failure -> {
-                        showResultNotification(
-                            analysisResult.failure.title,
-                            analysisResult.failure.detail,
-                            useOcrCapsule = true,
-                            durationMs = 8000L
-                        )
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            cancelResultNotification()
-                        }, 8000)
-                    }
+                    is AnalysisResult.Empty -> Unit
+                    is AnalysisResult.Failure -> Unit
                 }
             }
         } catch (e: Exception) {
@@ -516,73 +574,9 @@ class TextAccessibilityService : AccessibilityService() {
         }
     }
 
-    private suspend fun saveEventsLocally(aiEvents: List<CalendarEventData>, imagePath: String): List<MyEvent> {
-        val actuallyAdded = mutableListOf<MyEvent>()
-        val currentEvents = repository.events.value
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
-        aiEvents.forEachIndexed { index, aiEvent ->
-            try {
-                val now = LocalDateTime.now()
-                var startDateTime = try {
-                    if (aiEvent.startTime.isNotBlank()) LocalDateTime.parse(aiEvent.startTime, formatter) else now
-                } catch (e: Exception) { now }
-
-                var endDateTime = try {
-                    if (aiEvent.endTime.isNotBlank()) LocalDateTime.parse(aiEvent.endTime, formatter) else startDateTime.plusHours(1)
-                } catch (e: Exception) { startDateTime.plusHours(1) }
-
-                val finalTag = aiEvent.tag.ifBlank { EventTags.GENERAL }
-                val newEventTitle = aiEvent.title.trim()
-
-                val currentRepositoryEvents = repository.events.value
-
-                val isDuplicate = currentRepositoryEvents.any { existing ->
-                    val isExpired = existing.endDate.isBefore(java.time.LocalDate.now())
-                    if (isExpired) return@any false
-
-                    existing.startDate == startDateTime.toLocalDate() &&
-                            existing.startTime == startDateTime.format(timeFormatter) &&
-                            existing.title.trim().equals(newEventTitle, ignoreCase = true)
-                }
-
-                if (isDuplicate) return@forEachIndexed
-
-                val newEvent = MyEvent(
-                    id = UUID.randomUUID().toString(),
-                    title = newEventTitle,
-                    startDate = startDateTime.toLocalDate(),
-                    endDate = endDateTime.toLocalDate(),
-                    startTime = startDateTime.format(timeFormatter),
-                    endTime = endDateTime.format(timeFormatter),
-                    location = aiEvent.location,
-                    description = aiEvent.description,
-                    color = com.antgskds.calendarassistant.ui.theme.EventColors[currentEvents.size % com.antgskds.calendarassistant.ui.theme.EventColors.size],
-                    sourceImagePath = imagePath,
-                    eventType = EventType.EVENT,
-                    tag = finalTag.ifBlank { EventTags.GENERAL }
-                )
-                actuallyAdded.add(newEvent)
-
-                NotificationScheduler.scheduleReminders(this, newEvent)
-            } catch (e: Exception) {
-                Log.e(TAG, "保存单个事件失败", e)
-            }
-        }
-
-        if (actuallyAdded.isNotEmpty()) {
-            actuallyAdded.forEach { event ->
-                scheduleOperationApi.addEvent(event)
-                NotificationScheduler.scheduleReminders(this, event)
-            }
-        }
-        return actuallyAdded
-    }
-
     private fun showProgressNotification(title: String, content: String) {
         if (shouldUseOcrCapsule()) {
-            repository.capsuleStateManager.showOcrProgress(title, content)
+            capsuleCenter.showOcrProgress(title, content)
         } else {
             showBaseNotification(NOTIFICATION_ID_PROGRESS, title, content, isProgress = true, autoLaunch = false)
         }
@@ -590,7 +584,7 @@ class TextAccessibilityService : AccessibilityService() {
 
     private fun cancelProgressNotification() {
         if (shouldUseOcrCapsule()) {
-            repository.capsuleStateManager.clearOcrCapsule()
+            capsuleCenter.clearOcrCapsule()
             return
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -599,7 +593,7 @@ class TextAccessibilityService : AccessibilityService() {
 
     private fun cancelResultNotification() {
         if (shouldUseOcrCapsule()) {
-            repository.capsuleStateManager.clearOcrCapsule()
+            capsuleCenter.clearOcrCapsule()
             return
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -614,14 +608,14 @@ class TextAccessibilityService : AccessibilityService() {
         durationMs: Long = 8000L
     ) {
         if (useOcrCapsule && shouldUseOcrCapsule()) {
-            repository.capsuleStateManager.showOcrResult(title, content, durationMs)
+            capsuleCenter.showOcrResult(title, content, durationMs)
         } else {
             showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
         }
     }
 
     private fun shouldUseOcrCapsule(): Boolean {
-        return repository.settings.value.isLiveCapsuleEnabled
+        return settingsQueryApi.settings.value.isLiveCapsuleEnabled
     }
 
     private fun showBaseNotification(id: Int, title: String, content: String, isProgress: Boolean, autoLaunch: Boolean) {

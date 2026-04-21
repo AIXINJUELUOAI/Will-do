@@ -7,13 +7,9 @@ import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.util.UUID
 
-object EventType {
-    const val EVENT = "event"   // 普通日程（含取件码、火车、打车）
-    const val COURSE = "course" // 课程
-}
-
 object EventTags {
     const val GENERAL = "general"  // 普通日程、会议、约会
+    const val COURSE = "course"    // 课程
     const val PICKUP = "pickup"  // 取件、核销码
     const val FOOD = "food"      // 取餐、外卖
     const val TRAIN = "train"     // 火车、高铁
@@ -41,7 +37,6 @@ data class MyEvent(
     val isImportant: Boolean = false,
     val sourceImagePath: String? = null,
     val reminders: List<Int> = emptyList(),
-    val eventType: String = EventType.EVENT,
     val tag: String = EventTags.GENERAL,
     val isCompleted: Boolean = false,
     val completedAt: Long? = null,

@@ -23,6 +23,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import com.antgskds.calendarassistant.core.course.hasConfiguredSemesterAnchor
+import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
 import com.antgskds.calendarassistant.data.model.Course
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -47,22 +49,13 @@ fun ScheduleView(
     // 1. 解析开学日期
     // 修复：增加了对 null 的处理 (!semesterStartDateStr.isNullOrBlank())
     val semesterStart = remember(semesterStartDateStr) {
-        try {
-            // 如果字符串不为 null 且不为空白，则尝试解析
-            if (!semesterStartDateStr.isNullOrBlank()) {
-                LocalDate.parse(semesterStartDateStr)
-            } else {
-                LocalDate.now() // 没设置就默认今天
-            }
-        } catch (e: Exception) {
-            LocalDate.now()
-        }
+        resolveSemesterAnchor(semesterStartDateStr)
     }
 
     // 2. 计算"系统今天"是第几周
     val systemCurrentWeek = remember(semesterStart) {
         // 修复：使用 isNullOrBlank() 安全判断
-        if (semesterStartDateStr.isNullOrBlank()) {
+        if (!hasConfiguredSemesterAnchor(semesterStartDateStr)) {
             1 // 没设置开学日期 -> 显示第1周
         } else {
             val today = LocalDate.now() // 强制获取系统今天

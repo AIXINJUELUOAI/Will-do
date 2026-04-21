@@ -1,7 +1,6 @@
 package com.antgskds.calendarassistant.core.calendar
 
 import android.content.Context
-import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.TimeNode
 
@@ -12,15 +11,14 @@ class CalendarSyncGateway(context: Context) {
     suspend fun syncAllToCalendar(
         useV2: Boolean,
         events: List<MyEvent>,
-        courses: List<Course>,
         semesterStart: String?,
         totalWeeks: Int,
         timeNodes: List<TimeNode>
     ): Result<Unit> {
         return if (useV2) {
-            v2Manager.syncAllToCalendar(events, courses, semesterStart, totalWeeks, timeNodes)
+            v2Manager.syncAllToCalendar(events, semesterStart, totalWeeks, timeNodes)
         } else {
-            legacyManager.syncAllToCalendar(events, courses, semesterStart, totalWeeks, timeNodes)
+            legacyManager.syncAllToCalendar(events, semesterStart, totalWeeks, timeNodes)
         }
     }
 

@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.core.note
 
 import androidx.compose.ui.graphics.Color
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import java.time.LocalDate
 import java.util.UUID
@@ -64,7 +63,6 @@ fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEv
         this.title == normalizedTitle &&
         this.description == normalizedMarkdown &&
         this.tag == EventTags.NOTE &&
-        this.eventType == EventType.EVENT &&
         this.skipCalendarSync &&
         this.reminders.isEmpty() &&
         this.isCompleted == allDone &&
@@ -77,7 +75,6 @@ fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEv
         title = normalizedTitle,
         description = normalizedMarkdown,
         tag = EventTags.NOTE,
-        eventType = EventType.EVENT,
         skipCalendarSync = true,
         reminders = emptyList(),
         isCompleted = allDone,
@@ -112,7 +109,6 @@ fun createNoteEvent(
         description = normalizedMarkdown,
         color = color,
         reminders = emptyList(),
-        eventType = EventType.EVENT,
         tag = EventTags.NOTE,
         isCompleted = allDone,
         completedAt = if (allDone) System.currentTimeMillis() else null,

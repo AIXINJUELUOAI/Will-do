@@ -5,15 +5,16 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.core.util.OsUtils
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
@@ -44,7 +45,8 @@ import java.util.concurrent.ConcurrentHashMap
  * 胶囊状态管理器 - 主动唤醒模式
  */
 class CapsuleStateManager(
-    private val repository: AppRepository,
+    private val scheduleQueryApi: ScheduleQueryApi,
+    private val settingsQueryApi: SettingsQueryApi,
     private val appScope: CoroutineScope,
     private val context: Context
 ) {
@@ -207,7 +209,7 @@ class CapsuleStateManager(
     private fun startNotificationManager() {
         appScope.launch {
             uiState.collect { state ->
-                val settings = repository.settings.value
+                val settings = settingsQueryApi.settings.value
                 val useMiuiIsland = isMiuiIslandMode(settings)
                 when (state) {
                     is CapsuleUiState.Active -> {
@@ -322,18 +324,17 @@ class CapsuleStateManager(
 
         // combine 只支持最多 5 个流，需要嵌套 combine
         val baseCombine = combine(
-            repository.events,
-            repository.courses,
-            repository.settings,
+            scheduleQueryApi.events,
+            settingsQueryApi.settings,
             tickerTrigger,
             forceRefreshTrigger
-        ) { events, courses, settings, _, _ ->
-            Triple(events, courses, settings)
+        ) { events, settings, _, _ ->
+            Pair(events, settings)
         }
 
-        return combine(baseCombine, networkSpeedState, ocrCapsuleState) { (events, courses, settings), networkSpeed, ocrCapsule ->
+        return combine(baseCombine, networkSpeedState, ocrCapsuleState) { (events, settings), networkSpeed, ocrCapsule ->
             Log.d(TAG, "=== computeCapsuleState 被调用 ===")
-            computeCapsuleState(events, courses, settings, networkSpeed, ocrCapsule)
+            computeCapsuleState(events, settings, networkSpeed, ocrCapsule)
         }.flowOn(Dispatchers.Default)  // ✅ 将胶囊计算移到后台线程，避免主线程 ANR
         .stateIn(
             scope = appScope,
@@ -344,7 +345,6 @@ class CapsuleStateManager(
 
     private fun computeCapsuleState(
         events: List<MyEvent>,
-        courses: List<com.antgskds.calendarassistant.data.model.Course>,
         settings: MySettings,
         networkSpeed: NetworkSpeedMonitor.NetworkSpeed?,
         ocrCapsule: OcrCapsuleState?
@@ -374,7 +374,7 @@ class CapsuleStateManager(
                 display = activeOcrCapsule.display
             )
             // OCR 胶囊不阻断后续日程计算，与日程胶囊共存
-            val scheduleCapsules = computeScheduleCapsules(events, courses, settings)
+            val scheduleCapsules = computeScheduleCapsules(events, settings)
             return CapsuleUiState.Active(listOf(ocrItem) + scheduleCapsules)
         }
 
@@ -402,19 +402,19 @@ class CapsuleStateManager(
             return CapsuleUiState.None
         }
 
-        val capsules = computeScheduleCapsules(events, courses, settings)
+        val capsules = computeScheduleCapsules(events, settings)
         return if (capsules.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(capsules)
     }
 
     private fun computeScheduleCapsules(
         events: List<MyEvent>,
-        courses: List<com.antgskds.calendarassistant.data.model.Course>,
         settings: MySettings
     ): List<CapsuleUiState.Active.CapsuleItem> {
 
         val now = LocalDateTime.now()
         val today = LocalDate.now()
 
+        val courses = CourseEventMapper.extractCourses(events, settings)
         val todayCourses = CourseManager.getDailyCourses(today, courses, settings)
         val allEvents = (events + todayCourses)
 
@@ -583,8 +583,8 @@ class CapsuleStateManager(
     }
 
     private fun resolveCapsuleEventType(event: MyEvent): String {
-        return if (event.eventType == EventType.COURSE) {
-            EventType.COURSE
+        return if (event.tag == EventTags.COURSE) {
+            EventTags.COURSE
         } else {
             resolveRuleId(event)
         }

@@ -100,6 +100,9 @@ interface EventInstanceDao {
     @Query("DELETE FROM event_instances WHERE masterId = :masterId")
     suspend fun deleteByMasterId(masterId: String): Int
 
+    @Query("DELETE FROM event_instances WHERE masterId IN (:masterIds)")
+    suspend fun deleteByMasterIds(masterIds: List<String>): Int
+
     /**
      * 获取时间范围内的实例 ID 列表
      */

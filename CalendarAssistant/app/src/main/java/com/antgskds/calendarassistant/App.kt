@@ -3,41 +3,67 @@ package com.antgskds.calendarassistant
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
 import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
 import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncWorker
-import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
-import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
+import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.core.center.CapsuleCenter
+import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.core.center.ContentIngestCenter
+import com.antgskds.calendarassistant.core.center.FloatingCenter
+import com.antgskds.calendarassistant.core.center.ImportCenter
+import com.antgskds.calendarassistant.core.center.NotificationCenter
+import com.antgskds.calendarassistant.core.center.PermissionCenter
+import com.antgskds.calendarassistant.core.center.RecognitionCenter
+import com.antgskds.calendarassistant.core.center.ReminderCenter
+import com.antgskds.calendarassistant.core.center.RuleCenter
+import com.antgskds.calendarassistant.core.center.RuntimeCenter
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
+import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
+import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
+import com.antgskds.calendarassistant.core.operation.BackupOperationApi
+import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
+import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
+import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
+import com.antgskds.calendarassistant.core.query.EventActionQueryApi
+import com.antgskds.calendarassistant.core.query.DailySummaryQueryApi
+import com.antgskds.calendarassistant.core.query.HomeQueryApi
+import com.antgskds.calendarassistant.core.query.NotificationPresentationQueryApi
+import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
+import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.data.operation.AppRepositoryScheduleOperationApi
-import com.antgskds.calendarassistant.data.operation.AppRepositorySettingsOperationApi
-import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
-import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
-import com.antgskds.calendarassistant.data.repository.AppRepository
-import com.antgskds.calendarassistant.data.source.SettingsDataSource
+import com.antgskds.calendarassistant.core.query.SettingsTransformApi
+import com.antgskds.calendarassistant.core.query.WeatherQueryApi
+import com.antgskds.calendarassistant.data.operation.CapsuleStateManagerCommandApi
+import com.antgskds.calendarassistant.data.operation.WeatherRepositoryOperationApi
+import com.antgskds.calendarassistant.data.port.StoreDispatcher
+import com.antgskds.calendarassistant.data.query.CapsuleStateManagerQueryApi
+import com.antgskds.calendarassistant.data.query.LocalCapsuleRoutingQueryApi
+import com.antgskds.calendarassistant.data.query.LocalAlarmRoutingQueryApi
+import com.antgskds.calendarassistant.data.query.LocalDailySummaryQueryApi
+import com.antgskds.calendarassistant.data.query.LocalEventActionQueryApi
+import com.antgskds.calendarassistant.data.query.LocalHomeQueryApi
+import com.antgskds.calendarassistant.data.query.LocalNotificationPresentationQueryApi
+import com.antgskds.calendarassistant.data.query.LocalNetworkSpeedProbeQueryApi
+import com.antgskds.calendarassistant.data.query.LocalScheduleInsightsQueryApi
+import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
+import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
-import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
-import com.antgskds.calendarassistant.service.floating.EdgeBarService
-import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
-import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 class App : Application() {
 
@@ -52,25 +78,121 @@ class App : Application() {
             private set
     }
 
-    // 全局单例 Repository (懒加载)
-    val repository: AppRepository by lazy {
-        AppRepository.getInstance(this)
+    private val storeDispatcher by lazy {
+        StoreDispatcher.getInstance(this)
     }
 
     val scheduleOperationApi: ScheduleOperationApi by lazy {
-        AppRepositoryScheduleOperationApi(repository)
+        storeDispatcher
     }
 
     val settingsOperationApi: SettingsOperationApi by lazy {
-        AppRepositorySettingsOperationApi(repository)
+        storeDispatcher
+    }
+
+    val backupOperationApi: BackupOperationApi by lazy {
+        storeDispatcher
     }
 
     val scheduleQueryApi: ScheduleQueryApi by lazy {
-        AppRepositoryScheduleQueryApi(repository)
+        storeDispatcher
     }
 
     val settingsQueryApi: SettingsQueryApi by lazy {
-        AppRepositorySettingsQueryApi(repository)
+        storeDispatcher
+    }
+
+    val homeQueryApi: HomeQueryApi by lazy {
+        LocalHomeQueryApi()
+    }
+
+    val scheduleInsightsQueryApi: ScheduleInsightsQueryApi by lazy {
+        LocalScheduleInsightsQueryApi()
+    }
+
+    val dailySummaryQueryApi: DailySummaryQueryApi by lazy {
+        LocalDailySummaryQueryApi()
+    }
+
+    val settingsTransformApi: SettingsTransformApi by lazy {
+        LocalSettingsTransformApi()
+    }
+
+    private val weatherRepository by lazy {
+        com.antgskds.calendarassistant.core.weather.WeatherRepository.getInstance(applicationContext)
+    }
+
+    val weatherQueryApi: WeatherQueryApi by lazy {
+        WeatherRepositoryQueryApi(weatherRepository)
+    }
+
+    val weatherOperationApi: WeatherOperationApi by lazy {
+        WeatherRepositoryOperationApi(weatherRepository)
+    }
+
+    val domainEventBus: DomainEventBus by lazy {
+        DomainEventBus()
+    }
+
+    val eventActionQueryApi: EventActionQueryApi by lazy {
+        LocalEventActionQueryApi()
+    }
+
+    val notificationPresentationQueryApi: NotificationPresentationQueryApi by lazy {
+        LocalNotificationPresentationQueryApi()
+    }
+
+    val alarmRoutingQueryApi: AlarmRoutingQueryApi by lazy {
+        LocalAlarmRoutingQueryApi()
+    }
+
+    val capsuleRoutingQueryApi: CapsuleRoutingQueryApi by lazy {
+        LocalCapsuleRoutingQueryApi()
+    }
+
+    val scheduleCenter: ScheduleCenter by lazy {
+        ScheduleCenter(
+            scheduleOperationApi = scheduleOperationApi,
+            scheduleQueryApi = scheduleQueryApi,
+            settingsQueryApi = settingsQueryApi
+        )
+    }
+
+    private val importCenter: ImportCenter by lazy {
+        ImportCenter(
+            scheduleCenter = scheduleCenter
+        )
+    }
+
+    val contentIngestCenter: ContentIngestCenter by lazy {
+        ContentIngestCenter(
+            importCenter = importCenter,
+            domainEventBus = domainEventBus,
+            appScope = appScope
+        )
+    }
+
+    val recognitionCenter: RecognitionCenter by lazy {
+        RecognitionCenter(domainEventBus = domainEventBus)
+    }
+
+    val ingestCommandApi: IngestCommandApi by lazy {
+        contentIngestCenter
+    }
+
+    val ruleCenter: RuleCenter by lazy {
+        RuleCenter(applicationContext)
+    }
+
+    val syncCenter: SyncCenter by lazy {
+        SyncCenter(
+            settingsOperationApi = settingsOperationApi,
+            settingsQueryApi = settingsQueryApi
+        )
+    }
+
+    val backupCenter: BackupCenter by lazy {
+        BackupCenter(backupOperationApi = backupOperationApi)
     }
 
     // 日历内容观察者（可选，仅在有权限时初始化）
@@ -79,8 +201,73 @@ class App : Application() {
     // 短信内容观察者
     private var smsObserver: SmsContentObserver? = null
 
-    // 网速监控协程
-    private val networkSpeedScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    val capsuleStateManager: CapsuleStateManager by lazy {
+        CapsuleStateManager(
+            scheduleQueryApi = scheduleQueryApi,
+            settingsQueryApi = settingsQueryApi,
+            appScope = appScope,
+            context = applicationContext
+        )
+    }
+
+    val capsuleCommandApi: CapsuleCommandApi by lazy {
+        CapsuleStateManagerCommandApi(capsuleStateManager)
+    }
+
+    val capsuleQueryApi: CapsuleQueryApi by lazy {
+        CapsuleStateManagerQueryApi(capsuleStateManager)
+    }
+
+    val capsuleCenter: CapsuleCenter by lazy {
+        CapsuleCenter(
+            capsuleCommandApi = capsuleCommandApi,
+            capsuleQueryApi = capsuleQueryApi
+        )
+    }
+
+    val permissionCenter: PermissionCenter by lazy {
+        PermissionCenter()
+    }
+
+    val floatingCenter: FloatingCenter by lazy {
+        FloatingCenter(
+            appContext = applicationContext,
+            permissionCenter = permissionCenter
+        )
+    }
+
+    val notificationCenter: NotificationCenter by lazy {
+        NotificationCenter(applicationContext)
+    }
+
+    val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi by lazy {
+        LocalNetworkSpeedProbeQueryApi()
+    }
+
+    val reminderCenter: ReminderCenter by lazy {
+        ReminderCenter(
+            appContext = applicationContext,
+            capsuleCenter = capsuleCenter,
+            settingsQueryApi = settingsQueryApi,
+            scheduleQueryApi = scheduleQueryApi,
+            domainEventBus = domainEventBus,
+            appScope = appScope
+        )
+    }
+
+    val runtimeCenter: RuntimeCenter by lazy {
+        RuntimeCenter(
+            appContext = applicationContext,
+            settingsQueryApi = settingsQueryApi,
+            permissionCenter = permissionCenter,
+            floatingCenter = floatingCenter,
+            networkSpeedProbeQueryApi = networkSpeedProbeQueryApi,
+            capsuleCenter = capsuleCenter,
+            appScope = appScope
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -94,6 +281,13 @@ class App : Application() {
         
         // 初始化通知渠道
         createNotificationChannels()
+
+        storeDispatcher.bindCapsuleRefreshHandler {
+            capsuleCommandApi.forceRefresh()
+        }
+
+        // 预热入库中心，避免识别事件在订阅建立前发出导致“正在创建”无后续。
+        contentIngestCenter
 
         // 注册内容源定义，后续便签/天气/语音可平滑接入统一时间轴和胶囊框架
         ContentRegistry.register(
@@ -135,19 +329,9 @@ class App : Application() {
         // 初始化短信 ContentObserver（监听短信数据库变化，自动提取取件码）
         initSmsObserver()
 
-        // 短信监听开启时，尝试恢复通知监听服务绑定（用于 MIUI 等机型兜底）
-        restoreSmsNotificationListenerIfNeeded()
+        runtimeCenter.startAppRoutines()
 
-        // 启动定期日历同步（每1分钟）
-        startPeriodicSync()
-
-        // 启动后台保活检查（每30分钟）
-        KeepAliveReceiver.schedule(this)
-
-        // 启动网速监控
-        startNetworkSpeedMonitoring()
-
-        startEdgeBarIfNeeded()
+        reminderCenter.startEventSubscriptions()
     }
 
     private fun createNotificationChannels() {
@@ -186,7 +370,7 @@ class App : Application() {
      * 避免新安装未授权时崩溃或报错
      */
     private fun initCalendarObserverIfPermissionGranted() {
-        if (CalendarPermissionHelper.hasAllPermissions(this)) {
+        if (permissionCenter.hasCalendarPermissions(this)) {
             initCalendarObserver()
         } else {
             Log.d(TAG, "日历权限未授予，跳过 Observer 初始化")
@@ -201,8 +385,7 @@ class App : Application() {
     private fun initSmsObserver() {
         smsObserver = SmsContentObserver(
             context = this,
-            getRepository = { try { repository } catch (_: Exception) { null } },
-            getScheduleOperationApi = { try { scheduleOperationApi } catch (_: Exception) { null } }
+            getIngestCommandApi = { try { ingestCommandApi } catch (_: Exception) { null } }
         )
         smsObserver?.register()
     }
@@ -226,85 +409,4 @@ class App : Application() {
         Log.d(TAG, "日历内容观察者已初始化并注册")
     }
 
-    /**
-     * 启动网速监控
-     * 监听设置变化，当网速胶囊开启时持续更新网速数据
-     */
-    private fun startNetworkSpeedMonitoring() {
-        networkSpeedScope.launch {
-            repository.settings.collectLatest { settings ->
-                if (settings.isNetworkSpeedCapsuleEnabled) {
-                    Log.d(TAG, "网速胶囊已开启，启动监控")
-                    NetworkSpeedMonitor.monitorDownloadSpeed().collectLatest { speed ->
-                        repository.capsuleStateManager.updateNetworkSpeed(speed)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun startEdgeBarIfNeeded() {
-        try {
-            val settings = repository.settings.value
-            if (settings.edgeBarEnabled && Settings.canDrawOverlays(this)) {
-                startService(Intent(this, EdgeBarService::class.java))
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "启动侧边栏失败", e)
-        }
-    }
-
-    /**
-     * 启动定期日历同步
-     * 使用 AlarmManager 每隔一段时间触发一次同步
-     */
-    private fun startPeriodicSync() {
-        CalendarReverseSyncScheduler.schedule(this)
-    }
-
-    private fun restoreSmsNotificationListenerIfNeeded() {
-        try {
-            val settings = SettingsDataSource(this).loadSettings()
-            if (settings.isSmsMonitoringEnabled) {
-                SmsNotificationListenerService.rebind(this)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "恢复短信通知监听失败", e)
-        }
-    }
-}
-
-/**
- * 日历同步 BroadcastReceiver
- * 由 AlarmManager 定期触发，执行反向同步
- */
-class CalendarSyncReceiver : BroadcastReceiver() {
-    companion object {
-        private const val TAG = "CalendarSyncReceiver"
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "收到定期同步广播")
-
-        CalendarReverseSyncScheduler.schedule(context)
-
-        val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        val settingsOperationApi = (context.applicationContext as App).settingsOperationApi
-
-        syncScope.launch {
-            try {
-                val result = settingsOperationApi.syncFromCalendar()
-                if (result.isSuccess) {
-                    val count = result.getOrNull() ?: 0
-                    if (count > 0) {
-                        Log.d(TAG, "定期反向同步成功：从系统日历同步了 $count 个事件")
-                    }
-                } else {
-                    Log.w(TAG, "定期反向同步失败：${result.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "定期反向同步异常", e)
-            }
-        }
-    }
 }

@@ -1,0 +1,56 @@
+package com.antgskds.calendarassistant.data.query
+
+import com.antgskds.calendarassistant.core.query.SettingsTransformApi
+import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
+import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+
+class LocalSettingsTransformApi : SettingsTransformApi {
+    override fun applyPreferenceUpdate(
+        current: MySettings,
+        showTomorrow: Boolean?,
+        dailySummary: Boolean?,
+        liveCapsule: Boolean?,
+        pickupAggregation: Boolean?,
+        edgeBarEnabled: Boolean?,
+        networkSpeedCapsule: Boolean?,
+        floatingWindow: Boolean?,
+        advanceReminderEnabled: Boolean?,
+        advanceReminderMinutes: Int?,
+        autoArchive: Boolean?,
+        useMultimodalAi: Boolean?,
+        disableThinking: Boolean?,
+        floatingEventRange: Int?,
+        volumeUpLongPressEnabled: Boolean?,
+        volumeUpLongPressAction: Int?,
+        smsMonitoring: Boolean?,
+        noteEnabled: Boolean?,
+        homeBottomItems: List<String>?,
+        homeStartPageKey: String?
+    ): MySettings {
+        var updated = current
+        if (showTomorrow != null) updated = updated.copy(showTomorrowEvents = showTomorrow)
+        if (dailySummary != null) updated = updated.copy(isDailySummaryEnabled = dailySummary)
+        if (liveCapsule != null) updated = updated.copy(isLiveCapsuleEnabled = liveCapsule)
+        if (pickupAggregation != null) updated = updated.copy(isPickupAggregationEnabled = pickupAggregation)
+        if (edgeBarEnabled != null) updated = updated.copy(edgeBarEnabled = edgeBarEnabled)
+        if (networkSpeedCapsule != null) updated = updated.copy(isNetworkSpeedCapsuleEnabled = networkSpeedCapsule)
+        if (floatingWindow != null) updated = updated.copy(isFloatingWindowEnabled = floatingWindow)
+        if (advanceReminderEnabled != null) updated = updated.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
+        if (advanceReminderMinutes != null) updated = updated.copy(advanceReminderMinutes = advanceReminderMinutes)
+        if (autoArchive != null) updated = updated.copy(autoArchiveEnabled = autoArchive)
+        if (useMultimodalAi != null) updated = updated.copy(useMultimodalAi = useMultimodalAi)
+        if (disableThinking != null) updated = updated.copy(disableThinking = disableThinking)
+        if (floatingEventRange != null) updated = updated.copy(floatingEventRange = floatingEventRange)
+        if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
+        if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction)
+        if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
+        if (noteEnabled != null) updated = updated.copy(noteEnabled = noteEnabled)
+        if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
+        if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)
+
+        val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems, updated.noteEnabled)
+        val sanitizedStartPage = sanitizeHomeStartPageKey(updated.homeStartPageKey, sanitizedBottomItems)
+        return updated.copy(homeBottomItems = sanitizedBottomItems, homeStartPageKey = sanitizedStartPage)
+    }
+}
