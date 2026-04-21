@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
@@ -162,7 +161,6 @@ fun AddEventDialog(
     var endTime by remember { mutableStateOf(initialRange.end.toLocalTime().format(timeFormatter)) }
     var location by remember { mutableStateOf(eventToEdit?.location ?: "") }
     var desc by remember { mutableStateOf(eventToEdit?.description ?: "") }
-    var eventType by remember { mutableStateOf(eventToEdit?.eventType ?: EventType.EVENT) }
     var eventTag by remember { mutableStateOf(eventToEdit?.tag ?: EventTags.GENERAL) }
     val reminders = remember { mutableStateListOf<Int>().apply { addAll(eventToEdit?.reminders ?: emptyList()) } }
 
@@ -357,7 +355,7 @@ fun AddEventDialog(
                                 endTime = finalEnd.toLocalTime().format(timeFormatter),
                                 location = location, description = desc, color = eventToEdit?.color ?: nextColor,
                                 isImportant = eventToEdit?.isImportant ?: false, sourceImagePath = eventToEdit?.sourceImagePath,
-                                reminders = reminders.toList(), eventType = eventType, tag = eventTag
+                                reminders = reminders.toList(), tag = eventTag
                             )
                             onConfirm(newEvent)
                         }

@@ -4,12 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.core.weather.WeatherSyncWorker
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.data.repository.SettingsRepository
-import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,26 +18,16 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             Log.d("BootReceiver", "System/package restore trigger received, rescheduling alarms...")
 
-            // 1. 恢复数据相关的闹钟 (AppRepository 内部会调 NotificationScheduler)
-            val repository = AppRepository.getInstance(context)
-            repository.loadAndScheduleAll()
+            val app = context.applicationContext as App
 
-            // 2. 恢复早晚报调度
-            DailySummaryReceiver.schedule(context)
+            // 1. 恢复数据相关的闹钟 (StoreRootNode 内部会调 NotificationScheduler)
+            app.scheduleCenter.refreshAndScheduleAll()
 
-            // 3. 恢复后台保活检查
-            KeepAliveReceiver.schedule(context)
+            // 2. 恢复运行时调度（早晚报/保活/反向同步/短信监听）
+            app.runtimeCenter.restoreAfterBoot()
 
-            // 4. 恢复定期反向同步
-            CalendarReverseSyncScheduler.schedule(context)
-
-            // 5. 恢复天气定时刷新
+            // 3. 恢复天气定时刷新
             WeatherSyncWorker.syncForSettings(context, SettingsRepository(context).loadSettings())
-
-            // 6. 恢复系统短信通知监听兜底通道
-            if (SettingsDataSource(context).loadSettings().isSmsMonitoringEnabled) {
-                SmsNotificationListenerService.rebind(context)
-            }
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             AccessibilityGuardian.checkAndRestoreIfNeeded(

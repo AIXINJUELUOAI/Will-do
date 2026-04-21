@@ -39,7 +39,7 @@ fun AllEventsPage(
     val filteredEvents by remember(uiState.allEvents, searchQuery, today) {
         derivedStateOf {
             uiState.allEvents
-                .filter { it.tag != EventTags.NOTE }
+                .filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
                 .filter { event -> !event.isRecurringParent }
                 .filter { event -> !event.startDate.isAfter(futureLimit) }
                 .distinctBy { it.id }

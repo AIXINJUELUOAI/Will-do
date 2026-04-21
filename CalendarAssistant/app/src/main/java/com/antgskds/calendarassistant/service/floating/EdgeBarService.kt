@@ -11,7 +11,6 @@ import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
-import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -44,8 +43,10 @@ class EdgeBarService : Service() {
     private var layoutParams: WindowManager.LayoutParams? = null
     private var hiddenByFloating = false
     private var touchSlop = 0
-    private val repository by lazy { (applicationContext as App).repository }
-    private val settingsOperationApi by lazy { (applicationContext as App).settingsOperationApi }
+    private val app by lazy { applicationContext as App }
+    private val permissionCenter by lazy { app.permissionCenter }
+    private val settingsQueryApi by lazy { app.settingsQueryApi }
+    private val settingsOperationApi by lazy { app.settingsOperationApi }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -64,7 +65,7 @@ class EdgeBarService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (!Settings.canDrawOverlays(this)) {
+        if (!permissionCenter.canDrawOverlays(this)) {
             stopSelf()
             return
         }
@@ -82,7 +83,7 @@ class EdgeBarService : Service() {
         }
 
         serviceScope.launch {
-            repository.settings.collect { settings ->
+            settingsQueryApi.settings.collect { settings ->
                 if (!settings.edgeBarEnabled || !settings.isFloatingWindowEnabled) {
                     removeBarView()
                     stopSelf()
@@ -293,7 +294,7 @@ class EdgeBarService : Service() {
         val maxY = (getScreenHeight() - params.height).coerceAtLeast(1)
         val percent = (params.y.toFloat() / maxY * 100f).coerceIn(0f, 100f)
         serviceScope.launch {
-            val current = repository.settings.value
+            val current = settingsQueryApi.settings.value
             if (kotlin.math.abs(current.edgeBarYPercent - percent) >= 0.5f) {
                 settingsOperationApi.updateSettings(current.copy(edgeBarYPercent = percent))
             }

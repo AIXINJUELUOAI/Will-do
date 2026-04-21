@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
@@ -110,8 +110,8 @@ internal object EventPresentationInternals {
             RuleMatchingEngine.RULE_FLIGHT -> R.drawable.ic_stat_flight
             RuleMatchingEngine.RULE_TICKET -> R.drawable.ic_stat_ticket
             RuleMatchingEngine.RULE_SENDER -> R.drawable.ic_stat_sender
-            EventType.COURSE -> R.drawable.ic_stat_course
-            EventType.EVENT, RuleMatchingEngine.RULE_GENERAL -> R.drawable.ic_stat_event
+            EventTags.COURSE -> R.drawable.ic_stat_course
+            RuleMatchingEngine.RULE_GENERAL -> R.drawable.ic_stat_event
             else -> R.drawable.ic_notification_small
         }
     }
@@ -385,7 +385,7 @@ internal object EventPresentationInternals {
         val secondaryText = detailText ?: timeText
         val tertiaryText = if (detailText != null) timeText else null
         val expandedText = joinLines(detailText, tertiaryText, summaryText(event.description)?.takeUnless { it == detailText })
-        val action = if (!event.isCompleted && !isExpired && event.eventType != EventType.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
+        val action = if (!event.isCompleted && !isExpired && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
         return CapsuleDisplayModel(primaryText, primaryText, secondaryText, expandedText = expandedText, tertiaryText = tertiaryText, action = action)
     }
 

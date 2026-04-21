@@ -2,9 +2,7 @@ package com.antgskds.calendarassistant.core.calendar
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.SyncData
 import com.antgskds.calendarassistant.data.model.TimeNode
@@ -13,7 +11,6 @@ import com.antgskds.calendarassistant.core.util.EventDeduplicator
 import com.antgskds.calendarassistant.core.util.ExceptionLogStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,12 +29,6 @@ class CalendarSyncManager(private val context: Context) {
         private const val SYNC_LOOK_BACK_DAYS = 30L
         private const val SYNC_LOOK_AHEAD_DAYS = 30L
 
-        /**
-         * 课程同步的未来周数
-         * 只同步未来 N 周的课程，避免生成过多历史事件
-         */
-        private const val COURSE_SYNC_WEEKS_AHEAD = 16
-
         private const val RECURRING_INSTANCES_SYNC_LIMIT = 2000
         private const val MIN_FREE_MEMORY_BYTES = 64L * 1024L * 1024L
     }
@@ -52,10 +43,9 @@ class CalendarSyncManager(private val context: Context) {
 
     /**
      * 全量同步：将应用数据同步到系统日历
-     * 由 AppRepository 在数据变更时触发
+     * 由 StoreRootNode 在数据变更时触发
      *
      * @param events 应用内所有事件
-     * @param courses 应用内所有课程
      * @param semesterStart 学期开始日期
      * @param totalWeeks 总周数
      * @param timeNodes 作息时间表
@@ -63,7 +53,6 @@ class CalendarSyncManager(private val context: Context) {
      */
     suspend fun syncAllToCalendar(
         events: List<MyEvent>,
-        courses: List<Course>,
         semesterStart: String?,
         totalWeeks: Int,
         timeNodes: List<TimeNode>
@@ -101,16 +90,13 @@ class CalendarSyncManager(private val context: Context) {
 
             val memoryError = checkMemoryOrAbort(
                 action = "正向同步",
-                extra = "events=${events.size}, courses=${courses.size}, timeNodes=${timeNodes.size}"
+                extra = "events=${events.size}, timeNodes=${timeNodes.size}"
             )
             if (memoryError != null) {
                 return@withContext Result.failure(memoryError)
             }
 
-            // 5. 同步课程（单向强制同步：先删除再重建）
-            syncData = syncCourses(courses, semesterStart, totalWeeks, timeNodes, calendarId, syncData)
-
-            // 6. 同步普通事件（双向同步）
+            // 5. 同步事件（课程与普通日程统一走事件链路）
             syncData = syncEvents(events, calendarId, syncData)
 
             // 7. 更新同步时间
@@ -125,79 +111,11 @@ class CalendarSyncManager(private val context: Context) {
             ExceptionLogStore.append(
                 context,
                 TAG,
-                "syncAllToCalendar failed: events=${events.size}, courses=${courses.size}, timeNodes=${timeNodes.size}",
+                "syncAllToCalendar failed: events=${events.size}, timeNodes=${timeNodes.size}",
                 e
             )
             Result.failure(e)
         }
-    }
-
-    /**
-     * 同步课程（单向强制同步）
-     * 策略：先批量删除所有托管课程事件，再重新生成写入
-     *
-     * @return 更新后的 SyncData（包含新的学期哈希）
-     */
-    private suspend fun syncCourses(
-        courses: List<Course>,
-        semesterStart: String?,
-        totalWeeks: Int,
-        timeNodes: List<TimeNode>,
-        calendarId: Long,
-        syncData: SyncData
-    ): SyncData {
-        // 解析学期开始日期
-        val parsedSemesterStart = try {
-            LocalDate.parse(semesterStart)
-        } catch (e: Exception) {
-            Log.w(TAG, "解析学期开始日期失败，使用今天: $semesterStart")
-            LocalDate.now()
-        }
-
-        // 计算当前学期哈希
-        val currentSemesterHash = CalendarEventMapper.generateSemesterHash(
-            parsedSemesterStart,
-            totalWeeks
-        )
-
-        // 检查学期配置是否变化
-        val needRebuild = syncData.lastSemesterHash != currentSemesterHash
-
-        if (needRebuild) {
-            Log.d(TAG, "学期配置变化，需要重建课程事件")
-
-            // 1. 批量删除旧的托管课程事件
-            val deletedCount = calendarManager.batchDeleteManagedCourseEvents(calendarId)
-            Log.d(TAG, "删除了 $deletedCount 个旧的课程事件")
-
-            // 2. 展开所有课程
-            val instances = CalendarEventMapper.expandAllCourses(
-                courses = courses,
-                semesterStart = parsedSemesterStart,
-                totalWeeks = totalWeeks
-            )
-
-            // 3. 只同步未来 N 周的课程（避免生成过多历史事件）
-            val today = LocalDate.now()
-            val weeksAheadDate = today.plusWeeks(COURSE_SYNC_WEEKS_AHEAD.toLong())
-            val futureInstances = instances.filter { it.date <= weeksAheadDate }
-
-            // 4. 批量创建课程事件
-            if (futureInstances.isNotEmpty()) {
-                val mapping = calendarManager.batchCreateCourseEvents(
-                    courseEvents = futureInstances,
-                    calendarId = calendarId,
-                    timeNodes = timeNodes
-                )
-                Log.d(TAG, "创建了 ${mapping.size} 个新的课程事件")
-            }
-
-        } else {
-            Log.d(TAG, "学期配置未变化，跳过课程同步")
-        }
-
-        // 返回更新后的 SyncData（包含新的学期哈希）
-        return syncData.copy(lastSemesterHash = currentSemesterHash)
     }
 
     /**
@@ -213,9 +131,9 @@ class CalendarSyncManager(private val context: Context) {
         var updatedSyncData = syncData
         val currentMapping = updatedSyncData.mapping.toMutableMap()
 
-        // 过滤：只同步 eventType == EventType.EVENT 的普通事件
+        // 过滤：同步可下发到系统日历的普通事件（排除便签/课表虚拟事件）
         val eventsToSync = events.filter {
-            it.eventType == EventType.EVENT && !it.skipCalendarSync && !it.isRecurring && it.tag != EventTags.NOTE
+            !it.skipCalendarSync && !it.isRecurring && it.tag != EventTags.NOTE
         }
 
         Log.d(TAG, "普通事件: ${events.size} 个，过滤后: ${eventsToSync.size} 个")
@@ -703,7 +621,6 @@ class CalendarSyncManager(private val context: Context) {
             endTime = incomingEvent.endTime,
             location = incomingEvent.location,
             description = incomingEvent.description,
-            eventType = incomingEvent.eventType,
             tag = incomingEvent.tag,
             isRecurring = incomingEvent.isRecurring,
             isRecurringParent = incomingEvent.isRecurringParent,

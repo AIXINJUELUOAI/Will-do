@@ -14,14 +14,9 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.MainActivity
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
-import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.util.Calendar
 
 class DailySummaryReceiver : BroadcastReceiver() {
@@ -30,7 +25,7 @@ class DailySummaryReceiver : BroadcastReceiver() {
         if (intent.action != ACTION_DAILY_SUMMARY) return
 
         val type = intent.getIntExtra(EXTRA_TYPE, -1)
-        val repository = AppRepository.getInstance(context)
+        val app = context.applicationContext as App
 
         // 保持 Receiver 存活以进行异步操作
         val pendingResult = goAsync()
@@ -40,30 +35,18 @@ class DailySummaryReceiver : BroadcastReceiver() {
                 // 1. 稍微延迟等待 Repository 初始化（以防 App 冷启动）
                 Thread.sleep(500) // 简单且有效的实用主义做法
 
-                val settings = repository.settings.value
-                if (!settings.isDailySummaryEnabled) return@launch
-
-                // 2. 确定日期和文案
+                val settings = app.settingsQueryApi.settings.value
                 val isMorning = (type == TYPE_MORNING)
-                val targetDate = if (isMorning) LocalDate.now() else LocalDate.now().plusDays(1)
-
-                // 3. 筛选日程 (Repository 的 events 是 Hot Flow，通常已有缓存)
-                val events = repository.events.value.filter { it.startDate == targetDate && it.tag != EventTags.NOTE }
-
-                if (events.isEmpty()) return@launch
-
-                // 4. 构建文案
-                val cachedWeather = WeatherRepository.getInstance(context).weatherData.value
-                val titleBase = if (isMorning) "今日日程提醒" else "明日日程预告"
-                val title = if (settings.hasWeatherConfig() && cachedWeather != null) {
-                    "$titleBase ${cachedWeather.temperature}°C ${cachedWeather.text}".trim()
-                } else {
-                    titleBase
-                }
-                val content = "您有 ${events.size} 个日程：${events.joinToString("，") { it.title }}"
+                val cachedWeather = app.weatherQueryApi.weatherData.value
+                val payload = app.dailySummaryQueryApi.buildPayload(
+                    isMorning = isMorning,
+                    settings = settings,
+                    events = app.scheduleCenter.events.value,
+                    weatherData = cachedWeather
+                ) ?: return@launch
 
                 // 5. 发送通知
-                sendNotification(context, title, content, type)
+                sendNotification(context, payload.title, payload.content, type)
 
             } catch (e: Exception) {
                 Log.e("DailySummary", "Error processing summary", e)

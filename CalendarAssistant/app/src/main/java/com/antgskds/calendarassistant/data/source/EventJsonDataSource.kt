@@ -81,6 +81,20 @@ class EventJsonDataSource(private val context: Context) {
         }
     }
 
+    suspend fun loadRoomBackupEvents(): List<MyEvent> = withContext(Dispatchers.IO) {
+        try {
+            val backupFile = File(context.filesDir, roomBackupFileName)
+            if (!backupFile.exists()) return@withContext emptyList()
+            val content = backupFile.readText()
+            if (content.isBlank()) return@withContext emptyList()
+            val events = json.decodeFromString<List<MyEvent>>(content)
+            DataSanitizer.sanitizeEvents(events).data
+        } catch (e: Exception) {
+            Log.e("EventJsonDataSource", "加载 Room 备份失败", e)
+            emptyList()
+        }
+    }
+
     suspend fun saveEvents(events: List<MyEvent>) = withContext(Dispatchers.IO) {
         try {
             val file = File(context.filesDir, fileName)

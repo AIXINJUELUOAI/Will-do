@@ -54,11 +54,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.convertAiEventToMyEvent
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
@@ -162,7 +163,7 @@ fun HomePage(
                 }
 
                 val ocrText = withContext(Dispatchers.IO) {
-                    RecognitionProcessor.recognizeText(bitmap)
+                    (context.applicationContext as App).recognitionCenter.recognizeText(bitmap)
                 }
                 bitmap.recycle()
 
@@ -172,28 +173,26 @@ fun HomePage(
                 }
 
                 val analysisResult = withContext(Dispatchers.IO) {
-                    RecognitionProcessor.parseUserText(ocrText, settings, context.applicationContext)
+                    (context.applicationContext as App)
+                        .recognitionCenter
+                        .parseUserText(
+                            text = ocrText,
+                            settings = settings,
+                            context = context.applicationContext,
+                            sourceType = RecognitionFeedbackSource.HOME_SOURCE_TYPE,
+                            sourceId = RecognitionFeedbackSource.HOME_SOURCE_ID,
+                            sourceImagePath = imageFile.absolutePath,
+                            ingestRequested = true
+                        )
                 }
 
-                val eventData = when (analysisResult) {
-                    is AnalysisResult.Success -> analysisResult.data
-                    is AnalysisResult.Empty -> {
-                        Toast.makeText(context, analysisResult.message, Toast.LENGTH_SHORT).show()
-                        return@launch
+                when (analysisResult) {
+                    is AnalysisResult.Success -> {
+                        Toast.makeText(context, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
                     }
-                    is AnalysisResult.Failure -> {
-                        Toast.makeText(context, analysisResult.failure.fullMessage(), Toast.LENGTH_SHORT).show()
-                        return@launch
-                    }
+                    is AnalysisResult.Empty -> return@launch
+                    is AnalysisResult.Failure -> return@launch
                 }
-
-                val event = convertAiEventToMyEvent(
-                    eventData = eventData,
-                    currentEventsCount = uiState.allEvents.size,
-                    sourceImagePath = imageFile.absolutePath
-                )
-                viewModel.addEvent(event)
-                Toast.makeText(context, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
             } catch (_: CancellationException) {
                 // 取消识别时不提示错误
             } catch (e: Exception) {
@@ -354,6 +353,9 @@ fun HomePage(
     }
     var editingCourse by remember { mutableStateOf<Pair<Course, LocalDate>?>(null) }
     var pendingDeleteNote by remember { mutableStateOf<MyEvent?>(null) }
+    val courseProjection = remember(uiState.allEvents, uiState.settings) {
+        CourseEventMapper.extractCourses(uiState.allEvents, uiState.settings)
+    }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
@@ -420,7 +422,7 @@ fun HomePage(
             }
 
             ScheduleView(
-                courses = uiState.courses,
+                courses = courseProjection,
                 semesterStartDateStr = uiState.settings.semesterStartDate,
                 totalWeeks = uiState.settings.totalWeeks,
                 maxNodes = maxNodes,

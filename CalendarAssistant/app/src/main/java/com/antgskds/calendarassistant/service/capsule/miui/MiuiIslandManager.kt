@@ -8,7 +8,6 @@ import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
@@ -297,7 +296,7 @@ object MiuiIslandManager {
             EventTags.TAXI -> "用车"
             EventTags.PICKUP -> if (isFoodPickup(item.description)) "取餐" else "取件"
             EventTags.GENERAL -> "日程"
-            EventType.COURSE -> "课程"
+            EventTags.COURSE -> "课程"
             else -> when (item.type) {
                 CapsuleStateManager.TYPE_PICKUP,
                 CapsuleStateManager.TYPE_PICKUP_EXPIRED -> if (isFoodPickup(item.description)) "取餐" else "取件"

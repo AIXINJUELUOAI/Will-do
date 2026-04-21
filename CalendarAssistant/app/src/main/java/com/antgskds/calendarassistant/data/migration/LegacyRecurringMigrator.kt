@@ -13,11 +13,14 @@ import com.antgskds.calendarassistant.data.db.entity.EventMasterEntity
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 class LegacyRecurringMigrator(
     private val database: AppDatabase,
@@ -29,6 +32,7 @@ class LegacyRecurringMigrator(
         private const val TAG = "LegacyRecurringMigrator"
         private const val SOURCE = "legacy_json_recurring"
         private const val RRULE_PLACEHOLDER = "EXTERNAL"
+        private const val COURSE_RECURRING_META_PREFIX = "course-recurring-meta:"
         private const val PARENT_PREFIX = "recurring_parent_"
         private const val INSTANCE_PREFIX = "recurring_instance_"
     }
@@ -92,7 +96,6 @@ class LegacyRecurringMigrator(
                     colorArgb = sample.color.toArgb(),
                     rrule = RRULE_PLACEHOLDER,
                     syncId = null,
-                    eventType = sample.eventType,
                     remindersJson = json.encodeToString(sample.reminders),
                     isImportant = sample.isImportant,
                     sourceImagePath = sample.sourceImagePath,
@@ -161,17 +164,31 @@ class LegacyRecurringMigrator(
 
     suspend fun upsertRecurringEvents(events: List<MyEvent>) {
         val recurringEvents = events.filter { it.isRecurring || it.isRecurringParent }
-        if (recurringEvents.isEmpty()) return
-
         val masterDao = database.eventMasterDao()
         val instanceDao = database.eventInstanceDao()
         val excludedDao = database.eventExcludedDateDao()
+
+        if (recurringEvents.isEmpty()) {
+            val stale = masterDao.getBySource(SOURCE).map { it.masterId }
+            if (stale.isEmpty()) return
+            database.withTransaction {
+                excludedDao.deleteByMasterIds(stale)
+                instanceDao.deleteByMasterIds(stale)
+                masterDao.deleteAll(stale)
+            }
+            return
+        }
 
         val grouped = recurringEvents.mapNotNull { event ->
             resolveSeriesKey(event)?.let { it to event }
         }.groupBy({ it.first }, { it.second })
 
         if (grouped.isEmpty()) return
+
+        val groupedSeriesKeys = grouped.keys
+        val staleMasterIds = masterDao.getBySource(SOURCE)
+            .map { it.masterId }
+            .filter { it !in groupedSeriesKeys }
 
         val masters = mutableListOf<EventMasterEntity>()
         val instances = mutableListOf<EventInstanceEntity>()
@@ -198,6 +215,7 @@ class LegacyRecurringMigrator(
 
             if (childEvents.isEmpty()) return@forEach
 
+            val rrule = resolveRRule(sample, childEvents)
             masters.add(
                 EventMasterEntity(
                     masterId = seriesKey,
@@ -206,13 +224,12 @@ class LegacyRecurringMigrator(
                     description = sample.description,
                     location = sample.location,
                     colorArgb = sample.color.toArgb(),
-                    rrule = RRULE_PLACEHOLDER,
+                    rrule = rrule,
                     syncId = null,
-                    eventType = sample.eventType,
                     remindersJson = json.encodeToString(sample.reminders),
                     isImportant = sample.isImportant,
                     sourceImagePath = sample.sourceImagePath,
-                    skipCalendarSync = true,
+                    skipCalendarSync = sample.skipCalendarSync,
                     createdAt = sample.lastModified,
                     updatedAt = now,
                     source = SOURCE
@@ -259,6 +276,15 @@ class LegacyRecurringMigrator(
 
         try {
             database.withTransaction {
+                if (staleMasterIds.isNotEmpty()) {
+                    excludedDao.deleteByMasterIds(staleMasterIds)
+                    instanceDao.deleteByMasterIds(staleMasterIds)
+                    masterDao.deleteAll(staleMasterIds)
+                }
+                masters.map { it.masterId }.distinct().forEach { masterId ->
+                    excludedDao.deleteByMasterId(masterId)
+                    instanceDao.deleteByMasterId(masterId)
+                }
                 masterDao.insertAll(masters)
                 instanceDao.insertAll(instances)
                 if (excludedDates.isNotEmpty()) {
@@ -299,10 +325,50 @@ class LegacyRecurringMigrator(
         return instanceKey.removePrefix(prefix).toLongOrNull()
     }
 
+    private fun resolveRRule(sample: MyEvent, childEvents: List<MyEvent>): String {
+        if (sample.tag != EventTags.COURSE || !sample.description.startsWith(COURSE_RECURRING_META_PREFIX)) {
+            return RRULE_PLACEHOLDER
+        }
+
+        val meta = runCatching {
+            val payload = sample.description.removePrefix(COURSE_RECURRING_META_PREFIX)
+            json.decodeFromString<CourseRecurringMeta>(payload)
+        }.getOrNull() ?: return RRULE_PLACEHOLDER
+
+        val byDay = when (sample.startDate.dayOfWeek.value) {
+            1 -> "MO"
+            2 -> "TU"
+            3 -> "WE"
+            4 -> "TH"
+            5 -> "FR"
+            6 -> "SA"
+            else -> "SU"
+        }
+        val interval = if (meta.weekType == 1 || meta.weekType == 2) 2 else 1
+        val untilDate = sample.startDate.plusWeeks((meta.endWeek - meta.startWeek).coerceAtLeast(0).toLong())
+        val untilTime = runCatching { LocalTime.parse(childEvents.firstOrNull()?.endTime ?: sample.endTime) }
+            .getOrElse { LocalTime.of(23, 59) }
+        val untilUtc = LocalDateTime.of(untilDate, untilTime)
+            .atZone(ZoneId.systemDefault())
+            .withZoneSameInstant(ZoneOffset.UTC)
+            .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"))
+
+        return buildString {
+            append("FREQ=WEEKLY")
+            append(";INTERVAL=")
+            append(interval)
+            append(";BYDAY=")
+            append(byDay)
+            append(";UNTIL=")
+            append(untilUtc)
+        }
+    }
+
     private fun resolveRuleId(event: MyEvent): String {
         val parsed = RuleMatchingEngine.resolvePayload(event)?.ruleId
         if (!parsed.isNullOrBlank()) return parsed
         return when (event.tag) {
+            EventTags.COURSE -> EventTags.COURSE
             EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
             EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
             EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
@@ -326,4 +392,16 @@ class LegacyRecurringMigrator(
         val digest = MessageDigest.getInstance("SHA-1").digest(source.toByteArray())
         return digest.joinToString("") { byte -> "%02x".format(byte) }
     }
+
+    @kotlinx.serialization.Serializable
+    private data class CourseRecurringMeta(
+        val teacher: String = "",
+        val dayOfWeek: Int,
+        val startNode: Int,
+        val endNode: Int,
+        val startWeek: Int,
+        val endWeek: Int,
+        val weekType: Int,
+        val parentSeriesKey: String? = null
+    )
 }

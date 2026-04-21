@@ -68,9 +68,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.weather.WeatherApiAdapter
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
 import com.antgskds.calendarassistant.core.weather.WeatherSyncWorker
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -86,10 +86,10 @@ fun WeatherSettingsPage(
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
     val appContext = context.applicationContext
+    val app = appContext as App
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    val weatherRepository = remember { WeatherRepository.getInstance(appContext) }
-    val weatherData by weatherRepository.weatherData.collectAsState()
+    val weatherData by app.weatherQueryApi.weatherData.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val density = LocalDensity.current
@@ -162,7 +162,7 @@ fun WeatherSettingsPage(
             showToast("请填写API Host", ToastType.ERROR)
             return false
         }
-        val result = weatherRepository.forceRefresh(draft)
+        val result = app.weatherOperationApi.forceRefresh(draft)
         return if (result.isSuccess) {
             showToast("天气连接成功", ToastType.SUCCESS)
             true

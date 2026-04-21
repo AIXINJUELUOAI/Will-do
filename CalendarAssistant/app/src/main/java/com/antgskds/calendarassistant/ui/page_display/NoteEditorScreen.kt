@@ -37,9 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.convertAiEventToMyEvent
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.core.note.createNoteEvent
@@ -64,7 +63,6 @@ fun NoteEditorScreen(
     onDismiss: () -> Unit,
     onSave: (MyEvent) -> Unit,
     onDelete: (MyEvent) -> Unit,
-    onAnalyzeResult: (MyEvent) -> Unit,
     onShowMessage: (String, ToastType) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -182,20 +180,23 @@ fun NoteEditorScreen(
                     isAnalyzing = true
                     try {
                         when (val result = withContext(Dispatchers.IO) {
-                            RecognitionProcessor.parseUserText(text, settings, context.applicationContext)
+                            (context.applicationContext as App)
+                                .recognitionCenter
+                                .parseUserText(
+                                    text = text,
+                                    settings = settings,
+                                    context = context.applicationContext,
+                                    sourceType = RecognitionFeedbackSource.NOTE_SOURCE_TYPE,
+                                    sourceId = RecognitionFeedbackSource.NOTE_SOURCE_ID,
+                                    ingestRequested = true
+                                )
                         }) {
                             is AnalysisResult.Success -> {
-                                onAnalyzeResult(
-                                    convertAiEventToMyEvent(
-                                        eventData = result.data,
-                                        currentEventsCount = currentEventsCount,
-                                        sourceImagePath = null
-                                    )
-                                )
+                                onShowMessage("识别完成，正在保存...", ToastType.INFO)
                             }
 
-                            is AnalysisResult.Empty -> onShowMessage(result.message, ToastType.INFO)
-                            is AnalysisResult.Failure -> onShowMessage(result.failure.fullMessage(), ToastType.ERROR)
+                            is AnalysisResult.Empty -> Unit
+                            is AnalysisResult.Failure -> Unit
                         }
                     } finally {
                         isAnalyzing = false

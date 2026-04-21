@@ -54,13 +54,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.RulePatchPrefs
 import com.antgskds.calendarassistant.core.rule.RuleActionDefaults
 import com.antgskds.calendarassistant.core.rule.RuleActionSeeder
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
-import com.antgskds.calendarassistant.core.rule.RuleRegistry
-import com.antgskds.calendarassistant.data.db.AppDatabase
 import com.antgskds.calendarassistant.data.db.entity.EventRuleEntity
+import com.antgskds.calendarassistant.data.db.entity.EventStateEntity
 import com.antgskds.calendarassistant.ui.components.RuleIconPickerDialog
 import com.antgskds.calendarassistant.ui.components.RuleIconPreview
 import com.antgskds.calendarassistant.ui.components.resolveRuleIconResName
@@ -78,10 +78,8 @@ fun LaboratoryPage(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val database = remember { AppDatabase.getInstance(context.applicationContext) }
+    val ruleCenter = remember { (context.applicationContext as App).ruleCenter }
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
-    val ruleDao = remember { database.eventRuleDao() }
-    val stateDao = remember { database.eventStateDao() }
     val scrollState = rememberScrollState()
 
     var ruleEditEnabled by remember { mutableStateOf(RulePatchPrefs.isEnabled(context)) }
@@ -94,7 +92,7 @@ fun LaboratoryPage(
 
     fun loadRules() {
         scope.launch(Dispatchers.IO) {
-            val list = ruleDao.getAll()
+            val list = ruleCenter.getAllRules()
             withContext(Dispatchers.Main) {
                 rules = list
             }
@@ -208,8 +206,8 @@ fun LaboratoryPage(
                                             checked = rule.isEnabled,
                                             onCheckedChange = { enabled ->
                                                 scope.launch(Dispatchers.IO) {
-                                                    ruleDao.update(rule.copy(isEnabled = enabled))
-                                                    val list = ruleDao.getAll()
+                                                    ruleCenter.updateRuleEnabled(rule, enabled)
+                                                    val list = ruleCenter.getAllRules()
                                                     withContext(Dispatchers.Main) { rules = list }
                                                 }
                                             }
@@ -399,12 +397,12 @@ fun LaboratoryPage(
                 editingRuleState = rule
                 currentIconResName = iconResName
             },
-            stateDao = stateDao,
+            loadStates = { ruleId -> ruleCenter.getStatesByRuleId(ruleId) },
             onDismiss = { showRuleEditor = false },
             onIconPick = { showIconPicker = true },
             onSave = { rule, pendingTemplate, terminalTemplate ->
                 scope.launch(Dispatchers.IO) {
-                    ruleDao.insert(rule)
+                    ruleCenter.upsertRule(rule)
                     RuleActionSeeder.ensureRuleDefaults(context, rule.ruleId)
                     RuleActionSeeder.updateDisplayTemplates(
                         context = context,
@@ -412,8 +410,8 @@ fun LaboratoryPage(
                         pendingTemplate = pendingTemplate,
                         terminalTemplate = terminalTemplate
                     )
-                    RuleRegistry.refresh(context)
-                    val list = ruleDao.getAll()
+                    ruleCenter.refreshRegistry()
+                    val list = ruleCenter.getAllRules()
                     withContext(Dispatchers.Main) {
                         rules = list
                         showRuleEditor = false
@@ -422,10 +420,9 @@ fun LaboratoryPage(
             },
             onDelete = { ruleId ->
                 scope.launch(Dispatchers.IO) {
-                    ruleDao.delete(ruleId)
-                    stateDao.deleteByRuleId(ruleId)
-                    RuleRegistry.refresh(context)
-                    val list = ruleDao.getAll()
+                    ruleCenter.deleteRule(ruleId)
+                    ruleCenter.refreshRegistry()
+                    val list = ruleCenter.getAllRules()
                     withContext(Dispatchers.Main) {
                         rules = list
                         showRuleEditor = false
@@ -444,9 +441,9 @@ fun LaboratoryPage(
                     val baseRule = editingRuleState ?: return@launch
                     val newSource = RuleIconSource(capsuleIcon = resName ?: "")
                     val updated = baseRule.copy(iconSourceJson = RuleIconSource.serialize(newSource))
-                    ruleDao.insert(updated)
-                    RuleRegistry.refresh(context)
-                    val list = ruleDao.getAll()
+                    ruleCenter.upsertRule(updated)
+                    ruleCenter.refreshRegistry()
+                    val list = ruleCenter.getAllRules()
                     withContext(Dispatchers.Main) {
                         rules = list
                         editingRuleState = updated
@@ -465,7 +462,7 @@ private fun RuleEditorDialog(
     editingRuleState: EventRuleEntity?,
     currentIconResName: String?,
     onRuleStateChange: (EventRuleEntity?, String?) -> Unit,
-    stateDao: com.antgskds.calendarassistant.data.db.dao.EventStateDao,
+    loadStates: suspend (String) -> List<EventStateEntity>,
     onDismiss: () -> Unit,
     onSave: (EventRuleEntity, String, String) -> Unit,
     onDelete: (String) -> Unit,
@@ -489,7 +486,7 @@ private fun RuleEditorDialog(
             val defaults = RuleActionDefaults.defaultsFor(normalizedRuleId)
             val pendingStateId = RuleActionDefaults.stateId(normalizedRuleId, defaults.pending.suffix)
             val terminalStateId = RuleActionDefaults.stateId(normalizedRuleId, defaults.terminal.suffix)
-            val states = withContext(Dispatchers.IO) { stateDao.getByRuleId(normalizedRuleId) }
+            val states = withContext(Dispatchers.IO) { loadStates(normalizedRuleId) }
             val stateMap = states.associateBy { it.stateId }
             pendingTemplate = stateMap[pendingStateId]?.displayTemplate ?: defaults.pending.displayTemplate
             terminalTemplate = stateMap[terminalStateId]?.displayTemplate ?: defaults.terminal.displayTemplate

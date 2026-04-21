@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.core.course
 
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.TimeNode
@@ -19,15 +20,12 @@ object CourseManager {
         settings: MySettings
     ): List<MyEvent> {
         val startDateStr = settings.semesterStartDate
-        // 允许未设置开学日期时显示课程（视为第1周）
-        val semesterStart = try {
-            if (startDateStr.isNotBlank()) LocalDate.parse(startDateStr) else targetDate
-        } catch (e: Exception) { targetDate }
+        val semesterStart = resolveSemesterAnchor(startDateStr, targetDate)
 
         // 计算周次
         val daysDiff = ChronoUnit.DAYS.between(semesterStart, targetDate)
         // 如果未设置开学日期，默认显示所有课程，视为第1周
-        val currentWeek = if (startDateStr.isBlank()) 1 else (daysDiff / 7).toInt() + 1
+        val currentWeek = if (!hasConfiguredSemesterAnchor(startDateStr)) 1 else (daysDiff / 7).toInt() + 1
 
         val isOddWeek = currentWeek % 2 != 0
         val currentWeekType = if (isOddWeek) 1 else 2
@@ -70,7 +68,7 @@ object CourseManager {
                     location = course.location + (if (course.teacher.isNotBlank()) " | ${course.teacher}" else ""),
                     description = "第${course.startNode}-${course.endNode}节",
                     color = course.color,
-                    eventType = "course"
+                    tag = EventTags.COURSE
                 )
             } else {
                 null

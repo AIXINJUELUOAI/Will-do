@@ -1,0 +1,3 @@
+# Architecture guardrail baseline
+# Format: RULE_ID|relative/path/to/file.kt
+# Keep this file as small as possible. Remove entries once migrated.

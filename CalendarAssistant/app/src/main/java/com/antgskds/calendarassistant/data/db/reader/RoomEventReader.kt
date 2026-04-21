@@ -7,7 +7,6 @@ import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.db.AppDatabase
 import com.antgskds.calendarassistant.data.db.model.FullInstance
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.serialization.json.Json
 import java.time.Instant
@@ -113,7 +112,7 @@ class RoomEventReader(private val database: AppDatabase) {
         val startZoned = startInstant.atZone(zoneId)
         val endZoned = endInstant.atZone(zoneId)
         val reminders = parseReminders(master.remindersJson)
-        val tag = normalizeTag(master.ruleId, master.eventType)
+        val tag = normalizeTag(master.ruleId)
         val description = master.description
         val resolvedRuleId = master.ruleId?.ifBlank { RuleMatchingEngine.RULE_GENERAL } ?: RuleMatchingEngine.RULE_GENERAL
         val checkedInStateId = RuleActionDefaults.stateId(resolvedRuleId, RuleActionDefaults.STATE_CHECKED_IN)
@@ -134,7 +133,6 @@ class RoomEventReader(private val database: AppDatabase) {
             isImportant = master.isImportant,
             sourceImagePath = master.sourceImagePath,
             reminders = if (isRecurringParent) emptyList() else reminders,
-            eventType = master.eventType,
             tag = tag,
             isCompleted = isCompleted,
             completedAt = if (isRecurringParent) null else instance.completedAt,
@@ -163,14 +161,14 @@ class RoomEventReader(private val database: AppDatabase) {
         }
     }
 
-    private fun normalizeTag(ruleId: String?, eventType: String): String {
-        if (eventType == EventType.COURSE) return EventTags.GENERAL
+    private fun normalizeTag(ruleId: String?): String {
         return when (ruleId) {
             null, "" -> EventTags.GENERAL
             RuleMatchingEngine.RULE_GENERAL -> EventTags.GENERAL
             RuleMatchingEngine.RULE_PICKUP -> EventTags.PICKUP
             RuleMatchingEngine.RULE_TRAIN -> EventTags.TRAIN
             RuleMatchingEngine.RULE_TAXI -> EventTags.TAXI
+            EventTags.COURSE -> EventTags.COURSE
             else -> ruleId
         }
     }

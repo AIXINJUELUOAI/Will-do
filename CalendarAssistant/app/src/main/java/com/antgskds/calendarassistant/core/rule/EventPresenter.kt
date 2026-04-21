@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
-import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import java.time.LocalDateTime
@@ -56,7 +56,7 @@ object EventPresenter {
         val isInProgress = EventPresentationInternals.computeIsInProgress(event, now)
         val isComingSoon = EventPresentationInternals.computeIsComingSoon(event, now)
         val isTerminal = event.isCompleted || event.isCheckedIn
-        val isCourse = event.eventType == EventType.COURSE
+        val isCourse = event.tag == EventTags.COURSE
         val isAggregatePickup = EventPresentationInternals.isFoodPickup(event.description)
         val (title, subtitle, detail) = EventPresentationInternals.resolveDisplayContent(event, ruleId, isExpired, isTerminal)
 

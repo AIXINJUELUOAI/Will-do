@@ -7,17 +7,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
-import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 短信 ContentObserver
@@ -29,8 +24,7 @@ import java.time.format.DateTimeFormatter
  */
 class SmsContentObserver(
     private val context: Context,
-    private val getRepository: () -> com.antgskds.calendarassistant.data.repository.AppRepository?,
-    private val getScheduleOperationApi: () -> com.antgskds.calendarassistant.core.operation.ScheduleOperationApi?
+    private val getIngestCommandApi: () -> IngestCommandApi?
 ) : ContentObserver(Handler(Looper.getMainLooper())) {
 
     companion object {
@@ -133,8 +127,7 @@ class SmsContentObserver(
 
     private fun scanNewMessages(reason: String) {
         val contentResolver = context.contentResolver
-        val repository = getRepository() ?: return
-        val scheduleOperationApi = getScheduleOperationApi() ?: return
+        val ingestCommandApi = getIngestCommandApi() ?: return
 
         val settings = SettingsDataSource(context).loadSettings()
         if (!settings.isSmsMonitoringEnabled) return
@@ -169,7 +162,7 @@ class SmsContentObserver(
         scope.launch {
             for ((id, sender, body) in newMessages) {
                 try {
-                    processSms(repository, scheduleOperationApi, sender, body, id)
+                    processSms(ingestCommandApi, sender, body, id)
                 } catch (e: Exception) {
                     Log.e(TAG, "[探针] 处理短信异常 id=$id", e)
                 }
@@ -178,8 +171,7 @@ class SmsContentObserver(
     }
 
     private suspend fun processSms(
-        repository: com.antgskds.calendarassistant.data.repository.AppRepository,
-        scheduleOperationApi: com.antgskds.calendarassistant.core.operation.ScheduleOperationApi,
+        ingestCommandApi: IngestCommandApi,
         sender: String,
         body: String,
         smsId: Long
@@ -194,51 +186,12 @@ class SmsContentObserver(
 
         Log.d(TAG, "[探针] 解析成功: title=${eventData.title}, tag=${eventData.tag}, desc=${eventData.description}")
 
-        val event = eventDataToMyEvent(eventData, repository.events.value.size)
-
-        // 去重
-        val isDuplicate = repository.events.value.any { existing ->
-            existing.tag == eventData.tag &&
-                    existing.description == eventData.description &&
-                    !existing.endDate.isBefore(java.time.LocalDate.now())
-        }
-        if (isDuplicate) {
+        val added = ingestCommandApi.ingestSmsPickup(eventData)
+        if (added == null) {
             Log.d(TAG, "[探针] 重复取件码已跳过: ${eventData.title}")
             return
         }
 
-        scheduleOperationApi.addEvent(event)
-        NotificationScheduler.scheduleReminders(context, event)
-        Log.d(TAG, "[探针] ✅ 取件码已入库: ${eventData.title} from $sender")
+        Log.d(TAG, "[探针] ✅ 取件码已入库: ${added.title} from $sender")
     }
-}
-
-private fun eventDataToMyEvent(
-    eventData: CalendarEventData,
-    currentEventsCount: Int
-): MyEvent {
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    val now = LocalDateTime.now()
-
-    val startDateTime = try {
-        if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
-    } catch (_: Exception) { now }
-
-    val endDateTime = try {
-        if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
-    } catch (_: Exception) { startDateTime.plusHours(1) }
-
-    return MyEvent(
-        title = eventData.title.trim(),
-        startDate = startDateTime.toLocalDate(),
-        endDate = endDateTime.toLocalDate(),
-        startTime = startDateTime.format(timeFormatter),
-        endTime = endDateTime.format(timeFormatter),
-        location = eventData.location,
-        description = eventData.description,
-        color = EventColors[currentEventsCount % EventColors.size],
-        eventType = com.antgskds.calendarassistant.data.model.EventType.EVENT,
-        tag = eventData.tag.ifBlank { com.antgskds.calendarassistant.data.model.EventTags.GENERAL }
-    )
 }

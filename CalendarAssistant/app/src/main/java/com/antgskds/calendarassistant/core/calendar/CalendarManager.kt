@@ -14,6 +14,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.data.db.entity.EventInstanceEntity
 import com.antgskds.calendarassistant.data.db.entity.EventMasterEntity
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.TimeNode
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,6 @@ class CalendarManager(private val context: Context) {
          * 用于标识应用创建事件的扩展属性
          */
         private const val EXTENDED_PROPERTY_APP_ID = "com.antgskds.calendarassistant.event_id"
-        private const val EXTENDED_PROPERTY_EVENT_TYPE = "com.antgskds.calendarassistant.event_type"
         private const val EXTENDED_PROPERTY_TAG = "com.antgskds.calendarassistant.event_tag"
     }
 
@@ -65,7 +65,11 @@ class CalendarManager(private val context: Context) {
      * 获取用户可写的日历列表
      */
     suspend fun getWritableCalendars(): List<CalendarInfo> = withContext(Dispatchers.IO) {
-        queryCalendars(minAccessLevel = Calendars.CAL_ACCESS_CONTRIBUTOR)
+        CalendarManagerBuilders.queryCalendars(
+            contentResolver = contentResolver,
+            minAccessLevel = Calendars.CAL_ACCESS_CONTRIBUTOR,
+            logTag = TAG
+        )
     }
 
     /**
@@ -76,10 +80,12 @@ class CalendarManager(private val context: Context) {
         visibleOnly: Boolean = true,
         syncEnabledOnly: Boolean = true
     ): List<CalendarInfo> = withContext(Dispatchers.IO) {
-        queryCalendars(
+        CalendarManagerBuilders.queryCalendars(
+            contentResolver = contentResolver,
             minAccessLevel = Calendars.CAL_ACCESS_READ,
             visibleOnly = visibleOnly,
-            syncEnabledOnly = syncEnabledOnly
+            syncEnabledOnly = syncEnabledOnly,
+            logTag = TAG
         )
     }
 
@@ -110,7 +116,11 @@ class CalendarManager(private val context: Context) {
 
     suspend fun getCalendarsByIds(calendarIds: Collection<Long>): List<CalendarInfo> = withContext(Dispatchers.IO) {
         if (calendarIds.isEmpty()) return@withContext emptyList()
-        val calendarsById = queryCalendars(minAccessLevel = Calendars.CAL_ACCESS_NONE)
+        val calendarsById = CalendarManagerBuilders.queryCalendars(
+            contentResolver = contentResolver,
+            minAccessLevel = Calendars.CAL_ACCESS_NONE,
+            logTag = TAG
+        )
             .associateBy { it.id }
         calendarIds.distinct().mapNotNull(calendarsById::get)
     }
@@ -126,7 +136,7 @@ class CalendarManager(private val context: Context) {
         calendarId: Long
     ): Long = withContext(Dispatchers.IO) {
         try {
-            val values = buildEventContentValues(event, calendarId)
+            val values = CalendarManagerBuilders.buildEventContentValues(event, calendarId)
             val uri = contentResolver.insert(Events.CONTENT_URI, values)
             val eventId = uri?.lastPathSegment?.toLongOrNull() ?: -1L
 
@@ -155,7 +165,7 @@ class CalendarManager(private val context: Context) {
         calendarId: Long
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val values = buildEventContentValues(event, calendarId)
+            val values = CalendarManagerBuilders.buildEventContentValues(event, calendarId)
             val uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId)
             val rowsUpdated = contentResolver.update(uri, values, null, null)
 
@@ -184,12 +194,19 @@ class CalendarManager(private val context: Context) {
         calendarId: Long
     ): Long = withContext(Dispatchers.IO) {
         try {
-            val values = buildRecurringEventContentValues(master, instance, excludedStartTimes, calendarId)
+            val values = CalendarManagerBuilders.buildRecurringEventContentValues(
+                master = master,
+                instance = instance,
+                excludedStartTimes = excludedStartTimes,
+                calendarId = calendarId,
+                systemZone = systemZone,
+                exDateFormatter = exDateFormatter
+            )
             val uri = contentResolver.insert(Events.CONTENT_URI, values)
             val eventId = uri?.lastPathSegment?.toLongOrNull() ?: -1L
 
             if (eventId != -1L) {
-                if (!upsertEventMetadata(eventId, master.masterId, master.eventType, tag)) {
+                if (!upsertEventMetadata(eventId, master.masterId, tag)) {
                     Log.w(TAG, "重复事件元数据保存失败: $eventId - ${master.title}")
                 }
                 Log.d(TAG, "创建重复事件成功: $eventId - ${master.title}")
@@ -213,12 +230,19 @@ class CalendarManager(private val context: Context) {
         calendarId: Long
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val values = buildRecurringEventContentValues(master, instance, excludedStartTimes, calendarId)
+            val values = CalendarManagerBuilders.buildRecurringEventContentValues(
+                master = master,
+                instance = instance,
+                excludedStartTimes = excludedStartTimes,
+                calendarId = calendarId,
+                systemZone = systemZone,
+                exDateFormatter = exDateFormatter
+            )
             val uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId)
             val rowsUpdated = contentResolver.update(uri, values, null, null)
             val success = rowsUpdated > 0
             if (success) {
-                if (!upsertEventMetadata(eventId, master.masterId, master.eventType, tag)) {
+                if (!upsertEventMetadata(eventId, master.masterId, tag)) {
                     Log.w(TAG, "重复事件元数据更新失败: $eventId - ${master.title}")
                 }
                 Log.d(TAG, "更新重复事件成功: $eventId - ${master.title}")
@@ -281,11 +305,12 @@ class CalendarManager(private val context: Context) {
         try {
             courseEvents.forEach { instance ->
                 val virtualId = "course_${instance.course.id}_${instance.date}"
-                val values = buildCourseEventContentValues(
-                    instance.course,
-                    instance.date,
-                    calendarId,
-                    timeNodes
+                val values = CalendarManagerBuilders.buildCourseEventContentValues(
+                    course = instance.course,
+                    date = instance.date,
+                    calendarId = calendarId,
+                    timeNodes = timeNodes,
+                    managedEventMarker = MANAGED_EVENT_MARKER
                 )
 
                 // 构建 insert 操作
@@ -597,7 +622,6 @@ class CalendarManager(private val context: Context) {
             if (metadata != null) {
                 event.copy(
                     appId = metadata.appId,
-                    appEventType = metadata.eventType,
                     tag = metadata.tag
                 )
             } else {
@@ -633,7 +657,7 @@ class CalendarManager(private val context: Context) {
         recurringRule: String?,
         excludedInstanceKeys: Set<String>
     ): SystemEventInfo? {
-        val primaryHorizonDays = getRecurringLookAheadDays(recurringRule)
+        val primaryHorizonDays = CalendarManagerBuilders.getRecurringLookAheadDays(recurringRule)
         val fallbackHorizonDays = max(primaryHorizonDays, 3660L)
 
         val horizonEnds = listOf(primaryHorizonDays, fallbackHorizonDays)
@@ -796,7 +820,6 @@ class CalendarManager(private val context: Context) {
             if (metadata != null) {
                 event.copy(
                     appId = metadata.appId,
-                    appEventType = metadata.eventType,
                     tag = metadata.tag
                 )
             } else {
@@ -806,13 +829,12 @@ class CalendarManager(private val context: Context) {
     }
 
     private fun upsertEventMetadata(eventId: Long, event: MyEvent): Boolean {
-        return upsertEventMetadata(eventId, event.id, event.eventType, event.tag)
+        return upsertEventMetadata(eventId, event.id, event.tag)
     }
 
     private fun upsertEventMetadata(
         eventId: Long,
         appId: String,
-        eventType: String,
         tag: String
     ): Boolean {
         return try {
@@ -820,7 +842,6 @@ class CalendarManager(private val context: Context) {
 
             val metadataEntries = listOf(
                 EXTENDED_PROPERTY_APP_ID to appId,
-                EXTENDED_PROPERTY_EVENT_TYPE to eventType,
                 EXTENDED_PROPERTY_TAG to tag
             )
 
@@ -843,7 +864,6 @@ class CalendarManager(private val context: Context) {
     private fun deleteEventMetadata(eventId: Long) {
         val metadataNames = arrayOf(
             EXTENDED_PROPERTY_APP_ID,
-            EXTENDED_PROPERTY_EVENT_TYPE,
             EXTENDED_PROPERTY_TAG
         )
         val namePlaceholders = metadataNames.joinToString(",") { "?" }
@@ -857,7 +877,6 @@ class CalendarManager(private val context: Context) {
 
         val metadataNames = arrayOf(
             EXTENDED_PROPERTY_APP_ID,
-            EXTENDED_PROPERTY_EVENT_TYPE,
             EXTENDED_PROPERTY_TAG
         )
         val rawMetadata = mutableMapOf<Long, MutableMap<String, String>>()
@@ -900,265 +919,8 @@ class CalendarManager(private val context: Context) {
         return rawMetadata.mapValues { (_, values) ->
             EventMetadata(
                 appId = values[EXTENDED_PROPERTY_APP_ID],
-                eventType = values[EXTENDED_PROPERTY_EVENT_TYPE],
                 tag = values[EXTENDED_PROPERTY_TAG]
             )
-        }
-    }
-
-    private fun queryCalendars(
-        minAccessLevel: Int,
-        visibleOnly: Boolean = false,
-        syncEnabledOnly: Boolean = false
-    ): List<CalendarInfo> {
-        val calendars = mutableListOf<CalendarInfo>()
-        val projection = arrayOf(
-            Calendars._ID,
-            Calendars.ACCOUNT_NAME,
-            Calendars.ACCOUNT_TYPE,
-            Calendars.CALENDAR_DISPLAY_NAME,
-            Calendars.CALENDAR_ACCESS_LEVEL,
-            Calendars.VISIBLE,
-            Calendars.SYNC_EVENTS
-        )
-
-        val conditions = mutableListOf<String>()
-        val args = mutableListOf<String>()
-
-        conditions += "${Calendars.CALENDAR_ACCESS_LEVEL} >= ?"
-        args += minAccessLevel.toString()
-
-        if (visibleOnly) {
-            conditions += "${Calendars.VISIBLE} = 1"
-        }
-        if (syncEnabledOnly) {
-            conditions += "${Calendars.SYNC_EVENTS} = 1"
-        }
-
-        val selection = conditions.joinToString(" AND ")
-
-        try {
-            contentResolver.query(
-                Calendars.CONTENT_URI,
-                projection,
-                selection,
-                args.toTypedArray(),
-                "${Calendars.ACCOUNT_NAME} COLLATE NOCASE ASC, ${Calendars.CALENDAR_DISPLAY_NAME} COLLATE NOCASE ASC"
-            )?.use { cursor ->
-                val idIndex = cursor.getColumnIndexOrThrow(Calendars._ID)
-                val displayNameIndex = cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)
-                val accountNameIndex = cursor.getColumnIndex(Calendars.ACCOUNT_NAME)
-                val accountTypeIndex = cursor.getColumnIndex(Calendars.ACCOUNT_TYPE)
-                val accessLevelIndex = cursor.getColumnIndex(Calendars.CALENDAR_ACCESS_LEVEL)
-                val visibleIndex = cursor.getColumnIndex(Calendars.VISIBLE)
-                val syncEventsIndex = cursor.getColumnIndex(Calendars.SYNC_EVENTS)
-
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idIndex)
-                    val displayName = if (displayNameIndex >= 0) cursor.getString(displayNameIndex) else "日历 $id"
-                    val accessLevel = if (accessLevelIndex >= 0) cursor.getInt(accessLevelIndex) else Calendars.CAL_ACCESS_NONE
-
-                    calendars += CalendarInfo(
-                        id = id,
-                        name = displayName,
-                        accountName = if (accountNameIndex >= 0) cursor.getString(accountNameIndex) else null,
-                        accountType = if (accountTypeIndex >= 0) cursor.getString(accountTypeIndex) else null,
-                        accessLevel = accessLevel,
-                        isVisible = visibleIndex >= 0 && cursor.getInt(visibleIndex) == 1,
-                        syncEvents = syncEventsIndex >= 0 && cursor.getInt(syncEventsIndex) == 1,
-                        isWritable = accessLevel >= Calendars.CAL_ACCESS_CONTRIBUTOR
-                    )
-                }
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "缺少日历读取权限", e)
-            throw SecurityException("需要日历读取权限")
-        } catch (e: Exception) {
-            Log.e(TAG, "获取日历列表失败", e)
-        }
-
-        return calendars
-    }
-
-    // ==================== 辅助方法 ====================
-
-    /**
-     * 构建 MyEvent 的 ContentValues
-     */
-    private fun buildEventContentValues(
-        event: MyEvent,
-        calendarId: Long
-    ): android.content.ContentValues {
-        val values = android.content.ContentValues()
-
-        // 基础字段
-        values.put(Events.CALENDAR_ID, calendarId)
-        values.put(Events.TITLE, event.title)
-        values.put(Events.EVENT_LOCATION, event.location)
-        values.put(Events.DESCRIPTION, event.description)
-
-        // 时间转换
-        val startMillis = getDateTimeMillis(event.startDate, event.startTime)
-        val endMillis = getDateTimeMillis(event.endDate, event.endTime)
-        values.put(Events.DTSTART, startMillis)
-        values.put(Events.DTEND, endMillis)
-
-        // 时区
-        values.put(Events.EVENT_TIMEZONE, ZoneId.systemDefault().id)
-
-        // 不全天事件
-        values.put(Events.ALL_DAY, 0)
-
-        // 颜色
-        val colorInt = event.color.hashCode()
-        values.put(Events.EVENT_COLOR, colorInt)
-
-        // 提醒（如果有）
-        if (event.reminders.isNotEmpty()) {
-            values.put(Events.HAS_ALARM, 1)
-        }
-
-        return values
-    }
-
-    private fun buildRecurringEventContentValues(
-        master: EventMasterEntity,
-        instance: EventInstanceEntity,
-        excludedStartTimes: List<Long>,
-        calendarId: Long
-    ): android.content.ContentValues {
-        val values = android.content.ContentValues()
-
-        values.put(Events.CALENDAR_ID, calendarId)
-        values.put(Events.TITLE, master.title)
-        values.put(Events.EVENT_LOCATION, master.location)
-        values.put(Events.DESCRIPTION, master.description)
-
-        values.put(Events.DTSTART, instance.startTime)
-        values.put(Events.DTEND, instance.endTime)
-        values.put(Events.EVENT_TIMEZONE, systemZone.id)
-        values.put(Events.ALL_DAY, 0)
-
-        values.put(Events.EVENT_COLOR, master.colorArgb)
-
-        val rrule = master.rrule?.trim().orEmpty()
-        if (rrule.isNotBlank()) {
-            values.put(Events.RRULE, rrule)
-        }
-
-        val exDate = buildExDate(excludedStartTimes)
-        if (!exDate.isNullOrBlank()) {
-            values.put(Events.EXDATE, exDate)
-        }
-
-        if (master.remindersJson.isNotBlank() && master.remindersJson != "[]") {
-            values.put(Events.HAS_ALARM, 1)
-        }
-
-        return values
-    }
-
-    private fun buildExDate(excludedStartTimes: List<Long>): String? {
-        if (excludedStartTimes.isEmpty()) return null
-        return excludedStartTimes
-            .sorted()
-            .joinToString(",") { millis ->
-                Instant.ofEpochMilli(millis)
-                    .atZone(systemZone)
-                    .toLocalDateTime()
-                    .format(exDateFormatter)
-            }
-    }
-
-    /**
-     * 构建 Course 事件实例的 ContentValues
-     */
-    private fun buildCourseEventContentValues(
-        course: Course,
-        date: LocalDate,
-        calendarId: Long,
-        timeNodes: List<TimeNode>
-    ): android.content.ContentValues {
-        val values = android.content.ContentValues()
-
-        // 获取对应节次的时间
-        val startNode = timeNodes.find { it.index == course.startNode }
-        val endNode = timeNodes.find { it.index == course.endNode }
-
-        val startTime = startNode?.startTime ?: "08:00"
-        val endTime = endNode?.endTime ?: "09:00"
-
-        // 基础字段
-        values.put(Events.CALENDAR_ID, calendarId)
-        values.put(Events.TITLE, course.name)
-        values.put(Events.EVENT_LOCATION, course.location)
-
-        // 描述：包含课程信息 + 托管标记
-        val description = buildString {
-            if (course.teacher.isNotBlank()) {
-                append("教师: ${course.teacher}\n")
-            }
-            append("节次: 第${course.startNode}-${course.endNode}节")
-            append(MANAGED_EVENT_MARKER)
-        }
-        values.put(Events.DESCRIPTION, description)
-
-        // 时间
-        val startDateTime = LocalDateTime.of(date, parseTime(startTime))
-        val endDateTime = LocalDateTime.of(date, parseTime(endTime))
-        values.put(Events.DTSTART, startDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
-        values.put(Events.DTEND, endDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
-
-        values.put(Events.EVENT_TIMEZONE, ZoneId.systemDefault().id)
-        values.put(Events.ALL_DAY, 0)
-
-        // 颜色
-        val colorInt = course.color.hashCode()
-        values.put(Events.EVENT_COLOR, colorInt)
-
-        return values
-    }
-
-    /**
-     * 将 LocalDate 和时间字符串转换为毫秒时间戳
-     */
-    private fun getDateTimeMillis(date: LocalDate, timeStr: String): Long {
-        val time = parseTime(timeStr)
-        return LocalDateTime.of(date, time)
-            .atZone(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    }
-
-    /**
-     * 解析时间字符串 (HH:mm)
-     */
-    private fun parseTime(timeStr: String): LocalTime {
-        return try {
-            LocalTime.parse(timeStr)
-        } catch (e: Exception) {
-            LocalTime.of(9, 0) // 默认 9:00
-        }
-    }
-
-    private fun getRecurringLookAheadDays(recurringRule: String?): Long {
-        if (recurringRule.isNullOrBlank()) return 120L
-
-        val ruleMap = recurringRule
-            .split(';')
-            .mapNotNull { token ->
-                val parts = token.split('=', limit = 2)
-                if (parts.size == 2) parts[0].uppercase() to parts[1] else null
-            }
-            .toMap()
-
-        val interval = ruleMap["INTERVAL"]?.toLongOrNull()?.coerceAtLeast(1L) ?: 1L
-        return when (ruleMap["FREQ"]?.uppercase()) {
-            "DAILY" -> max(60L, interval * 3L + 7L)
-            "WEEKLY" -> max(120L, interval * 21L)
-            "MONTHLY" -> max(730L, interval * 93L)
-            "YEARLY" -> max(3660L, interval * 730L)
-            else -> 365L
         }
     }
 
@@ -1205,7 +967,6 @@ class CalendarManager(private val context: Context) {
         val seriesKey: String? = null,
         val instanceKey: String? = null,
         val appId: String? = null,
-        val appEventType: String? = null,
         val tag: String? = null
     )
 
@@ -1216,7 +977,6 @@ class CalendarManager(private val context: Context) {
 
     private data class EventMetadata(
         val appId: String? = null,
-        val eventType: String? = null,
         val tag: String? = null
     )
 }

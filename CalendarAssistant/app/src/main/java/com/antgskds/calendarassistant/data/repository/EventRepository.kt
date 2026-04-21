@@ -9,6 +9,8 @@ class EventRepository(context: Context) {
 
     suspend fun loadEvents(): List<MyEvent> = eventSource.loadEvents()
 
+    suspend fun loadRoomBackupEvents(): List<MyEvent> = eventSource.loadRoomBackupEvents()
+
     fun getAndClearCleanupInfo(): String = eventSource.getAndClearCleanupInfo()
 
     suspend fun saveEvents(events: List<MyEvent>) {

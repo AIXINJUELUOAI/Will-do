@@ -14,7 +14,6 @@ data class EventMasterEntity(
     val colorArgb: Int,
     val rrule: String?,
     val syncId: Long?,
-    val eventType: String,
     val remindersJson: String,
     val isImportant: Boolean,
     val sourceImagePath: String?,

@@ -24,7 +24,7 @@ import com.antgskds.calendarassistant.data.db.entity.EventTransitionEntity
 /**
  * Room 数据库主类
  * 数据库名：calendar_assistant.db
- * 版本：2
+ * 版本：3
  */
 @Database(
     entities = [
@@ -36,7 +36,7 @@ import com.antgskds.calendarassistant.data.db.entity.EventTransitionEntity
         EventExcludedDateEntity::class,
         CalendarSyncMapEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -62,6 +62,50 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS event_masters_new (
+                        masterId TEXT NOT NULL PRIMARY KEY,
+                        ruleId TEXT,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        location TEXT NOT NULL,
+                        colorArgb INTEGER NOT NULL,
+                        rrule TEXT,
+                        syncId INTEGER,
+                        remindersJson TEXT NOT NULL,
+                        isImportant INTEGER NOT NULL,
+                        sourceImagePath TEXT,
+                        skipCalendarSync INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        source TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    INSERT INTO event_masters_new (
+                        masterId, ruleId, title, description, location, colorArgb, rrule, syncId,
+                        remindersJson, isImportant, sourceImagePath, skipCalendarSync,
+                        createdAt, updatedAt, source
+                    )
+                    SELECT
+                        masterId, ruleId, title, description, location, colorArgb, rrule, syncId,
+                        remindersJson, isImportant, sourceImagePath, skipCalendarSync,
+                        createdAt, updatedAt, source
+                    FROM event_masters
+                    """.trimIndent()
+                )
+
+                db.execSQL("DROP TABLE event_masters")
+                db.execSQL("ALTER TABLE event_masters_new RENAME TO event_masters")
+            }
+        }
+
         /**
          * 获取数据库单例
          * 使用双重检查锁定确保线程安全
@@ -73,7 +117,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     // .fallbackToDestructiveMigration() // 开发阶段可使用
                     .build()
                 INSTANCE = instance

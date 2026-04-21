@@ -34,9 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
-import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -52,6 +50,7 @@ fun PreferenceSettingsPage(
     val syncStatus by viewModel.syncStatus.collectAsState()
     val availableSyncCalendars by viewModel.availableSyncCalendars.collectAsState()
     val context = LocalContext.current
+    val app = context.applicationContext as? App
     val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,10 +79,13 @@ fun PreferenceSettingsPage(
         }
     }
 
-    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var hasOverlayPermission by remember {
+        mutableStateOf(app?.permissionCenter?.canDrawOverlays(context) ?: Settings.canDrawOverlays(context))
+    }
 
     fun refreshOverlayPermission() {
-        hasOverlayPermission = Settings.canDrawOverlays(context)
+        hasOverlayPermission = app?.permissionCenter?.canDrawOverlays(context)
+            ?: Settings.canDrawOverlays(context)
     }
 
     LaunchedEffect(Unit) {
@@ -113,11 +115,13 @@ fun PreferenceSettingsPage(
     }
 
     fun startEdgeBarService() {
-        context.startService(Intent(context, EdgeBarService::class.java))
+        app?.floatingCenter?.startEdgeBarServiceIfPermitted()
+            ?: context.startService(Intent(context, EdgeBarService::class.java))
     }
 
     fun stopEdgeBarService() {
-        context.stopService(Intent(context, EdgeBarService::class.java))
+        app?.floatingCenter?.stopEdgeBarService()
+            ?: context.stopService(Intent(context, EdgeBarService::class.java))
     }
 
     // --- 字体样式优化 ---
@@ -499,7 +503,9 @@ fun PreferenceSettingsPage(
                         checked = settings.isDailySummaryEnabled,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(dailySummary = isChecked)
-                            if (isChecked) DailySummaryReceiver.schedule(context)
+                            if (isChecked) {
+                                app?.runtimeCenter?.scheduleDailySummary()
+                            }
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -675,7 +681,7 @@ fun PreferenceSettingsPage(
                         checked = syncStatus.isEnabled,
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
-                                if (CalendarPermissionHelper.hasAllPermissions(context)) {
+                                if (app?.permissionCenter?.hasCalendarPermissions(context) == true) {
                                     viewModel.enableCalendarSyncAndSyncNow { result ->
                                         (context.applicationContext as? App)?.initCalendarObserver()
                                         if (result.isSuccess) {
