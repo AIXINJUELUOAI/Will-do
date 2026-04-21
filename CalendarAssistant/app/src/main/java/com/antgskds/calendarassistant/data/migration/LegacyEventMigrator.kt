@@ -65,7 +65,6 @@ class LegacyEventMigrator(
                     colorArgb = event.color.toArgb(),
                     rrule = null,
                     syncId = null,
-                    eventType = event.eventType,
                     remindersJson = json.encodeToString(event.reminders),
                     isImportant = event.isImportant,
                     sourceImagePath = event.sourceImagePath,
@@ -108,6 +107,7 @@ class LegacyEventMigrator(
         val parsed = RuleMatchingEngine.resolvePayload(event)?.ruleId
         if (!parsed.isNullOrBlank()) return parsed
         return when (event.tag) {
+            EventTags.COURSE -> EventTags.COURSE
             EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
             EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
             EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI

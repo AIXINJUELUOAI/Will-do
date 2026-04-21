@@ -106,23 +106,28 @@ class MainActivity : ComponentActivity() {
         }
 
         val app = application as App
-        val repository = app.repository
 
         val viewModelFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return when {
                     modelClass.isAssignableFrom(MainViewModel::class.java) -> MainViewModel(
-                        repository = repository,
-                        scheduleOperationApi = app.scheduleOperationApi,
-                        scheduleQueryApi = app.scheduleQueryApi,
-                        settingsQueryApi = app.settingsQueryApi
+                        appContext = app.applicationContext,
+                        scheduleCenter = app.scheduleCenter,
+                        settingsQueryApi = app.settingsQueryApi,
+                        homeQueryApi = app.homeQueryApi,
+                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
+                        weatherQueryApi = app.weatherQueryApi,
+                        weatherOperationApi = app.weatherOperationApi
                     ) as T
                     modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(
-                        repository = repository,
+                        scheduleCenter = app.scheduleCenter,
+                        backupCenter = app.backupCenter,
+                        syncCenter = app.syncCenter,
                         settingsOperationApi = app.settingsOperationApi,
-                        scheduleQueryApi = app.scheduleQueryApi,
-                        settingsQueryApi = app.settingsQueryApi
+                        settingsQueryApi = app.settingsQueryApi,
+                        settingsTransformApi = app.settingsTransformApi,
+                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }

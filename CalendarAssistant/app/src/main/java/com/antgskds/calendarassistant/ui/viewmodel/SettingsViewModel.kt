@@ -2,31 +2,32 @@ package com.antgskds.calendarassistant.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.antgskds.calendarassistant.core.center.BackupCenter
 import com.antgskds.calendarassistant.core.calendar.CalendarManager
 import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.data.operation.AppRepositorySettingsOperationApi
-import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
-import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
-import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
-import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.data.model.ImportResult
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
-    private val repository: AppRepository,
-    private val settingsOperationApi: SettingsOperationApi = AppRepositorySettingsOperationApi(repository),
-    private val scheduleQueryApi: ScheduleQueryApi = AppRepositoryScheduleQueryApi(repository),
-    private val settingsQueryApi: SettingsQueryApi = AppRepositorySettingsQueryApi(repository)
+    private val scheduleCenter: ScheduleCenter,
+    private val backupCenter: BackupCenter,
+    private val syncCenter: SyncCenter,
+    private val settingsOperationApi: SettingsOperationApi,
+    private val settingsQueryApi: SettingsQueryApi,
+    private val settingsTransformApi: SettingsTransformApi,
+    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi
 ) : ViewModel() {
-
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
 
@@ -133,35 +134,29 @@ class SettingsViewModel(
         homeStartPageKey: String? = null
     ) {
         viewModelScope.launch {
-            var current = settings.value
-            if (showTomorrow != null) current = current.copy(showTomorrowEvents = showTomorrow)
-            if (dailySummary != null) current = current.copy(isDailySummaryEnabled = dailySummary)
-            if (liveCapsule != null) current = current.copy(isLiveCapsuleEnabled = liveCapsule)
-            if (pickupAggregation != null) current = current.copy(isPickupAggregationEnabled = pickupAggregation)
-            if (edgeBarEnabled != null) current = current.copy(edgeBarEnabled = edgeBarEnabled)
-            if (networkSpeedCapsule != null) current = current.copy(isNetworkSpeedCapsuleEnabled = networkSpeedCapsule)
-            if (floatingWindow != null) current = current.copy(isFloatingWindowEnabled = floatingWindow)
-            if (advanceReminderEnabled != null) current = current.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
-            if (advanceReminderMinutes != null) current = current.copy(advanceReminderMinutes = advanceReminderMinutes)
-            if (autoArchive != null) current = current.copy(autoArchiveEnabled = autoArchive)
-            if (useMultimodalAi != null) current = current.copy(useMultimodalAi = useMultimodalAi)
-            if (disableThinking != null) current = current.copy(disableThinking = disableThinking)
-            if (floatingEventRange != null) current = current.copy(floatingEventRange = floatingEventRange)
-            if (volumeUpLongPressEnabled != null) current = current.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
-            if (volumeUpLongPressAction != null) current = current.copy(volumeUpLongPressAction = volumeUpLongPressAction)
-            if (smsMonitoring != null) current = current.copy(isSmsMonitoringEnabled = smsMonitoring)
-            if (noteEnabled != null) current = current.copy(noteEnabled = noteEnabled)
-            if (homeBottomItems != null) current = current.copy(homeBottomItems = homeBottomItems)
-            if (homeStartPageKey != null) current = current.copy(homeStartPageKey = homeStartPageKey)
-
-            val sanitizedBottomItems = sanitizeHomeBottomItems(current.homeBottomItems, current.noteEnabled)
-            val sanitizedStartPage = sanitizeHomeStartPageKey(current.homeStartPageKey, sanitizedBottomItems)
-            current = current.copy(
-                homeBottomItems = sanitizedBottomItems,
-                homeStartPageKey = sanitizedStartPage
+            val updated = settingsTransformApi.applyPreferenceUpdate(
+                current = settings.value,
+                showTomorrow = showTomorrow,
+                dailySummary = dailySummary,
+                liveCapsule = liveCapsule,
+                pickupAggregation = pickupAggregation,
+                edgeBarEnabled = edgeBarEnabled,
+                networkSpeedCapsule = networkSpeedCapsule,
+                floatingWindow = floatingWindow,
+                advanceReminderEnabled = advanceReminderEnabled,
+                advanceReminderMinutes = advanceReminderMinutes,
+                autoArchive = autoArchive,
+                useMultimodalAi = useMultimodalAi,
+                disableThinking = disableThinking,
+                floatingEventRange = floatingEventRange,
+                volumeUpLongPressEnabled = volumeUpLongPressEnabled,
+                volumeUpLongPressAction = volumeUpLongPressAction,
+                smsMonitoring = smsMonitoring,
+                noteEnabled = noteEnabled,
+                homeBottomItems = homeBottomItems,
+                homeStartPageKey = homeStartPageKey
             )
-
-            settingsOperationApi.updateSettings(current)
+            settingsOperationApi.updateSettings(updated)
         }
     }
 
@@ -258,29 +253,33 @@ class SettingsViewModel(
     // --- 导出/导入功能 ---
 
     suspend fun exportCoursesData(): String {
-        return settingsOperationApi.exportCoursesData()
+        return backupCenter.exportCoursesData()
     }
 
     suspend fun importCoursesData(jsonString: String): Result<Unit> {
-        return settingsOperationApi.importCoursesData(jsonString)
+        return backupCenter.importCoursesData(jsonString)
     }
 
     suspend fun exportEventsData(): String {
-        return settingsOperationApi.exportEventsData()
+        return backupCenter.exportEventsData()
     }
 
     suspend fun importEventsData(jsonString: String): Result<ImportResult> {
-        return settingsOperationApi.importEventsData(jsonString)
+        return backupCenter.importEventsData(jsonString)
     }
 
-    fun getEventsCount(): Int = scheduleQueryApi.getEventsCount()
-    fun getTotalEventsCount(): Int = scheduleQueryApi.getTotalEventsCount()
-    fun getCoursesCount(): Int = scheduleQueryApi.getCoursesCount()
+    fun getEventsCount(): Int = scheduleCenter.getEventsCount()
+    fun getTotalEventsCount(): Int = scheduleCenter.getTotalEventsCount()
+    fun getCoursesCount(): Int = CourseEventMapper.extractCourses(
+        scheduleCenter.events.value,
+        settingsQueryApi.settings.value
+    ).size
 
     fun hasDuplicateAdvanceReminder(minutes: Int): Boolean {
-        return scheduleQueryApi.events.value.any { event ->
-            event.reminders.any { it <= minutes }
-        }
+        return scheduleInsightsQueryApi.hasDuplicateAdvanceReminder(
+            events = scheduleCenter.events.value,
+            minutes = minutes
+        )
     }
 
     /**
@@ -297,7 +296,7 @@ class SettingsViewModel(
         callback: suspend (Result<Int>) -> Unit
     ) {
         viewModelScope.launch {
-            val result = settingsOperationApi.importWakeUpFile(content, mode, importSettings)
+            val result = backupCenter.importWakeUpFile(content, mode, importSettings)
             callback(result)
         }
     }
@@ -309,13 +308,13 @@ class SettingsViewModel(
      */
     fun refreshSyncStatus() {
         viewModelScope.launch {
-            _syncStatus.value = settingsQueryApi.getSyncStatus()
+            _syncStatus.value = syncCenter.getSyncStatus()
         }
     }
 
     fun refreshSyncCalendars() {
         viewModelScope.launch {
-            _availableSyncCalendars.value = settingsQueryApi.getSelectableSyncCalendars()
+            _availableSyncCalendars.value = syncCenter.getSelectableSyncCalendars()
         }
     }
 
@@ -325,9 +324,9 @@ class SettingsViewModel(
     fun toggleCalendarSync(enabled: Boolean) {
         viewModelScope.launch {
             val result = if (enabled) {
-                settingsOperationApi.enableCalendarSync()
+                syncCenter.enableCalendarSync()
             } else {
-                settingsOperationApi.disableCalendarSync()
+                syncCenter.disableCalendarSync()
             }
 
             if (result.isSuccess) {
@@ -338,7 +337,7 @@ class SettingsViewModel(
 
     fun enableCalendarSyncAndSyncNow(callback: suspend (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            val result = settingsOperationApi.enableCalendarSyncAndSyncNow()
+            val result = syncCenter.enableCalendarSyncAndSyncNow()
             refreshSyncStatus()
             refreshSyncCalendars()
             callback(result)
@@ -347,7 +346,7 @@ class SettingsViewModel(
 
     fun updateSourceCalendars(calendarIds: List<Long>, callback: suspend (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            val result = settingsOperationApi.updateSourceCalendars(calendarIds)
+            val result = syncCenter.updateSourceCalendars(calendarIds)
             refreshSyncStatus()
             refreshSyncCalendars()
             callback(result)
@@ -358,7 +357,7 @@ class SettingsViewModel(
      * 手动触发同步
      */
     suspend fun manualSync(): Result<Unit> {
-        val result = settingsOperationApi.manualSync()
+        val result = syncCenter.manualSync()
         if (result.isSuccess) {
             refreshSyncStatus()
         }

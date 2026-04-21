@@ -10,7 +10,6 @@ import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -31,20 +30,25 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.event.DomainEventType
+import com.antgskds.calendarassistant.core.event.EventIdentity
+import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
+import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
+import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.note.createNoteEvent
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.core.query.WeatherQueryApi
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.EventType
 import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
@@ -52,11 +56,13 @@ import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -66,6 +72,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     companion object {
         private const val TAG = "FloatingScheduleService"
+        private const val RECOGNITION_SOURCE_TYPE = "floating"
+        private const val RECOGNITION_SOURCE_ID = "floating.manual_input"
 
         const val ACTION_IMAGE_PICKED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICKED"
         const val ACTION_IMAGE_PICK_CANCELLED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICK_CANCELLED"
@@ -93,9 +101,16 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val repository by lazy { AppRepository.getInstance(applicationContext) }
-    private val scheduleOperationApi by lazy { (applicationContext as App).scheduleOperationApi }
-
+    private val app by lazy { applicationContext as App }
+    private val scheduleCenter: ScheduleCenter by lazy { app.scheduleCenter }
+    private val scheduleQueryApi: ScheduleQueryApi by lazy { app.scheduleQueryApi }
+    private val settingsQueryApi: SettingsQueryApi by lazy { app.settingsQueryApi }
+    private val weatherQueryApi: WeatherQueryApi by lazy { app.weatherQueryApi }
+    private val permissionCenter by lazy { app.permissionCenter }
+    private val domainEventBus by lazy { app.domainEventBus }
+    private var recognitionFailedSubscriptionJob: Job? = null
+    private var ingestSucceededSubscriptionJob: Job? = null
+    private var ingestFailedSubscriptionJob: Job? = null
     // 广播接收器
     private val closeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -138,12 +153,70 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             registerReceiver(closeReceiver, filter)
         }
 
-        if (!Settings.canDrawOverlays(this)) {
+        if (!permissionCenter.canDrawOverlays(this)) {
             requestClose()
             return
         }
 
+        subscribeRecognitionFailedEvents()
+        subscribeIngestEvents()
         initUI()
+    }
+
+    private fun subscribeRecognitionFailedEvents() {
+        recognitionFailedSubscriptionJob?.cancel()
+        recognitionFailedSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<RecognitionFailedEvent>(DomainEventType.RECOGNITION_FAILED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    Toast.makeText(
+                        applicationContext,
+                        payload.message.ifBlank { "分析失败" },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+        }
+    }
+
+    private fun subscribeIngestEvents() {
+        ingestSucceededSubscriptionJob?.cancel()
+        ingestSucceededSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<IngestSucceededEvent>(DomainEventType.INGEST_SUCCEEDED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    val message = when {
+                        payload.createdCount <= 0 -> "已处理，无新增"
+                        payload.createdCount == 1 -> "已添加 1 个事件"
+                        else -> "已添加 ${payload.createdCount} 个事件"
+                    }
+                    Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+                }
+        }
+
+        ingestFailedSubscriptionJob?.cancel()
+        ingestFailedSubscriptionJob = serviceScope.launch {
+            domainEventBus
+                .eventsOfType<IngestFailedEvent>(DomainEventType.INGEST_FAILED)
+                .collect { event ->
+                    val payload = event.payload
+                    if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
+                        return@collect
+                    }
+                    Toast.makeText(
+                        applicationContext,
+                        payload.message.ifBlank { "保存失败" },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+        }
     }
 
     private fun initUI() {
@@ -210,10 +283,10 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             isFocusableInTouchMode = true
 
             setContent {
-                val events by repository.events.collectAsState()
-                val settings by repository.settings.collectAsState()
+                val events by scheduleQueryApi.events.collectAsState()
+                val settings by settingsQueryApi.settings.collectAsState()
                 val context = LocalContext.current
-                val weatherData by WeatherRepository.getInstance(context).weatherData.collectAsState()
+                val weatherData by weatherQueryApi.weatherData.collectAsState()
 
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
@@ -263,7 +336,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUpdateEvent = { updatedEvent, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    scheduleOperationApi.updateEvent(updatedEvent)
+                                    scheduleCenter.updateEvent(updatedEvent)
                                     Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to update event", e)
@@ -278,13 +351,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         },
                         onUndo = { eventId, _ ->
                             serviceScope.launch {
-                                scheduleOperationApi.performPrimaryRuleAction(eventId)
+                                scheduleCenter.performPrimaryRuleAction(eventId)
                             }
                         },
                         onDeleteNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    scheduleOperationApi.deleteEvent(note.id)
+                                    scheduleCenter.deleteEvent(note.id)
                                 } finally {
                                     onComplete()
                                 }
@@ -293,7 +366,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onRestoreNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    scheduleOperationApi.addEvent(note)
+                                    scheduleCenter.addEvent(note)
                                 } finally {
                                     onComplete()
                                 }
@@ -340,7 +413,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private fun showFloatingWindow() {
         val view = composeView ?: return
         val params = windowLayoutParams ?: return
-        if (!Settings.canDrawOverlays(this)) return
+        if (!permissionCenter.canDrawOverlays(this)) return
 
         if (!isViewAttached || !view.isAttachedToWindow) {
             try {
@@ -409,7 +482,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private fun handlePickedImage(uri: Uri) {
         serviceScope.launch {
-            val settings = repository.settings.value
+            val settings = settingsQueryApi.settings.value
             val config = settings.activeAiConfig()
             if (!config.isConfigured()) {
                 Toast.makeText(applicationContext, config.missingConfigMessage(), Toast.LENGTH_SHORT).show()
@@ -437,7 +510,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             }
 
             val ocrText = withContext(Dispatchers.IO) {
-                RecognitionProcessor.recognizeText(bitmap)
+                app.recognitionCenter.recognizeText(bitmap)
             }
             bitmap.recycle()
 
@@ -469,24 +542,31 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
         serviceScope.launch {
             try {
-                val settings = repository.settings.value
+                val settings = settingsQueryApi.settings.value
                 if (isNote) {
                     val note = convertToNote(text)
-                    scheduleOperationApi.addEvent(note)
+                    scheduleCenter.addEvent(note)
                     Toast.makeText(applicationContext, "便签已添加", Toast.LENGTH_SHORT).show()
-                } else when (val result = withContext(Dispatchers.IO) {
-                    RecognitionProcessor.parseUserText(text, settings, applicationContext)
-                }) {
-                    is AnalysisResult.Success -> {
-                        val event = convertToMyEvent(result.data, sourceImagePath)
-                        scheduleOperationApi.addEvent(event)
-                        Toast.makeText(applicationContext, "已添加: ${event.title}", Toast.LENGTH_SHORT).show()
+                } else {
+                    val traceId = EventIdentity.newTraceId("floating")
+                    val result = withContext(Dispatchers.IO) {
+                        app.recognitionCenter.parseUserText(
+                            text = text,
+                            settings = settings,
+                            context = applicationContext,
+                            sourceType = RECOGNITION_SOURCE_TYPE,
+                            sourceId = RECOGNITION_SOURCE_ID,
+                            sourceImagePath = sourceImagePath,
+                            ingestRequested = true,
+                            traceId = traceId
+                        )
                     }
-                    is AnalysisResult.Empty -> {
-                        Toast.makeText(applicationContext, result.message, Toast.LENGTH_SHORT).show()
-                    }
-                    is AnalysisResult.Failure -> {
-                        Toast.makeText(applicationContext, result.failure.fullMessage(), Toast.LENGTH_SHORT).show()
+                    when (result) {
+                        is AnalysisResult.Success -> {
+                            Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
+                        }
+                        is AnalysisResult.Empty -> Unit
+                        is AnalysisResult.Failure -> Unit
                     }
                 }
                 // 收起输入法
@@ -517,12 +597,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             try {
                 when (actionType) {
                     "archive" -> {
-                        scheduleOperationApi.archiveEvent(eventId)
+                        scheduleCenter.archiveEvent(eventId)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    else -> scheduleOperationApi.performPrimaryRuleAction(eventId)
+                    else -> scheduleCenter.performPrimaryRuleAction(eventId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle event action", e)
@@ -556,9 +636,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             endTime = endDateTime.format(timeFormatter),
             location = eventData.location,
             description = eventData.description,
-            color = EventColors[repository.events.value.size % EventColors.size],
+            color = EventColors[scheduleCenter.events.value.size % EventColors.size],
             sourceImagePath = sourceImagePath,
-            eventType = EventType.EVENT,
             tag = resolvedTag
         )
     }
@@ -571,7 +650,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         return createNoteEvent(
             title = title,
             markdown = clean,
-            color = EventColors[repository.events.value.size % EventColors.size],
+            color = EventColors[scheduleCenter.events.value.size % EventColors.size],
         )
     }
 
@@ -605,6 +684,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         serviceScope.cancel()
+        recognitionFailedSubscriptionJob?.cancel()
+        recognitionFailedSubscriptionJob = null
+        ingestSucceededSubscriptionJob?.cancel()
+        ingestSucceededSubscriptionJob = null
+        ingestFailedSubscriptionJob?.cancel()
+        ingestFailedSubscriptionJob = null
         composeView?.let { view ->
             if (view.isAttachedToWindow) {
                 try { windowManager.removeView(view) } catch (e: Exception) {}

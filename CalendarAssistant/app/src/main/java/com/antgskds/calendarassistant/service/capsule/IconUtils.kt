@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.service.capsule
 import android.content.Context
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 
@@ -48,8 +48,8 @@ object IconUtils {
             RuleMatchingEngine.RULE_FLIGHT -> R.drawable.ic_stat_flight
             RuleMatchingEngine.RULE_TICKET -> R.drawable.ic_stat_ticket
             RuleMatchingEngine.RULE_SENDER -> R.drawable.ic_stat_sender
-            EventType.COURSE -> R.drawable.ic_stat_course
-            EventType.EVENT, RuleMatchingEngine.RULE_GENERAL -> R.drawable.ic_stat_event
+            EventTags.COURSE -> R.drawable.ic_stat_course
+            EventTags.GENERAL, RuleMatchingEngine.RULE_GENERAL, "event" -> R.drawable.ic_stat_event
             else -> R.drawable.ic_notification_small
         }
     }

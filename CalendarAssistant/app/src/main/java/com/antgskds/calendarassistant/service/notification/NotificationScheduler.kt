@@ -14,7 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.data.repository.AppRepository
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
@@ -48,10 +48,14 @@ object NotificationScheduler {
     private const val OFFSET_CAPSULE_START = 100000
     private const val OFFSET_CAPSULE_END = 200000
     private const val OFFSET_REFRESH_CAPSULE = 300000 // 刷新胶囊的偏移量
-    const val OFFSET_PICKUP_INITIAL_NOTIF = 1000000 // 取件码初始通知的偏移量，避免与胶囊通知冲突（public供AppRepository使用）
+    const val OFFSET_PICKUP_INITIAL_NOTIF = 1000000 // 取件码初始通知的偏移量，避免与胶囊通知冲突（public供StoreRootNode使用）
 
     fun scheduleReminders(context: Context, event: MyEvent) {
-        val settings = AppRepository.getInstance(context).settings.value
+        val settings = (context.applicationContext as? App)
+            ?.settingsQueryApi
+            ?.settings
+            ?.value
+            ?: MySettings()
         if (event.isRecurringParent) {
             Log.d("NotificationScheduler", "跳过重复日程父事件提醒: ${event.id}")
             return

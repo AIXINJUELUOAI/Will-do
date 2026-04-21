@@ -43,8 +43,8 @@ interface EventMasterDao {
     @Query("SELECT masterId FROM event_masters")
     suspend fun getAllMasterIds(): List<String>
 
-    @Query("SELECT * FROM event_masters WHERE rrule IS NOT NULL AND rrule != '' AND eventType = :eventType AND skipCalendarSync = 0")
-    suspend fun getRecurringMasters(eventType: String): List<EventMasterEntity>
+    @Query("SELECT * FROM event_masters WHERE rrule IS NOT NULL AND rrule != '' AND skipCalendarSync = 0")
+    suspend fun getRecurringMasters(): List<EventMasterEntity>
 
     @Query("SELECT * FROM event_masters WHERE source = :source")
     suspend fun getBySource(source: String): List<EventMasterEntity>

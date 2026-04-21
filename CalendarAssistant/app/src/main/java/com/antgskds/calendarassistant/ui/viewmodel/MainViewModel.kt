@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,38 +8,33 @@ import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
 import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
-import com.antgskds.calendarassistant.core.course.CourseManager
-import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
+import com.antgskds.calendarassistant.core.query.HomeQueryApi
+import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.data.operation.AppRepositoryScheduleOperationApi
-import com.antgskds.calendarassistant.data.query.AppRepositoryScheduleQueryApi
-import com.antgskds.calendarassistant.data.query.AppRepositorySettingsQueryApi
+import com.antgskds.calendarassistant.core.query.WeatherQueryApi
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.RemotePrompts
 import com.antgskds.calendarassistant.data.model.WeatherData
-import com.antgskds.calendarassistant.data.repository.AppRepository
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
 import com.antgskds.calendarassistant.ui.components.ToastType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
-import java.util.UUID
+import java.time.LocalTime
 
 data class MainUiState(
     val selectedDate: LocalDate = LocalDate.now(),
     val revealedEventId: String? = null,
     val allEvents: List<MyEvent> = emptyList(),
     val noteEvents: List<MyEvent> = emptyList(),
-    val courses: List<Course> = emptyList(),
     val settings: MySettings = MySettings(),
     val currentDateEvents: List<MyEvent> = emptyList(),
     val tomorrowEvents: List<MyEvent> = emptyList(),
@@ -56,12 +52,14 @@ data class PromptCheckFeedback(
 )
 
 class MainViewModel(
-    private val repository: AppRepository,
-    private val scheduleOperationApi: ScheduleOperationApi = AppRepositoryScheduleOperationApi(repository),
-    private val scheduleQueryApi: ScheduleQueryApi = AppRepositoryScheduleQueryApi(repository),
-    private val settingsQueryApi: SettingsQueryApi = AppRepositorySettingsQueryApi(repository)
+    private val appContext: Context,
+    private val scheduleCenter: ScheduleCenter,
+    private val settingsQueryApi: SettingsQueryApi,
+    private val homeQueryApi: HomeQueryApi,
+    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
+    private val weatherQueryApi: WeatherQueryApi,
+    private val weatherOperationApi: WeatherOperationApi
 ) : ViewModel() {
-    private val weatherRepository = WeatherRepository.getInstance(repository.appContext)
 
     // ✅ 精确过期触发器：仅在事件实际过期时触发 UI 刷新，避免无效轮询
     private val _timeTrigger = MutableStateFlow(System.currentTimeMillis())
@@ -69,9 +67,9 @@ class MainViewModel(
     val promptUpdateDialogState: StateFlow<PromptUpdateDialogState?> = _promptUpdateDialogState.asStateFlow()
     private val _promptCheckInProgress = MutableStateFlow(false)
     val promptCheckInProgress: StateFlow<Boolean> = _promptCheckInProgress.asStateFlow()
-    private val _promptLocalVersion = MutableStateFlow(AiPrompts.getLocalVersion(repository.appContext))
+    private val _promptLocalVersion = MutableStateFlow(AiPrompts.getLocalVersion(appContext))
     val promptLocalVersion: StateFlow<Int> = _promptLocalVersion.asStateFlow()
-    private val _promptSource = MutableStateFlow(AiPrompts.getPromptSource(repository.appContext))
+    private val _promptSource = MutableStateFlow(AiPrompts.getPromptSource(appContext))
     val promptSource: StateFlow<AiPrompts.PromptSource> = _promptSource.asStateFlow()
     private val _promptCheckFeedback = MutableSharedFlow<PromptCheckFeedback>(extraBufferCapacity = 1)
     val promptCheckFeedback: SharedFlow<PromptCheckFeedback> = _promptCheckFeedback.asSharedFlow()
@@ -82,6 +80,7 @@ class MainViewModel(
         viewModelScope.launch {
             while (true) {
                 val delayMs = calculateDelayToNextExpiration()
+                
                 if (delayMs > 0) {
                     kotlinx.coroutines.delay(delayMs)
                 } else {
@@ -93,7 +92,7 @@ class MainViewModel(
 
         // 自动归档过期事件
         viewModelScope.launch {
-            val archivedCount = scheduleOperationApi.autoArchiveExpiredEvents()
+            val archivedCount = scheduleCenter.autoArchiveExpiredEvents()
             if (archivedCount > 0) {
                 Log.d("Archive", "自动归档了 $archivedCount 条事件")
             }
@@ -101,43 +100,19 @@ class MainViewModel(
 
         viewModelScope.launch {
             settingsQueryApi.settings.collectLatest { settings ->
-                weatherRepository.refreshIfNeeded(settings)
+                weatherOperationApi.refreshIfNeeded(settings)
             }
         }
 
         checkPromptUpdatesSilently()
     }
 
-    /**
-     * 计算距离下一个事件过期还有多少毫秒。
-     * 遍历所有事件，找到尚未过期但即将过期的事件中，最早到达结束时间的那个。
-     */
     private fun calculateDelayToNextExpiration(): Long {
-        val now = LocalDateTime.now()
-        var nearestEndMillis = Long.MAX_VALUE
-
-        for (event in scheduleQueryApi.events.value) {
-            if (event.isRecurringParent) continue
-            if (event.tag == EventTags.NOTE) continue
-            try {
-                val timeParts = event.endTime.split(":")
-                val hour = timeParts.getOrElse(0) { "23" }.toIntOrNull() ?: 23
-                val minute = timeParts.getOrElse(1) { "59" }.toIntOrNull() ?: 59
-                val endDateTime = LocalDateTime.of(event.endDate, java.time.LocalTime.of(hour, minute))
-                if (endDateTime.isAfter(now)) {
-                    val diff = ChronoUnit.MILLIS.between(now, endDateTime)
-                    if (diff in 1 until nearestEndMillis) {
-                        nearestEndMillis = diff
-                    }
-                }
-            } catch (_: Exception) { continue }
-        }
-
-        return if (nearestEndMillis == Long.MAX_VALUE) -1L else nearestEndMillis
+        return homeQueryApi.calculateDelayToNextExpiration(scheduleCenter.events.value)
     }
 
     // 归档事件（公开访问）
-    val archivedEvents = scheduleQueryApi.archivedEvents
+    val archivedEvents = scheduleCenter.archivedEvents
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _revealedEventId = MutableStateFlow<String?>(null)
@@ -145,89 +120,33 @@ class MainViewModel(
     val uiState: StateFlow<MainUiState> = combine(
         _selectedDate,
         _revealedEventId,
-        scheduleQueryApi.events,
-        scheduleQueryApi.courses,
+        scheduleCenter.events,
         settingsQueryApi.settings,
-        weatherRepository.weatherData,
+        weatherQueryApi.weatherData,
         _timeTrigger  // ✅ 添加时间触发器
     ) { values ->
         val date = values[0] as LocalDate
         val revealedId = values[1] as String?
         val events = values[2] as List<MyEvent>
-        val courses = values[3] as List<Course>
-        val settings = values[4] as MySettings
-        val weatherData = values[5] as WeatherData?
-        // values[6] 是 _timeTrigger，不需要使用
+        val settings = values[3] as MySettings
+        val weatherData = values[4] as WeatherData?
+        val courses = CourseEventMapper.extractCourses(events, settings)
 
-        val scheduleEvents = events.filter { it.tag != EventTags.NOTE }
-        val noteEvents = events.filter { it.tag == EventTags.NOTE }
-
-        val todayNormal = scheduleEvents.filter { event ->
-            !event.isRecurringParent &&
-            DateCalculator.overlapsDate(event, date)
-        }.distinctBy { it.id }
-        val todayCourses = CourseManager.getDailyCourses(date, courses, settings)
-        val todayMerged = (todayNormal + todayCourses).sortedWith(compareBy(
-            // 8级优先级：过期状态 > 重要性 > 单多日
-            { event ->
-                val isExpired = DateCalculator.isEventExpired(event)
-                val isImportant = event.isImportant
-                val isMultiDay = event.startDate != event.endDate
-                when {
-                    !isExpired && isImportant && isMultiDay -> 0
-                    !isExpired && isImportant && !isMultiDay -> 1
-                    !isExpired && !isImportant && isMultiDay -> 2
-                    !isExpired && !isImportant && !isMultiDay -> 3
-                    isExpired && isImportant && isMultiDay -> 4
-                    isExpired && isImportant && !isMultiDay -> 5
-                    isExpired && !isImportant && isMultiDay -> 6
-                    else -> 7
-                }
-            },
-            // 同优先级内按开始时间排序
-            { it.startTime }
-        ))
-
-        val tomorrowMerged = if (settings.showTomorrowEvents) {
-            val tomorrow = date.plusDays(1)
-            val todayEventIds = todayMerged.map { it.id }.toSet()
-            val tomorrowNormal = scheduleEvents.filter { event ->
-                !event.isRecurringParent &&
-                DateCalculator.overlapsDate(event, tomorrow)
-            }.distinctBy { it.id }
-            val tomorrowCourses = CourseManager.getDailyCourses(tomorrow, courses, settings)
-            (tomorrowNormal + tomorrowCourses)
-                .filter { it.id !in todayEventIds }
-                .sortedWith(compareBy(
-                // 8级优先级：过期状态 > 重要性 > 单多日
-                { event ->
-                    val isExpired = DateCalculator.isEventExpired(event)
-                    val isImportant = event.isImportant
-                    val isMultiDay = event.startDate != event.endDate
-                    when {
-                        !isExpired && isImportant && isMultiDay -> 0
-                        !isExpired && isImportant && !isMultiDay -> 1
-                        !isExpired && !isImportant && isMultiDay -> 2
-                        !isExpired && !isImportant && !isMultiDay -> 3
-                        isExpired && isImportant && isMultiDay -> 4
-                        isExpired && isImportant && !isMultiDay -> 5
-                        isExpired && !isImportant && isMultiDay -> 6
-                        else -> 7
-                    }
-                },
-                { it.startTime }
-            ))
-        } else { emptyList() }
+        val snapshot = homeQueryApi.buildSnapshot(
+            selectedDate = date,
+            events = events,
+            courses = courses,
+            settings = settings
+        )
 
         MainUiState(
             selectedDate = date,
             revealedEventId = revealedId,
             allEvents = events,
-            noteEvents = noteEvents,
-            courses = courses,
+            noteEvents = snapshot.noteEvents,
             settings = settings,
-            currentDateEvents = todayMerged,
-            tomorrowEvents = tomorrowMerged,
+            currentDateEvents = snapshot.currentDateEvents,
+            tomorrowEvents = snapshot.tomorrowEvents,
             weatherData = if (settings.hasWeatherConfig()) weatherData else null
         )
     }.flowOn(Dispatchers.Default)  // ✅ 将计算移到后台线程，避免主线程 ANR
@@ -246,7 +165,7 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _promptCheckInProgress.value = true
             try {
-                when (val result = PromptUpdater.check(repository.appContext, ignoreIgnoredVersion = true)) {
+                when (val result = PromptUpdater.check(appContext, ignoreIgnoredVersion = true)) {
                     is PromptCheckResult.UpdateAvailable -> {
                         presentPromptUpdate(result.candidate)
                     }
@@ -272,7 +191,7 @@ class MainViewModel(
     fun confirmPromptUpdate() {
         val remotePrompts = pendingPromptUpdate ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            AiPrompts.updatePrompts(repository.appContext, remotePrompts, AiPrompts.PromptSource.CLOUD)
+            AiPrompts.updatePrompts(appContext, remotePrompts, AiPrompts.PromptSource.CLOUD)
             refreshPromptInfo()
             Log.d("MainViewModel", "用户确认更新 prompt，version=${remotePrompts.version}")
             pendingPromptUpdate = null
@@ -282,15 +201,15 @@ class MainViewModel(
     }
 
     fun refreshPromptInfo() {
-        _promptLocalVersion.value = AiPrompts.getLocalVersion(repository.appContext)
-        _promptSource.value = AiPrompts.getPromptSource(repository.appContext)
+        _promptLocalVersion.value = AiPrompts.getLocalVersion(appContext)
+        _promptSource.value = AiPrompts.getPromptSource(appContext)
     }
 
     fun dismissPromptUpdate() {
         val remotePrompts = pendingPromptUpdate
         viewModelScope.launch(Dispatchers.IO) {
             if (remotePrompts != null) {
-                AiPrompts.markVersionIgnored(repository.appContext, remotePrompts.version)
+                AiPrompts.markVersionIgnored(appContext, remotePrompts.version)
                 Log.d("MainViewModel", "用户取消更新 prompt，忽略 version=${remotePrompts.version}")
                 sendPromptFeedback("已忽略 v${remotePrompts.version}，更高版本时会再次提示", ToastType.INFO)
             }
@@ -301,7 +220,7 @@ class MainViewModel(
 
     private fun checkPromptUpdatesSilently() {
         viewModelScope.launch(Dispatchers.IO) {
-            when (val result = PromptUpdater.check(repository.appContext)) {
+            when (val result = PromptUpdater.check(appContext)) {
                 is PromptCheckResult.UpdateAvailable -> presentPromptUpdate(result.candidate)
                 is PromptCheckResult.NoUpdate,
                 is PromptCheckResult.Error -> Unit
@@ -326,8 +245,8 @@ class MainViewModel(
     }
 
     // --- 普通事件操作 ---
-    fun addEvent(event: MyEvent) = viewModelScope.launch { scheduleOperationApi.addEvent(event) }
-    fun updateEvent(event: MyEvent) = viewModelScope.launch { scheduleOperationApi.updateEvent(event) }
+    fun addEvent(event: MyEvent) = viewModelScope.launch { scheduleCenter.addEvent(event) }
+    fun updateEvent(event: MyEvent) = viewModelScope.launch { scheduleCenter.updateEvent(event) }
 
     fun detachRecurringInstance(
         parentEventId: String,
@@ -335,35 +254,31 @@ class MainViewModel(
         sourceInstanceKey: String,
         detachedEvent: MyEvent
     ) = viewModelScope.launch {
-        scheduleOperationApi.detachRecurringInstance(parentEventId, sourceInstanceId, sourceInstanceKey, detachedEvent)
+        scheduleCenter.detachRecurringInstance(parentEventId, sourceInstanceId, sourceInstanceKey, detachedEvent)
     }
 
     fun findRecurringParent(event: MyEvent): MyEvent? {
         if (event.isRecurringParent) return event
         val parentId = event.parentRecurringId ?: return null
-        return scheduleQueryApi.events.value.find { it.id == parentId && it.isRecurringParent }
+        return scheduleCenter.events.value.find { it.id == parentId && it.isRecurringParent }
     }
 
     fun findNextRecurringInstance(parentEvent: MyEvent): MyEvent? {
-        val now = System.currentTimeMillis()
-        return scheduleQueryApi.events.value
-            .filter { it.isRecurring && !it.isRecurringParent && it.parentRecurringId == parentEvent.id }
-            .mapNotNull { child ->
-                val startMillis = RecurringEventUtils.eventStartMillis(child) ?: return@mapNotNull null
-                child to startMillis
-            }
-            .filter { (_, startMillis) -> startMillis >= now }
-            .minByOrNull { (_, startMillis) -> startMillis }
-            ?.first
+        return scheduleInsightsQueryApi.findNextRecurringInstance(
+            events = scheduleCenter.events.value,
+            parentEventId = parentEvent.id
+        )
     }
 
     fun deleteEvent(event: MyEvent) {
         viewModelScope.launch {
-            if (event.eventType == "course") {
-                // 如果是课程，走排除逻辑
-                excludeCourse(event.id, event.startDate)
+            if (event.tag == EventTags.COURSE) {
+                // 仅虚拟课程实例支持“删除本次”，课程模板不进入该入口。
+                if (event.id.startsWith("course_")) {
+                    excludeCourse(event.id, event.startDate)
+                }
             } else {
-                scheduleOperationApi.deleteEvent(event.id)
+                scheduleCenter.deleteEvent(event.id)
             }
             _revealedEventId.value = null
         }
@@ -371,17 +286,36 @@ class MainViewModel(
 
     fun toggleImportant(event: MyEvent) {
         viewModelScope.launch {
-            if (event.eventType != "course") {
-                scheduleOperationApi.updateEvent(event.copy(isImportant = !event.isImportant))
+            if (event.tag != EventTags.COURSE) {
+                scheduleCenter.updateEvent(event.copy(isImportant = !event.isImportant))
             }
             _revealedEventId.value = null
         }
     }
 
     // --- 课程管理 ---
-    fun addCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.addCourse(course) }
-    fun updateCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.updateCourse(course) }
-    fun deleteCourse(course: Course) = viewModelScope.launch { scheduleOperationApi.deleteCourse(course) }
+    fun addCourse(course: Course) = viewModelScope.launch {
+        scheduleCenter.addEvent(courseToTemplateEvent(course))
+    }
+
+    fun updateCourse(course: Course) = viewModelScope.launch {
+        val parentEvent = findCourseParentBySeries(course.id)
+        scheduleCenter.updateEvent(courseToTemplateEvent(course, parentEvent))
+    }
+
+    fun deleteCourse(course: Course) = viewModelScope.launch {
+        val parentId = RecurringEventUtils.buildParentId(course.id)
+        scheduleCenter.deleteEvent(parentId)
+        scheduleCenter.events.value
+            .filter { event ->
+                event.tag == EventTags.COURSE &&
+                    !event.isRecurring &&
+                    CourseEventMapper.detachedParentSeriesKey(event) == course.id
+            }
+            .forEach { detached ->
+                scheduleCenter.deleteEvent(detached.id)
+            }
+    }
 
     // 删除单次课程逻辑 (通过 ID，用于 SwipeableEventItem)
     fun excludeCourse(virtualEventId: String, date: LocalDate) {
@@ -389,17 +323,23 @@ class MainViewModel(
             val parts = virtualEventId.split("_")
             if (parts.size >= 2) {
                 val courseId = parts[1]
-                val all = scheduleQueryApi.courses.value.toMutableList()
+                val all = currentCourses().toMutableList()
                 val target = all.find { it.id == courseId } ?: return@launch
 
                 if (target.isTemp) {
                     // 如果本身是影子课程，直接删
-                    scheduleOperationApi.deleteCourse(target)
+                    scheduleCenter.deleteEvent(target.id)
                 } else {
-                    // 主课程，加入排除列表
-                    val dateStr = date.toString()
-                    if (!target.excludedDates.contains(dateStr)) {
-                        scheduleOperationApi.updateCourse(target.copy(excludedDates = target.excludedDates + dateStr))
+                    val parentEvent = findCourseParentBySeries(target.id) ?: return@launch
+                    val startMillis = resolveCourseStartMillis(target, date, settingsQueryApi.settings.value)
+                    val instanceKey = RecurringEventUtils.buildInstanceKey(target.id, startMillis)
+                    if (!parentEvent.excludedRecurringInstances.contains(instanceKey)) {
+                        scheduleCenter.updateEvent(
+                            parentEvent.copy(
+                                excludedRecurringInstances = (parentEvent.excludedRecurringInstances + instanceKey).distinct(),
+                                lastModified = System.currentTimeMillis()
+                            )
+                        )
                     }
                 }
             }
@@ -412,13 +352,18 @@ class MainViewModel(
         viewModelScope.launch {
             if (course.isTemp) {
                 // 如果是影子课程，物理删除
-                scheduleOperationApi.deleteCourse(course)
+                scheduleCenter.deleteEvent(course.id)
             } else {
-                // 如果是主课程，逻辑删除（排除该日）
-                val dateStr = date.toString()
-                if (!course.excludedDates.contains(dateStr)) {
-                    val newExcluded = course.excludedDates + dateStr
-                    scheduleOperationApi.updateCourse(course.copy(excludedDates = newExcluded))
+                val parentEvent = findCourseParentBySeries(course.id) ?: return@launch
+                val startMillis = resolveCourseStartMillis(course, date, settingsQueryApi.settings.value)
+                val instanceKey = RecurringEventUtils.buildInstanceKey(course.id, startMillis)
+                if (!parentEvent.excludedRecurringInstances.contains(instanceKey)) {
+                    scheduleCenter.updateEvent(
+                        parentEvent.copy(
+                            excludedRecurringInstances = (parentEvent.excludedRecurringInstances + instanceKey).distinct(),
+                            lastModified = System.currentTimeMillis()
+                        )
+                    )
                 }
             }
         }
@@ -441,59 +386,95 @@ class MainViewModel(
             val originalCourseId = parts[1]
             val originalDateStr = parts[2] // 这节课原本应该发生的日期
 
-            val allCourses = scheduleQueryApi.courses.value
+            val allCourses = currentCourses()
             val originalCourse = allCourses.find { it.id == originalCourseId } ?: return@launch
 
-            // 1. 计算目标周次
-            val settings = settingsQueryApi.settings.value
-            val semesterStart = try {
-                if(settings.semesterStartDate.isNotBlank()) LocalDate.parse(settings.semesterStartDate) else LocalDate.now()
-            } catch (e: Exception) { LocalDate.now() }
-
-            // 目标日期是第几周
-            val daysDiff = ChronoUnit.DAYS.between(semesterStart, newDate)
-            val targetWeek = (daysDiff / 7).toInt() + 1
-
             if (originalCourse.isTemp) {
-                // --- 场景 A：本身就是影子课程 ---
-                // 直接更新属性
-                val updatedShadow = originalCourse.copy(
-                    name = newName,
+                val parentSeriesKey = originalCourse.parentCourseId.orEmpty()
+                val updatedDetached = MyEvent(
+                    id = originalCourse.id,
+                    title = newName,
+                    startDate = newDate,
+                    endDate = newDate,
+                    startTime = resolveNodeTime(newStartNode, settingsQueryApi.settings.value, true),
+                    endTime = resolveNodeTime(newEndNode, settingsQueryApi.settings.value, false),
                     location = newLoc,
-                    dayOfWeek = newDate.dayOfWeek.value, // 支持改到另一天
-                    startNode = newStartNode,
-                    endNode = newEndNode,
-                    startWeek = targetWeek,
-                    endWeek = targetWeek
+                    description = CourseEventMapper.buildDetachedInstanceDescription(
+                        teacher = originalCourse.teacher,
+                        startNode = newStartNode,
+                        endNode = newEndNode,
+                        parentSeriesKey = parentSeriesKey
+                    ),
+                    color = originalCourse.color,
+                    tag = EventTags.COURSE,
+                    skipCalendarSync = false
                 )
-                scheduleOperationApi.updateCourse(updatedShadow)
-            } else {
-                // --- 场景 B：这是主课程 ---
-                // 1. 先把主课程在那天屏蔽掉
-                if (!originalCourse.excludedDates.contains(originalDateStr)) {
-                    val newExcluded = originalCourse.excludedDates + originalDateStr
-                    scheduleOperationApi.updateCourse(originalCourse.copy(excludedDates = newExcluded))
-                }
-
-                // 2. 创建一个新的影子课程
-                val shadowCourse = Course(
-                    id = UUID.randomUUID().toString(),
-                    name = newName,
-                    location = newLoc,
-                    teacher = originalCourse.teacher,
-                    color = originalCourse.color,      // 继承颜色
-                    dayOfWeek = newDate.dayOfWeek.value,
-                    startNode = newStartNode,
-                    endNode = newEndNode,
-                    startWeek = targetWeek,            // 🔒 锁定只在这一周生效
-                    endWeek = targetWeek,
-                    weekType = 0,                      // 0=每周
-                    isTemp = true,                     // ⚠️ 标记为影子
-                    parentCourseId = originalCourse.id // 🔗 认父，用于级联删除
-                )
-                scheduleOperationApi.addCourse(shadowCourse)
+                scheduleCenter.updateEvent(updatedDetached)
+                return@launch
             }
+
+            val parentEvent = findCourseParentBySeries(originalCourse.id) ?: return@launch
+            val originalDate = runCatching { LocalDate.parse(originalDateStr) }.getOrElse { newDate }
+            val sourceStartMillis = resolveCourseStartMillis(originalCourse, originalDate, settingsQueryApi.settings.value)
+            val sourceInstanceKey = RecurringEventUtils.buildInstanceKey(originalCourse.id, sourceStartMillis)
+
+            val detachedEvent = MyEvent(
+                title = newName,
+                startDate = newDate,
+                endDate = newDate,
+                startTime = resolveNodeTime(newStartNode, settingsQueryApi.settings.value, true),
+                endTime = resolveNodeTime(newEndNode, settingsQueryApi.settings.value, false),
+                location = newLoc,
+                description = CourseEventMapper.buildDetachedInstanceDescription(
+                    teacher = originalCourse.teacher,
+                    startNode = newStartNode,
+                    endNode = newEndNode,
+                    parentSeriesKey = originalCourse.id
+                ),
+                color = originalCourse.color,
+                tag = EventTags.COURSE,
+                skipCalendarSync = false
+            )
+
+            scheduleCenter.detachRecurringInstance(
+                parentEventId = parentEvent.id,
+                sourceInstanceId = "",
+                sourceInstanceKey = sourceInstanceKey,
+                detachedEvent = detachedEvent
+            )
         }
+    }
+
+    private fun currentCourses(): List<Course> {
+        return CourseEventMapper.extractCourses(scheduleCenter.events.value, settingsQueryApi.settings.value)
+    }
+
+    private fun findCourseParentBySeries(seriesKey: String): MyEvent? {
+        val parentId = RecurringEventUtils.buildParentId(seriesKey)
+        return scheduleCenter.events.value.firstOrNull { it.id == parentId && it.isRecurringParent }
+    }
+
+    private fun resolveCourseStartMillis(course: Course, date: LocalDate, settings: MySettings): Long {
+        val startTime = resolveNodeTime(course.startNode, settings, true)
+        return runCatching {
+            LocalDateTime.of(date, LocalTime.parse(startTime))
+                .atZone(java.time.ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        }.getOrElse { System.currentTimeMillis() }
+    }
+
+    private fun resolveNodeTime(nodeIndex: Int, settings: MySettings, start: Boolean): String {
+        val nodes = runCatching {
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .decodeFromString<List<com.antgskds.calendarassistant.data.model.TimeNode>>(settings.timeTableJson)
+        }.getOrElse { emptyList() }
+        val matched = nodes.find { it.index == nodeIndex }
+        return if (start) matched?.startTime ?: "08:00" else matched?.endTime ?: "09:40"
+    }
+
+    private fun courseToTemplateEvent(course: Course, existingParent: MyEvent? = null): MyEvent {
+        return CourseEventMapper.toTemplateEvent(course, settingsQueryApi.settings.value, existingParent)
     }
 
     // --- 归档操作 ---
@@ -503,7 +484,7 @@ class MainViewModel(
      * 仅在进入归档页面时调用
      */
     fun fetchArchivedEvents() {
-        scheduleQueryApi.fetchArchivedEvents()
+        scheduleCenter.fetchArchivedEvents()
     }
 
     /**
@@ -511,7 +492,7 @@ class MainViewModel(
      */
     fun archiveEvent(eventId: String) {
         viewModelScope.launch {
-            scheduleOperationApi.archiveEvent(eventId)
+            scheduleCenter.archiveEvent(eventId)
             _revealedEventId.value = null
         }
     }
@@ -521,7 +502,7 @@ class MainViewModel(
      */
     fun restoreEvent(archivedEventId: String) {
         viewModelScope.launch {
-            scheduleOperationApi.restoreEvent(archivedEventId)
+            scheduleCenter.restoreEvent(archivedEventId)
         }
     }
 
@@ -530,7 +511,7 @@ class MainViewModel(
      */
     fun deleteArchivedEvent(archivedEventId: String) {
         viewModelScope.launch {
-            scheduleOperationApi.deleteArchivedEvent(archivedEventId)
+            scheduleCenter.deleteArchivedEvent(archivedEventId)
         }
     }
 
@@ -539,7 +520,7 @@ class MainViewModel(
      */
     fun clearAllArchives() {
         viewModelScope.launch {
-            scheduleOperationApi.clearAllArchives()
+            scheduleCenter.clearAllArchives()
         }
     }
 
@@ -550,7 +531,7 @@ class MainViewModel(
     fun refreshData() {
         viewModelScope.launch {
             // 1. 触发自动归档，删除过期事件
-            val archivedCount = scheduleOperationApi.autoArchiveExpiredEvents()
+            val archivedCount = scheduleCenter.autoArchiveExpiredEvents()
             if (archivedCount > 0) {
                 Log.d("Refresh", "自动归档了 $archivedCount 条事件")
             }

@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.util.DateCalculator
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
-import com.antgskds.calendarassistant.data.model.EventType
+import com.antgskds.calendarassistant.data.model.EventTags
 import com.antgskds.calendarassistant.data.model.MyEvent
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -152,7 +152,7 @@ fun SwipeableEventItem(
                     onImportant(event)
                 }
                 // 🔥 修复：课程显示删除按钮，普通日程显示归档按钮
-                if (event.eventType == EventType.COURSE) {
+                if (event.tag == EventTags.COURSE) {
                     SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
                         onCollapse()
                         onDelete(event)

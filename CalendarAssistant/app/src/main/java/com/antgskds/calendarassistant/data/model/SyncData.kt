@@ -35,12 +35,5 @@ data class SyncData(
     /**
      * 上次同步时间戳（毫秒）
      */
-    val lastSyncTime: Long = 0L,
-
-    /**
-     * 上次完整同步课程时的学期标识
-     * 用于判断是否需要重新生成课程事件
-     * 格式: "{startWeek}-{endWeek}" 或基于开学日期的哈希
-     */
-    val lastSemesterHash: String = ""
+    val lastSyncTime: Long = 0L
 )
