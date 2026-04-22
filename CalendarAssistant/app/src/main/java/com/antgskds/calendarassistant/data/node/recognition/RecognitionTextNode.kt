@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.data.node.recognition
 
 import android.content.Context
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.ai.provider.RecognitionProviderFactory
 import com.antgskds.calendarassistant.data.model.CalendarEventData
 import com.antgskds.calendarassistant.data.model.MySettings
 
@@ -12,6 +12,6 @@ internal object RecognitionTextNode {
         settings: MySettings,
         context: Context
     ): AnalysisResult<CalendarEventData> {
-        return RecognitionProcessor.parseUserText(text, settings, context)
+        return RecognitionProviderFactory.semanticProvider(settings).parseUserText(text, settings, context)
     }
 }

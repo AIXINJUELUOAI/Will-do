@@ -663,6 +663,7 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
                 }
             }
 
