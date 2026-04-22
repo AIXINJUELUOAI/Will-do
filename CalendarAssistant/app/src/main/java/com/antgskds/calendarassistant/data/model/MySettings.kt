@@ -14,6 +14,7 @@ data class MySettings(
     val mmModelName: String = "",
     val mmModelUrl: String = "",
     val disableThinking: Boolean = false,
+    val isLocalSemanticEnabled: Boolean = false,
 
     // 功能开关
     val showTomorrowEvents: Boolean = false,

@@ -17,6 +17,7 @@ interface SettingsTransformApi {
         autoArchive: Boolean? = null,
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
+        localSemanticEnabled: Boolean? = null,
         floatingEventRange: Int? = null,
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
