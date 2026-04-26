@@ -249,6 +249,7 @@ fun HomeScreen(
     var noteToEdit by remember { mutableStateOf<Event?>(null) }
     var showNoteEditor by remember { mutableStateOf(false) }
     var noteEditorInitialNote by remember { mutableStateOf<Event?>(null) }
+    var noteEditorSessionKey by remember { mutableIntStateOf(0) }
     var editingVirtualCourse by remember { mutableStateOf<Event?>(null) }
     var courseItemToEdit by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
@@ -260,10 +261,11 @@ fun HomeScreen(
 
     val noteEditorVisible = showNoteEditor || noteToEdit != null
 
-    LaunchedEffect(noteEditorVisible, noteToEdit) {
-        if (noteEditorVisible) {
-            noteEditorInitialNote = noteToEdit
-        }
+    fun openNoteEditor(note: Event?) {
+        noteEditorInitialNote = note
+        noteToEdit = note
+        noteEditorSessionKey += 1
+        showNoteEditor = true
     }
 
     LaunchedEffect(pendingAddDialog) {
@@ -285,8 +287,7 @@ fun HomeScreen(
             eventToEdit = null
             recurringEditSession = null
         } else if (event.tag == EventTags.NOTE) {
-            noteToEdit = event
-            showNoteEditor = true
+            openNoteEditor(event)
             eventToEdit = null
             editingVirtualCourse = null
             recurringEditSession = null
@@ -368,8 +369,7 @@ fun HomeScreen(
                     return
                 }
                 if (event.tag == EventTags.NOTE) {
-                    noteToEdit = event
-                    showNoteEditor = true
+                    openNoteEditor(event)
                     return
                 }
                 // 单次事件或已有子实例
@@ -428,8 +428,7 @@ fun HomeScreen(
             draftEventToAdd = null
             eventToEdit = null
             editingVirtualCourse = null
-            noteToEdit = null
-            showNoteEditor = true
+            openNoteEditor(null)
             showAddEventDialog = false
             pendingAddDialog = false
         } else {
@@ -693,6 +692,7 @@ fun HomeScreen(
     ) {
         NoteEditorScreen(
             initialNote = noteEditorInitialNote,
+            editorSessionKey = noteEditorSessionKey,
             currentEventsCount = uiState.rawEventCount,
             settings = settings,
             onDismiss = {

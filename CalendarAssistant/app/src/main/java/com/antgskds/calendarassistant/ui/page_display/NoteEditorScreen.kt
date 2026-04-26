@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,6 +60,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun NoteEditorScreen(
     initialNote: Event?,
+    editorSessionKey: Int = 0,
     currentEventsCount: Int,
     settings: MySettings,
     onDismiss: () -> Unit,
@@ -73,10 +75,10 @@ fun NoteEditorScreen(
     val savedTitle = initialNote?.title?.takeUnless { it.isBlank() } ?: ""
     val savedMarkdown = initialNote?.noteMarkdown().orEmpty()
     val fallbackColor = MaterialTheme.colorScheme.primary
-    val editorController = remember { BlockNoteEditorController() }
-    var titleText by rememberSaveable(initialNote?.id) { mutableStateOf(savedTitle) }
-    var bodyText by rememberSaveable(initialNote?.id) { mutableStateOf(savedMarkdown) }
-    var isAnalyzing by remember { mutableStateOf(false) }
+    val editorController = remember(editorSessionKey) { BlockNoteEditorController() }
+    var titleText by rememberSaveable(editorSessionKey) { mutableStateOf(savedTitle) }
+    var bodyText by rememberSaveable(editorSessionKey) { mutableStateOf(savedMarkdown) }
+    var isAnalyzing by remember(editorSessionKey) { mutableStateOf(false) }
 
     fun buildSavedNote(markdownOverride: String? = null): Event {
         val markdown = (markdownOverride ?: bodyText).trimEnd()
@@ -147,15 +149,17 @@ fun NoteEditorScreen(
                     .padding(innerPadding)
                     .imePadding()
             ) {
-                BlockNoteEditor(
-                    title = titleText,
-                    onTitleChange = { titleText = it },
-                    markdown = bodyText,
-                    onMarkdownChange = { bodyText = it },
-                    controller = editorController,
-                    modifier = Modifier.fillMaxSize(),
-                    textColor = MaterialTheme.colorScheme.onSurface
-                )
+                key(editorSessionKey) {
+                    BlockNoteEditor(
+                        title = titleText,
+                        onTitleChange = { titleText = it },
+                        markdown = bodyText,
+                        onMarkdownChange = { bodyText = it },
+                        controller = editorController,
+                        modifier = Modifier.fillMaxSize(),
+                        textColor = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
 

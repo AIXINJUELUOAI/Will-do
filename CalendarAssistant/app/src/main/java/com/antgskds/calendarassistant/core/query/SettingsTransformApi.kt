@@ -20,6 +20,7 @@ interface SettingsTransformApi {
         disableThinking: Boolean? = null,
         localSemanticEnabled: Boolean? = null,
         floatingEventRange: Int? = null,
+        floatingExpandSide: String? = null,
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,

@@ -317,6 +317,25 @@ fun PreferenceSettingsPage(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
+                        SideChoiceSettingItem(
+                            title = "悬浮窗展开方向",
+                            subtitle = if (settings.floatingExpandSide == "LEFT") {
+                                "所有入口从左侧滑入"
+                            } else {
+                                "所有入口从右侧滑入"
+                            },
+                            selectedSide = settings.floatingExpandSide,
+                            onSideSelected = { side -> viewModel.updatePreference(floatingExpandSide = side) },
+                            cardTitleStyle = cardTitleStyle,
+                            cardSubtitleStyle = cardSubtitleStyle
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
                         SwitchSettingItem(
                             title = "侧边栏唤起",
                             subtitle = "在屏幕侧边滑动呼出悬浮窗",
@@ -348,36 +367,18 @@ fun PreferenceSettingsPage(
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("侧边位置", style = cardTitleStyle)
-                                        Text("默认右侧", style = cardSubtitleStyle)
-                                    }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        val isRight = settings.edgeBarSide == "RIGHT"
-                                        if (isRight) {
-                                            Button(onClick = { viewModel.updateEdgeBarSettings(side = "RIGHT") }) {
-                                                Text("右侧")
-                                            }
-                                            OutlinedButton(onClick = { viewModel.updateEdgeBarSettings(side = "LEFT") }) {
-                                                Text("左侧")
-                                            }
-                                        } else {
-                                            OutlinedButton(onClick = { viewModel.updateEdgeBarSettings(side = "RIGHT") }) {
-                                                Text("右侧")
-                                            }
-                                            Button(onClick = { viewModel.updateEdgeBarSettings(side = "LEFT") }) {
-                                                Text("左侧")
-                                            }
-                                        }
-                                    }
-                                }
+                                SideChoiceSettingItem(
+                                    title = "侧边栏位置",
+                                    subtitle = if (settings.edgeBarSide == "LEFT") {
+                                        "唤起条固定在屏幕左侧"
+                                    } else {
+                                        "唤起条固定在屏幕右侧"
+                                    },
+                                    selectedSide = settings.edgeBarSide,
+                                    onSideSelected = { side -> viewModel.updateEdgeBarSettings(side = side) },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle
+                                )
 
                                 HorizontalDivider(
                                     modifier = Modifier.padding(start = 16.dp),
@@ -915,6 +916,51 @@ fun SwitchSettingItem(
             Text(subtitle, style = cardSubtitleStyle)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SideChoiceSettingItem(
+    title: String,
+    subtitle: String,
+    selectedSide: String,
+    onSideSelected: (String) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = cardTitleStyle)
+            Text(subtitle, style = cardSubtitleStyle)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val isLeft = selectedSide == "LEFT"
+            if (isLeft) {
+                Button(onClick = { onSideSelected("LEFT") }) {
+                    Text("左侧")
+                }
+            } else {
+                OutlinedButton(onClick = { onSideSelected("LEFT") }) {
+                    Text("左侧")
+                }
+            }
+
+            if (isLeft) {
+                OutlinedButton(onClick = { onSideSelected("RIGHT") }) {
+                    Text("右侧")
+                }
+            } else {
+                Button(onClick = { onSideSelected("RIGHT") }) {
+                    Text("右侧")
+                }
+            }
+        }
     }
 }
 

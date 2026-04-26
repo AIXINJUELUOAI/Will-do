@@ -148,11 +148,12 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // --- 定义输入模式 ---
 enum class FloatingInputMode { SCHEDULE, NOTE }
+
+private const val FLOATING_EXPAND_LEFT = "LEFT"
 
 @Composable
 fun FloatingScheduleScreen(
@@ -160,6 +161,7 @@ fun FloatingScheduleScreen(
     noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
     noteEnabled: Boolean = false,
+    expandSide: String = "RIGHT",
     onClose: () -> Unit,
     onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
@@ -177,6 +179,7 @@ fun FloatingScheduleScreen(
     var manualInputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var pickerRequest by remember { mutableStateOf<FloatingPickerRequest?>(null) }
+    val expandFromLeft = expandSide == FLOATING_EXPAND_LEFT
 
     // 动画状态
     var isAppearing by remember { mutableStateOf(false) }
@@ -269,28 +272,29 @@ fun FloatingScheduleScreen(
                 })
             }
     ) {
-        // 日程列表：从右侧滑入滑出
+        // 日程列表：根据设置从左侧或右侧滑入滑出
         AnimatedVisibility(
             visible = isAppearing,
             enter = fadeIn(
                 animationSpec = tween(enterDuration, easing = fastOutSlowIn)
             ) + slideInHorizontally(
                 animationSpec = tween(enterDuration, easing = fastOutSlowIn),
-                initialOffsetX = { it }
+                initialOffsetX = { width -> if (expandFromLeft) -width else width }
             ),
             exit = fadeOut(
                 animationSpec = tween(exitDuration, easing = fastOutSlowIn)
             ) + slideOutHorizontally(
                 animationSpec = tween(exitDuration, easing = fastOutSlowIn),
-                targetOffsetX = { it }
+                targetOffsetX = { width -> if (expandFromLeft) -width else width }
             ),
-            modifier = Modifier.align(Alignment.TopEnd)
+            modifier = Modifier.align(if (expandFromLeft) Alignment.TopStart else Alignment.TopEnd)
         ) {
             TimeWheelList(
                 scheduleItems = scheduleItems,
                 noteEvents = noteEvents,
                 weatherData = weatherData,
                 currentMode = currentMode,
+                expandFromLeft = expandFromLeft,
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(),
@@ -604,6 +608,7 @@ fun TimeWheelList(
     noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
+    expandFromLeft: Boolean = false,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
@@ -616,6 +621,12 @@ fun TimeWheelList(
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
     val now = LocalDateTime.now()
+    val cardAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
+    val cardModifier = if (expandFromLeft) {
+        Modifier.padding(start = 20.dp).width(260.dp)
+    } else {
+        Modifier.padding(end = 20.dp).width(260.dp)
+    }
     val sortedScheduleItems = remember(scheduleItems) {
         scheduleItems
             .distinctBy { it.stableKey }
@@ -634,11 +645,11 @@ fun TimeWheelList(
                 item(key = "weather_header") {
                     Box(
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterEnd
+                        contentAlignment = cardAlignment
                     ) {
                         FloatingWeatherCard(
                             weatherData = weatherData,
-                            modifier = Modifier.padding(end = 20.dp).width(260.dp)
+                            modifier = cardModifier
                         )
                     }
                 }
@@ -647,11 +658,12 @@ fun TimeWheelList(
                 items(noteEvents, key = { "note_${it.id}" }) { note ->
                     Box(
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterEnd
+                        contentAlignment = cardAlignment
                     ) {
                         FloatingNoteCard(
                             note = note,
-                            modifier = Modifier.padding(end = 20.dp).width(260.dp),
+                            modifier = cardModifier,
+                            expandFromLeft = expandFromLeft,
                             onDelete = onDeleteNote,
                             onToggleTodo = { task ->
                                 onUpdateEvent(
@@ -669,13 +681,14 @@ fun TimeWheelList(
                 items(sortedScheduleItems, key = { it.stableKey }) { item ->
                 Box(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.CenterEnd
+                    contentAlignment = cardAlignment
                 ) {
                     ScheduleCard(
                         item = item,
                         hasPendingStatus = item.stableKey in pendingStatusKeys,
                         listState = listState,
-                        modifier = Modifier.padding(end = 20.dp).width(260.dp),
+                        modifier = cardModifier,
+                        expandFromLeft = expandFromLeft,
                         onUpdateScheduleItem = onUpdateScheduleItem,
                         onArchiveScheduleItem = onArchiveScheduleItem,
                         onStatusAction = onStatusAction,
@@ -743,6 +756,7 @@ private fun FloatingWeatherCard(
 private fun FloatingNoteCard(
     note: Event,
     modifier: Modifier = Modifier,
+    expandFromLeft: Boolean = false,
     onToggleTodo: (com.antgskds.calendarassistant.core.note.MarkdownTaskItem) -> Unit,
     onDelete: (Event) -> Unit,
     onSave: (Event) -> Unit
@@ -755,14 +769,17 @@ private fun FloatingNoteCard(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val actionButtonSize = 46.dp
-    val actionButtonSpacing = 10.dp
-    val actionAreaEndPadding = 14.dp
+    val actionAreaSidePadding = 14.dp
     val cardToButtonGap = 12.dp
-    val actionAreaWidthDp = actionAreaEndPadding + actionButtonSize + cardToButtonGap
-    val revealOffsetPx = with(density) { -actionAreaWidthDp.toPx() }
-    val revealSnapThresholdPx = revealOffsetPx * 0.35f
+    val actionDirection = if (expandFromLeft) 1f else -1f
+    val deleteDirection = -actionDirection
+    val actionAreaWidthDp = actionAreaSidePadding + actionButtonSize + cardToButtonGap
+    val actionAreaWidthPx = with(density) { actionAreaWidthDp.toPx() }
+    val revealOffsetPx = actionDirection * actionAreaWidthPx
+    val revealSnapThresholdPx = actionAreaWidthPx * 0.35f
     val deleteTriggerPx = with(density) { 110.dp.toPx() }
     val screenWidthPx = with(density) { 400.dp.toPx() }
+    val dragLimitPx = revealOffsetPx + actionDirection * with(density) { 40.dp.toPx() }
     val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
     val tasks = remember(note.description, note.lastModifiedMillis) { extractMarkdownTasks(note.noteMarkdown()) }
     val bodyMarkdown = remember(note.description, note.lastModifiedMillis) { markdownWithoutTasks(note.noteMarkdown()) }
@@ -799,13 +816,15 @@ private fun FloatingNoteCard(
     }
 
     Box(modifier = modifier) {
-        if (offsetX.value < -1f) {
-            val revealProgress = ((-offsetX.value) / abs(revealOffsetPx)).coerceIn(0f, 1f)
+        if (offsetX.value * actionDirection > 1f) {
+            val revealProgress = ((offsetX.value * actionDirection) / actionAreaWidthPx).coerceIn(0f, 1f)
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(end = actionAreaEndPadding),
-                contentAlignment = Alignment.CenterEnd
+                modifier = if (expandFromLeft) {
+                    Modifier.matchParentSize().padding(start = actionAreaSidePadding)
+                } else {
+                    Modifier.matchParentSize().padding(end = actionAreaSidePadding)
+                },
+                contentAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
             ) {
                 Surface(
                     modifier = Modifier
@@ -838,22 +857,22 @@ private fun FloatingNoteCard(
                             detectHorizontalDragGestures(
                                 onDragStart = { scope.launch { offsetX.stop() } },
                                 onDragEnd = {
-                                    val shouldRevealLeft = offsetX.value <= revealSnapThresholdPx
-                                    val fullSwipeRight = offsetX.value >= deleteTriggerPx
+                                    val shouldRevealAction = offsetX.value * actionDirection >= revealSnapThresholdPx
+                                    val fullSwipeDelete = offsetX.value * deleteDirection >= deleteTriggerPx
                                     scope.launch {
                                         when {
-                                            fullSwipeRight -> {
-                                                offsetX.animateTo(screenWidthPx, tween(200))
+                                            fullSwipeDelete -> {
+                                                offsetX.animateTo(deleteDirection * screenWidthPx, tween(200))
                                                 onDelete(note)
                                             }
-                                            shouldRevealLeft -> offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                            shouldRevealAction -> offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
                                             else -> offsetX.animateTo(0f, swipeSpringSpec)
                                         }
                                     }
                                 },
                                 onDragCancel = {
                                     scope.launch {
-                                        if (offsetX.value <= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                        if (offsetX.value * actionDirection >= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
                                         else offsetX.animateTo(0f, swipeSpringSpec)
                                     }
                                 },
@@ -861,12 +880,15 @@ private fun FloatingNoteCard(
                                     change.consume()
                                     scope.launch {
                                         val current = offsetX.value
+                                        val draggingAction = dragAmount * actionDirection > 0f
+                                        val draggingDelete = dragAmount * deleteDirection > 0f
                                         val resistance = when {
-                                            dragAmount < 0 && current <= revealOffsetPx -> 0.45f
-                                            dragAmount > 0 && current >= deleteTriggerPx -> 0.95f
+                                            draggingAction && current * actionDirection >= actionAreaWidthPx -> 0.45f
+                                            draggingDelete && current * deleteDirection >= deleteTriggerPx -> 0.95f
                                             else -> 0.85f
                                         }
-                                        offsetX.snapTo((current + dragAmount * resistance).coerceAtLeast(revealOffsetPx - 40f))
+                                        val next = current + dragAmount * resistance
+                                        offsetX.snapTo(if (expandFromLeft) next.coerceAtMost(dragLimitPx) else next.coerceAtLeast(dragLimitPx))
                                     }
                                 }
                             )
@@ -880,7 +902,7 @@ private fun FloatingNoteCard(
                     indication = null
                 ) {
                     scope.launch {
-                        if (offsetX.value < -10f) offsetX.animateTo(0f, swipeSpringSpec)
+                        if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                         else if (!isEditing) isExpanded = !isExpanded
                     }
                 },
@@ -1260,6 +1282,7 @@ fun ScheduleCard(
     hasPendingStatus: Boolean,
     listState: LazyListState,
     modifier: Modifier = Modifier,
+    expandFromLeft: Boolean = false,
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
     onStatusAction: (ScheduleDisplayItem) -> Unit = {},
@@ -1355,27 +1378,34 @@ fun ScheduleCard(
     val density = LocalDensity.current
     val actionButtonSize = 46.dp
     val actionButtonSpacing = 10.dp
-    val actionAreaEndPadding = 14.dp
+    val actionAreaSidePadding = 14.dp
     val cardToButtonGap = 12.dp
     val actionButtonCount = if (hasAction) 2 else 1
 
-    val actionAreaWidthDp = actionAreaEndPadding + (actionButtonSize * actionButtonCount) + (actionButtonSpacing * (actionButtonCount - 1)) + cardToButtonGap
-    val revealOffsetPx = with(density) { -actionAreaWidthDp.toPx() }
-    val revealSnapThresholdPx = revealOffsetPx * 0.35f
-    val fullSwipeTriggerPx = with(density) { -150.dp.toPx() }
-    val dragLimitPx = with(density) { -190.dp.toPx() }
+    val actionDirection = if (expandFromLeft) 1f else -1f
+    val archiveDirection = -actionDirection
+    val actionAreaWidthDp = actionAreaSidePadding + (actionButtonSize * actionButtonCount) + (actionButtonSpacing * (actionButtonCount - 1)) + cardToButtonGap
+    val actionAreaWidthPx = with(density) { actionAreaWidthDp.toPx() }
+    val revealOffsetPx = actionDirection * actionAreaWidthPx
+    val revealSnapThresholdPx = actionAreaWidthPx * 0.35f
+    val fullSwipeTriggerPx = with(density) { 150.dp.toPx() }
+    val dragLimitPx = with(density) { actionDirection * 190.dp.toPx() }
 
-    // 【归档相关参数】右滑触发阈值和飞出距离
+    // 【归档相关参数】反向滑动触发阈值和飞出距离
     val archiveTriggerPx = with(density) { 110.dp.toPx() }
     val screenWidthPx = with(density) { 400.dp.toPx() }
 
     val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
 
-    val isPastFullSwipe by remember { derivedStateOf { hasAction && offsetX.value <= fullSwipeTriggerPx } }
+    val isPastFullSwipe by remember(hasAction, actionDirection, fullSwipeTriggerPx) {
+        derivedStateOf { hasAction && offsetX.value * actionDirection >= fullSwipeTriggerPx }
+    }
     var hasVibrated by remember { mutableStateOf(false) }
 
-    // 【核心新增】右滑（归档）震动状态
-    val isPastArchiveSwipe by remember { derivedStateOf { offsetX.value >= archiveTriggerPx } }
+    // 【核心新增】反向滑动（归档）震动状态
+    val isPastArchiveSwipe by remember(archiveDirection, archiveTriggerPx) {
+        derivedStateOf { offsetX.value * archiveDirection >= archiveTriggerPx }
+    }
     var hasVibratedArchive by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPastFullSwipe, hasAction) {
@@ -1387,7 +1417,7 @@ fun ScheduleCard(
         }
     }
 
-    // 【核心新增】右滑阈值的震动控制
+    // 【核心新增】归档阈值的震动控制
     LaunchedEffect(isPastArchiveSwipe) {
         if (isPastArchiveSwipe && !hasVibratedArchive) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1407,47 +1437,65 @@ fun ScheduleCard(
     val effectiveActionIcon = if (hasPendingStatus) Icons.Rounded.Undo else actionIcon
     val actionColor = if (hasPendingStatus) MaterialTheme.colorScheme.primary else Color(model.actionIcon.color)
 
+    @Composable
+    fun StatusActionButton() {
+        if (hasAction) {
+            Surface(
+                modifier = Modifier.size(actionButtonSize), shape = CircleShape,
+                color = if (isPastFullSwipe) actionColor else actionColor.copy(alpha = 0.92f),
+                onClick = { scope.launch { onStatusAction(item); offsetX.animateTo(0f, swipeSpringSpec) } }
+            ) {
+                Box(contentAlignment = Alignment.Center) { Icon(effectiveActionIcon, null, Modifier.size(22.dp), tint = Color.White) }
+            }
+        }
+    }
+
+    @Composable
+    fun EditActionButton() {
+        Surface(
+            modifier = Modifier.size(actionButtonSize), shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            onClick = {
+                scope.launch {
+                    if (!canEdit) android.widget.Toast.makeText(context, "暂不支持在悬浮窗编辑", android.widget.Toast.LENGTH_SHORT).show()
+                    else {
+                        draftTitle = item.title
+                        draftStartDate = item.startDate; draftStartTime = item.startTime
+                        draftEndDate = item.endDate; draftEndTime = item.endTime
+                        draftLocation = item.location; draftDescription = item.description
+                        isExpanded = true; isEditing = true
+                    }
+                    offsetX.animateTo(0f, swipeSpringSpec)
+                }
+            }
+        ) {
+            Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+        }
+    }
+
     Box(modifier = modifier) {
         // 背景滑动按钮
-        if (offsetX.value < -1f) {
-            val revealProgress = ((-offsetX.value) / abs(revealOffsetPx)).coerceIn(0f, 1f)
+        if (offsetX.value * actionDirection > 1f) {
+            val revealProgress = ((offsetX.value * actionDirection) / actionAreaWidthPx).coerceIn(0f, 1f)
             Box(
-                modifier = Modifier.matchParentSize().padding(end = actionAreaEndPadding),
-                contentAlignment = Alignment.CenterEnd
+                modifier = if (expandFromLeft) {
+                    Modifier.matchParentSize().padding(start = actionAreaSidePadding)
+                } else {
+                    Modifier.matchParentSize().padding(end = actionAreaSidePadding)
+                },
+                contentAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(actionButtonSpacing),
                     modifier = Modifier.alpha(revealProgress)
                 ) {
-                    if (hasAction) {
-                        Surface(
-                            modifier = Modifier.size(actionButtonSize), shape = CircleShape,
-                            color = if (isPastFullSwipe) actionColor else actionColor.copy(alpha = 0.92f),
-                            onClick = { scope.launch { onStatusAction(item); offsetX.animateTo(0f, swipeSpringSpec) } }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) { Icon(effectiveActionIcon, null, Modifier.size(22.dp), tint = Color.White) }
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier.size(actionButtonSize), shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        onClick = {
-                            scope.launch {
-                                if (!canEdit) android.widget.Toast.makeText(context, "暂不支持在悬浮窗编辑", android.widget.Toast.LENGTH_SHORT).show()
-                                else {
-                                    draftTitle = item.title
-                                    draftStartDate = item.startDate; draftStartTime = item.startTime
-                                    draftEndDate = item.endDate; draftEndTime = item.endTime
-                                    draftLocation = item.location; draftDescription = item.description
-                                    isExpanded = true; isEditing = true
-                                }
-                                offsetX.animateTo(0f, swipeSpringSpec)
-                            }
-                        }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                    if (expandFromLeft) {
+                        EditActionButton()
+                        StatusActionButton()
+                    } else {
+                        StatusActionButton()
+                        EditActionButton()
                     }
                 }
             }
@@ -1464,22 +1512,22 @@ fun ScheduleCard(
                             detectHorizontalDragGestures(
                                 onDragStart = { scope.launch { offsetX.stop() } },
                                 onDragEnd = {
-                                    val fullSwipeLeft = hasAction && offsetX.value <= fullSwipeTriggerPx
-                                    val shouldRevealLeft = offsetX.value <= revealSnapThresholdPx
-                                    val fullSwipeRight = offsetX.value >= archiveTriggerPx
+                                    val fullSwipeAction = hasAction && offsetX.value * actionDirection >= fullSwipeTriggerPx
+                                    val shouldRevealAction = offsetX.value * actionDirection >= revealSnapThresholdPx
+                                    val fullSwipeArchive = offsetX.value * archiveDirection >= archiveTriggerPx
 
                                     scope.launch {
-                                        if (fullSwipeLeft) {
+                                        if (fullSwipeAction) {
                                             onStatusAction(item)
                                             offsetX.animateTo(0f, swipeSpringSpec)
-                                        } else if (fullSwipeRight) {
+                                        } else if (fullSwipeArchive) {
                                             // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
                                             offsetX.animateTo(
-                                                targetValue = screenWidthPx,
+                                                targetValue = archiveDirection * screenWidthPx,
                                                 animationSpec = tween(durationMillis = 200)
                                             )
                                             onArchiveScheduleItem(item)
-                                        } else if (shouldRevealLeft) {
+                                        } else if (shouldRevealAction) {
                                             offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
                                         } else {
                                             offsetX.animateTo(0f, swipeSpringSpec)
@@ -1488,7 +1536,7 @@ fun ScheduleCard(
                                 },
                                 onDragCancel = {
                                     scope.launch {
-                                        if (offsetX.value <= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                        if (offsetX.value * actionDirection >= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
                                         else offsetX.animateTo(0f, swipeSpringSpec)
                                     }
                                 },
@@ -1496,15 +1544,17 @@ fun ScheduleCard(
                                     change.consume()
                                     scope.launch {
                                         val current = offsetX.value
-                                        // 【阻尼感调校】向右滑过阈值后瞬间解除阻力，鼓励直接飞出去
+                                        val draggingAction = dragAmount * actionDirection > 0f
+                                        val draggingArchive = dragAmount * archiveDirection > 0f
+                                        // 【阻尼感调校】滑过阈值后调整阻力，鼓励反向归档直接飞出去
                                         val resistance = when {
-                                            dragAmount < 0 && current <= fullSwipeTriggerPx -> 0.25f
-                                            dragAmount < 0 && current <= revealOffsetPx -> 0.45f
-                                            dragAmount > 0 && current >= archiveTriggerPx -> 0.95f
+                                            draggingAction && current * actionDirection >= fullSwipeTriggerPx -> 0.25f
+                                            draggingAction && current * actionDirection >= actionAreaWidthPx -> 0.45f
+                                            draggingArchive && current * archiveDirection >= archiveTriggerPx -> 0.95f
                                             else -> 0.85f
                                         }
-                                        // 【修改】去除了上限 0f，允许卡片向右无限制拖拽
-                                        offsetX.snapTo((current + (dragAmount * resistance)).coerceAtLeast(dragLimitPx))
+                                        val next = current + (dragAmount * resistance)
+                                        offsetX.snapTo(if (expandFromLeft) next.coerceAtMost(dragLimitPx) else next.coerceAtLeast(dragLimitPx))
                                     }
                                 }
                             )
@@ -1516,7 +1566,7 @@ fun ScheduleCard(
             shadowElevation = elevation,
             onClick = {
                 scope.launch {
-                    if (offsetX.value < -10f) offsetX.animateTo(0f, swipeSpringSpec)
+                    if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                     else if (!isEditing && !isSaving) isExpanded = !isExpanded
                 }
             }

@@ -24,6 +24,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         disableThinking: Boolean?,
         localSemanticEnabled: Boolean?,
         floatingEventRange: Int?,
+        floatingExpandSide: String?,
         volumeUpLongPressEnabled: Boolean?,
         volumeUpLongPressAction: Int?,
         smsMonitoring: Boolean?,
@@ -48,6 +49,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (disableThinking != null) updated = updated.copy(disableThinking = disableThinking)
         if (localSemanticEnabled != null) updated = updated.copy(isLocalSemanticEnabled = localSemanticEnabled)
         if (floatingEventRange != null) updated = updated.copy(floatingEventRange = floatingEventRange)
+        if (floatingExpandSide != null) updated = updated.copy(floatingExpandSide = sanitizeFloatingSide(floatingExpandSide))
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
         if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction)
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
@@ -69,5 +71,9 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems, updated.noteEnabled)
         val sanitizedStartPage = sanitizeHomeStartPageKey(updated.homeStartPageKey, sanitizedBottomItems)
         return updated.copy(homeBottomItems = sanitizedBottomItems, homeStartPageKey = sanitizedStartPage)
+    }
+
+    private fun sanitizeFloatingSide(side: String): String {
+        return if (side == "LEFT") "LEFT" else "RIGHT"
     }
 }

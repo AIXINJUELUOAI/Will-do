@@ -330,6 +330,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         noteEvents = noteEvents,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         noteEnabled = settings.noteEnabled,
+                        expandSide = settings.floatingExpandSide,
                         onClose = { requestClose() },
                         onManualInput = { text, isNote, onComplete ->
                             handleManualInput(text = text, isNote = isNote,  onComplete = onComplete)

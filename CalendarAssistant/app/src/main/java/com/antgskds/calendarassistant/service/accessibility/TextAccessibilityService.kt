@@ -161,7 +161,7 @@ class TextAccessibilityService : AccessibilityService() {
                     cancelProgressNotification()
                     showResultNotification(
                         title = "识别失败",
-                        content = payload.message.ifBlank { "分析失败" },
+                        content = buildRecognitionFailureContent(payload),
                         useOcrCapsule = true,
                         durationMs = 8000L
                     )
@@ -512,10 +512,11 @@ class TextAccessibilityService : AccessibilityService() {
                     }
                 }
                 override fun onFailure(errorCode: Int) {
+                    Log.w(TAG, "takeScreenshot 失败: code=$errorCode")
                     cancelProgressNotification()
                     showResultNotification(
                         "截图失败",
-                        "错误码: $errorCode",
+                        buildScreenshotFailureContent(errorCode),
                         useOcrCapsule = true
                     )
                 }
@@ -529,7 +530,16 @@ class TextAccessibilityService : AccessibilityService() {
             val colorSpace = result.colorSpace
             val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
             if (bitmap == null) {
-                cancelProgressNotification()
+                hardwareBuffer.close()
+                withContext(Dispatchers.Main) {
+                    cancelProgressNotification()
+                    showResultNotification(
+                        "截图处理失败",
+                        "请重试",
+                        useOcrCapsule = true,
+                        durationMs = 8000L
+                    )
+                }
                 return
             }
 
@@ -577,9 +587,9 @@ class TextAccessibilityService : AccessibilityService() {
             softwareBitmap.recycle()
 
             withContext(Dispatchers.Main) {
-                cancelProgressNotification()
                 when (analysisResult) {
                     is AnalysisResult.Success -> {
+                        cancelProgressNotification()
                         val validEvents = analysisResult.data.filter { it.title.isNotBlank() }
                         if (validEvents.isEmpty()) {
                             showResultNotification(
@@ -656,6 +666,28 @@ class TextAccessibilityService : AccessibilityService() {
             capsuleCenter.showOcrResult(title, content, durationMs)
         } else {
             showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
+        }
+    }
+
+    private fun buildRecognitionFailureContent(payload: RecognitionFailedEvent): String {
+        val message = payload.message.ifBlank { "分析失败" }
+        return when {
+            message.isNotBlank() && message != "分析失败" -> message
+            payload.errorCode == "EMPTY_RESULT" -> "未识别到有效日程"
+            payload.errorCode == "ANALYSIS_FAILURE" -> "分析失败，请稍后重试"
+            else -> message
+        }
+    }
+
+    private fun buildScreenshotFailureContent(errorCode: Int): String {
+        return when (errorCode) {
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> "截图太频繁，请稍后再试"
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS -> "截图权限不可用，请检查无障碍服务"
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "当前屏幕不可截图，请重试"
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_WINDOW -> "当前窗口不可截图，请重试"
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> "当前页面禁止截图"
+            AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR -> "系统截图失败，请重试"
+            else -> "系统截图失败，请重试"
         }
     }
 

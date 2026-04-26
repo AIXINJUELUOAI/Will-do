@@ -69,6 +69,7 @@ data class MySettings(
     // 悬浮窗功能开关
     val isFloatingWindowEnabled: Boolean = false,
     val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
+    val floatingExpandSide: String = "RIGHT", // 悬浮窗展开方向：LEFT/RIGHT
 
     // 天气配置
     val weatherEnabled: Boolean = false,

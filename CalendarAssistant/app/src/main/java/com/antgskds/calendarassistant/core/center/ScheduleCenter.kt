@@ -117,9 +117,19 @@ class ScheduleCenter(
         id
     }
 
-    suspend fun updateEvent(event: Event) = withContext(Dispatchers.IO) {
-        calendarCenter.updateEvent(event)
-        refreshEvents()
+    suspend fun updateEvent(event: Event) {
+        val eventId = event.id
+        if (eventId != null && eventId >= 0) {
+            _events.value = _events.value.map { current ->
+                if (current.id == eventId) event else current
+            }
+            scheduleNotificationRefresh()
+        }
+
+        withContext(Dispatchers.IO) {
+            calendarCenter.updateEvent(event)
+            refreshEvents()
+        }
     }
 
     suspend fun deleteEvent(eventId: Long) = withContext(Dispatchers.IO) {
