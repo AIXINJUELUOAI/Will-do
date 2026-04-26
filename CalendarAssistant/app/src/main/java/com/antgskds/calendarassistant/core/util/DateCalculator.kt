@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.core.util
 
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -22,7 +23,7 @@ object DateCalculator {
      * 判断事件是否过期
      * 逻辑移植自原 MainActivity.kt
      */
-    fun isEventExpired(event: MyEvent): Boolean {
+    fun isEventExpired(event: Event): Boolean {
         return try {
             val timeParts = event.endTime.split(":")
             val hour = timeParts.getOrElse(0) { "23" }.toIntOrNull() ?: 23
@@ -35,7 +36,7 @@ object DateCalculator {
         }
     }
 
-    fun overlapsDate(event: MyEvent, date: LocalDate): Boolean {
+    fun overlapsDate(event: Event, date: LocalDate): Boolean {
         return try {
             val startTime = LocalTime.parse(event.startTime)
             val endTime = LocalTime.parse(event.endTime)

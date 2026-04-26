@@ -20,7 +20,7 @@ object AiPrompts {
     private const val KEY_PROMPTS_JSON = "cached_prompts_json"
     private const val KEY_IGNORED_VERSION = "ignored_prompt_version"
     private const val KEY_PROMPT_SOURCE = "prompt_source"
-    private const val MIN_PROMPT_VERSION = 6
+    private const val MIN_PROMPT_VERSION = 7
     private const val PROMPT_SOURCE_LOCAL = "local"
     private const val PROMPT_SOURCE_CLOUD = "cloud"
 
@@ -63,7 +63,8 @@ object AiPrompts {
            - 🎫 取票：【取票】取票号|品牌|位置
            - 🚚 寄件：【寄件】寄件码|品牌|地点
 
-           endTime = startTime + 1h
+           所有识别出的事件都必须按默认持续时间计算 endTime，不要自行猜测其他时长。
+           endTime = {{defaultDuration}}
     """.trimIndent()
 
     private val defaultRulePatch = """
@@ -107,7 +108,7 @@ object AiPrompts {
     """.trimIndent()
 
     private val defaultPrompts = RemotePrompts(
-        version = 6,
+        version = 7,
         promptHeader = defaultPromptHeader,
         userTextPrompt = defaultMmUnifiedPrompt,
         mmUnifiedPrompt = defaultMmUnifiedPrompt,
@@ -305,7 +306,8 @@ object AiPrompts {
         timeStr: String,
         dateToday: String,
         dayOfWeek: String,
-        rulePatch: String? = null
+        rulePatch: String? = null,
+        defaultDurationMinutes: Int = 60
     ): String {
         val prompts = activePrompts(context)
         return appendRulePatch(
@@ -314,7 +316,8 @@ object AiPrompts {
             values = mapOf(
                 "timeStr" to timeStr,
                 "dateToday" to dateToday,
-                "dayOfWeek" to dayOfWeek
+                "dayOfWeek" to dayOfWeek,
+                "defaultDuration" to formatDuration(defaultDurationMinutes)
             )
         ),
             rulePatch
@@ -330,7 +333,8 @@ object AiPrompts {
         nowTime: String,
         nowPlusHourTime: String,
         dayOfWeek: String,
-        rulePatch: String? = null
+        rulePatch: String? = null,
+        defaultDurationMinutes: Int = 60
     ): String {
         val prompts = activePrompts(context)
         return appendRulePatch(
@@ -343,7 +347,8 @@ object AiPrompts {
                 "dateBeforeYesterday" to dateBeforeYesterday,
                 "nowTime" to nowTime,
                 "nowPlusHourTime" to nowPlusHourTime,
-                "dayOfWeek" to dayOfWeek
+                "dayOfWeek" to dayOfWeek,
+                "defaultDuration" to formatDuration(defaultDurationMinutes)
             )
         ),
             rulePatch
@@ -357,7 +362,8 @@ object AiPrompts {
         dateYesterday: String,
         dateBeforeYesterday: String,
         dayOfWeek: String,
-        rulePatch: String? = null
+        rulePatch: String? = null,
+        defaultDurationMinutes: Int = 60
     ): String {
         val prompts = activePrompts(context)
         return appendRulePatch(
@@ -369,7 +375,8 @@ object AiPrompts {
                 "dateYesterday" to dateYesterday,
                 "dateBeforeYesterday" to dateBeforeYesterday,
                 "dayOfWeek" to dayOfWeek,
-                "copyrightMarker" to COPYRIGHT_MARKER
+                "copyrightMarker" to COPYRIGHT_MARKER,
+                "defaultDuration" to formatDuration(defaultDurationMinutes)
             )
         ),
             rulePatch
@@ -380,7 +387,8 @@ object AiPrompts {
         context: Context,
         timeStr: String,
         nowTime: String,
-        nowPlusHourTime: String
+        nowPlusHourTime: String,
+        defaultDurationMinutes: Int = 60
     ): String {
         val prompts = activePrompts(context)
         return appendRulePatch(
@@ -390,7 +398,8 @@ object AiPrompts {
                 "timeStr" to timeStr,
                 "nowTime" to nowTime,
                 "nowPlusHourTime" to nowPlusHourTime,
-                "copyrightMarker" to COPYRIGHT_MARKER
+                "copyrightMarker" to COPYRIGHT_MARKER,
+                "defaultDuration" to formatDuration(defaultDurationMinutes)
             )
         )
         )
@@ -471,6 +480,17 @@ object AiPrompts {
             rendered = rendered.replace("{{${key}}}", value)
         }
         return rendered
+    }
+
+    private fun formatDuration(minutes: Int): String {
+        return when (minutes) {
+            END_OF_DAY_DURATION -> "endTime = 23:59 on the same day as startTime"
+            60 -> "endTime = startTime + 1h"
+            120 -> "endTime = startTime + 2h"
+            180 -> "endTime = startTime + 3h"
+            360 -> "endTime = startTime + 6h"
+            else -> "endTime = startTime + ${minutes.coerceAtLeast(1)}min"
+        }
     }
 
     private fun withPromptHeader(header: String, body: String): String {

@@ -56,25 +56,23 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.convertAiEventToMyEvent
 import com.antgskds.calendarassistant.core.ai.isConfigured
 import com.antgskds.calendarassistant.core.ai.missingConfigMessage
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
-import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import com.antgskds.calendarassistant.ui.dialogs.CourseSingleEditDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -100,9 +98,10 @@ fun HomePage(
     imageRequestId: Int = 0,
     isSidebarOpen: Boolean = false,
     onTabChange: (Int) -> Unit = {},
-    onCourseClick: (Course, LocalDate) -> Unit = { _, _ -> },
     onAddEventClick: () -> Unit = {},
-    onEditEvent: (MyEvent) -> Unit = {},
+    onEditItem: (ScheduleDisplayItem) -> Unit = {},
+    onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
+    onEditNote: (Event) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {}
@@ -181,7 +180,7 @@ fun HomePage(
                             context = context.applicationContext,
                             sourceType = RecognitionFeedbackSource.HOME_SOURCE_TYPE,
                             sourceId = RecognitionFeedbackSource.HOME_SOURCE_ID,
-                            sourceImagePath = imageFile.absolutePath,
+                            
                             ingestRequested = true
                         )
                 }
@@ -351,11 +350,7 @@ fun HomePage(
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         mutableStateOf(notificationManager.areNotificationsEnabled())
     }
-    var editingCourse by remember { mutableStateOf<Pair<Course, LocalDate>?>(null) }
-    var pendingDeleteNote by remember { mutableStateOf<MyEvent?>(null) }
-    val courseProjection = remember(uiState.allEvents, uiState.settings) {
-        CourseEventMapper.extractCourses(uiState.allEvents, uiState.settings)
-    }
+    var pendingDeleteNote by remember { mutableStateOf<Event?>(null) }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
@@ -417,47 +412,19 @@ fun HomePage(
                     scaleY = 0.9f + (0.1f * progress)
                 }
         ) {
+
             val maxNodes = remember(uiState.settings.timeTableJson) {
                 TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
             }
-
             ScheduleView(
-                courses = courseProjection,
+                items = uiState.courseScheduleItems,
                 semesterStartDateStr = uiState.settings.semesterStartDate,
                 totalWeeks = uiState.settings.totalWeeks,
                 maxNodes = maxNodes,
                 selectedDate = uiState.selectedDate,
-                onCourseClick = { course, date -> editingCourse = course to date }
+                onCourseClick = { item -> onEditItem(item) }
             )
 
-            // 编辑弹窗
-            editingCourse?.let { (course, date) ->
-                CourseSingleEditDialog(
-                    initialName = course.name,
-                    initialLocation = course.location,
-                    initialStartNode = course.startNode,
-                    initialEndNode = course.endNode,
-                    initialDate = date,
-                    maxNodes = maxNodes,
-                    onDismiss = { editingCourse = null },
-                    onDelete = {
-                        viewModel.deleteSingleCourseInstance(course, date)
-                        editingCourse = null
-                    },
-                    onConfirm = { name, location, start, end, newDate ->
-                        val virtualEventId = "course_${course.id}_${date}"
-                        viewModel.updateSingleCourseInstance(
-                            virtualEventId = virtualEventId,
-                            newName = name,
-                            newLoc = location,
-                            newStartNode = start,
-                            newEndNode = end,
-                            newDate = newDate
-                        )
-                        editingCourse = null
-                    }
-                )
-            }
         }
 
         // === 前景层：日程列表 + Scaffold ===
@@ -478,7 +445,7 @@ fun HomePage(
                                     else -> todaySearchQuery = ""
                                 }
                             }
-                            else -> viewModel.onRevealEvent(null)
+                            else -> viewModel.onRevealItem(null)
                         }
                     })
                 }
@@ -658,36 +625,36 @@ fun HomePage(
                                 val emptyText = if (todaySearchQuery.isBlank()) "下滑以打开课表" else "未找到相关日程"
                                 item { Text(emptyText, modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
                             } else {
-                                items(todayEvents, key = { "today_${it.id}" }) { event ->
+                                items(todayEvents, key = { "today_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
-                                        event = event,
-                                        isRevealed = uiState.revealedEventId == event.id,
-                                        onExpand = { viewModel.onRevealEvent(event.id) },
-                                        onCollapse = { viewModel.onRevealEvent(null) },
-                                        onDelete = { viewModel.deleteEvent(event) },
-                                        onImportant = { viewModel.toggleImportant(event) },
-                                        onEdit = { onEditEvent(event) },
+                                        item = item,
+                                        isRevealed = uiState.revealedItemKey == item.stableKey,
+                                        onExpand = { viewModel.onRevealItem(item.stableKey) },
+                                        onCollapse = { viewModel.onRevealItem(null) },
+                                        onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
+                                        onEdit = { onEditItem(item) },
+                                        onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
+                                        onArchive = { viewModel.archiveItem(item.action) }
                                     )
                                 }
                             }
 
                             if (uiState.selectedDate == LocalDate.now() && tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
-                                items(tomorrowEvents, key = { "tomorrow_${it.id}" }) { event ->
+                                items(tomorrowEvents, key = { "tomorrow_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
-                                        event = event,
-                                        isRevealed = uiState.revealedEventId == event.id,
-                                        onExpand = { viewModel.onRevealEvent(event.id) },
-                                        onCollapse = { viewModel.onRevealEvent(null) },
-                                        onDelete = { viewModel.deleteEvent(event) },
-                                        onImportant = { viewModel.toggleImportant(event) },
-                                        onEdit = { onEditEvent(event) },
+                                        item = item,
+                                        isRevealed = uiState.revealedItemKey == item.stableKey,
+                                        onExpand = { viewModel.onRevealItem(item.stableKey) },
+                                        onCollapse = { viewModel.onRevealItem(null) },
+                                        onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
+                                        onEdit = { onEditItem(item) },
+                                        onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveEvent(it.id) } // 归档回调
+                                        onArchive = { viewModel.archiveItem(item.action) }
                                     )
                                 }
                             }
@@ -697,18 +664,19 @@ fun HomePage(
                             viewModel = viewModel,
                             searchQuery = noteSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onEditNote = { onEditEvent(it) },
+                            onEditNote = { onEditNote(it) },
                             onPendingDeleteChange = { pendingDeleteNote = it }
                         )
                     } else {
                         AllEventsPage(
                             viewModel = viewModel,
-                            onEditEvent = { onEditEvent(it) },
+                            onEditItem = { onEditItem(it) },
                             uiSize = uiSize,
                             // 【修改 2】透传给 AllEventsPage
                             pickupTimestamp = pickupTimestamp,
                             searchQuery = allSearchQuery,
-                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp
+                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
+                            onRequestDeleteItem = onRequestDeleteItem
                         )
                     }
 

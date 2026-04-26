@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
-import com.antgskds.calendarassistant.data.db.AppDatabase
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,12 +22,20 @@ object RuleDisplayTemplateResolver {
 
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
-            val states = AppDatabase.getInstance(context.applicationContext).eventStateDao().getAll()
-            templateMap = states.associate { it.stateId to it.displayTemplate }
+            val allStates = mutableMapOf<String, String>()
+            com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules().forEach { rule ->
+                val defaults = RuleActionDefaults.defaultsFor(rule.ruleId)
+                RuleActionDefaults.buildStates(rule.ruleId, defaults).forEach { state ->
+                    if (state.displayTemplate.isNotBlank()) {
+                        allStates[state.stateId] = state.displayTemplate
+                    }
+                }
+            }
+            templateMap = allStates
         }
     }
 
-    fun renderTitle(event: MyEvent): String? {
+    fun renderTitle(event: Event): String? {
         val ruleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
             ?: event.tag.ifBlank { RuleMatchingEngine.RULE_GENERAL }
         val defaults = RuleActionDefaults.defaultsFor(ruleId)
@@ -45,7 +53,7 @@ object RuleDisplayTemplateResolver {
         return title.takeUnless { looksUnresolved(it, resolvedTemplate, ruleId) }
     }
 
-    private fun applyTemplate(template: String, event: MyEvent): String {
+    private fun applyTemplate(template: String, event: Event): String {
         val ruleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
             ?: event.tag.ifBlank { null }
         val processed = convertFriendlyPlaceholders(template, ruleId)

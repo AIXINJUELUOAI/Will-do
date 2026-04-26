@@ -1,9 +1,10 @@
 package com.antgskds.calendarassistant.core.operation
 
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 
 interface IngestCommandApi {
-    suspend fun ingestSmsPickup(eventData: CalendarEventData): MyEvent?
-    suspend fun ingestRecognizedEvents(events: List<CalendarEventData>, sourceImagePath: String?): List<MyEvent>
+    suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event?
+    suspend fun ingestRecognizedEvents(events: List<RecognitionDraft>, sourceImagePath: String?): List<Event>
 }

@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.service.floating
 
 import android.app.Service
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -29,6 +30,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.activeAiConfig
 import com.antgskds.calendarassistant.core.ai.isConfigured
@@ -40,15 +42,19 @@ import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.note.createNoteEvent
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.WeatherQueryApi
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
@@ -64,9 +70,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
 
 class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
@@ -287,26 +290,27 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings by settingsQueryApi.settings.collectAsState()
                 val context = LocalContext.current
                 val weatherData by weatherQueryApi.weatherData.collectAsState()
+                val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
+                val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
 
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
                 val noteEvents = if (settings.noteEnabled) {
-                    events.filter { it.tag == EventTags.NOTE && it.archivedAt == null }
-                        .sortedWith(compareBy<MyEvent> { it.isCompleted }.thenByDescending { it.lastModified })
+                    events.filter { it.tag == EventTags.NOTE && it.archivedAtMillis == null }
+                        .sortedWith(compareBy<Event> { it.isCompleted }.thenByDescending { it.lastModifiedMillis })
                 } else {
                     emptyList()
                 }
-                val filteredEvents = when (settings.floatingEventRange) {
-                    1 -> events.filter { it.tag != EventTags.NOTE && (it.startDate == today || it.endDate == today) }
-                    2 -> events.filter {
-                        it.tag != EventTags.NOTE && (
-                            it.startDate == today || it.startDate == tomorrow ||
-                                it.endDate == today || it.endDate == tomorrow
-                        )
-                    }
-                    else -> events.filter { it.tag != EventTags.NOTE } // 0 = 全部日程
+                val scheduleEvents = events.filter { it.tag != EventTags.NOTE && it.archivedAt == null }
+                val (displayFrom, displayTo) = when (settings.floatingEventRange) {
+                    1 -> today to today
+                    2 -> today to tomorrow
+                    else -> (scheduleEvents.minOfOrNull { it.startDate } ?: today) to today.plusDays(7) // 0 = 过去全部到未来7天
                 }
+                val scheduleItems = scheduleCenter.applyPendingStateOverrides(
+                    ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, displayFrom, displayTo)
+                )
 
                 val isDarkTheme = when (settings.themeMode) {
                     1 -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
@@ -322,13 +326,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     themeColorScheme = themeColorSchemeEnum
                 ) {
                     FloatingScheduleScreen(
-                        events = filteredEvents,
+                        scheduleItems = scheduleItems,
                         noteEvents = noteEvents,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         noteEnabled = settings.noteEnabled,
                         onClose = { requestClose() },
                         onManualInput = { text, isNote, onComplete ->
-                            handleManualInput(text = text, isNote = isNote, sourceImagePath = null, onComplete = onComplete)
+                            handleManualInput(text = text, isNote = isNote,  onComplete = onComplete)
                         },
                         onPickImageRequest = { onComplete ->
                             startScreenshotAnalysisFlow(onComplete)
@@ -346,18 +350,33 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                 }
                             }
                         },
-                        onEventAction = { eventId, actionType ->
-                            handleEventAction(eventId, actionType)
+                        onUpdateScheduleItem = { item, patch, onComplete ->
+                            handleUpdateScheduleItem(item, patch, onComplete)
                         },
-                        onUndo = { eventId, _ ->
+                        onArchiveScheduleItem = { item ->
                             serviceScope.launch {
-                                scheduleCenter.performPrimaryRuleAction(eventId)
+                                try {
+                                    scheduleCenter.archiveItem(item.action)
+                                    Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to archive item", e)
+                                    Toast.makeText(applicationContext, "归档失败", Toast.LENGTH_SHORT).show()
+                                }
                             }
+                        },
+                        onStatusAction = { item ->
+                            scheduleCenter.performPrimaryActionOnItemWithUndo(item)
+                        },
+                        pendingStatusKeys = pendingItemStates.keys,
+                        undoPendingLabel = undoPending?.label,
+                        onUndoAction = {
+                            scheduleCenter.undoStatusAction()
                         },
                         onDeleteNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    scheduleCenter.deleteEvent(note.id)
+                                    val nid = note.id ?: return@launch
+                                    scheduleCenter.deleteEvent(nid)
                                 } finally {
                                     onComplete()
                                 }
@@ -522,7 +541,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             handleManualInput(
                 text = ocrText,
-                sourceImagePath = imageFile.absolutePath,
+                
                 onComplete = ::finishPendingImagePick
             )
         }
@@ -556,7 +575,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                             context = applicationContext,
                             sourceType = RECOGNITION_SOURCE_TYPE,
                             sourceId = RECOGNITION_SOURCE_ID,
-                            sourceImagePath = sourceImagePath,
+                            
                             ingestRequested = true,
                             traceId = traceId
                         )
@@ -592,57 +611,63 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
     }
 
-    private fun handleEventAction(eventId: String, actionType: String) {
+    private fun handleUpdateScheduleItem(
+        item: ScheduleDisplayItem,
+        patch: EventPatch,
+        onComplete: () -> Unit
+    ) {
         serviceScope.launch {
             try {
-                when (actionType) {
-                    "archive" -> {
-                        scheduleCenter.archiveEvent(eventId)
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
-                        }
+                val enrichedPatch = enrichPatchForItem(item, patch)
+                when (val target = item.action) {
+                    is ScheduleDisplayItem.ActionTarget.Single -> {
+                        scheduleCenter.updateSingleFromPatch(target.eventId, enrichedPatch)
+                        Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
                     }
-                    else -> scheduleCenter.performPrimaryRuleAction(eventId)
+                    is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
+                        scheduleCenter.editRecurringFromPatch(
+                            parentId = target.parentId,
+                            occurrenceTs = target.occurrenceTs,
+                            mode = RecurringMode.THIS,
+                            patch = enrichedPatch
+                        )
+                        Toast.makeText(applicationContext, "已更新本次实例", Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to handle event action", e)
+                Log.e(TAG, "Failed to update schedule item", e)
+                Toast.makeText(applicationContext, "更新失败", Toast.LENGTH_SHORT).show()
+            } finally {
+                onComplete()
             }
         }
     }
 
-    private fun convertToMyEvent(eventData: CalendarEventData, sourceImagePath: String?): MyEvent {
-        val now = LocalDateTime.now()
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-        var startDateTime = try {
-            if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
-        } catch (e: Exception) { now }
-        var endDateTime = try {
-            if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
-        } catch (e: Exception) { startDateTime.plusHours(1) }
-
-        val resolvedTag = when {
-            eventData.tag.isNotBlank() && eventData.tag != EventTags.GENERAL -> eventData.tag
-            eventData.type == "pickup" -> EventTags.PICKUP
-            else -> eventData.tag
-        }.ifBlank { EventTags.GENERAL }
-
-        return MyEvent(
-            id = UUID.randomUUID().toString(),
-            title = eventData.title.trim(),
-            startDate = startDateTime.toLocalDate(),
-            endDate = endDateTime.toLocalDate(),
-            startTime = startDateTime.format(timeFormatter),
-            endTime = endDateTime.format(timeFormatter),
-            location = eventData.location,
-            description = eventData.description,
-            color = EventColors[scheduleCenter.events.value.size % EventColors.size],
-            sourceImagePath = sourceImagePath,
-            tag = resolvedTag
-        )
+    private fun enrichPatchForItem(item: ScheduleDisplayItem, patch: EventPatch): EventPatch {
+        val baseEvent = when (val target = item.action) {
+            is ScheduleDisplayItem.ActionTarget.Single -> scheduleCenter.events.value.find { it.id == target.eventId }
+            is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> scheduleCenter.events.value.find { it.id == target.parentId }
+        }
+        return if (baseEvent == null) {
+            patch
+        } else {
+            patch.copy(
+                tag = baseEvent.tag,
+                color = baseEvent.color,
+                rrule = baseEvent.rrule,
+                reminder1Minutes = baseEvent.reminder1Minutes,
+                reminder2Minutes = baseEvent.reminder2Minutes,
+                reminder3Minutes = baseEvent.reminder3Minutes
+            )
+        }
     }
 
-    private fun convertToNote(text: String): MyEvent {
+    private fun convertToEvent(eventData: RecognitionDraft, sourceImagePath: String?): Event {
+        val durationMinutes = settingsQueryApi.settings.value.defaultEventDurationMinutes
+        return com.antgskds.calendarassistant.core.ai.convertDraftToEvent(eventData, sourceImagePath, defaultDurationMinutes = durationMinutes)
+    }
+
+    private fun convertToNote(text: String): Event {
         val clean = text.trim()
         val lines = clean.lines().map { it.trim() }.filter { it.isNotBlank() }
         val titleSeed = lines.firstOrNull().orEmpty().ifBlank { clean }

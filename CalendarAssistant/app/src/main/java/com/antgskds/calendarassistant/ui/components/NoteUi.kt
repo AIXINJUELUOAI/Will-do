@@ -22,7 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.note.MarkdownTaskItem
 import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
 import com.antgskds.calendarassistant.core.note.noteMarkdown
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -44,15 +45,15 @@ private val markdownInlineCodeRegex = Regex("`([^`]*)`")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
-    note: MyEvent,
+    note: Event,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val markdown = remember(note.description, note.lastModified) { note.noteMarkdown() }
+    val markdown = remember(note.description, note.lastModifiedMillis) { note.noteMarkdown() }
     val tasks = remember(markdown) { extractMarkdownTasks(markdown) }
     val previewText = remember(markdown) { buildNotePreview(markdown) }
-    val updatedLabel = remember(note.lastModified) { formatNoteUpdatedText(note.lastModified) }
+    val updatedLabel = remember(note.lastModifiedMillis) { formatNoteUpdatedText(note.lastModifiedMillis) }
     val secondaryText = remember(tasks, previewText) {
         taskSummaryText(tasks) ?: previewText ?: "空白便签"
     }

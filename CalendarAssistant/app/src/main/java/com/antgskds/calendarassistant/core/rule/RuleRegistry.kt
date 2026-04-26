@@ -4,10 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.RulePatchProvider
-import com.antgskds.calendarassistant.data.db.AppDatabase
-import com.antgskds.calendarassistant.data.db.entity.EventRuleEntity
-import com.antgskds.calendarassistant.data.db.entity.EventStateEntity
-import com.antgskds.calendarassistant.data.db.entity.EventTransitionEntity
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,68 +35,53 @@ object RuleRegistry {
      */
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
-            val appCtx = context.applicationContext
-            val db = AppDatabase.getInstance(appCtx)
-
-            // 1. 确保内置规则和默认状态/动作存在
-            RulePatchProvider.ensureBuiltins(appCtx)
-            RuleActionSeeder.ensureDefaults(appCtx)
-
-            // 2. 加载规则
-            val loadedRules = db.eventRuleDao().getAll()
-            val newRules = loadedRules.associateBy { it.ruleId }
-            rules = newRules
-
-            // 3. 加载状态
-            val loadedStates = db.eventStateDao().getAll()
-            val newStatesByRule = loadedStates.groupBy { it.ruleId }
-            val newAllStates = loadedStates.associateBy { it.stateId }
-            statesByRule = newStatesByRule
-            allStates = newAllStates
-
-            // 4. 加载转换（一次查询替代 N+1）
-            val newTransitionsByRule = mutableMapOf<String, List<EventTransitionEntity>>()
-            val newTransitionsByFrom = mutableMapOf<String, MutableList<EventTransitionEntity>>()
-            val allTransitions = db.eventTransitionDao().getAll()
-            for (t in allTransitions) {
-                newTransitionsByRule.getOrPut(t.ruleId) { mutableListOf() }.let { list ->
-                    (list as MutableList).add(t)
-                }
-                newTransitionsByFrom.getOrPut(t.fromStateId) { mutableListOf() }.add(t)
+            val builtins = com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules()
+            
+            // 规则
+            rules = builtins.associateBy { it.ruleId }
+            
+            // 状态
+            val allStatesList = mutableListOf<EventStateEntity>()
+            val statesByRuleMap = mutableMapOf<String, List<EventStateEntity>>()
+            builtins.forEach { rule ->
+                val defaults = RuleActionDefaults.defaultsFor(rule.ruleId)
+                val states = RuleActionDefaults.buildStates(rule.ruleId, defaults)
+                allStatesList.addAll(states)
+                statesByRuleMap[rule.ruleId] = states
             }
-            transitionsByRule = newTransitionsByRule
-            transitionsByFromState = newTransitionsByFrom.mapValues { it.value.toList() }
-
-            // 5. 加载图标
-            val newIcons = mutableMapOf<String, Int>()
-            val newCustomIcons = mutableMapOf<String, Int>()
-            val newCustomNames = mutableMapOf<String, String>()
-            loadedRules.forEach { rule ->
-                val resName = RuleIconResolver.buildFallbackResName(rule.ruleId)
-                val resId = resolveResId(appCtx, resName)
-                if (resId != null && resId != 0) {
-                    newIcons[rule.ruleId] = resId
-                }
-                // 解析用户自定义图标
-                val iconSource = RuleIconSource.parse(rule.iconSourceJson)
-                val customResName = iconSource.capsuleIcon.trim()
-                if (customResName.isNotBlank()) {
-                    val customResId = resolveResId(appCtx, customResName)
-                    if (customResId != null && customResId != 0) {
-                        newCustomIcons[rule.ruleId] = customResId
-                        newCustomNames[rule.ruleId] = customResName
-                    }
+            statesByRule = statesByRuleMap
+            allStates = allStatesList.associateBy { it.stateId }
+            
+            // 转换
+            val allTransitionsList = mutableListOf<EventTransitionEntity>()
+            val transitionsByRuleMap = mutableMapOf<String, List<EventTransitionEntity>>()
+            val transitionsByFromMap = mutableMapOf<String, MutableList<EventTransitionEntity>>()
+            builtins.forEach { rule ->
+                val defaults = RuleActionDefaults.defaultsFor(rule.ruleId)
+                val transitions = RuleActionDefaults.buildTransitions(rule.ruleId, defaults)
+                allTransitionsList.addAll(transitions)
+                transitionsByRuleMap[rule.ruleId] = transitions
+                transitions.forEach { t ->
+                    transitionsByFromMap.getOrPut(t.fromStateId) { mutableListOf() }.add(t)
                 }
             }
-            iconCache = newIcons
-            customCapsuleIconCache = newCustomIcons
-            customCapsuleIconNameCache = newCustomNames
-
-            // 6. 刷新模板缓存 (供 RuleDisplayTemplateResolver.renderTitle 使用)
-            RuleDisplayTemplateResolver.refresh(appCtx)
-
-            Log.d(TAG, "Refreshed: ${rules.size} rules, ${allStates.size} states, " +
-                    "${transitionsByRule.values.sumOf { it.size }} transitions, ${iconCache.size} icons")
+            transitionsByRule = transitionsByRuleMap
+            transitionsByFromState = transitionsByFromMap
+            
+            // 更新初始状态
+            rules = builtins.map { rule ->
+                val defaults = RuleActionDefaults.defaultsFor(rule.ruleId)
+                val pendingId = RuleActionDefaults.stateId(rule.ruleId, defaults.pending.suffix)
+                rule.copy(initialStateId = pendingId)
+            }.associateBy { it.ruleId }
+            
+            // 图标
+            RuleIconResolver.refresh(context)
+            iconCache = builtins.mapNotNull { rule ->
+                RuleIconResolver.resolve(rule.ruleId)?.let { rule.ruleId to it }
+            }.toMap()
+            
+            Log.d(TAG, "Loaded ${rules.size} rules, ${allStates.size} states, ${allTransitionsList.size} transitions")
         }
     }
 

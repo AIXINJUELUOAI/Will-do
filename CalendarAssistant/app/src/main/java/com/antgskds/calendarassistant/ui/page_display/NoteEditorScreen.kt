@@ -44,7 +44,8 @@ import com.antgskds.calendarassistant.core.ai.missingConfigMessage
 import com.antgskds.calendarassistant.core.note.createNoteEvent
 import com.antgskds.calendarassistant.core.note.noteMarkdown
 import com.antgskds.calendarassistant.core.note.withNoteMarkdown
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.BlockNoteEditor
 import com.antgskds.calendarassistant.ui.components.BlockNoteEditorController
@@ -57,12 +58,12 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
-    initialNote: MyEvent?,
+    initialNote: Event?,
     currentEventsCount: Int,
     settings: MySettings,
     onDismiss: () -> Unit,
-    onSave: (MyEvent) -> Unit,
-    onDelete: (MyEvent) -> Unit,
+    onSave: (Event) -> Unit,
+    onDelete: (Event) -> Unit,
     onShowMessage: (String, ToastType) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -77,7 +78,7 @@ fun NoteEditorScreen(
     var bodyText by rememberSaveable(initialNote?.id) { mutableStateOf(savedMarkdown) }
     var isAnalyzing by remember { mutableStateOf(false) }
 
-    fun buildSavedNote(markdownOverride: String? = null): MyEvent {
+    fun buildSavedNote(markdownOverride: String? = null): Event {
         val markdown = (markdownOverride ?: bodyText).trimEnd()
         val finalTitle = titleText.ifBlank { "无标题" }
         return if (initialNote == null) {

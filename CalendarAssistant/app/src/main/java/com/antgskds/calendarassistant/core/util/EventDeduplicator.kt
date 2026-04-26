@@ -1,13 +1,10 @@
 package com.antgskds.calendarassistant.core.util
 
 import android.util.Log
-import com.antgskds.calendarassistant.core.calendar.CalendarManager
-import com.antgskds.calendarassistant.data.model.EventFingerprint
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import com.antgskds.calendarassistant.core.util.EventFingerprint
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 
 /**
  * 事件去重工具类
@@ -49,56 +46,12 @@ object EventDeduplicator {
      * 生成事件的内容指纹
      * 修复：增加空安全处理和统一小写，确保指纹稳定性
      */
-    fun generateFingerprint(event: MyEvent): EventFingerprint {
+    fun generateFingerprint(event: Event): EventFingerprint {
         return EventFingerprint(
-            title = event.title.trim().lowercase(), // 统一小写
-            startDate = event.startDate,
-            endDate = event.endDate,
-            startTime = normalizeTimeFormat(event.startTime),
-            endTime = normalizeTimeFormat(event.endTime),
-            // 修复：处理 location 可能为 null 的情况，并统一小写
-            location = (event.location ?: "").trim().lowercase()
-        )
-    }
-
-    /**
-     * 生成系统日历事件的内容指纹
-     */
-    fun generateFingerprintFromSystemEvent(systemEvent: CalendarManager.SystemEventInfo): EventFingerprint {
-        val startInstant = Instant.ofEpochMilli(systemEvent.startMillis)
-        val endInstant = Instant.ofEpochMilli(systemEvent.endMillis)
-
-        val startDate: LocalDate
-        val endDate: LocalDate
-        val startTimeStr: String
-        val endTimeStr: String
-
-        if (systemEvent.allDay) {
-            // 全天事件处理
-            val utcZone = ZoneId.of("UTC")
-            startDate = startInstant.atZone(utcZone).toLocalDate()
-            endDate = endInstant.atZone(utcZone).minusNanos(1).toLocalDate()
-            startTimeStr = "00:00"
-            endTimeStr = "23:59"
-        } else {
-            // 普通事件处理
-            val systemZone = ZoneId.systemDefault()
-            val startDateTime = startInstant.atZone(systemZone).toLocalDateTime()
-            val endDateTime = endInstant.atZone(systemZone).toLocalDateTime()
-
-            startDate = startDateTime.toLocalDate()
-            endDate = endDateTime.toLocalDate()
-            startTimeStr = normalizeTimeFormat(startDateTime.toLocalTime().toString())
-            endTimeStr = normalizeTimeFormat(endDateTime.toLocalTime().toString())
-        }
-
-        return EventFingerprint(
-            title = systemEvent.title.trim().lowercase(), // 统一小写
-            startDate = startDate,
-            endDate = endDate,
-            startTime = startTimeStr,
-            endTime = endTimeStr,
-            location = (systemEvent.location ?: "").trim().lowercase() // 统一处理 null 和小写
+            title = event.title.trim().lowercase(),
+            startTS = event.startTS,
+            endTS = event.endTS,
+            location = event.location.trim().lowercase()
         )
     }
 
@@ -110,9 +63,9 @@ object EventDeduplicator {
      * @property toUpdateArchiveStatus 需要更新归档状态的事件列表 (event -> shouldBeArchived)
      */
     data class DeduplicationResult(
-        val toAdd: List<MyEvent>,
-        val toSkip: List<MyEvent>,
-        val toUpdateArchiveStatus: List<Pair<MyEvent, Boolean>> // event -> shouldBeArchived
+        val toAdd: List<Event>,
+        val toSkip: List<Event>,
+        val toUpdateArchiveStatus: List<Pair<Event, Boolean>> // event -> shouldBeArchived
     )
 
     /**
@@ -132,30 +85,30 @@ object EventDeduplicator {
      * @return 去重结果
      */
     fun deduplicateForImport(
-        importEvents: List<MyEvent>,
-        existingActiveEvents: List<MyEvent>,
-        existingArchivedEvents: List<MyEvent>,
+        importEvents: List<Event>,
+        existingActiveEvents: List<Event>,
+        existingArchivedEvents: List<Event>,
         preserveArchivedStatus: Boolean = true
     ): DeduplicationResult {
         // 1. 过滤掉便签与课程（不参与去重）
-        val importRegularEvents = importEvents.filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
+        val importRegularEvents = importEvents.filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
 
         // 2. 构建现有事件的指纹集合
         val existingActiveFingerprints = existingActiveEvents
-            .filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
+            .filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
             .associateBy { generateFingerprint(it) }
 
         val existingArchivedFingerprints = existingArchivedEvents
-            .filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
+            .filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
             .associateBy { generateFingerprint(it) }
 
-        val toAdd = mutableListOf<MyEvent>()
-        val toSkip = mutableListOf<MyEvent>()
-        val toUpdateArchiveStatus = mutableListOf<Pair<MyEvent, Boolean>>()
+        val toAdd = mutableListOf<Event>()
+        val toSkip = mutableListOf<Event>()
+        val toUpdateArchiveStatus = mutableListOf<Pair<Event, Boolean>>()
 
         for (importEvent in importRegularEvents) {
             val fingerprint = generateFingerprint(importEvent)
-            val isImportArchived = importEvent.archivedAt != null
+            val isImportArchived = importEvent.archivedAtMillis != null
 
             // 3. 检查是否与现有活跃事件重复
             if (fingerprint in existingActiveFingerprints) {
@@ -198,26 +151,5 @@ object EventDeduplicator {
             toSkip = toSkip,
             toUpdateArchiveStatus = toUpdateArchiveStatus
         )
-    }
-
-    /**
-     * 检查系统日历事件是否与现有事件（活跃+归档）内容重复
-     *
-     * 用于反向同步时防止已归档事件被重新添加
-     *
-     * @param systemEvent 系统日历事件
-     * @param existingEvents 现有事件列表（活跃+归档）
-     * @return 是否重复
-     */
-    fun isContentDuplicate(
-        systemEvent: CalendarManager.SystemEventInfo,
-        existingEvents: List<MyEvent>
-    ): Boolean {
-        val systemFingerprint = generateFingerprintFromSystemEvent(systemEvent)
-
-        // 只检查普通日程（排除便签与课程）
-        return existingEvents
-            .filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
-            .any { generateFingerprint(it) == systemFingerprint }
     }
 }

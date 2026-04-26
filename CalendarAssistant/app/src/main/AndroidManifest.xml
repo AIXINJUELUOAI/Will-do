@@ -10,6 +10,8 @@
 
     <!-- 基础网络与通知 -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
@@ -163,11 +165,17 @@
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".service.receiver.AlarmReceiver" />
 
-        <!-- 日历定期同步接收器 -->
+        <!-- 日历定时同步接收器 -->
         <receiver
-            android:name=".CalendarSyncReceiver"
+            android:name=".calendar.receivers.CalDAVSyncReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- 日历内容变更监听 JobService -->
+        <service
+            android:name=".calendar.jobs.CalDAVUpdateListener"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
 
         <!-- 5. 每日汇总接收器 (已修正) -->
         <!-- 这里的 exported=false 是对的，因为我们是用显式 Intent 调用的 -->

@@ -13,7 +13,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
@@ -50,13 +51,13 @@ object NotificationScheduler {
     private const val OFFSET_REFRESH_CAPSULE = 300000 // 刷新胶囊的偏移量
     const val OFFSET_PICKUP_INITIAL_NOTIF = 1000000 // 取件码初始通知的偏移量，避免与胶囊通知冲突（public供StoreRootNode使用）
 
-    fun scheduleReminders(context: Context, event: MyEvent) {
+    fun scheduleReminders(context: Context, event: Event) {
         val settings = (context.applicationContext as? App)
             ?.settingsQueryApi
             ?.settings
             ?.value
             ?: MySettings()
-        if (event.isRecurringParent) {
+        if (event.isRecurring) {
             Log.d("NotificationScheduler", "跳过重复日程父事件提醒: ${event.id}")
             return
         }
@@ -88,7 +89,7 @@ object NotificationScheduler {
         if (isLiveCapsuleEnabled) {
             Log.d("NotificationScheduler", "胶囊开启，跳过普通提醒调度: ${event.id}")
         } else {
-            event.reminders.forEach { minutesBefore ->
+            event.reminderMinutes.forEach { minutesBefore ->
                 val triggerTime = startMillis - (minutesBefore.toLong() * 60 * 1000)
                 val label = REMINDER_OPTIONS.find { it.first == minutesBefore }?.second ?: ""
                 if (triggerTime > now) {
@@ -148,7 +149,7 @@ object NotificationScheduler {
         }
 
         // 6. 胶囊关闭时，日程开始时发送普通通知
-        if (!isLiveCapsuleEnabled && 0 !in event.reminders) {
+        if (!isLiveCapsuleEnabled && 0 !in event.reminderMinutes) {
             if (startMillis > now) {
                 scheduleSingleAlarm(
                     context, event, 0, startMillis, "日程开始",
@@ -162,11 +163,11 @@ object NotificationScheduler {
     }
 
     private fun scheduleSingleAlarm(
-        context: Context, event: MyEvent, minutesBefore: Int, triggerTime: Long, label: String, actionType: String, alarmManager: AlarmManager
+        context: Context, event: Event, minutesBefore: Int, triggerTime: Long, label: String, actionType: String, alarmManager: AlarmManager
     ) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = actionType
-            putExtra("EVENT_ID", event.id)
+            putExtra("EVENT_ID", event.id?.toString() ?: "")
             putExtra("EVENT_TITLE", event.title)
             putExtra("REMINDER_LABEL", label)
             putExtra("EVENT_LOCATION", event.location)
@@ -174,32 +175,32 @@ object NotificationScheduler {
             putExtra("EVENT_END_TIME", event.endTime)
             putExtra("EVENT_TAG", event.tag)
             putExtra("EVENT_COLOR", android.graphics.Color.argb(
-                (event.color.alpha * 255).toInt(),
-                (event.color.red * 255).toInt(),
-                (event.color.green * 255).toInt(),
-                (event.color.blue * 255).toInt()
+                android.graphics.Color.alpha(event.color),
+                android.graphics.Color.red(event.color),
+                android.graphics.Color.green(event.color),
+                android.graphics.Color.blue(event.color)
             ))
             putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(event)?.ruleId ?: event.tag)
         }
-        val requestCode = (event.id.hashCode() + minutesBefore).toInt()
+        val requestCode = ((event.id ?: 0L).hashCode() + minutesBefore).toInt()
         scheduleAlarmExact(context, triggerTime, intent, requestCode, alarmManager)
     }
 
     private fun scheduleCapsuleAlarm(
-        context: Context, event: MyEvent, triggerTime: Long, actualStartTime: Long, actionType: String, alarmManager: AlarmManager
+        context: Context, event: Event, triggerTime: Long, actualStartTime: Long, actionType: String, alarmManager: AlarmManager
     ) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = actionType
-            putExtra("EVENT_ID", event.id)
+            putExtra("EVENT_ID", event.id?.toString() ?: "")
             putExtra("EVENT_TITLE", event.title)
             putExtra("EVENT_LOCATION", event.location)
             putExtra("EVENT_START_TIME", "${event.startTime}")
             putExtra("EVENT_END_TIME", "${event.endTime}")
             putExtra("EVENT_COLOR", android.graphics.Color.argb(
-                (event.color.alpha * 255).toInt(),
-                (event.color.red * 255).toInt(),
-                (event.color.green * 255).toInt(),
-                (event.color.blue * 255).toInt()
+                android.graphics.Color.alpha(event.color),
+                android.graphics.Color.red(event.color),
+                android.graphics.Color.green(event.color),
+                android.graphics.Color.blue(event.color)
             ))
             // 传入实际开始时间戳（用于胶囊判断显示"还有x分钟"还是"进行中"）
             if (actualStartTime > 0) {
@@ -212,7 +213,7 @@ object NotificationScheduler {
             ACTION_CAPSULE_END -> OFFSET_CAPSULE_END
             else -> 0
         }
-        val requestCode = (event.id.hashCode() + offset).toInt()
+        val requestCode = ((event.id ?: 0L).hashCode() + offset).toInt()
         scheduleAlarmExact(context, triggerTime, intent, requestCode, alarmManager)
     }
 
@@ -221,25 +222,25 @@ object NotificationScheduler {
      * 当启用了提前提醒时，需要在课程真正开始时刷新胶囊文案（从"还有x分钟"改为"进行中"）
      */
     private fun scheduleRefreshCapsuleAlarm(
-        context: Context, event: MyEvent, actualStartTime: Long, alarmManager: AlarmManager
+        context: Context, event: Event, actualStartTime: Long, alarmManager: AlarmManager
     ) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_REFRESH_CAPSULE
-            putExtra("EVENT_ID", event.id)
+            putExtra("EVENT_ID", event.id?.toString() ?: "")
             putExtra("EVENT_TITLE", event.title)
             putExtra("EVENT_LOCATION", event.location)
             putExtra("EVENT_START_TIME", "${event.startTime}")
             putExtra("EVENT_END_TIME", "${event.endTime}")
             putExtra("ACTUAL_START_MILLIS", actualStartTime)
             putExtra("EVENT_COLOR", android.graphics.Color.argb(
-                (event.color.alpha * 255).toInt(),
-                (event.color.red * 255).toInt(),
-                (event.color.green * 255).toInt(),
-                (event.color.blue * 255).toInt()
+                android.graphics.Color.alpha(event.color),
+                android.graphics.Color.red(event.color),
+                android.graphics.Color.green(event.color),
+                android.graphics.Color.blue(event.color)
             ))
             putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(event)?.ruleId ?: event.tag)
         }
-        val requestCode = (event.id.hashCode() + OFFSET_REFRESH_CAPSULE).toInt()
+        val requestCode = ((event.id ?: 0L).hashCode() + OFFSET_REFRESH_CAPSULE).toInt()
         scheduleAlarmExact(context, actualStartTime, intent, requestCode, alarmManager)
     }
 
@@ -263,39 +264,39 @@ object NotificationScheduler {
         }
     }
 
-    fun cancelReminders(context: Context, event: MyEvent) {
+    fun cancelReminders(context: Context, event: Event) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val notificationManager = NotificationManagerCompat.from(context)
 
         // 1. 取消普通提醒（包括全局提前提醒）
-        val reminderMinutes = event.reminders.toMutableSet()
+        val reminderMinutes = event.reminderMinutes.toMutableSet()
         reminderMinutes.add(0)
         reminderMinutes.forEach { minutesBefore ->
-            cancelPendingIntent(context, event.id.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
+            cancelPendingIntent(context, (event.id ?: 0L).hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
         }
 
         // 【修复】暴力清除所有可能的全局提醒残留（30/45/60分钟）
-        // 即使这些分钟数不在 event.reminders 中，也要尝试取消
+        // 即使这些分钟数不在 event.reminderMinutes 中，也要尝试取消
         listOf(30, 45, 60).forEach { mins ->
-            if (mins !in event.reminders) {
-                cancelPendingIntent(context, event.id.hashCode() + mins, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
+            if (mins !in event.reminderMinutes) {
+                cancelPendingIntent(context, (event.id ?: 0L).hashCode() + mins, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
             }
         }
 
         // 2. 取消胶囊开始
-        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_START, ACTION_CAPSULE_START, AlarmReceiver::class.java, alarmManager)
+        cancelPendingIntent(context, (event.id ?: 0L).hashCode() + OFFSET_CAPSULE_START, ACTION_CAPSULE_START, AlarmReceiver::class.java, alarmManager)
 
         // 3. 取消胶囊结束
-        cancelPendingIntent(context, event.id.hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, AlarmReceiver::class.java, alarmManager)
+        cancelPendingIntent(context, (event.id ?: 0L).hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, AlarmReceiver::class.java, alarmManager)
 
         // 4. 取消刷新胶囊闹钟
-        cancelPendingIntent(context, event.id.hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
+        cancelPendingIntent(context, (event.id ?: 0L).hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
 
         // ✅ 取消胶囊通知
-        notificationManager.cancel(event.id.hashCode())
+        notificationManager.cancel((event.id ?: 0L).hashCode())
 
         // ✅ 取消取件码初始通知（如果存在）
-        notificationManager.cancel(event.id.hashCode() + OFFSET_PICKUP_INITIAL_NOTIF)
+        notificationManager.cancel((event.id ?: 0L).hashCode() + OFFSET_PICKUP_INITIAL_NOTIF)
 
         // ✅ 新架构：Dumb Service 不需要手动停止
         // Service 会通过 uiState 自动管理生命周期
@@ -318,17 +319,17 @@ object NotificationScheduler {
     /**
      * 显示取件码初始通知（创建时立即弹出，带"已取"按钮）
      */
-    private fun showPickupInitialNotification(context: Context, event: MyEvent) {
+    private fun showPickupInitialNotification(context: Context, event: Event) {
         val notificationManager = NotificationManagerCompat.from(context)
 
         // 构建"已取"按钮的 PendingIntent
         val completeIntent = Intent(context, EventActionReceiver::class.java).apply {
             action = EventActionReceiver.ACTION_COMPLETE
-            putExtra(EventActionReceiver.EXTRA_EVENT_ID, event.id)
+            putExtra(EventActionReceiver.EXTRA_EVENT_ID, event.id?.toString() ?: "")
         }
         val pendingComplete = PendingIntent.getBroadcast(
             context,
-            event.id.hashCode() + 1,
+            (event.id ?: 0L).hashCode() + 1,
             completeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -351,7 +352,7 @@ object NotificationScheduler {
             .build()
 
         // 【修复问题2】使用带偏移的 ID，避免与胶囊通知冲突
-        notificationManager.notify(event.id.hashCode() + OFFSET_PICKUP_INITIAL_NOTIF, notification)
+        notificationManager.notify((event.id ?: 0L).hashCode() + OFFSET_PICKUP_INITIAL_NOTIF, notification)
 
         Log.d("NotificationScheduler", "取件码初始通知已显示: ${event.title}")
     }

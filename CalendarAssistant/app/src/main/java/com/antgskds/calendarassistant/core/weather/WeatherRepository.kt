@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.Locale
 
 class WeatherRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
@@ -32,6 +33,7 @@ class WeatherRepository private constructor(context: Context) {
     }
     private val mutex = Mutex()
     private val client by lazy { HttpClient(Android) }
+    private val locationProvider by lazy { WeatherLocationProvider(appContext) }
     private val _weatherData = MutableStateFlow(loadCachedWeather())
     val weatherData: StateFlow<WeatherData?> = _weatherData.asStateFlow()
 
@@ -54,8 +56,10 @@ class WeatherRepository private constructor(context: Context) {
             if (!settings.hasWeatherConfig()) {
                 Result.failure(IllegalStateException("Weather not configured"))
             } else {
-                val rawBody = requestWeather(settings)
-                val parsed = WeatherApiAdapter.parse(WeatherApiAdapter.PROVIDER_QWEATHER, rawBody, settings.weatherCity.trim())
+                val requestLocation = resolveRequestLocation()
+                val rawBody = requestWeather(settings, requestLocation)
+                val cityLabel = if (requestLocation.source == "cached") "最近位置" else "当前位置"
+                val parsed = WeatherApiAdapter.parse(WeatherApiAdapter.PROVIDER_QWEATHER, rawBody, cityLabel)
                 saveCachedWeather(parsed)
                 _weatherData.value = parsed
                 Result.success(parsed)
@@ -66,20 +70,40 @@ class WeatherRepository private constructor(context: Context) {
         }
     }
 
-    private suspend fun requestWeather(settings: MySettings): String {
+    private suspend fun requestWeather(settings: MySettings, requestLocation: WeatherLocation): String {
         val endpoint = WeatherApiAdapter.resolveRequestUrl(
             provider = WeatherApiAdapter.PROVIDER_QWEATHER,
             rawValue = settings.weatherApiUrl.ifBlank { WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_QWEATHER) }
         )
         val response: HttpResponse = client.get {
             url(endpoint)
-            parameter("location", settings.weatherCity.trim())
+            parameter("location", toCoordinateParam(requestLocation))
             header("X-QW-Api-Key", settings.weatherApiKey.trim())
         }
         if (!response.status.isSuccess()) {
             throw IllegalStateException("HTTP ${response.status.value}")
         }
         return response.bodyAsText()
+    }
+
+    private suspend fun resolveRequestLocation(): WeatherLocation {
+        val currentResult = locationProvider.resolveCurrentLocation()
+        if (currentResult.isSuccess) {
+            val current = currentResult.getOrThrow()
+            saveCachedLocation(current)
+            return current
+        }
+
+        val cached = loadCachedLocation()
+        if (cached != null) {
+            return cached.copy(source = "cached")
+        }
+
+        throw currentResult.exceptionOrNull() ?: IllegalStateException("Location unavailable")
+    }
+
+    private fun toCoordinateParam(location: WeatherLocation): String {
+        return String.format(Locale.US, "%.6f,%.6f", location.longitude, location.latitude)
     }
 
     private fun loadCachedWeather(): WeatherData? {
@@ -91,10 +115,30 @@ class WeatherRepository private constructor(context: Context) {
         prefs.edit().putString(KEY_WEATHER_JSON, json.encodeToString(data)).apply()
     }
 
+    private fun saveCachedLocation(location: WeatherLocation) {
+        prefs.edit()
+            .putString(KEY_LOCATION_LAT, location.latitude.toString())
+            .putString(KEY_LOCATION_LON, location.longitude.toString())
+            .putString(KEY_LOCATION_SOURCE, location.source)
+            .putLong(KEY_LOCATION_TIME, System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun loadCachedLocation(): WeatherLocation? {
+        val lat = prefs.getString(KEY_LOCATION_LAT, null)?.toDoubleOrNull() ?: return null
+        val lon = prefs.getString(KEY_LOCATION_LON, null)?.toDoubleOrNull() ?: return null
+        val source = prefs.getString(KEY_LOCATION_SOURCE, "cached") ?: "cached"
+        return WeatherLocation(latitude = lat, longitude = lon, source = source)
+    }
+
     companion object {
         private const val TAG = "WeatherRepository"
         private const val PREFS_NAME = "weather_cache"
         private const val KEY_WEATHER_JSON = "weather_json"
+        private const val KEY_LOCATION_LAT = "location_lat"
+        private const val KEY_LOCATION_LON = "location_lon"
+        private const val KEY_LOCATION_SOURCE = "location_source"
+        private const val KEY_LOCATION_TIME = "location_time"
 
         @Volatile
         private var INSTANCE: WeatherRepository? = null
@@ -114,5 +158,5 @@ class WeatherRepository private constructor(context: Context) {
 }
 
 fun MySettings.hasWeatherConfig(): Boolean {
-    return weatherEnabled && weatherCity.isNotBlank() && weatherApiKey.isNotBlank() && weatherApiUrl.isNotBlank()
+    return weatherEnabled && weatherApiKey.isNotBlank() && weatherApiUrl.isNotBlank()
 }

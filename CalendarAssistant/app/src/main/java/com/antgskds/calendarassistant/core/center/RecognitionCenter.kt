@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.node.recognition.RecognitionMultimodalNode
 import com.antgskds.calendarassistant.data.node.recognition.RecognitionOcrNode
@@ -29,7 +29,7 @@ class RecognitionCenter(
         sourceImagePath: String? = null,
         ingestRequested: Boolean = false,
         traceId: String = EventIdentity.newTraceId()
-    ): AnalysisResult<CalendarEventData> {
+    ): AnalysisResult<RecognitionDraft> {
         val result = RecognitionTextNode.parseUserText(text, settings, context)
         when (result) {
             is AnalysisResult.Success -> {
@@ -92,7 +92,7 @@ class RecognitionCenter(
         sourceImagePath: String? = null,
         ingestRequested: Boolean = false,
         traceId: String = EventIdentity.newTraceId()
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context)
         when (result) {
             is AnalysisResult.Success -> {

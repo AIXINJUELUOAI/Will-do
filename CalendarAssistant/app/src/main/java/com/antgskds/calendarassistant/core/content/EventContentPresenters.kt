@@ -3,14 +3,15 @@ package com.antgskds.calendarassistant.core.content
 import android.content.Context
 import com.antgskds.calendarassistant.core.rule.EventPresenter
 import com.antgskds.calendarassistant.core.rule.EventRenderModel
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 
 data class EventTimelineItem(
-    val event: MyEvent,
+    val event: Event,
     val renderModel: EventRenderModel
 ) : TimelineItem {
-    override val stableId: String = event.id
+    override val stableId: String = event.idString
     override val sourceType: ContentSourceType = ContentSourceType.SCHEDULE
     override val title: String = renderModel.title
     override val subtitle: String? = renderModel.subtitle
@@ -31,7 +32,7 @@ data class EventCapsuleItem(
 }
 
 object EventTimelinePresenter {
-    fun present(context: Context, event: MyEvent): EventTimelineItem {
+    fun present(context: Context, event: Event): EventTimelineItem {
         return EventTimelineItem(
             event = event,
             renderModel = EventPresenter.present(context, event)
@@ -40,16 +41,16 @@ object EventTimelinePresenter {
 }
 
 object EventCapsulePresenter {
-    fun present(context: Context, event: MyEvent, isExpired: Boolean): EventCapsuleItem {
+    fun present(context: Context, event: Event, isExpired: Boolean): EventCapsuleItem {
         return EventCapsuleItem(
-            eventIds = listOf(event.id),
+            eventIds = listOf(event.idString),
             displayModel = EventPresenter.presentCapsule(context, event, isExpired)
         )
     }
 
-    fun present(context: Context, events: List<MyEvent>): EventCapsuleItem {
+    fun present(context: Context, events: List<Event>): EventCapsuleItem {
         return EventCapsuleItem(
-            eventIds = events.map { it.id },
+            eventIds = events.map { it.idString },
             displayModel = EventPresenter.presentCapsule(context, events)
         )
     }

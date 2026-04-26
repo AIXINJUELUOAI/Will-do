@@ -1,40 +1,20 @@
 package com.antgskds.calendarassistant.core.ai
 
 import android.content.Context
+import com.antgskds.calendarassistant.core.rule.EventRuleEntity
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.data.db.AppDatabase
-import com.antgskds.calendarassistant.data.db.entity.EventRuleEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 object RulePatchProvider {
     suspend fun loadSchedulePatch(context: Context): String {
         if (!RulePatchPrefs.isEnabled(context.applicationContext)) return ""
-        return withContext(Dispatchers.IO) {
-            val ruleDao = AppDatabase.getInstance(context.applicationContext).eventRuleDao()
-            ensureBuiltins(ruleDao)
-            val rules = ruleDao.getEnabledForSchedule()
-            buildRulePatch(rules)
-        }
+        return buildRulePatch(builtinRules().filter { it.isEnabled && it.appliesToSchedule })
     }
 
     suspend fun ensureBuiltins(context: Context) {
-        withContext(Dispatchers.IO) {
-            val ruleDao = AppDatabase.getInstance(context.applicationContext).eventRuleDao()
-            ensureBuiltins(ruleDao)
-        }
+        // 第一阶段：规则硬编码在内存中，无需初始化 DB
     }
 
-    private suspend fun ensureBuiltins(ruleDao: com.antgskds.calendarassistant.data.db.dao.EventRuleDao) {
-        val existing = ruleDao.getAll()
-        val existingIds = existing.map { it.ruleId }.toSet()
-        val missing = builtinRules().filter { it.ruleId !in existingIds }
-        if (missing.isNotEmpty()) {
-            ruleDao.insertAll(missing)
-        }
-    }
-
-    private fun builtinRules(): List<EventRuleEntity> {
+    fun builtinRules(): List<EventRuleEntity> {
         return listOf(
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_GENERAL,
@@ -43,10 +23,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_GENERAL,
                 aiPrompt = "普通日程描述",
-                aiTitlePrompt = "日程",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "日程"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_TRAIN,
@@ -55,10 +32,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_TRAIN,
                 aiPrompt = "车次|检票口|座位号",
-                aiTitlePrompt = "车次 路线",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "车次 路线"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_TAXI,
@@ -67,10 +41,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_TAXI,
                 aiPrompt = "颜色|车型|车牌",
-                aiTitlePrompt = "车型 车牌",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "车型 车牌"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_FLIGHT,
@@ -79,10 +50,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_FLIGHT,
                 aiPrompt = "航班号|登机口|座位号",
-                aiTitlePrompt = "航班号 航线",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "航班号 航线"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_PICKUP,
@@ -91,10 +59,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_PICKUP,
                 aiPrompt = "取件码|品牌|位置",
-                aiTitlePrompt = "取件 品牌",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "取件 品牌"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_FOOD,
@@ -103,10 +68,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_FOOD,
                 aiPrompt = "取餐码|品牌|位置",
-                aiTitlePrompt = "取餐 品牌",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "取餐 品牌"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_TICKET,
@@ -115,10 +77,7 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_TICKET,
                 aiPrompt = "取票码|取票地点|取票时间",
-                aiTitlePrompt = "取票 地点",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "取票 地点"
             ),
             EventRuleEntity(
                 ruleId = RuleMatchingEngine.RULE_SENDER,
@@ -127,10 +86,16 @@ object RulePatchProvider {
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_SENDER,
                 aiPrompt = "寄件码|品牌|地点",
-                aiTitlePrompt = "寄件 品牌",
-                extractionConfigJson = "{}",
-                iconSourceJson = "{}",
-                initialStateId = ""
+                aiTitlePrompt = "寄件 品牌"
+            ),
+            EventRuleEntity(
+                ruleId = RuleMatchingEngine.RULE_COURSE,
+                name = "课程",
+                isEnabled = true,
+                appliesToSchedule = false,
+                aiTag = RuleMatchingEngine.RULE_COURSE,
+                aiPrompt = "课程元数据",
+                aiTitlePrompt = "课程名称"
             )
         )
     }

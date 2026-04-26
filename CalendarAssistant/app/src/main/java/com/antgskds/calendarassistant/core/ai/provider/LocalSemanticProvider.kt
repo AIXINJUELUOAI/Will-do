@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.core.ai.AnalysisFailure
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 
 object LocalSemanticProvider : SemanticProvider {
@@ -17,7 +17,7 @@ object LocalSemanticProvider : SemanticProvider {
         text: String,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<CalendarEventData> {
+    ): AnalysisResult<RecognitionDraft> {
         return AnalysisResult.Failure(notReadyFailure)
     }
 
@@ -25,7 +25,7 @@ object LocalSemanticProvider : SemanticProvider {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         return AnalysisResult.Failure(notReadyFailure)
     }
 }

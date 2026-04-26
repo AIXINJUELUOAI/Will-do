@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.core.rule
 
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 
 enum class RuleActionType {
     COMPLETE,
@@ -15,7 +16,7 @@ data class RuleActionDecision(
 )
 
 object EventActionResolver {
-    fun resolve(event: MyEvent): RuleActionDecision? {
+    fun resolve(event: Event): RuleActionDecision? {
         val resolvedRuleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
         val ruleId = resolvedRuleId?.ifBlank { null } ?: event.tag.ifBlank { RuleMatchingEngine.RULE_GENERAL }
 

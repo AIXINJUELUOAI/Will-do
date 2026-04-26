@@ -1,11 +1,11 @@
 package com.antgskds.calendarassistant.core.event.events
 
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
 
 data class RecognitionCompletedEvent(
     val sourceType: String,
     val sourceId: String,
-    val candidates: List<CalendarEventData>,
+    val candidates: List<RecognitionDraft>,
     val sourceImagePath: String? = null,
     val ingestRequested: Boolean = false,
     val modelName: String? = null,

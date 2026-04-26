@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.isCompleted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,8 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 事件动作接收器
- * 处理取件码的"已取"和"延长"操作
+ * 事件动作接收器：处理通知上的「完成」「签到」按钮。
+ * 统一通过 ActionTarget 路由到 ScheduleCenter 新 API。
  */
 class EventActionReceiver : BroadcastReceiver() {
     companion object {
@@ -27,7 +29,7 @@ class EventActionReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+        val eventIdStr = intent.getStringExtra(EXTRA_EVENT_ID) ?: return
         val app = context.applicationContext as App
         val scheduleCenter = app.scheduleCenter
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -37,11 +39,24 @@ class EventActionReceiver : BroadcastReceiver() {
                 val pendingResult = goAsync()
                 scope.launch {
                     try {
-                        if (eventId == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
-                            completeAllActivePickups(scheduleCenter = scheduleCenter, app = app, context = context)
+                        if (eventIdStr == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
+                            // 聚合取件完成：完成所有活跃的取件事件
+                            val pickups = scheduleCenter.events.value.filter {
+                                it.tag == EventTags.PICKUP && !it.isCompleted
+                            }
+                            pickups.forEach { event ->
+                                val id = event.id ?: return@forEach
+                                scheduleCenter.completeItem(ActionTarget.Single(id))
+                            }
                         } else {
-                            val targetEventId = eventId ?: return@launch
-                            scheduleCenter.performPrimaryRuleAction(targetEventId)
+                            val targetEventId = eventIdStr.toLongOrNull() ?: return@launch
+                            val event = scheduleCenter.events.value.find { it.id == targetEventId } ?: return@launch
+                            val target = ActionTarget.Single(targetEventId)
+
+                            when (intent.action) {
+                                ACTION_CHECKIN -> scheduleCenter.checkInItem(target)
+                                else -> scheduleCenter.completeItem(target)
+                            }
                         }
                     } finally {
                         pendingResult.finish()
@@ -49,31 +64,5 @@ class EventActionReceiver : BroadcastReceiver() {
                 }
             }
         }
-    }
-
-    /**
-     * 批量完成所有活跃的取件码（聚合胶囊使用）
-     * 获取所有未过期的取件码并批量删除
-     */
-    private suspend fun completeAllActivePickups(
-        scheduleCenter: ScheduleCenter,
-        app: App,
-        context: Context
-    ) {
-        val completedCount = scheduleCenter.completeAllActivePickups()
-
-        // 取消聚合胶囊的通知
-        val nm = NotificationManagerCompat.from(context)
-        nm.cancel(CapsuleStateManager.AGGREGATE_NOTIF_ID)
-
-        // 显示删除数量
-        if (completedCount > 0) {
-            withContext(Dispatchers.Main) {
-                UniversalToastUtil.showSuccess(context, "已完成 $completedCount 个取件码")
-            }
-        }
-
-        // 主动触发胶囊状态刷新
-        app.capsuleCommandApi.forceRefresh()
     }
 }

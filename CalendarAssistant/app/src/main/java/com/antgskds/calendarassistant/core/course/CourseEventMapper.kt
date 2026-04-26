@@ -1,342 +1,314 @@
 package com.antgskds.calendarassistant.core.course
 
-import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
+import com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF
+import com.antgskds.calendarassistant.calendar.helpers.SOURCE_SIMPLE_CALENDAR
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.toEpochSeconds
 import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.TimeNode
-import java.time.DayOfWeek
-import java.time.LocalDate
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 object CourseEventMapper {
-    private const val LEGACY_COURSE_META_PREFIX = "course-meta:"
-    private const val COURSE_RECURRING_META_PREFIX = "course-recurring-meta:"
-    private const val COURSE_INSTANCE_META_PREFIX = "course-instance-meta:"
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    const val COURSE_HEADER = "【课程】"
+    private const val COURSE_ASCII_PREFIX = "[course]"
+    private const val LEGACY_RECURRING_PREFIX = "course-recurring-meta:"
+    private const val LEGACY_INSTANCE_PREFIX = "course-instance-meta:"
+    private const val LEGACY_TEMPLATE_PREFIX = "course-meta:"
 
-    fun isCourseTemplateEvent(event: MyEvent): Boolean {
-        return event.tag == EventTags.COURSE && event.description.startsWith(LEGACY_COURSE_META_PREFIX)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        coerceInputValues = true
+    }
+    private val exdateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+        .withZone(ZoneOffset.UTC)
+
+    fun isCourseEvent(event: Event): Boolean = event.tag == EventTags.COURSE
+    fun isCourseParent(event: Event): Boolean = isCourseEvent(event) && event.isRecurring && event.parentId == 0L
+    fun isCourseException(event: Event): Boolean = isCourseEvent(event) && event.parentId != 0L
+
+    fun newCourseId(course: Course): String {
+        if (course.id.isNotBlank()) return course.id
+        return UUID.randomUUID().toString()
     }
 
-    fun isCourseRecurringParentEvent(event: MyEvent): Boolean {
-        return event.tag == EventTags.COURSE && event.isRecurringParent && event.description.startsWith(COURSE_RECURRING_META_PREFIX)
-    }
-
-    fun isCourseDetachedInstanceEvent(event: MyEvent): Boolean {
-        return event.tag == EventTags.COURSE && !event.isRecurring && event.description.startsWith(COURSE_INSTANCE_META_PREFIX)
-    }
-
-    fun normalizeTemplateEvent(event: MyEvent): MyEvent {
-        if (!isCourseTemplateEvent(event)) return event
-        return event.copy(
-            isRecurring = false,
-            isRecurringParent = false,
-            recurringSeriesKey = null,
-            recurringInstanceKey = null,
-            parentRecurringId = null,
-            excludedRecurringInstances = emptyList(),
-            nextOccurrenceStartMillis = null,
-            reminders = emptyList(),
-            skipCalendarSync = true
-        )
-    }
-
-    fun toTemplateEvents(courses: List<Course>, settings: MySettings): List<MyEvent> {
-        return courses.map { toTemplateEvent(it, settings, existingParent = null) }
-    }
-
-    fun toTemplateEvent(course: Course, settings: MySettings, existingParent: MyEvent? = null): MyEvent {
-        if (course.isTemp) {
-            return toDetachedInstanceEvent(course, settings)
-        }
-
-        val timeNodes = parseTimeNodes(settings.timeTableJson)
-        val startNode = timeNodes.find { it.index == course.startNode }
-        val endNode = timeNodes.find { it.index == course.endNode }
-        val semesterStart = parseSemesterStart(settings.semesterStartDate)
-        val firstDate = resolveFirstOccurrenceDate(semesterStart, course.dayOfWeek, course.startWeek)
-        val firstStartTime = startNode?.startTime ?: "08:00"
-        val firstStartMillis = toMillis(firstDate, firstStartTime)
-        val seriesKey = course.id
-        val parentId = RecurringEventUtils.buildParentId(seriesKey)
-        val existingExcludedDates = existingParent?.excludedRecurringInstances.orEmpty()
-            .mapNotNull { key -> keyToDate(seriesKey, key) }
-        val mergedExcludedDates = (existingExcludedDates + course.excludedDates).distinct()
-        val mergedExcluded = excludedDatesToKeys(seriesKey, mergedExcludedDates, firstStartTime)
-
-        val meta = CourseRecurringMeta(
-            teacher = course.teacher,
-            dayOfWeek = course.dayOfWeek,
-            startNode = course.startNode,
-            endNode = course.endNode,
-            startWeek = course.startWeek,
-            endWeek = course.endWeek,
-            weekType = course.weekType,
-            parentSeriesKey = null
-        )
-
-        return MyEvent(
-            id = parentId,
-            title = course.name,
-            startDate = firstDate,
-            endDate = firstDate,
-            startTime = firstStartTime,
-            endTime = endNode?.endTime ?: "09:40",
-            location = course.location,
-            description = COURSE_RECURRING_META_PREFIX + json.encodeToString(meta),
-            color = course.color,
-            reminders = emptyList(),
-            tag = EventTags.COURSE,
-            isRecurring = true,
-            isRecurringParent = true,
-            recurringSeriesKey = seriesKey,
-            recurringInstanceKey = RecurringEventUtils.buildInstanceKey(seriesKey, firstStartMillis),
-            parentRecurringId = null,
-            excludedRecurringInstances = mergedExcluded,
-            nextOccurrenceStartMillis = firstStartMillis,
-            skipCalendarSync = false
-        )
-    }
-
-    fun buildDetachedInstanceDescription(
+    fun stableImportId(
+        name: String,
         teacher: String,
+        room: String,
+        dayOfWeek: Int,
         startNode: Int,
         endNode: Int,
-        parentSeriesKey: String
+        startWeek: Int,
+        endWeek: Int,
+        weekType: Int
     ): String {
-        val meta = CourseRecurringMeta(
-            teacher = teacher,
-            dayOfWeek = 1,
+        val raw = listOf(name, teacher, room, dayOfWeek, startNode, endNode, startWeek, endWeek, weekType)
+            .joinToString("|") { it.toString().trim() }
+        val digest = MessageDigest.getInstance("SHA-1").digest(raw.toByteArray())
+        return digest.take(10).joinToString("") { "%02x".format(it) }
+    }
+
+    fun buildParentDescription(meta: CourseMeta): String = COURSE_HEADER + json.encodeToString(meta.copy(v = 1))
+
+    fun buildDetachedInstanceDescription(
+        parentMeta: CourseMeta,
+        startNode: Int,
+        endNode: Int,
+        originalOccurrenceTs: Long,
+        originalWeek: Int,
+        originalDate: LocalDate
+    ): String {
+        val meta = parentMeta.copy(
             startNode = startNode,
             endNode = endNode,
-            startWeek = 1,
-            endWeek = 1,
-            weekType = 0,
-            parentSeriesKey = parentSeriesKey
+            parentCourseUid = parentMeta.uid,
+            originalOccurrenceTs = originalOccurrenceTs,
+            originalWeek = originalWeek,
+            originalDate = originalDate.toString()
         )
-        return COURSE_INSTANCE_META_PREFIX + json.encodeToString(meta)
+        return COURSE_HEADER + json.encodeToString(meta)
     }
 
-    fun detachedParentSeriesKey(event: MyEvent): String? {
-        val meta = parseRecurringMeta(event.description, COURSE_INSTANCE_META_PREFIX) ?: return null
-        return meta.parentSeriesKey
+    fun parseMeta(description: String?): CourseMeta? {
+        val text = description?.trim().orEmpty()
+        if (text.isBlank()) return null
+        val payload = when {
+            text.startsWith(COURSE_HEADER) -> text.removePrefix(COURSE_HEADER).trim()
+            text.startsWith(COURSE_ASCII_PREFIX) -> text.removePrefix(COURSE_ASCII_PREFIX).trim()
+            text.startsWith(LEGACY_RECURRING_PREFIX) -> text.removePrefix(LEGACY_RECURRING_PREFIX).trim()
+            text.startsWith(LEGACY_INSTANCE_PREFIX) -> text.removePrefix(LEGACY_INSTANCE_PREFIX).trim()
+            text.startsWith(LEGACY_TEMPLATE_PREFIX) -> text.removePrefix(LEGACY_TEMPLATE_PREFIX).trim()
+            else -> return null
+        }
+        return runCatching { json.decodeFromString<CourseMeta>(payload) }.getOrNull()
     }
 
-    fun extractCourses(events: List<MyEvent>, settings: MySettings): List<Course> {
-        val fromRecurringParents = events
-            .filter(::isCourseRecurringParentEvent)
-            .mapNotNull { toCourseFromRecurringParent(it, settings) }
-
-        val fromDetachedInstances = events
-            .filter(::isCourseDetachedInstanceEvent)
-            .mapNotNull { toCourseFromDetachedInstance(it, settings) }
-
-        val fromLegacyTemplates = events
-            .filter(::isCourseTemplateEvent)
-            .map { normalizeTemplateEvent(it) }
-            .mapNotNull { toLegacyCourse(it, settings) }
-
-        return (fromRecurringParents + fromDetachedInstances + fromLegacyTemplates)
-            .sortedBy { it.dayOfWeek * 100 + it.startNode }
+    fun displayDescription(description: String?, location: String = ""): String {
+        val meta = parseMeta(description) ?: return description.orEmpty()
+        return buildString {
+            if (meta.teacher.isNotBlank()) append(meta.teacher)
+            if (location.isNotBlank()) {
+                if (isNotEmpty()) append(" · ")
+                append(location)
+            }
+            if (meta.startNode > 0 && meta.endNode >= meta.startNode) {
+                if (isNotEmpty()) append(" · ")
+                append("第${meta.startNode}-${meta.endNode}节")
+            }
+        }
     }
 
-    private fun toLegacyCourse(event: MyEvent, settings: MySettings): Course? {
-        val meta = parseMeta(event.description)
-        val dayOfWeek = meta?.dayOfWeek ?: event.startDate.dayOfWeek.value
-        val startNode = meta?.startNode ?: 1
-        val endNode = meta?.endNode ?: startNode
-        val totalWeeks = settings.totalWeeks.coerceAtLeast(1)
+    fun toParentEvent(
+        course: Course,
+        settings: MySettings,
+        existingParent: Event? = null,
+        additionalExcludedOccurrenceTs: List<Long> = emptyList()
+    ): Event {
+        val courseId = newCourseId(course)
+        val normalized = course.copy(
+            id = courseId,
+            dayOfWeek = course.dayOfWeek.coerceIn(1, 7),
+            startNode = course.startNode.coerceAtLeast(1),
+            endNode = course.endNode.coerceAtLeast(course.startNode.coerceAtLeast(1)),
+            startWeek = course.startWeek.coerceAtLeast(1),
+            endWeek = course.endWeek.coerceAtLeast(course.startWeek.coerceAtLeast(1)),
+            weekType = course.weekType.coerceIn(0, 2)
+        )
+        val firstWeek = firstActiveWeek(normalized.startWeek, normalized.endWeek, normalized.weekType)
+            ?: normalized.startWeek
+        val firstDate = resolveOccurrenceDate(settings.semesterStartDate, normalized.dayOfWeek, firstWeek)
+        val (startTs, endTs) = mapNodesToEpochRange(
+            settings = settings,
+            date = firstDate,
+            startNode = normalized.startNode,
+            endNode = normalized.endNode
+        )
+        val occurrenceCount = occurrenceCount(normalized.startWeek, normalized.endWeek, normalized.weekType).coerceAtLeast(1)
+        val interval = if (normalized.weekType == 0) 1 else 2
+        val meta = CourseMeta(
+            uid = courseId,
+            teacher = normalized.teacher,
+            dayOfWeek = normalized.dayOfWeek,
+            startNode = normalized.startNode,
+            endNode = normalized.endNode,
+            startWeek = normalized.startWeek,
+            endWeek = normalized.endWeek,
+            weekType = normalized.weekType
+        )
+        val excludedDateOccurrenceTs = normalized.excludedDates.mapNotNull { dateText ->
+            runCatching { LocalDate.parse(dateText) }.getOrNull()?.let { date ->
+                mapNodesToEpochRange(settings, date, normalized.startNode, normalized.endNode).first
+            }
+        }
+        val exdates = (
+            existingParent?.exdates.orEmpty() +
+                excludedDateOccurrenceTs.map(::formatExdateUtc) +
+                additionalExcludedOccurrenceTs.map(::formatExdateUtc)
+            ).distinct()
 
-        return Course(
-            id = event.id,
-            name = event.title,
-            location = event.location,
-            teacher = meta?.teacher.orEmpty(),
-            color = event.color,
-            dayOfWeek = dayOfWeek,
-            startNode = startNode,
-            endNode = endNode,
-            startWeek = (meta?.startWeek ?: 1).coerceAtLeast(1),
-            endWeek = (meta?.endWeek ?: totalWeeks).coerceAtLeast(1),
-            weekType = meta?.weekType ?: 0,
-            excludedDates = meta?.excludedDates ?: emptyList(),
-            isTemp = meta?.isTemp ?: false,
-            parentCourseId = meta?.parentCourseId
+        return Event(
+            id = existingParent?.id,
+            startTS = startTs,
+            endTS = endTs,
+            title = normalized.name,
+            location = normalized.location,
+            description = buildParentDescription(meta),
+            reminder1Minutes = existingParent?.reminder1Minutes ?: REMINDER_OFF,
+            reminder2Minutes = existingParent?.reminder2Minutes ?: REMINDER_OFF,
+            reminder3Minutes = existingParent?.reminder3Minutes ?: REMINDER_OFF,
+            rrule = "FREQ=WEEKLY;INTERVAL=$interval;COUNT=$occurrenceCount",
+            exdates = exdates,
+            importId = existingParent?.importId ?: "",
+            timeZone = existingParent?.timeZone ?: ZoneId.systemDefault().id,
+            parentId = 0L,
+            lastUpdated = existingParent?.lastUpdated ?: 0L,
+            source = existingParent?.source ?: SOURCE_SIMPLE_CALENDAR,
+            color = normalized.color,
+            tag = EventTags.COURSE,
+            archivedAt = existingParent?.archivedAt
         )
     }
 
-    private fun toCourseFromRecurringParent(event: MyEvent, settings: MySettings): Course? {
-        val meta = parseRecurringMeta(event.description, COURSE_RECURRING_META_PREFIX) ?: return null
-        val seriesKey = event.recurringSeriesKey?.takeIf { it.isNotBlank() }
-            ?: event.id.removePrefix("recurring_parent_")
-        if (seriesKey.isBlank()) return null
-
-        val excludedDates = event.excludedRecurringInstances
-            .mapNotNull { key -> keyToDate(seriesKey, key) }
-            .distinct()
-
+    fun toCourse(parent: Event, settings: MySettings): Course? {
+        if (!isCourseParent(parent)) return null
+        val meta = parseMeta(parent.description) ?: return null
         return Course(
-            id = seriesKey,
-            name = event.title,
-            location = event.location,
+            id = meta.uid.ifBlank { parent.id?.toString().orEmpty() },
+            name = parent.title,
+            location = parent.location,
             teacher = meta.teacher,
-            color = event.color,
+            color = parent.color,
             dayOfWeek = meta.dayOfWeek.coerceIn(1, 7),
-            startNode = meta.startNode,
-            endNode = meta.endNode,
+            startNode = meta.startNode.coerceAtLeast(1),
+            endNode = meta.endNode.coerceAtLeast(meta.startNode.coerceAtLeast(1)),
             startWeek = meta.startWeek.coerceAtLeast(1),
             endWeek = meta.endWeek.coerceAtLeast(meta.startWeek.coerceAtLeast(1)),
-            weekType = meta.weekType,
-            excludedDates = excludedDates,
+            weekType = meta.weekType.coerceIn(0, 2),
+            excludedDates = parent.exdates.mapNotNull { exdateToLocalDate(it) },
             isTemp = false,
             parentCourseId = null
         )
     }
 
-    private fun toCourseFromDetachedInstance(event: MyEvent, settings: MySettings): Course? {
-        val meta = parseRecurringMeta(event.description, COURSE_INSTANCE_META_PREFIX) ?: return null
-        val targetWeek = calculateTargetWeek(settings.semesterStartDate, event.startDate)
-        return Course(
-            id = event.id,
-            name = event.title,
-            location = event.location,
-            teacher = meta.teacher,
-            color = event.color,
-            dayOfWeek = event.startDate.dayOfWeek.value,
-            startNode = meta.startNode,
-            endNode = meta.endNode,
-            startWeek = targetWeek,
-            endWeek = targetWeek,
-            weekType = 0,
-            excludedDates = emptyList(),
-            isTemp = true,
-            parentCourseId = meta.parentSeriesKey
-        )
+    fun extractParentCourses(events: List<Event>, settings: MySettings): List<Course> {
+        return events.mapNotNull { toCourse(it, settings) }
+            .sortedBy { it.dayOfWeek * 100 + it.startNode }
     }
 
-    private fun parseMeta(description: String): CourseMeta? {
-        if (!description.startsWith(LEGACY_COURSE_META_PREFIX)) return null
-        val payload = description.removePrefix(LEGACY_COURSE_META_PREFIX)
-        return runCatching { json.decodeFromString<CourseMeta>(payload) }.getOrNull()
+    fun findParentByCourseId(events: List<Event>, courseId: String): Event? {
+        return events.firstOrNull { event ->
+            isCourseParent(event) && parseMeta(event.description)?.uid == courseId
+        }
     }
 
-    private fun parseRecurringMeta(description: String, prefix: String): CourseRecurringMeta? {
-        if (!description.startsWith(prefix)) return null
-        val payload = description.removePrefix(prefix)
-        return runCatching { json.decodeFromString<CourseRecurringMeta>(payload) }.getOrNull()
+    fun childOriginalWeek(child: Event, settings: MySettings): Int? {
+        val meta = parseMeta(child.description)
+        meta?.originalWeek?.takeIf { it > 0 }?.let { return it }
+        val originalTs = meta?.originalOccurrenceTs?.takeIf { it > 0 } ?: child.startTS
+        val originalDate = Instant.ofEpochSecond(originalTs).atZone(ZoneId.systemDefault()).toLocalDate()
+        return calculateSemesterWeek(settings.semesterStartDate, originalDate).takeIf { it > 0 }
     }
 
-    private fun parseSemesterStart(value: String): LocalDate {
-        return resolveSemesterAnchor(value)
+    fun occurrenceTsForWeek(course: Course, settings: MySettings, week: Int): Long? {
+        if (week !in course.startWeek..course.endWeek) return null
+        if (course.weekType == 1 && week % 2 == 0) return null
+        if (course.weekType == 2 && week % 2 != 0) return null
+        val date = resolveOccurrenceDate(settings.semesterStartDate, course.dayOfWeek, week)
+        return toEpochSeconds(date, nodeStartTime(settings, course.startNode))
     }
 
-    private fun resolveFirstOccurrenceDate(semesterStart: LocalDate, dayOfWeek: Int, startWeek: Int): LocalDate {
+    fun mapNodesToEpochRange(
+        settings: MySettings,
+        date: LocalDate,
+        startNode: Int,
+        endNode: Int
+    ): Pair<Long, Long> {
+        val safeStartNode = startNode.coerceAtLeast(1)
+        val safeEndNode = endNode.coerceAtLeast(safeStartNode)
+        val startTime = nodeStartTime(settings, safeStartNode)
+        val endTime = nodeEndTime(settings, safeEndNode, startTime)
+        val startTs = toEpochSeconds(date, startTime)
+        val endTs = toEpochSeconds(date, endTime).let { if (it > startTs) it else startTs + 45 * 60 }
+        return startTs to endTs
+    }
+
+    fun resolveOccurrenceDate(semesterStartDate: String?, dayOfWeek: Int, week: Int): LocalDate {
+        val semesterStart = resolveSemesterAnchor(semesterStartDate)
         val target = DayOfWeek.of(dayOfWeek.coerceIn(1, 7))
         var date = semesterStart
         while (date.dayOfWeek != target) {
             date = date.plusDays(1)
         }
-        val weekOffset = (startWeek.coerceAtLeast(1) - 1) * 7L
-        return date.plusDays(weekOffset)
+        return date.plusWeeks((week.coerceAtLeast(1) - 1).toLong())
     }
 
-    private fun parseTimeNodes(jsonText: String): List<TimeNode> {
-        if (jsonText.isBlank()) return emptyList()
-        return runCatching { json.decodeFromString<List<TimeNode>>(jsonText) }.getOrElse { emptyList() }
+    fun nodeStartTime(settings: MySettings, nodeIndex: Int): String {
+        val nodes = resolveNodes(settings)
+        return nodes.firstOrNull { it.index == nodeIndex }?.startTime ?: "08:00"
     }
 
-    private fun toDetachedInstanceEvent(course: Course, settings: MySettings): MyEvent {
-        val timeNodes = parseTimeNodes(settings.timeTableJson)
-        val startNode = timeNodes.find { it.index == course.startNode }
-        val endNode = timeNodes.find { it.index == course.endNode }
-        val semesterStart = parseSemesterStart(settings.semesterStartDate)
-        val targetDate = resolveFirstOccurrenceDate(semesterStart, course.dayOfWeek, course.startWeek)
-        val parentSeriesKey = course.parentCourseId.orEmpty()
-
-        return MyEvent(
-            id = course.id,
-            title = course.name,
-            startDate = targetDate,
-            endDate = targetDate,
-            startTime = startNode?.startTime ?: "08:00",
-            endTime = endNode?.endTime ?: "09:40",
-            location = course.location,
-            description = buildDetachedInstanceDescription(
-                teacher = course.teacher,
-                startNode = course.startNode,
-                endNode = course.endNode,
-                parentSeriesKey = parentSeriesKey
-            ),
-            color = course.color,
-            reminders = emptyList(),
-            tag = EventTags.COURSE,
-            skipCalendarSync = false
-        )
+    fun nodeEndTime(settings: MySettings, nodeIndex: Int, fallbackStart: String = "08:00"): String {
+        val nodes = resolveNodes(settings)
+        return nodes.firstOrNull { it.index == nodeIndex }?.endTime ?: runCatching {
+            LocalTime.parse(fallbackStart).plusMinutes(TimeTableLayoutUtils.DEFAULT_COURSE_DURATION_MINUTES.toLong()).toString()
+        }.getOrDefault("09:40")
     }
 
-    private fun toMillis(date: LocalDate, time: String): Long {
+    fun formatExdateUtc(occurrenceTs: Long): String = exdateFormatter.format(Instant.ofEpochSecond(occurrenceTs))
+
+    private fun exdateToLocalDate(exdate: String): String? {
         return runCatching {
-            java.time.LocalDateTime.of(date, java.time.LocalTime.parse(time))
-                .atZone(java.time.ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        }.getOrElse { System.currentTimeMillis() }
-    }
-
-    private fun excludedDatesToKeys(seriesKey: String, excludedDates: List<String>, startTime: String): List<String> {
-        return excludedDates.mapNotNull { dateStr ->
-            runCatching { LocalDate.parse(dateStr) }.getOrNull()?.let { date ->
-                val startMillis = toMillis(date, startTime)
-                RecurringEventUtils.buildInstanceKey(seriesKey, startMillis)
-            }
-        }
-    }
-
-    private fun keyToDate(seriesKey: String, key: String): String? {
-        val prefix = "${seriesKey}_"
-        if (!key.startsWith(prefix)) return null
-        val millis = key.removePrefix(prefix).toLongOrNull() ?: return null
-        return runCatching {
-            java.time.Instant.ofEpochMilli(millis)
-                .atZone(java.time.ZoneId.systemDefault())
+            Instant.from(exdateFormatter.parse(exdate.trim()))
+                .atZone(ZoneId.systemDefault())
                 .toLocalDate()
                 .toString()
         }.getOrNull()
     }
 
-    private fun calculateTargetWeek(semesterStartDate: String, targetDate: LocalDate): Int {
-        val semesterStart = parseSemesterStart(semesterStartDate)
-        val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(semesterStart, targetDate)
-        return (daysDiff / 7).toInt() + 1
+    private fun resolveNodes(settings: MySettings) =
+        TimeTableLayoutUtils.parseNodes(settings.timeTableJson).takeIf { it.isNotEmpty() }
+            ?: TimeTableLayoutUtils.generateNodes(TimeTableLayoutUtils.defaultConfig())
+
+    private fun firstActiveWeek(startWeek: Int, endWeek: Int, weekType: Int): Int? {
+        return (startWeek..endWeek).firstOrNull { week ->
+            weekType == 0 || (weekType == 1 && week % 2 != 0) || (weekType == 2 && week % 2 == 0)
+        }
     }
 
-    @Serializable
-    private data class CourseMeta(
-        val teacher: String = "",
-        val dayOfWeek: Int,
-        val startNode: Int,
-        val endNode: Int,
-        val startWeek: Int,
-        val endWeek: Int,
-        val weekType: Int,
-        val excludedDates: List<String> = emptyList(),
-        val isTemp: Boolean = false,
-        val parentCourseId: String? = null
-    )
-
-    @Serializable
-    private data class CourseRecurringMeta(
-        val teacher: String = "",
-        val dayOfWeek: Int,
-        val startNode: Int,
-        val endNode: Int,
-        val startWeek: Int,
-        val endWeek: Int,
-        val weekType: Int,
-        val parentSeriesKey: String? = null
-    )
+    private fun occurrenceCount(startWeek: Int, endWeek: Int, weekType: Int): Int {
+        return (startWeek..endWeek).count { week ->
+            weekType == 0 || (weekType == 1 && week % 2 != 0) || (weekType == 2 && week % 2 == 0)
+        }
+    }
 }
+
+@Serializable
+data class CourseMeta(
+    val v: Int = 1,
+    val uid: String = "",
+    val teacher: String = "",
+    val dayOfWeek: Int = 1,
+    val startNode: Int = 1,
+    val endNode: Int = 1,
+    val startWeek: Int = 1,
+    val endWeek: Int = 1,
+    val weekType: Int = 0,
+    val parentCourseUid: String? = null,
+    val originalOccurrenceTs: Long? = null,
+    val originalWeek: Int? = null,
+    val originalDate: String? = null
+)

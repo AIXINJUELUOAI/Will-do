@@ -3,8 +3,9 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.core.query.DailySummaryPayload
 import com.antgskds.calendarassistant.core.query.DailySummaryQueryApi
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.WeatherData
 import java.time.LocalDate
@@ -13,7 +14,7 @@ class LocalDailySummaryQueryApi : DailySummaryQueryApi {
     override fun buildPayload(
         isMorning: Boolean,
         settings: MySettings,
-        events: List<MyEvent>,
+        events: List<Event>,
         weatherData: WeatherData?
     ): DailySummaryPayload? {
         if (!settings.isDailySummaryEnabled) return null

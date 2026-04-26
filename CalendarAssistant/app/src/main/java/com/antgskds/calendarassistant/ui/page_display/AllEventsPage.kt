@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.compose.foundation.layout.*
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -13,10 +14,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
-import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
@@ -25,7 +26,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AllEventsPage(
     viewModel: MainViewModel,
-    onEditEvent: (MyEvent) -> Unit,
+    onEditItem: (ScheduleDisplayItem) -> Unit,
+    onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
     searchQuery: String = "",
@@ -33,32 +35,28 @@ fun AllEventsPage(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val today = LocalDate.now()
-    val futureLimit = today.plusDays(7)
 
     // 核心过滤逻辑
-    val filteredEvents by remember(uiState.allEvents, searchQuery, today) {
+    val filteredItems by remember(uiState.allScheduleItems, searchQuery, today) {
         derivedStateOf {
-            uiState.allEvents
-                .filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
-                .filter { event -> !event.isRecurringParent }
-                .filter { event -> !event.startDate.isAfter(futureLimit) }
-                .distinctBy { it.id }
-                .filter { event ->
-                // 搜索匹配
+            uiState.allScheduleItems
+                .filter { it.tag != EventTags.NOTE }
+                .distinctBy { it.stableKey }
+                .filter { item ->
                 val searchMatch = if (searchQuery.isBlank()) true else {
-                    event.title.contains(searchQuery, ignoreCase = true) ||
-                            event.description.contains(searchQuery, ignoreCase = true) ||
-                            event.location.contains(searchQuery, ignoreCase = true)
+                    item.title.contains(searchQuery, ignoreCase = true) ||
+                            item.description.contains(searchQuery, ignoreCase = true) ||
+                            item.location.contains(searchQuery, ignoreCase = true)
                 }
                 searchMatch
             }.sortedWith { a, b ->
-                val aExpired = DateCalculator.isEventExpired(a)
-                val bExpired = DateCalculator.isEventExpired(b)
+                val now = java.time.LocalDateTime.now()
+                val aExpired = try { java.time.LocalDateTime.of(a.endDate, a.endLocalTime).isBefore(now) } catch (_: Exception) { false }
+                val bExpired = try { java.time.LocalDateTime.of(b.endDate, b.endLocalTime).isBefore(now) } catch (_: Exception) { false }
                 when {
                     aExpired != bExpired -> if (aExpired) 1 else -1
-                    a.isImportant != b.isImportant -> if (a.isImportant) -1 else 1
                     else -> {
-                        fun dateKey(e: MyEvent, expired: Boolean): Long {
+                        fun dateKey(e: ScheduleDisplayItem, expired: Boolean): Long {
                             val started = e.startDate.isBefore(today) || e.startDate == today
                             return when {
                                 expired -> -e.endDate.toEpochDay()
@@ -76,8 +74,8 @@ fun AllEventsPage(
     }
 
     // 按日期分组（用于显示日期分割线）
-    val groupedEvents = remember(filteredEvents) {
-        filteredEvents.groupBy { it.startDate }
+    val groupedItems = remember(filteredItems) {
+        filteredItems.groupBy { it.startDate }
     }
 
     // 🔥 直接是一个 Column，没有 Scaffold 了
@@ -89,7 +87,7 @@ fun AllEventsPage(
         val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
 
         // 列表内容
-        if (filteredEvents.isEmpty()) {
+        if (filteredItems.isEmpty()) {
             // 空状态居中显示
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.align(Alignment.Center)) {
@@ -113,7 +111,7 @@ fun AllEventsPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 按日期分组显示
-                groupedEvents.forEach { (date, events) ->
+                groupedItems.forEach { (date, events) ->
                     // 日期分割线头部
                     item(key = "header_${date}") {
                         val headerText = if (date.year == currentYear) {
@@ -131,30 +129,19 @@ fun AllEventsPage(
                     }
 
                     // 该日期下的所有事件
-                    items(events, key = { it.id }) { event ->
+                    items(events, key = { it.stableKey }) { item ->
                         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                            // 重复日程显示下次发生时间
-                            if (event.isRecurringParent) {
-                                Text(
-                                    text = "下次：${RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis) ?: "暂无未来实例"}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                            }
-
-                            // 滑动组件
                             SwipeableEventItem(
-                                event = event,
-                                isRevealed = uiState.revealedEventId == event.id,
-                                onExpand = { viewModel.onRevealEvent(event.id) },
-                                onCollapse = { viewModel.onRevealEvent(null) },
-                                onDelete = { viewModel.deleteEvent(event) },
-                                onImportant = { viewModel.toggleImportant(event) },
-                                onEdit = { onEditEvent(event) },
+                                item = item,
+                                isRevealed = uiState.revealedItemKey == item.stableKey,
+                                onExpand = { viewModel.onRevealItem(item.stableKey) },
+                                onCollapse = { viewModel.onRevealItem(null) },
+                                onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
+                                onEdit = { onEditItem(item) },
+                                onLongPress = { onRequestDeleteItem(item) },
                                 uiSize = uiSize,
                                 isArchivePage = false,
-                                onArchive = { viewModel.archiveEvent(it.id) }
+                                onArchive = { viewModel.archiveItem(item.action) }
                             )
                         }
                     }

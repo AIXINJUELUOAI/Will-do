@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.data.db.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -13,7 +12,7 @@ object RuleIconResolver {
 
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
-            val rules = AppDatabase.getInstance(context.applicationContext).eventRuleDao().getAll()
+            val rules = com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules()
             val updated = mutableMapOf<String, Int>()
             rules.forEach { rule ->
                 val fallbackResName = buildFallbackResName(rule.ruleId)

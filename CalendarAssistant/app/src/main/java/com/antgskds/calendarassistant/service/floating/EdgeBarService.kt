@@ -204,7 +204,7 @@ class EdgeBarService : Service() {
 
     private fun buildBackground(settings: MySettings, widthPx: Int, heightPx: Int): GradientDrawable {
         val baseColor = resolveThemeColor(settings)
-        val alpha = (settings.edgeBarAlpha.coerceIn(0.1f, 1f) * 255).toInt()
+        val alpha = (settings.edgeBarAlpha.coerceIn(0f, 1f) * 255).toInt()
         val color = Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
         return GradientDrawable().apply {
             setColor(color)

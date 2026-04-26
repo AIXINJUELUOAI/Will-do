@@ -15,7 +15,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
@@ -258,7 +258,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                     RuleMatchingEngine.RULE_FLIGHT -> R.drawable.ic_stat_flight
                     RuleMatchingEngine.RULE_TICKET -> R.drawable.ic_stat_ticket
                     RuleMatchingEngine.RULE_SENDER -> R.drawable.ic_stat_sender
-                    EventTags.COURSE -> R.drawable.ic_stat_course
+                    RuleMatchingEngine.RULE_COURSE, EventTags.COURSE, "__removed_course__" -> R.drawable.ic_stat_course
                     RuleMatchingEngine.RULE_GENERAL, EventTags.GENERAL -> R.drawable.ic_stat_event
                     else -> R.drawable.ic_stat_event
                 }

@@ -35,11 +35,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
+import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun PreferenceSettingsPage(
@@ -58,6 +61,7 @@ fun PreferenceSettingsPage(
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showSourceCalendarSheet by remember { mutableStateOf(false) }
+    var showEventDurationPicker by remember { mutableStateOf(false) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -149,7 +153,7 @@ fun PreferenceSettingsPage(
         val allGranted = permissions.values.all { it }
         if (allGranted) {
             viewModel.enableCalendarSyncAndSyncNow { result ->
-                (context.applicationContext as? App)?.initCalendarObserver()
+                // initCalendarObserver removed - sync handled by StoreRootNode
                 viewModel.refreshSyncCalendars()
                 if (result.isSuccess) {
                     snackbarHostState.showSnackbar("日历同步已开启，并已立即同步")
@@ -385,9 +389,9 @@ fun PreferenceSettingsPage(
                                     title = "纵向位置",
                                     subtitle = "上下位置百分比",
                                     value = settings.edgeBarYPercent,
-                                    onValueChange = { viewModel.updateEdgeBarSettings(yPercent = it) },
+                                    onValueChange = { viewModel.updateEdgeBarSettings(yPercent = it.roundToInt().toFloat()) },
                                     valueRange = 0f..100f,
-                                    steps = 9,
+                                    steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle,
@@ -399,9 +403,9 @@ fun PreferenceSettingsPage(
                                     title = "宽度",
                                     subtitle = "侧边条宽度",
                                     value = settings.edgeBarWidthDp.toFloat(),
-                                    onValueChange = { viewModel.updateEdgeBarSettings(widthDp = it.toInt()) },
+                                    onValueChange = { viewModel.updateEdgeBarSettings(widthDp = it.roundToInt()) },
                                     valueRange = 4f..20f,
-                                    steps = 15,
+                                    steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle,
@@ -413,9 +417,9 @@ fun PreferenceSettingsPage(
                                     title = "高度",
                                     subtitle = "侧边条高度",
                                     value = settings.edgeBarHeightDp.toFloat(),
-                                    onValueChange = { viewModel.updateEdgeBarSettings(heightDp = it.toInt()) },
+                                    onValueChange = { viewModel.updateEdgeBarSettings(heightDp = it.roundToInt()) },
                                     valueRange = 60f..240f,
-                                    steps = 17,
+                                    steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle,
@@ -425,11 +429,11 @@ fun PreferenceSettingsPage(
 
                                 SliderSettingItem(
                                     title = "颜色深浅",
-                                    subtitle = "调整透明度",
+                                    subtitle = "调整透明度，0% 时完全透明",
                                     value = (settings.edgeBarAlpha * 100f),
-                                    onValueChange = { viewModel.updateEdgeBarSettings(alpha = it / 100f) },
-                                    valueRange = 10f..100f,
-                                    steps = 8,
+                                    onValueChange = { viewModel.updateEdgeBarSettings(alpha = it.roundToInt() / 100f) },
+                                    valueRange = 0f..100f,
+                                    steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle,
@@ -684,7 +688,7 @@ fun PreferenceSettingsPage(
                             if (isChecked) {
                                 if (app?.permissionCenter?.hasCalendarPermissions(context) == true) {
                                     viewModel.enableCalendarSyncAndSyncNow { result ->
-                                        (context.applicationContext as? App)?.initCalendarObserver()
+                                        // initCalendarObserver removed - sync handled by StoreRootNode
                                         if (result.isSuccess) {
                                             showToast("日历同步已开启，并已立即同步")
                                         } else {
@@ -735,6 +739,29 @@ fun PreferenceSettingsPage(
                                 cardSubtitleStyle = cardSubtitleStyle,
                                 cardValueStyle = cardValueStyle
                             )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+
+                            SliderSettingItem(
+                                title = "兜底同步频率",
+                                subtitle = "仅作兜底轮询，优先即时监听",
+                                value = syncStatus.syncIntervalSeconds.toFloat(),
+                                onValueChange = { seconds ->
+                                    viewModel.updateSyncIntervalSeconds(seconds.toInt())
+                                },
+                                valueRange = 1f..300f,
+                                steps = 0,
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle,
+                                showValueAsNumber = true,
+                                valueUnit = "s"
+                            )
+
                         }
                     }
 
@@ -752,6 +779,21 @@ fun PreferenceSettingsPage(
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    EventDurationSettingItem(
+                        title = "日程默认持续时间",
+                        subtitle = "所有识别日程都按该时长生成结束时间",
+                        durationMinutes = settings.defaultEventDurationMinutes,
+                        onClick = { showEventDurationPicker = true },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle
                     )
                 }
             }
@@ -839,6 +881,17 @@ fun PreferenceSettingsPage(
                 }
             )
         }
+
+        if (showEventDurationPicker) {
+            EventDurationPickerDialog(
+                selectedDuration = settings.defaultEventDurationMinutes,
+                onDismiss = { showEventDurationPicker = false },
+                onConfirm = { duration ->
+                    viewModel.updatePreference(defaultEventDurationMinutes = duration)
+                    showEventDurationPicker = false
+                }
+            )
+        }
     }
 }
 
@@ -895,7 +948,7 @@ private fun ActionSettingItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SourceCalendarPickerSheet(
-    calendars: List<com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo>,
+    calendars: List<com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo>,
     initialSelection: Set<Long>,
     onDismiss: () -> Unit,
     onConfirm: (List<Long>) -> Unit
@@ -999,7 +1052,7 @@ private fun SourceCalendarPickerSheet(
 
 private fun formatSelectedCalendarSummary(
     selectedIds: List<Long>,
-    selectedCalendars: List<com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo>
+    selectedCalendars: List<com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo>
 ): String {
     if (selectedIds.isEmpty()) {
         return "请选择需要从系统同步进 APP 的日历"
@@ -1018,7 +1071,7 @@ private fun formatSelectedCalendarSummary(
 }
 
 private fun buildAccountGroupTitle(
-    calendar: com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo
+    calendar: com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo
 ): String {
     val accountName = calendar.accountName?.takeIf { it.isNotBlank() } ?: "本地账户"
     val accountType = calendar.accountType?.takeIf { it.isNotBlank() }
@@ -1030,7 +1083,7 @@ private fun buildAccountGroupTitle(
 }
 
 private fun buildCalendarMetaLine(
-    calendar: com.antgskds.calendarassistant.core.calendar.CalendarManager.CalendarInfo
+    calendar: com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo
 ): String {
     val tags = mutableListOf<String>()
     if (!calendar.isVisible) tags += "已隐藏"
@@ -1204,6 +1257,81 @@ fun AdvanceReminderSettingItem(
             }
         }
     }
+}
+
+private data class EventDurationOption(
+    val minutes: Int,
+    val label: String
+)
+
+private val EVENT_DURATION_OPTIONS = listOf(
+    EventDurationOption(60, "1小时"),
+    EventDurationOption(120, "2小时"),
+    EventDurationOption(180, "3小时"),
+    EventDurationOption(360, "6小时"),
+    EventDurationOption(-1, "今天结束")
+)
+
+private fun formatEventDuration(minutes: Int): String {
+    return EVENT_DURATION_OPTIONS.firstOrNull { it.minutes == minutes }?.label ?: "1小时"
+}
+
+@Composable
+fun EventDurationSettingItem(
+    title: String,
+    subtitle: String,
+    durationMinutes: Int,
+    onClick: () -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle
+) {
+    ActionSettingItem(
+        title = title,
+        subtitle = subtitle,
+        value = formatEventDuration(durationMinutes),
+        enabled = true,
+        onClick = onClick,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+        cardValueStyle = cardValueStyle
+    )
+}
+
+@Composable
+private fun EventDurationPickerDialog(
+    selectedDuration: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val defaultIndex = EVENT_DURATION_OPTIONS.indexOfFirst { it.minutes == selectedDuration }
+        .takeIf { it >= 0 } ?: 0
+    var selectedIndex by remember(selectedDuration) { mutableIntStateOf(defaultIndex) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { CenteredDialogTitle("日程默认持续时间") },
+        text = {
+            WheelPicker(
+                items = EVENT_DURATION_OPTIONS.map { it.label },
+                initialIndex = defaultIndex,
+                onSelectionChanged = { selectedIndex = it }
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(EVENT_DURATION_OPTIONS[selectedIndex].minutes) }) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
 }
 
 @Composable
