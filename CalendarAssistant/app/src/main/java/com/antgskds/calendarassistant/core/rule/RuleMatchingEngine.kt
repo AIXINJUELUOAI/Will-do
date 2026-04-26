@@ -1,7 +1,8 @@
 package com.antgskds.calendarassistant.core.rule
 
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 
 object RuleMatchingEngine {
     const val RULE_GENERAL = "general"
@@ -12,6 +13,7 @@ object RuleMatchingEngine {
     const val RULE_FLIGHT = "flight"
     const val RULE_TICKET = "ticket"
     const val RULE_SENDER = "sender"
+    const val RULE_COURSE = "course"
 
     data class RulePayload(
         val ruleId: String,
@@ -19,7 +21,7 @@ object RuleMatchingEngine {
         val rawHeader: String?
     )
 
-    fun resolvePayload(event: MyEvent): RulePayload? {
+    fun resolvePayload(event: Event): RulePayload? {
         if (event.tag == EventTags.NOTE) return null
         val fallbackRuleId = when (event.tag) {
             EventTags.PICKUP -> RULE_PICKUP
@@ -29,6 +31,7 @@ object RuleMatchingEngine {
             EventTags.FLIGHT -> RULE_FLIGHT
             EventTags.TICKET -> RULE_TICKET
             EventTags.SENDER -> RULE_SENDER
+            EventTags.COURSE -> RULE_COURSE
             else -> null
         }
         return resolvePayload(event.description, fallbackRuleId)
@@ -104,6 +107,7 @@ object RuleMatchingEngine {
             "flight", "航班", "飞机" -> RULE_FLIGHT
             "ticket", "取票" -> RULE_TICKET
             "sender", "寄件" -> RULE_SENDER
+            "course", "课程" -> RULE_COURSE
             "general", "日程" -> RULE_GENERAL
             else -> {
                 val lower = header.lowercase()

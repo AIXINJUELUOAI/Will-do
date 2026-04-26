@@ -24,6 +24,7 @@ data class MySettings(
 
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true, // 旧版默认为 true
+    val defaultEventDurationMinutes: Int = 60,
     val screenshotDelayMs: Long = 1000L,
     val isLiveCapsuleEnabled: Boolean = false,
 

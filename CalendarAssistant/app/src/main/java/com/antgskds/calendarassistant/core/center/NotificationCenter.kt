@@ -10,7 +10,8 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 
 class NotificationCenter(
@@ -20,7 +21,7 @@ class NotificationCenter(
         private const val TAG = "NotificationCenter"
     }
 
-    fun showStandardNotificationForEvent(event: MyEvent, label: String = "日程开始") {
+    fun showStandardNotificationForEvent(event: Event, label: String = "日程开始") {
         val channelId = App.CHANNEL_ID_POPUP
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val tapIntent = Intent(appContext, MainActivity::class.java).apply {
@@ -28,7 +29,7 @@ class NotificationCenter(
         }
         val pendingIntent = PendingIntent.getActivity(
             appContext,
-            event.id.hashCode(),
+            (event.id ?: 0L).hashCode(),
             tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -71,11 +72,11 @@ class NotificationCenter(
             if (actionButton != null) {
                 val actionIntent = Intent(appContext, EventActionReceiver::class.java).apply {
                     action = actionButton.intentAction
-                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, event.id)
+                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, event.idString)
                 }
                 val pendingAction = PendingIntent.getBroadcast(
                     appContext,
-                    event.id.hashCode() + 100,
+                    (event.id ?: 0L).hashCode() + 100,
                     actionIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
@@ -85,7 +86,7 @@ class NotificationCenter(
             Log.e(TAG, "检查事件状态失败: ${e.message}")
         }
 
-        manager.notify(event.id.hashCode(), builder.build())
+        manager.notify((event.id ?: 0L).hashCode(), builder.build())
     }
 
     fun showStandardNotification(
@@ -114,7 +115,7 @@ class NotificationCenter(
         val app = appContext as? App
         val scheduleCenter = app?.scheduleCenter
         val eventActionQueryApi = app?.eventActionQueryApi
-        val matchedEvent = scheduleCenter?.events?.value?.find { it.id == eventId }
+        val matchedEvent = scheduleCenter?.events?.value?.find { it.id == eventId.toLongOrNull() }
 
         val effectiveRuleId = eventActionQueryApi?.resolveEffectiveRuleId(
             intentRuleId = eventRuleId,

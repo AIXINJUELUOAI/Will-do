@@ -1,19 +1,18 @@
 package com.antgskds.calendarassistant.core.capsule
 
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import androidx.compose.ui.graphics.toArgb
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.CourseManager
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.core.util.OsUtils
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
@@ -45,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 胶囊状态管理器 - 主动唤醒模式
  */
 class CapsuleStateManager(
-    private val scheduleQueryApi: ScheduleQueryApi,
+    private val scheduleCenter: ScheduleCenter,
     private val settingsQueryApi: SettingsQueryApi,
     private val appScope: CoroutineScope,
     private val context: Context
@@ -324,7 +323,7 @@ class CapsuleStateManager(
 
         // combine 只支持最多 5 个流，需要嵌套 combine
         val baseCombine = combine(
-            scheduleQueryApi.events,
+            scheduleCenter.events,
             settingsQueryApi.settings,
             tickerTrigger,
             forceRefreshTrigger
@@ -344,7 +343,7 @@ class CapsuleStateManager(
     }
 
     private fun computeCapsuleState(
-        events: List<MyEvent>,
+        events: List<Event>,
         settings: MySettings,
         networkSpeed: NetworkSpeedMonitor.NetworkSpeed?,
         ocrCapsule: OcrCapsuleState?
@@ -407,21 +406,19 @@ class CapsuleStateManager(
     }
 
     private fun computeScheduleCapsules(
-        events: List<MyEvent>,
+        events: List<Event>,
         settings: MySettings
     ): List<CapsuleUiState.Active.CapsuleItem> {
 
         val now = LocalDateTime.now()
         val today = LocalDate.now()
 
-        val courses = CourseEventMapper.extractCourses(events, settings)
-        val todayCourses = CourseManager.getDailyCourses(today, courses, settings)
-        val allEvents = (events + todayCourses)
+        val allEvents = events
 
         // 4. 过滤活跃事件
         val activeEvents = allEvents.filter { event ->
             try {
-                if (event.isRecurringParent) {
+                if (event.isRecurring) {
                     return@filter false
                 }
                 if (event.tag == EventTags.NOTE) {
@@ -468,12 +465,12 @@ class CapsuleStateManager(
             val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired)
 
             capsules.add(createCapsuleItem(
-                id = event.id,
-                notifId = event.id.hashCode(),
+                id = event.idString,
+                notifId = (event.id ?: 0L).hashCode(),
                 type = TYPE_SCHEDULE,
                 eventType = resolveCapsuleEventType(event),
                 description = event.description,
-                color = event.color.toArgb(),
+                color = event.color,
                 startMillis = toMillis(event, event.startTime),
                 endMillis = toMillis(event, event.endTime),
                 display = display
@@ -531,14 +528,14 @@ class CapsuleStateManager(
                 }
 
                 // 4. ID 保持稳定，不再 +1
-                val dynamicNotifId = event.id.hashCode()
+                val dynamicNotifId = (event.id ?: 0L).hashCode()
                 val display = CapsuleMessageComposer.composePickup(context, event, isExpired)
 
                 // ✅ 详细日志：输出生成的胶囊信息
                 Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=${display.shortText}")
 
                 capsules.add(createCapsuleItem(
-                    id = event.id,
+                    id = event.idString,
                     notifId = dynamicNotifId, // ID 保持不变
                     type = capsuleType,
                     eventType = RuleMatchingEngine.RULE_PICKUP,
@@ -582,15 +579,15 @@ class CapsuleStateManager(
         )
     }
 
-    private fun resolveCapsuleEventType(event: MyEvent): String {
-        return if (event.tag == EventTags.COURSE) {
-            EventTags.COURSE
+    private fun resolveCapsuleEventType(event: Event): String {
+        return if (event.tag == EventTags.COURSE || event.tag == "__removed_course__") {
+            RuleMatchingEngine.RULE_COURSE
         } else {
             resolveRuleId(event)
         }
     }
 
-    private fun resolveRuleId(event: MyEvent): String {
+    private fun resolveRuleId(event: Event): String {
         val parsedRuleId = RuleMatchingEngine.resolvePayload(event)?.ruleId
         if (!parsedRuleId.isNullOrBlank()) {
             return parsedRuleId
@@ -604,11 +601,11 @@ class CapsuleStateManager(
         }
     }
 
-    private fun isPickupRule(event: MyEvent): Boolean {
+    private fun isPickupRule(event: Event): Boolean {
         return resolveRuleId(event) == RuleMatchingEngine.RULE_PICKUP
     }
 
-    private fun toMillis(event: MyEvent, timeStr: String): Long {
+    private fun toMillis(event: Event, timeStr: String): Long {
         return try {
             // 修复：时间必须对应正确的日期
             // startTime 对应 startDate，endTime 对应 endDate

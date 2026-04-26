@@ -61,7 +61,7 @@ class SettingsDataSource(context: Context) {
             prefs.edit()
                 .putString(KEY_JSON, jsonString)
                 .putInt(KEY_UI_SIZE_INDEPENDENT, settings.uiSize)
-                .apply()
+                .commit()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -94,7 +94,8 @@ class SettingsDataSource(context: Context) {
 
             semesterStartDate = prefs.getString("semester_start_date", "") ?: "",
             totalWeeks = prefs.getInt("semester_total_weeks", 20),
-            timeTableJson = prefs.getString("time_table_json", "") ?: ""
+            timeTableJson = prefs.getString("time_table_json", "") ?: "",
+            timeTableConfigJson = prefs.getString("time_table_config_json", "") ?: ""
         )
     }
 }

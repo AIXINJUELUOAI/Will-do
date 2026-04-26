@@ -1,16 +1,17 @@
 package com.antgskds.calendarassistant.core.query
 
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
 
 interface ScheduleInsightsQueryApi {
-    fun hasDuplicateAdvanceReminder(events: List<MyEvent>, minutes: Int): Boolean
+    fun hasDuplicateAdvanceReminder(events: List<Event>, minutes: Int): Boolean
 
     fun findNextRecurringInstance(
-        events: List<MyEvent>,
-        parentEventId: String,
+        events: List<Event>,
+        parentEventId: Long,
         nowMillis: Long = System.currentTimeMillis()
-    ): MyEvent?
+    ): Event?
 
     fun calculateTargetWeek(
         semesterStartDate: String,

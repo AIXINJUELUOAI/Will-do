@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.core.center
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncScheduler
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
@@ -44,7 +43,6 @@ class RuntimeCenter(
     }
 
     fun startPeriodicSync() {
-        CalendarReverseSyncScheduler.schedule(appContext)
     }
 
     fun scheduleDailySummary() {

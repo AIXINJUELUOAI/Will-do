@@ -1,23 +1,22 @@
 package com.antgskds.calendarassistant.core.center
 
+import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
 
 class ImportCenter(
-    private val scheduleCenter: ScheduleCenter
+    private val scheduleCenter: ScheduleCenter,
+    private val settingsQueryApi: SettingsQueryApi
 ) : IngestCommandApi {
 
-    private val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    private val defaultDurationMinutes: Int
+        get() = settingsQueryApi.settings.value.defaultEventDurationMinutes
 
-    override suspend fun ingestSmsPickup(eventData: CalendarEventData): MyEvent? {
+    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? {
         val existingEvents = scheduleCenter.events.value
         val isDuplicate = existingEvents.any { existing ->
             existing.tag == eventData.tag &&
@@ -28,23 +27,24 @@ class ImportCenter(
             return null
         }
 
-        val event = eventDataToMyEvent(eventData, existingEvents.size, sourceImagePath = null)
+        val event = convertDraftToEvent(eventData, defaultDurationMinutes = defaultDurationMinutes)
         scheduleCenter.addEvent(event)
         return event
     }
 
     override suspend fun ingestRecognizedEvents(
-        events: List<CalendarEventData>,
+        events: List<RecognitionDraft>,
         sourceImagePath: String?
-    ): List<MyEvent> {
+    ): List<Event> {
         if (events.isEmpty()) return emptyList()
 
-        val added = mutableListOf<MyEvent>()
+        val durationMinutes = defaultDurationMinutes
+        val added = mutableListOf<Event>()
         val knownEvents = scheduleCenter.events.value.toMutableList()
         events.forEach { eventData ->
             if (eventData.title.isBlank()) return@forEach
 
-            val event = eventDataToMyEvent(eventData, knownEvents.size, sourceImagePath)
+            val event = convertDraftToEvent(eventData, sourceImagePath, defaultDurationMinutes = durationMinutes)
             val isDuplicate = knownEvents.any { existing ->
                 val isExpired = existing.endDate.isBefore(LocalDate.now())
                 if (isExpired) return@any false
@@ -63,46 +63,5 @@ class ImportCenter(
         }
 
         return added
-    }
-
-    private fun eventDataToMyEvent(
-        eventData: CalendarEventData,
-        currentEventsCount: Int,
-        sourceImagePath: String?
-    ): MyEvent {
-        val now = LocalDateTime.now()
-        val startDateTime = try {
-            if (eventData.startTime.isNotBlank()) {
-                LocalDateTime.parse(eventData.startTime, dateTimeFormatter)
-            } else {
-                now
-            }
-        } catch (_: Exception) {
-            now
-        }
-
-        val endDateTime = try {
-            if (eventData.endTime.isNotBlank()) {
-                LocalDateTime.parse(eventData.endTime, dateTimeFormatter)
-            } else {
-                startDateTime.plusHours(1)
-            }
-        } catch (_: Exception) {
-            startDateTime.plusHours(1)
-        }
-
-        return MyEvent(
-            id = UUID.randomUUID().toString(),
-            title = eventData.title.trim(),
-            startDate = startDateTime.toLocalDate(),
-            endDate = endDateTime.toLocalDate(),
-            startTime = startDateTime.format(timeFormatter),
-            endTime = endDateTime.format(timeFormatter),
-            location = eventData.location,
-            description = eventData.description,
-            color = EventColors[currentEventsCount % EventColors.size],
-            sourceImagePath = sourceImagePath,
-            tag = eventData.tag.ifBlank { EventTags.GENERAL }
-        )
     }
 }

@@ -96,11 +96,28 @@ fun WheelPicker(items: List<String>, initialIndex: Int, modifier: Modifier = Mod
 }
 
 @Composable
-fun WheelDatePickerDialog(initialDate: LocalDate, onDismiss: () -> Unit, onConfirm: (LocalDate) -> Unit) {
+fun CenteredDialogTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+@Composable
+fun WheelDatePickerDialog(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    title: String = "选择日期",
+    onConfirm: (LocalDate) -> Unit
+) {
     var selectedDate by remember { mutableStateOf(initialDate) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = null,
+        title = { CenteredDialogTitle(title) },
         text = { WheelDatePicker(initialDate, { selectedDate = it }) },
         confirmButton = { TextButton(onClick = { onConfirm(selectedDate) }) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
@@ -127,7 +144,12 @@ fun WheelDatePicker(initialDate: LocalDate, onDateChanged: (LocalDate) -> Unit) 
 }
 
 @Composable
-fun WheelTimePickerDialog(initialTime: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+fun WheelTimePickerDialog(
+    initialTime: String,
+    onDismiss: () -> Unit,
+    title: String = "选择时间",
+    onConfirm: (String) -> Unit
+) {
     val parts = initialTime.split(":")
     val h = parts.getOrElse(0) { "09" }.toIntOrNull() ?: 9
     val m = parts.getOrElse(1) { "00" }.toIntOrNull() ?: 0
@@ -135,7 +157,7 @@ fun WheelTimePickerDialog(initialTime: String, onDismiss: () -> Unit, onConfirm:
     var sM by remember { mutableIntStateOf(m) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = null,
+        title = { CenteredDialogTitle(title) },
         text = { WheelTimePicker(h, m, { hh, mm -> sH = hh; sM = mm }) },
         confirmButton = { TextButton(onClick = { onConfirm(String.format("%02d:%02d", sH, sM)) }) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
@@ -173,7 +195,7 @@ fun WheelReminderPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加提醒", style = MaterialTheme.typography.titleMedium) },
+        title = { CenteredDialogTitle("添加提醒") },
         text = {
             if (options.isEmpty()) {
                 Text("当前设置下无需额外添加提醒", style = MaterialTheme.typography.bodyMedium)

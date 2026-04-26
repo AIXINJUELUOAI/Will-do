@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
@@ -161,6 +162,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         WheelDatePickerDialog(
             initialDate = semesterStartDate ?: LocalDate.now(),
             onDismiss = { showDatePicker = false },
+            title = "学期开始日期",
             onConfirm = {
                 viewModel.updateSemesterStartDate(it.toString())
                 showDatePicker = false
@@ -173,7 +175,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         var selectedWeek by remember { mutableIntStateOf(currentWeek) }
         AlertDialog(
             onDismissRequest = { showWeekPicker = false },
-            title = { Text("设置当前是第几周") },
+            title = { CenteredDialogTitle("设置当前是第几周") },
             text = {
                 WheelPicker(items = weekOptions.map { "第 $it 周" }, initialIndex = (currentWeek - 1).coerceAtLeast(0), onSelectionChanged = { selectedWeek = weekOptions[it] })
             },
@@ -195,7 +197,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         var selectedTotal by remember { mutableIntStateOf(settings.totalWeeks) }
         AlertDialog(
             onDismissRequest = { showTotalWeeksPicker = false },
-            title = { Text("设置学期总周数") },
+            title = { CenteredDialogTitle("设置学期总周数") },
             text = {
                 WheelPicker(items = totalOptions.map { "$it 周" }, initialIndex = totalOptions.indexOf(settings.totalWeeks).coerceAtLeast(0), onSelectionChanged = { selectedTotal = totalOptions[it] })
             },

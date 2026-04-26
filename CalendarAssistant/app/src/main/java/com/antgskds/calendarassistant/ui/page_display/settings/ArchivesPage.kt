@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.endDate
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -37,13 +39,12 @@ fun ArchivesPage(
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        if (archivedEvents.isEmpty()) {
-            viewModel.fetchArchivedEvents()
-        }
+        viewModel.fetchArchivedEvents()
     }
 
     val groupedEvents = remember(archivedEvents) {
         archivedEvents
+            .filter { it.archivedAt != null }
             .distinctBy { it.id }
             .sortedByDescending { it.endDate }
             .groupBy { it.endDate }
@@ -120,17 +121,17 @@ fun ArchivesPage(
                                 )
                             }
 
-                            items(events, key = { it.id }) { event ->
+                            items(events, key = { it.id ?: 0L }) { event ->
+                                val displayItem = com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper.eventToSingleItem(event)
                                 SwipeableEventItem(
-                                    event = event,
+                                    item = displayItem,
                                     isRevealed = false,
                                     onExpand = {},
                                     onCollapse = {},
-                                    onDelete = { viewModel.deleteArchivedEvent(it.id) },
-                                    onImportant = {},
+                                    onDelete = { event.id?.let { id -> viewModel.deleteArchivedEvent(id) } },
                                     onEdit = {},
                                     isArchivePage = true,
-                                    onRestore = { viewModel.restoreEvent(it.id) }
+                                    onRestore = { event.id?.let { id -> viewModel.restoreEvent(id) } }
                                 )
                             }
                         }

@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
 import com.antgskds.calendarassistant.core.note.noteMarkdown
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.ui.components.NoteCard
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
@@ -30,8 +31,8 @@ fun NotePage(
     viewModel: MainViewModel,
     searchQuery: String = "",
     extraBottomPadding: Dp = 0.dp,
-    onEditNote: (MyEvent) -> Unit = {},
-    onPendingDeleteChange: (MyEvent?) -> Unit = {}
+    onEditNote: (Event) -> Unit = {},
+    onPendingDeleteChange: (Event?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val bottomSafePadding = 112.dp + extraBottomPadding
@@ -46,7 +47,7 @@ fun NotePage(
                     markdown.contains(searchQuery, ignoreCase = true) ||
                     tasks.any { it.text.contains(searchQuery, ignoreCase = true) }
             }
-        }.sortedWith(compareBy<MyEvent> { it.isCompleted }.thenByDescending { it.lastModified })
+        }.sortedWith(compareBy<Event> { it.isCompleted }.thenByDescending { it.lastModifiedMillis })
     }
     val completedNotes = remember(notes) { notes.count { it.isCompleted } }
     val pendingTaskCount = remember(notes) {
@@ -106,7 +107,7 @@ fun NotePage(
                 )
             }
 
-            items(notes, key = { it.id }) { note ->
+            items(notes, key = { it.id ?: 0L }) { note ->
                 NoteCard(
                     note = note,
                     onClick = { onEditNote(note) },

@@ -127,13 +127,16 @@ import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
 import com.antgskds.calendarassistant.core.note.markdownWithoutTasks
 import com.antgskds.calendarassistant.core.note.toggleMarkdownTask
 import com.antgskds.calendarassistant.core.note.withNoteMarkdown
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.core.rule.ActionIconType
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.StatusColor
+import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.components.MarkdownText
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
@@ -153,18 +156,22 @@ enum class FloatingInputMode { SCHEDULE, NOTE }
 
 @Composable
 fun FloatingScheduleScreen(
-    events: List<MyEvent>,
-    noteEvents: List<MyEvent> = emptyList(),
+    scheduleItems: List<ScheduleDisplayItem>,
+    noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
     noteEnabled: Boolean = false,
     onClose: () -> Unit,
     onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
-    onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String, String) -> Unit = { _, _ -> },
-    onDeleteNote: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onRestoreNote: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
+    onStatusAction: (ScheduleDisplayItem) -> Unit = {},
+    pendingStatusKeys: Set<String> = emptySet(),
+    undoPendingLabel: String? = null,
+    onUndoAction: () -> Unit = {},
+    onDeleteNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onRestoreNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onLoadingChange: (Boolean) -> Unit = {}
 ) {
     var manualInputText by remember { mutableStateOf("") }
@@ -213,7 +220,7 @@ fun FloatingScheduleScreen(
             }
         )
     }
-    var deletedNote by remember { mutableStateOf<MyEvent?>(null) }
+    var deletedNote by remember { mutableStateOf<Event?>(null) }
     var showUndoDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentMode, noteEnabled) {
@@ -280,7 +287,7 @@ fun FloatingScheduleScreen(
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
             TimeWheelList(
-                events = events,
+                scheduleItems = scheduleItems,
                 noteEvents = noteEvents,
                 weatherData = weatherData,
                 currentMode = currentMode,
@@ -289,8 +296,10 @@ fun FloatingScheduleScreen(
                     .fillMaxWidth(),
                 listState = listState,
                 onUpdateEvent = onUpdateEvent,
-                onEventAction = onEventAction,
-                onUndo = { id, tag -> onUndo(id, tag) },
+                onUpdateScheduleItem = onUpdateScheduleItem,
+                onArchiveScheduleItem = onArchiveScheduleItem,
+                onStatusAction = onStatusAction,
+                pendingStatusKeys = pendingStatusKeys,
                 onDeleteNote = { note ->
                     onDeleteNote(note) {
                         deletedNote = note
@@ -373,6 +382,30 @@ fun FloatingScheduleScreen(
                             deletedNote = null
                         }
                     }) {
+                        Text("撤销")
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = undoPendingLabel != null,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(undoPendingLabel ?: "", color = MaterialTheme.colorScheme.onSurface)
+                    TextButton(onClick = { onUndoAction() }) {
                         Text("撤销")
                     }
                 }
@@ -567,37 +600,26 @@ fun BottomInteractionArea(
 
 @Composable
 fun TimeWheelList(
-    events: List<MyEvent>,
-    noteEvents: List<MyEvent> = emptyList(),
+    scheduleItems: List<ScheduleDisplayItem>,
+    noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
-    onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String, String) -> Unit = { _, _ -> },
-    onDeleteNote: (MyEvent) -> Unit = {},
+    onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
+    onStatusAction: (ScheduleDisplayItem) -> Unit = {},
+    pendingStatusKeys: Set<String> = emptySet(),
+    onDeleteNote: (Event) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
     val now = LocalDateTime.now()
-    val sortedEvents = remember(events, now) {
-        events
-            .filter { it.archivedAt == null }
-            .filter { event -> !event.isRecurring || event.isRecurringParent }
-            .distinctBy { it.id }
-            .sortedByDescending { event ->
-                try {
-                    if (event.isRecurringParent && event.nextOccurrenceStartMillis != null) {
-                        LocalDateTime.ofInstant(
-                            java.time.Instant.ofEpochMilli(event.nextOccurrenceStartMillis),
-                            java.time.ZoneId.systemDefault()
-                        )
-                    } else {
-                        LocalDateTime.parse("${event.startDate} ${event.startTime}", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                    }
-                } catch (e: Exception) { LocalDateTime.MIN }
-            }
+    val sortedScheduleItems = remember(scheduleItems) {
+        scheduleItems
+            .distinctBy { it.stableKey }
+            .sortedByDescending { it.startTS }
     }
     Box(modifier = modifier) {
         LazyColumn(
@@ -644,18 +666,19 @@ fun TimeWheelList(
                 }
             }
             if (currentMode == FloatingInputMode.SCHEDULE) {
-                items(sortedEvents, key = { it.id }) { event ->
+                items(sortedScheduleItems, key = { it.stableKey }) { item ->
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterEnd
                 ) {
                     ScheduleCard(
-                        event = event,
+                        item = item,
+                        hasPendingStatus = item.stableKey in pendingStatusKeys,
                         listState = listState,
                         modifier = Modifier.padding(end = 20.dp).width(260.dp),
-                        onUpdateEvent = onUpdateEvent,
-                        onEventAction = onEventAction,
-                        onUndo = { id, tag -> onUndo(id, tag) },
+                        onUpdateScheduleItem = onUpdateScheduleItem,
+                        onArchiveScheduleItem = onArchiveScheduleItem,
+                        onStatusAction = onStatusAction,
                         onRequestDatePicker = onRequestDatePicker,
                         onRequestTimePicker = onRequestTimePicker
                     )
@@ -718,11 +741,11 @@ private fun FloatingWeatherCard(
 
 @Composable
 private fun FloatingNoteCard(
-    note: MyEvent,
+    note: Event,
     modifier: Modifier = Modifier,
     onToggleTodo: (com.antgskds.calendarassistant.core.note.MarkdownTaskItem) -> Unit,
-    onDelete: (MyEvent) -> Unit,
-    onSave: (MyEvent) -> Unit
+    onDelete: (Event) -> Unit,
+    onSave: (Event) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
@@ -741,8 +764,8 @@ private fun FloatingNoteCard(
     val deleteTriggerPx = with(density) { 110.dp.toPx() }
     val screenWidthPx = with(density) { 400.dp.toPx() }
     val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
-    val tasks = remember(note.description, note.lastModified) { extractMarkdownTasks(note.noteMarkdown()) }
-    val bodyMarkdown = remember(note.description, note.lastModified) { markdownWithoutTasks(note.noteMarkdown()) }
+    val tasks = remember(note.description, note.lastModifiedMillis) { extractMarkdownTasks(note.noteMarkdown()) }
+    val bodyMarkdown = remember(note.description, note.lastModifiedMillis) { markdownWithoutTasks(note.noteMarkdown()) }
     val floatingBodyMarkdown = remember(bodyMarkdown) {
         bodyMarkdown.lines().joinToString("\n") { line ->
             line.replaceFirst(Regex("^#{1,6}\\s+"), "")
@@ -768,7 +791,7 @@ private fun FloatingNoteCard(
         (maxExpandedLines - previewTasks.size).coerceAtLeast(0)
     }
 
-    LaunchedEffect(note.id, note.lastModified) {
+    LaunchedEffect(note.id, note.lastModifiedMillis) {
         if (!isEditing) {
             draftTitle = note.title
             draftMarkdown = note.noteMarkdown()
@@ -897,7 +920,7 @@ private fun FloatingNoteCard(
                     Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.lastModified)),
+                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.lastModifiedMillis)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1233,12 +1256,13 @@ private fun FloatingTimePickerOverlay(
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun ScheduleCard(
-    event: MyEvent,
+    item: ScheduleDisplayItem,
+    hasPendingStatus: Boolean,
     listState: LazyListState,
     modifier: Modifier = Modifier,
-    onUpdateEvent: (MyEvent, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onEventAction: (String, String) -> Unit = { _, _ -> },
-    onUndo: (String, String) -> Unit = { _, _ -> },
+    onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
+    onStatusAction: (ScheduleDisplayItem) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
 ) {
@@ -1246,29 +1270,31 @@ fun ScheduleCard(
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val canEdit = remember(event.tag, event.isRecurring, event.isRecurringParent) {
-        event.tag != EventTags.COURSE && !event.isRecurring && !event.isRecurringParent
+    val canEdit = remember(item.tag) {
+        item.tag != EventTags.COURSE
     }
+    val renderEvent = remember(item) { item.toRenderEvent() }
 
     var isEditing by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
-    var draftTitle by remember { mutableStateOf(event.title) }
-    var draftStartDate by remember { mutableStateOf(event.startDate) }
-    var draftStartTime by remember { mutableStateOf(event.startTime) }
-    var draftEndDate by remember { mutableStateOf(event.endDate) }
-    var draftEndTime by remember { mutableStateOf(event.endTime) }
-    var draftLocation by remember { mutableStateOf(event.location) }
-    var draftDescription by remember { mutableStateOf(event.description) }
+    var draftTitle by remember { mutableStateOf(item.title) }
+    var draftStartDate by remember { mutableStateOf(item.startDate) }
+    var draftStartTime by remember { mutableStateOf(item.startTime) }
+    var draftEndDate by remember { mutableStateOf(item.endDate) }
+    var draftEndTime by remember { mutableStateOf(item.endTime) }
+    var draftLocation by remember { mutableStateOf(item.location) }
+    var draftDescription by remember { mutableStateOf(item.description) }
 
-    LaunchedEffect(event.id, event.lastModified) {
+    LaunchedEffect(item.stableKey, item.startTS, item.endTS, item.state) {
         if (!isEditing && !isSaving) {
-            draftTitle = event.title
-            draftStartDate = event.startDate
-            draftStartTime = event.startTime
-            draftEndDate = event.endDate
-            draftLocation = event.location
-            draftDescription = event.description
+            draftTitle = item.title
+            draftStartDate = item.startDate
+            draftStartTime = item.startTime
+            draftEndDate = item.endDate
+            draftEndTime = item.endTime
+            draftLocation = item.location
+            draftDescription = item.description
         }
     }
 
@@ -1302,8 +1328,8 @@ fun ScheduleCard(
     }
 
     val now = LocalDateTime.now()
-    val startDateTime = remember(event) { try { LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime)) } catch (e: Exception) { LocalDateTime.MIN } }
-    val endDateTime = remember(event) { try { LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime)) } catch (e: Exception) { LocalDateTime.MAX } }
+    val startDateTime = remember(item.startTS) { try { LocalDateTime.of(item.startDate, item.startLocalTime) } catch (e: Exception) { LocalDateTime.MIN } }
+    val endDateTime = remember(item.endTS) { try { LocalDateTime.of(item.endDate, item.endLocalTime) } catch (e: Exception) { LocalDateTime.MAX } }
 
     val isExpired = remember(now, endDateTime) { now.isAfter(endDateTime) }
     val isInProgress = remember(now, startDateTime, endDateTime) { !isExpired && now.isAfter(startDateTime) && now.isBefore(endDateTime) }
@@ -1311,21 +1337,20 @@ fun ScheduleCard(
         if (isExpired || isInProgress) false else Duration.between(now, startDateTime).toMinutes() in 0..30
     }
 
-    val barColor = if (isExpired) MaterialTheme.colorScheme.outlineVariant else event.color
+    val barColor = if (isExpired) MaterialTheme.colorScheme.outlineVariant else item.composeColor
     val titleColor = if (isExpired) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
     val contentColor = if (isExpired) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation = if (isInProgress) 6.dp else 2.dp
 
-    val model = remember(event.description, event.tag, event.isCompleted, event.isCheckedIn, event.isRecurringParent) {
-        EventTimelinePresenter.present(context, event).renderModel
-    }
-    val resolvedRuleId = model.ruleId
-
-    val hasAction = remember(event.isRecurringParent, isExpired, event.isCompleted, event.isCheckedIn) {
-        !event.isRecurringParent && (!isExpired || (event.isCompleted || event.isCheckedIn))
+    val model = remember(renderEvent.description, renderEvent.tag, renderEvent.state, renderEvent.startTS, renderEvent.endTS) {
+        EventTimelinePresenter.present(context, renderEvent).renderModel
     }
 
-    val displayTitle = if (isExpired) event.title else model.title
+    val hasAction = remember(item.tag, isExpired, item.isCompleted, item.isCheckedIn, hasPendingStatus) {
+        item.tag != EventTags.COURSE && (hasPendingStatus || !isExpired || item.isCompleted || item.isCheckedIn)
+    }
+
+    val displayTitle = if (isExpired) item.title else model.title
 
     val density = LocalDensity.current
     val actionButtonSize = 46.dp
@@ -1379,7 +1404,8 @@ fun ScheduleCard(
         ActionIconType.PICKUP -> Icons.Rounded.ShoppingBag
         ActionIconType.COMPLETE -> Icons.Rounded.CheckCircle
     }
-    val actionColor = Color(model.actionIcon.color)
+    val effectiveActionIcon = if (hasPendingStatus) Icons.Rounded.Undo else actionIcon
+    val actionColor = if (hasPendingStatus) MaterialTheme.colorScheme.primary else Color(model.actionIcon.color)
 
     Box(modifier = modifier) {
         // 背景滑动按钮
@@ -1398,9 +1424,9 @@ fun ScheduleCard(
                         Surface(
                             modifier = Modifier.size(actionButtonSize), shape = CircleShape,
                             color = if (isPastFullSwipe) actionColor else actionColor.copy(alpha = 0.92f),
-                            onClick = { scope.launch { onUndo(event.id, resolvedRuleId); offsetX.animateTo(0f, swipeSpringSpec) } }
+                            onClick = { scope.launch { onStatusAction(item); offsetX.animateTo(0f, swipeSpringSpec) } }
                         ) {
-                            Box(contentAlignment = Alignment.Center) { Icon(actionIcon, null, Modifier.size(22.dp), tint = Color.White) }
+                            Box(contentAlignment = Alignment.Center) { Icon(effectiveActionIcon, null, Modifier.size(22.dp), tint = Color.White) }
                         }
                     }
 
@@ -1411,10 +1437,10 @@ fun ScheduleCard(
                             scope.launch {
                                 if (!canEdit) android.widget.Toast.makeText(context, "暂不支持在悬浮窗编辑", android.widget.Toast.LENGTH_SHORT).show()
                                 else {
-                                    draftTitle = event.title
-                                    draftStartDate = event.startDate; draftStartTime = event.startTime
-                                    draftEndDate = event.endDate; draftEndTime = event.endTime
-                                    draftLocation = event.location; draftDescription = event.description
+                                    draftTitle = item.title
+                                    draftStartDate = item.startDate; draftStartTime = item.startTime
+                                    draftEndDate = item.endDate; draftEndTime = item.endTime
+                                    draftLocation = item.location; draftDescription = item.description
                                     isExpanded = true; isEditing = true
                                 }
                                 offsetX.animateTo(0f, swipeSpringSpec)
@@ -1434,7 +1460,7 @@ fun ScheduleCard(
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .then(
                     if (!isEditing && !isSaving) {
-                        Modifier.pointerInput(event.id, hasAction, event.isCompleted) {
+                        Modifier.pointerInput(item.stableKey, hasAction, item.state, hasPendingStatus) {
                             detectHorizontalDragGestures(
                                 onDragStart = { scope.launch { offsetX.stop() } },
                                 onDragEnd = {
@@ -1444,7 +1470,7 @@ fun ScheduleCard(
 
                                     scope.launch {
                                         if (fullSwipeLeft) {
-                                            onUndo(event.id, resolvedRuleId)
+                                            onStatusAction(item)
                                             offsetX.animateTo(0f, swipeSpringSpec)
                                         } else if (fullSwipeRight) {
                                             // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
@@ -1452,7 +1478,7 @@ fun ScheduleCard(
                                                 targetValue = screenWidthPx,
                                                 animationSpec = tween(durationMillis = 200)
                                             )
-                                            onEventAction(event.id, "archive")
+                                            onArchiveScheduleItem(item)
                                         } else if (shouldRevealLeft) {
                                             offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
                                         } else {
@@ -1536,11 +1562,11 @@ fun ScheduleCard(
                     Row(modifier = Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), contentColor)
                         Spacer(Modifier.width(4.dp))
-                        Text(text = event.startDate.format(DateTimeFormatter.ofPattern("MM-dd")), style = MaterialTheme.typography.bodySmall, color = contentColor)
+                        Text(text = item.startDate.format(DateTimeFormatter.ofPattern("MM-dd")), style = MaterialTheme.typography.bodySmall, color = contentColor)
                         Spacer(Modifier.width(12.dp))
                         Icon(Icons.Rounded.Schedule, null, Modifier.size(12.dp), contentColor)
                         Spacer(Modifier.width(4.dp))
-                        Text(text = "${event.startTime} - ${event.endTime}", style = MaterialTheme.typography.bodySmall, color = contentColor)
+                        Text(text = "${item.startTime} - ${item.endTime}", style = MaterialTheme.typography.bodySmall, color = contentColor)
                     }
 
                     AnimatedVisibility(
@@ -1773,11 +1799,18 @@ fun ScheduleCard(
 
                                                     focusManager.clearFocus(force = true)
                                                     isSaving = true
-                                                    onUpdateEvent(event.copy(
-                                                        title = title, startDate = draftStartDate, startTime = draftStartTime,
-                                                        endDate = draftEndDate, endTime = draftEndTime, location = draftLocation.trim(),
-                                                        description = draftDescription.trim(), lastModified = System.currentTimeMillis()
-                                                    )) { isSaving = false; isEditing = false }
+                                                    onUpdateScheduleItem(
+                                                        item,
+                                                        EventPatch(
+                                                            title = title,
+                                                            startTS = toEpochSeconds(draftStartDate, draftStartTime),
+                                                            endTS = toEpochSeconds(draftEndDate, draftEndTime),
+                                                            location = draftLocation.trim(),
+                                                            description = draftDescription.trim(),
+                                                            tag = item.tag,
+                                                            color = item.color
+                                                        )
+                                                    ) { isSaving = false; isEditing = false }
                                                 },
                                                 enabled = !isSaving,
                                                 modifier = Modifier
@@ -1821,6 +1854,22 @@ fun ScheduleCard(
         }
 
     }
+}
+
+private fun ScheduleDisplayItem.toRenderEvent(): Event {
+    return Event(
+        id = eventId,
+        startTS = startTS,
+        endTS = endTS,
+        title = title,
+        location = location,
+        description = description,
+        timeZone = timeZone,
+        color = color,
+        state = state,
+        tag = tag,
+        parentId = parentId ?: 0L
+    )
 }
 
 @Composable

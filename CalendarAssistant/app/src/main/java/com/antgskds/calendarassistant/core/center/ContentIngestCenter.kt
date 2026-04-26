@@ -8,8 +8,9 @@ import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -27,20 +28,20 @@ class ContentIngestCenter(
     }
 
     private data class SmsIngestTask(
-        val eventData: CalendarEventData,
+        val eventData: RecognitionDraft,
         override val traceId: String,
         override val sourceType: String,
         override val sourceId: String,
-        val result: CompletableDeferred<MyEvent?>
+        val result: CompletableDeferred<Event?>
     ) : IngestTask
 
     private data class RecognizedIngestTask(
-        val events: List<CalendarEventData>,
+        val events: List<RecognitionDraft>,
         val sourceImagePath: String?,
         override val traceId: String,
         override val sourceType: String,
         override val sourceId: String,
-        val result: CompletableDeferred<List<MyEvent>>? = null
+        val result: CompletableDeferred<List<Event>>? = null
     ) : IngestTask
 
     private val ingestChannel = Channel<IngestTask>(capacity = 64)
@@ -98,7 +99,7 @@ class ContentIngestCenter(
                     ingestChannel.send(
                         RecognizedIngestTask(
                             events = payload.candidates,
-                            sourceImagePath = payload.sourceImagePath,
+                            sourceImagePath = null,
                             traceId = event.traceId,
                             sourceType = payload.sourceType,
                             sourceId = payload.sourceId,
@@ -109,8 +110,8 @@ class ContentIngestCenter(
         }
     }
 
-    override suspend fun ingestSmsPickup(eventData: CalendarEventData): MyEvent? {
-        val deferred = CompletableDeferred<MyEvent?>()
+    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? {
+        val deferred = CompletableDeferred<Event?>()
         val traceId = EventIdentity.newTraceId()
         ingestChannel.send(
             SmsIngestTask(
@@ -125,10 +126,10 @@ class ContentIngestCenter(
     }
 
     override suspend fun ingestRecognizedEvents(
-        events: List<CalendarEventData>,
+        events: List<RecognitionDraft>,
         sourceImagePath: String?
-    ): List<MyEvent> {
-        val deferred = CompletableDeferred<List<MyEvent>>()
+    ): List<Event> {
+        val deferred = CompletableDeferred<List<Event>>()
         val traceId = EventIdentity.newTraceId()
         ingestChannel.send(
             RecognizedIngestTask(
@@ -152,7 +153,7 @@ class ContentIngestCenter(
                 traceId = task.traceId,
                 sourceType = task.sourceType,
                 sourceId = task.sourceId,
-                createdEventIds = listOf(created.id),
+                createdEventIds = listOf(created.id?.toString() ?: ""),
                 dedupedCount = 0,
                 createdCount = 1
             )
@@ -179,7 +180,7 @@ class ContentIngestCenter(
                 traceId = task.traceId,
                 sourceType = task.sourceType,
                 sourceId = task.sourceId,
-                createdEventIds = created.map { it.id },
+                createdEventIds = created.mapNotNull { it.id?.toString() },
                 dedupedCount = dedupedCount,
                 createdCount = created.size
             )

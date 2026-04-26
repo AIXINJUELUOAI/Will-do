@@ -2,8 +2,10 @@ package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
@@ -26,13 +28,13 @@ internal object EventPresentationInternals {
         val location: String
     )
 
-    fun resolveRuleId(event: MyEvent): String {
+    fun resolveRuleId(event: Event): String {
         return RuleMatchingEngine.resolvePayload(event)?.ruleId
             ?: event.tag.ifBlank { RuleMatchingEngine.RULE_GENERAL }
     }
 
     fun resolveDisplayContent(
-        event: MyEvent,
+        event: Event,
         ruleId: String,
         isExpired: Boolean,
         isTerminal: Boolean
@@ -44,19 +46,20 @@ internal object EventPresentationInternals {
             RuleMatchingEngine.RULE_FLIGHT -> resolveFlightDisplay(event)
             RuleMatchingEngine.RULE_TICKET -> resolveTicketDisplay(event, isExpired)
             RuleMatchingEngine.RULE_SENDER -> resolveSenderDisplay(event)
+            RuleMatchingEngine.RULE_COURSE -> resolveCourseDisplay(event)
             else -> resolveGeneralDisplay(event)
         }
     }
 
     fun resolveStatusLabel(
-        event: MyEvent,
+        event: Event,
         ruleId: String,
         isExpired: Boolean,
         isInProgress: Boolean,
         isComingSoon: Boolean
     ): String? {
         return when {
-            event.isRecurringParent -> "重复"
+            event.isRecurring -> "重复"
             isExpired -> "已结束"
             event.isCheckedIn -> "已检票"
             event.isCompleted -> RuleActionDefaults.defaultsFor(ruleId).terminal.name
@@ -67,13 +70,13 @@ internal object EventPresentationInternals {
     }
 
     fun resolveStatusColor(
-        event: MyEvent,
+        event: Event,
         isExpired: Boolean,
         isInProgress: Boolean,
         isComingSoon: Boolean
     ): StatusColor {
         return when {
-            event.isRecurringParent -> StatusColor.PRIMARY
+            event.isRecurring -> StatusColor.PRIMARY
             isExpired -> StatusColor.MUTED
             event.isCheckedIn -> StatusColor.SUCCESS
             event.isCompleted -> StatusColor.MUTED
@@ -83,8 +86,8 @@ internal object EventPresentationInternals {
         }
     }
 
-    fun resolvePrimaryAction(ruleId: String, event: MyEvent, isExpired: Boolean, isCourse: Boolean): EventAction? {
-        if (event.isCompleted || event.isCheckedIn || isExpired || isCourse || event.isRecurringParent) return null
+    fun resolvePrimaryAction(ruleId: String, event: Event, isExpired: Boolean, isCourse: Boolean): EventAction? {
+        if (event.isCompleted || event.isCheckedIn || isExpired || isCourse || event.isRecurring) return null
         val defaults = RuleActionDefaults.defaultsFor(ruleId)
         val receiverAction = when (ruleId) {
             RuleMatchingEngine.RULE_TRAIN -> EventActionReceiver.ACTION_CHECKIN
@@ -99,7 +102,7 @@ internal object EventPresentationInternals {
         return EventAction(defaults.undoLabel, EventActionReceiver.ACTION_COMPLETE_SCHEDULE, isUndo = true)
     }
 
-    fun resolveIconResId(ruleId: String, event: MyEvent): Int? {
+    fun resolveIconResId(ruleId: String, event: Event): Int? {
         RuleRegistry.getCustomCapsuleIconResId(ruleId)?.let { return it }
         RuleRegistry.getIconResId(ruleId)?.let { return it }
         return when (ruleId) {
@@ -110,7 +113,8 @@ internal object EventPresentationInternals {
             RuleMatchingEngine.RULE_FLIGHT -> R.drawable.ic_stat_flight
             RuleMatchingEngine.RULE_TICKET -> R.drawable.ic_stat_ticket
             RuleMatchingEngine.RULE_SENDER -> R.drawable.ic_stat_sender
-            EventTags.COURSE -> R.drawable.ic_stat_course
+            RuleMatchingEngine.RULE_COURSE -> R.drawable.ic_stat_course
+            "__removed_course__" -> R.drawable.ic_stat_course
             RuleMatchingEngine.RULE_GENERAL -> R.drawable.ic_stat_event
             else -> R.drawable.ic_notification_small
         }
@@ -127,7 +131,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    fun resolveTimeRange(event: MyEvent, ruleId: String, isCourse: Boolean): String? {
+    fun resolveTimeRange(event: Event, ruleId: String, isCourse: Boolean): String? {
         if (isCourse || ruleId == RuleMatchingEngine.RULE_GENERAL) {
             val start = event.startTime.trim().takeIf { it.isNotEmpty() }
             val end = event.endTime.trim().takeIf { it.isNotEmpty() }
@@ -140,7 +144,7 @@ internal object EventPresentationInternals {
         return null
     }
 
-    fun composeCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    fun composeCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         return when (model.ruleId) {
             RuleMatchingEngine.RULE_TRAIN -> composeTrainCapsule(model, event, isExpired)
             RuleMatchingEngine.RULE_TAXI -> composeTaxiCapsule(model, event, isExpired)
@@ -152,7 +156,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    fun composeAggregatePickupCapsule(events: List<MyEvent>): CapsuleDisplayModel {
+    fun composeAggregatePickupCapsule(events: List<Event>): CapsuleDisplayModel {
         val hasExpiredItems = events.any { computeIsExpired(it, LocalDateTime.now()) }
         val primaryText = if (hasExpiredItems) "${events.size} 个待取 (含过期)" else "${events.size} 个待取事项"
         val secondaryText = events.mapNotNull {
@@ -179,12 +183,12 @@ internal object EventPresentationInternals {
         )
     }
 
-    fun parsePickupInfo(event: MyEvent): PickupInfo {
+    fun parsePickupInfo(event: Event): PickupInfo {
         val (code, platform, location) = parsePickupMicroFormat(event.description)
         return PickupInfo(code.ifBlank { event.title }, platform, location.ifBlank { event.location })
     }
 
-    fun computeIsExpired(event: MyEvent, now: LocalDateTime): Boolean {
+    fun computeIsExpired(event: Event, now: LocalDateTime): Boolean {
         return try {
             val endDate = LocalDate.parse(event.endDate.toString(), DateTimeFormatter.ISO_LOCAL_DATE)
             val endTime = LocalTime.parse(event.endTime, DateTimeFormatter.ofPattern("HH:mm"))
@@ -194,7 +198,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    fun computeIsInProgress(event: MyEvent, now: LocalDateTime): Boolean {
+    fun computeIsInProgress(event: Event, now: LocalDateTime): Boolean {
         return try {
             val startDate = LocalDate.parse(event.startDate.toString(), DateTimeFormatter.ISO_LOCAL_DATE)
             val startTime = LocalTime.parse(event.startTime, DateTimeFormatter.ofPattern("HH:mm"))
@@ -206,7 +210,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    fun computeIsComingSoon(event: MyEvent, now: LocalDateTime): Boolean {
+    fun computeIsComingSoon(event: Event, now: LocalDateTime): Boolean {
         return try {
             val startDate = LocalDate.parse(event.startDate.toString(), DateTimeFormatter.ISO_LOCAL_DATE)
             val startTime = LocalTime.parse(event.startTime, DateTimeFormatter.ofPattern("HH:mm"))
@@ -219,7 +223,7 @@ internal object EventPresentationInternals {
 
     fun isFoodPickup(description: String?): Boolean = description?.startsWith("【取餐】") == true
 
-    private fun resolveTrainDisplay(event: MyEvent, isExpired: Boolean): Triple<String, String?, String?> {
+    private fun resolveTrainDisplay(event: Event, isExpired: Boolean): Triple<String, String?, String?> {
         val info = parseTransport(event)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle?.takeIf { it.isNotBlank() } ?: when {
@@ -231,7 +235,7 @@ internal object EventPresentationInternals {
         return Triple(title, formatTrainSubtitle(info.subDisplay, destination), null)
     }
 
-    private fun resolveTaxiDisplay(event: MyEvent, isExpired: Boolean, isTerminal: Boolean): Triple<String, String?, String?> {
+    private fun resolveTaxiDisplay(event: Event, isExpired: Boolean, isTerminal: Boolean): Triple<String, String?, String?> {
         val info = parseTransport(event)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle?.takeIf { it.isNotBlank() } ?: if (isTerminal || isExpired) event.title else info.mainDisplay.ifBlank { event.title }
@@ -240,7 +244,7 @@ internal object EventPresentationInternals {
         return Triple(title, subtitle, listOfNotNull(subtitle, locationExtra).joinToString("\n").ifBlank { null })
     }
 
-    private fun resolvePickupDisplay(event: MyEvent, isExpired: Boolean): Triple<String, String?, String?> {
+    private fun resolvePickupDisplay(event: Event, isExpired: Boolean): Triple<String, String?, String?> {
         val info = parsePickupInfo(event)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle?.takeIf { it.isNotBlank() } ?: if (event.isCompleted || isExpired) {
@@ -252,7 +256,7 @@ internal object EventPresentationInternals {
         return Triple(title, formatPickupSubtitle(info.platform, info.location), locationExtra?.takeIf { it.isNotBlank() })
     }
 
-    private fun resolveFlightDisplay(event: MyEvent): Triple<String, String?, String?> {
+    private fun resolveFlightDisplay(event: Event): Triple<String, String?, String?> {
         val fields = RuleMatchingEngine.splitFields(RuleMatchingEngine.extractPayloadText(event.description).orEmpty(), 3)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val flightNo = fields.getOrNull(0).orEmpty()
@@ -269,7 +273,7 @@ internal object EventPresentationInternals {
         return Triple(title, subtitle, null)
     }
 
-    private fun resolveTicketDisplay(event: MyEvent, isExpired: Boolean): Triple<String, String?, String?> {
+    private fun resolveTicketDisplay(event: Event, isExpired: Boolean): Triple<String, String?, String?> {
         val info = parsePickupInfo(event)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle?.takeIf { it.isNotBlank() } ?: if (event.isCompleted || isExpired) {
@@ -280,14 +284,14 @@ internal object EventPresentationInternals {
         return Triple(title, formatPickupSubtitle(info.platform, info.location), null)
     }
 
-    private fun resolveSenderDisplay(event: MyEvent): Triple<String, String?, String?> {
+    private fun resolveSenderDisplay(event: Event): Triple<String, String?, String?> {
         val info = parsePickupInfo(event)
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle?.takeIf { it.isNotBlank() } ?: preferText(info.code, event.title, "寄件提醒")
         return Triple(title, formatPickupSubtitle(info.platform, info.location), null)
     }
 
-    private fun resolveGeneralDisplay(event: MyEvent): Triple<String, String?, String?> {
+    private fun resolveGeneralDisplay(event: Event): Triple<String, String?, String?> {
         val templateTitle = RuleDisplayTemplateResolver.renderTitle(event)
         val title = templateTitle ?: preferText(event.title, "日程提醒")
         val location = event.location.trim().takeIf { it.isNotBlank() }
@@ -295,7 +299,7 @@ internal object EventPresentationInternals {
         return Triple(title, location ?: desc, if (location != null && desc != null && desc != location) desc else null)
     }
 
-    private fun composeTrainCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTrainCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val info = parseTransport(event)
         val secondaryText = formatTrainSubtitle(info.subDisplay, event.location)
         val action = if (!info.isCheckedIn && !isExpired) CapsuleActionSpec("已检票", EventActionReceiver.ACTION_CHECKIN) else null
@@ -308,7 +312,7 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeTaxiCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTaxiCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val info = parseTransport(event)
         val secondaryText = formatTaxiSubtitle(event, info) ?: "网约车"
         val expandedText = joinLines(secondaryText, sanitize(event.location))
@@ -322,7 +326,7 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composePickupCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composePickupCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
@@ -337,7 +341,7 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeFlightCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeFlightCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val secondaryText = model.subtitle
         val expandedText = joinLines(secondaryText, sanitize(event.location))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已登机", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
@@ -350,7 +354,7 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeTicketCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTicketCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
@@ -364,7 +368,7 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeSenderCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeSenderCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
@@ -378,18 +382,23 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeGeneralCapsule(model: EventRenderModel, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeGeneralCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val primaryText = preferText(model.title, "日程提醒")
         val detailText = sanitize(event.location) ?: summaryText(event.description)
         val timeText = formatTimeRange(event)
         val secondaryText = detailText ?: timeText
         val tertiaryText = if (detailText != null) timeText else null
         val expandedText = joinLines(detailText, tertiaryText, summaryText(event.description)?.takeUnless { it == detailText })
-        val action = if (!event.isCompleted && !isExpired && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
+        val action = if (!event.isCompleted && !isExpired && event.tag != "__removed_course__" && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
         return CapsuleDisplayModel(primaryText, primaryText, secondaryText, expandedText = expandedText, tertiaryText = tertiaryText, action = action)
     }
 
-    private fun parseTransport(event: MyEvent): TransportInfo {
+    private fun resolveCourseDisplay(event: Event): Triple<String, String?, String?> {
+        val desc = CourseEventMapper.displayDescription(event.description, event.location).takeIf { it.isNotBlank() }
+        return Triple(event.title.ifBlank { "课程" }, desc, null)
+    }
+
+    private fun parseTransport(event: Event): TransportInfo {
         if (event.description.isBlank()) return TransportInfo("none", "", "", false)
         val payload = RuleMatchingEngine.resolvePayload(event.description, null)
         return when (payload?.ruleId) {
@@ -452,7 +461,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    private fun formatTaxiSubtitle(event: MyEvent, info: TransportInfo): String? {
+    private fun formatTaxiSubtitle(event: Event, info: TransportInfo): String? {
         val payload = RuleMatchingEngine.resolvePayload(event.description, null)
         if (payload?.ruleId == RuleMatchingEngine.RULE_TAXI) {
             val parts = RuleMatchingEngine.splitFields(payload.payload, 3)
@@ -475,7 +484,7 @@ internal object EventPresentationInternals {
         }
     }
 
-    private fun formatTimeRange(event: MyEvent): String? {
+    private fun formatTimeRange(event: Event): String? {
         val start = sanitize(event.startTime)
         val end = sanitize(event.endTime)
         return when {

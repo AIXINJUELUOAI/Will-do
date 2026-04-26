@@ -15,6 +15,7 @@ interface SettingsTransformApi {
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
         autoArchive: Boolean? = null,
+        defaultEventDurationMinutes: Int? = null,
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
         localSemanticEnabled: Boolean? = null,

@@ -22,12 +22,15 @@ fun FloatingActionCard(
     content: String = "",
     confirmText: String,
     dismissText: String = "取消",
+    dismissIsDestructive: Boolean = false,
     isDestructive: Boolean = false,
     isLoading: Boolean = false, // 新增：加载状态
     allowDismissWhileLoading: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    actionsBelowContent: Boolean = false,
+    actionContent: (@Composable RowScope.() -> Unit)? = null
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -48,84 +51,130 @@ fun FloatingActionCard(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 左侧文本区
+            if (actionContent != null && actionsBelowContent) {
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                    ActionCardText(
+                        title = title,
+                        content = content,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    if (content.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actionContent
+                    )
                 }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // 右侧操作按钮区
+            } else {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 取消按钮 (加载时禁用以防误触)
-                    TextButton(
-                        onClick = onDismiss,
-                        enabled = !isLoading || allowDismissWhileLoading,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Text(
-                            text = dismissText,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    // 左侧文本区
+                    ActionCardText(
+                        title = title,
+                        content = content,
+                        modifier = Modifier.weight(1f)
+                    )
 
-                    // 确认/执行按钮
-                    Button(
-                        onClick = onConfirm,
-                        enabled = !isLoading, // 加载时禁用
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            contentColor = if (isDestructive) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        // 平滑切换文字和加载动画
-                        AnimatedContent(targetState = isLoading, label = "loading_anim") { loading ->
-                            if (loading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp), // 限制进度条大小适配按钮
-                                    color = if (isDestructive) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    if (actionContent != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            content = actionContent
+                        )
+                    } else {
+                        // 右侧操作按钮区
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 取消按钮 (加载时禁用以防误触)
+                            TextButton(
+                                onClick = onDismiss,
+                                enabled = !isLoading || allowDismissWhileLoading,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
                                 Text(
-                                    text = confirmText,
+                                    text = dismissText,
                                     style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
+                                    color = if (dismissIsDestructive) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                 )
+                            }
+
+                            // 确认/执行按钮
+                            Button(
+                                onClick = onConfirm,
+                                enabled = !isLoading, // 加载时禁用
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    contentColor = if (isDestructive) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                // 平滑切换文字和加载动画
+                                AnimatedContent(targetState = isLoading, label = "loading_anim") { loading ->
+                                    if (loading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp), // 限制进度条大小适配按钮
+                                            color = if (isDestructive) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text(
+                                            text = confirmText,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ActionCardText(
+    title: String,
+    content: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (content.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

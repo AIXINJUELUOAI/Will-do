@@ -39,7 +39,6 @@ data class TimeTableLayoutSnapshot(
 )
 
 object TimeTableLayoutUtils {
-
     const val MIN_SECTION_COUNT = 2
     const val MAX_SECTION_COUNT = 6
     const val MIN_NIGHT_SECTION_COUNT = 0
@@ -58,17 +57,17 @@ object TimeTableLayoutUtils {
         ignoreUnknownKeys = true
         coerceInputValues = true
     }
-
     private val configJson = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
         coerceInputValues = true
         prettyPrint = true
     }
-
-    // ✅ 添加 LRU 缓存，限制缓存大小为 100 个条目，避免内存占用过大
-    private val timeParseCache = androidx.collection.LruCache<String, LocalTime>(100)
-    private val configCache = mutableMapOf<String, TimeTableLayoutConfig>()
+    private val timeParseCache = object : LinkedHashMap<String, LocalTime>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LocalTime>?): Boolean {
+            return size > 100
+        }
+    }
 
     fun defaultConfig(): TimeTableLayoutConfig = TimeTableLayoutConfig()
 
@@ -79,15 +78,16 @@ object TimeTableLayoutUtils {
     }
 
     fun encodeLayoutConfig(config: TimeTableLayoutConfig): String {
+        val normalized = normalizeConfig(config)
         val snapshot = TimeTableLayoutSnapshot(
-            morningCount = config.morningCount,
-            afternoonCount = config.afternoonCount,
-            nightCount = config.nightCount,
-            morningStart = config.morningStart.format(formatter),
-            afternoonStart = config.afternoonStart.format(formatter),
-            nightStart = config.nightStart.format(formatter),
-            customBreaks = config.customBreaks,
-            customDurations = config.customDurations
+            morningCount = normalized.morningCount,
+            afternoonCount = normalized.afternoonCount,
+            nightCount = normalized.nightCount,
+            morningStart = normalized.morningStart.format(formatter),
+            afternoonStart = normalized.afternoonStart.format(formatter),
+            nightStart = normalized.nightStart.format(formatter),
+            customBreaks = normalized.customBreaks,
+            customDurations = normalized.customDurations
         )
         return configJson.encodeToString(snapshot)
     }
@@ -131,8 +131,9 @@ object TimeTableLayoutUtils {
 
     fun generateNodes(config: TimeTableLayoutConfig): List<TimeNode> {
         val normalizedConfig = normalizeConfig(config)
-        val nodes = mutableListOf<TimeNode>()
+        if (normalizedConfig.totalNodes <= 0) return emptyList()
 
+        val nodes = mutableListOf<TimeNode>()
         for (index in 1..normalizedConfig.totalNodes) {
             val previousEnd = nodes.lastOrNull()?.let {
                 safeParseTime(it.endTime, normalizedConfig.morningStart)
@@ -167,7 +168,6 @@ object TimeTableLayoutUtils {
                 period = periodForIndex(index, normalizedConfig)
             )
         }
-
         return nodes
     }
 
@@ -180,35 +180,32 @@ object TimeTableLayoutUtils {
 
         val morningStart = safeParseTime(sortedNodes.first().startTime, defaultConfig().morningStart)
         val afternoonStart = if (afternoonCount > 0 && morningCount < sortedNodes.size) {
-            sortedNodes[morningCount].startTime.let { safeParseTime(it, defaultConfig().afternoonStart) }
+            safeParseTime(sortedNodes[morningCount].startTime, defaultConfig().afternoonStart)
         } else {
             defaultConfig().afternoonStart
         }
         val nightStart = if (nightCount > 0 && morningCount + afternoonCount < sortedNodes.size) {
-            sortedNodes[morningCount + afternoonCount].startTime.let {
-                safeParseTime(it, defaultConfig().nightStart)
-            }
+            safeParseTime(sortedNodes[morningCount + afternoonCount].startTime, defaultConfig().nightStart)
         } else {
             defaultConfig().nightStart
         }
 
-        val config = TimeTableLayoutConfig(
-            morningCount = morningCount,
-            afternoonCount = afternoonCount,
-            nightCount = nightCount,
-            morningStart = morningStart,
-            afternoonStart = afternoonStart,
-            nightStart = nightStart,
-            customBreaks = inferCustomBreaks(sortedNodes, morningCount, afternoonCount),
-            customDurations = inferCustomDurations(sortedNodes)
+        return normalizeConfig(
+            TimeTableLayoutConfig(
+                morningCount = morningCount,
+                afternoonCount = afternoonCount,
+                nightCount = nightCount,
+                morningStart = morningStart,
+                afternoonStart = afternoonStart,
+                nightStart = nightStart,
+                customBreaks = inferCustomBreaks(sortedNodes, morningCount, afternoonCount),
+                customDurations = inferCustomDurations(sortedNodes)
+            )
         )
-
-        return normalizeConfig(config)
     }
 
     fun sanitizeCustomBreaks(customBreaks: Map<Int, Int>, config: TimeTableLayoutConfig): Map<Int, Int> {
         val blockedKeys = setOf(config.lunchBoundaryNode, config.dinnerBoundaryNode)
-
         return customBreaks
             .filterKeys { it in 1 until config.totalNodes && it !in blockedKeys }
             .mapValues { (_, minutes) -> minutes.coerceAtLeast(1) }
@@ -238,7 +235,6 @@ object TimeTableLayoutUtils {
         val morningCount = periods.count { it == PERIOD_MORNING }
         val afternoonCount = periods.count { it == PERIOD_AFTERNOON }
         val nightCount = periods.count { it == PERIOD_NIGHT }
-
         return if (isRenderableSectionCounts(morningCount, afternoonCount, nightCount)) {
             Triple(morningCount, afternoonCount, nightCount)
         } else {
@@ -261,11 +257,9 @@ object TimeTableLayoutUtils {
         if (significantBreaks.size < 2) return null
 
         val topBreaks = significantBreaks.take(2).sortedBy { it.first }
-
         val morningCount = topBreaks[0].first
         val afternoonCount = topBreaks[1].first - topBreaks[0].first
         val nightCount = totalNodes - topBreaks[1].first
-
         return if (isRenderableSectionCounts(morningCount, afternoonCount, nightCount)) {
             Triple(morningCount, afternoonCount, nightCount)
         } else {
@@ -275,7 +269,6 @@ object TimeTableLayoutUtils {
 
     private fun inferCustomDurations(nodes: List<TimeNode>): Map<Int, Int> {
         val durations = mutableMapOf<Int, Int>()
-
         nodes.forEach { node ->
             val start = safeParseTimeOrNull(node.startTime) ?: return@forEach
             val end = safeParseTimeOrNull(node.endTime) ?: return@forEach
@@ -284,7 +277,6 @@ object TimeTableLayoutUtils {
                 durations[node.index] = duration.coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
             }
         }
-
         return durations
     }
 
@@ -295,33 +287,25 @@ object TimeTableLayoutUtils {
     ): Map<Int, Int> {
         val blockedKeys = setOf(morningCount, morningCount + afternoonCount)
         val inferredBreaks = mutableMapOf<Int, Int>()
-
         nodes.zipWithNext().forEach { (current, next) ->
             if (current.index in blockedKeys) return@forEach
 
             val currentEnd = safeParseTimeOrNull(current.endTime) ?: return@forEach
             val nextStart = safeParseTimeOrNull(next.startTime) ?: return@forEach
             val gapMinutes = Duration.between(currentEnd, nextStart).toMinutes().toInt()
-
             if (gapMinutes > 0 && gapMinutes != DEFAULT_BREAK_MINUTES) {
                 inferredBreaks[current.index] = gapMinutes
             }
         }
-
         return inferredBreaks
     }
 
     private fun normalizeConfig(config: TimeTableLayoutConfig): TimeTableLayoutConfig {
-        val morningCount = config.morningCount.coerceAtLeast(0)
-        val afternoonCount = config.afternoonCount.coerceAtLeast(0)
-        val nightCount = config.nightCount.coerceAtLeast(0)
-
         val normalizedConfig = config.copy(
-            morningCount = morningCount,
-            afternoonCount = afternoonCount,
-            nightCount = nightCount
+            morningCount = config.morningCount.coerceAtLeast(0),
+            afternoonCount = config.afternoonCount.coerceAtLeast(0),
+            nightCount = config.nightCount.coerceAtLeast(0)
         )
-
         return normalizedConfig.copy(
             customBreaks = sanitizeCustomBreaks(normalizedConfig.customBreaks, normalizedConfig),
             customDurations = sanitizeCustomDurations(normalizedConfig.customDurations, normalizedConfig)
@@ -365,10 +349,10 @@ object TimeTableLayoutUtils {
 
     private fun safeParseTimeOrNull(value: String): LocalTime? {
         val normalized = normalizeTimeText(value)
-        // ✅ 先尝试从缓存获取
-        timeParseCache[normalized]?.let { return it }
+        synchronized(timeParseCache) {
+            timeParseCache[normalized]?.let { return it }
+        }
 
-        // 缓存未命中，进行解析
         val result = try {
             LocalTime.parse(normalized)
         } catch (_: Exception) {
@@ -379,9 +363,10 @@ object TimeTableLayoutUtils {
             }
         }
 
-        // ✅ 将解析结果存入缓存
         if (result != null) {
-            timeParseCache.put(normalized, result)
+            synchronized(timeParseCache) {
+                timeParseCache[normalized] = result
+            }
         }
         return result
     }

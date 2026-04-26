@@ -1,8 +1,9 @@
 package com.antgskds.calendarassistant.core.rule
 
 import android.content.Context
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import java.time.LocalDateTime
 
@@ -24,8 +25,7 @@ data class EventRenderModel(
     val isExpired: Boolean,
     val isInProgress: Boolean,
     val isComingSoon: Boolean,
-    val isCourse: Boolean,
-    val isRecurringParent: Boolean,
+    val isRecurring: Boolean,
     val canEdit: Boolean,
     val isAggregatePickup: Boolean,
     val isAggregate: Boolean = false,
@@ -48,7 +48,7 @@ data class ActionIconSpec(
 )
 
 object EventPresenter {
-    fun present(context: Context, event: MyEvent): EventRenderModel {
+    fun present(context: Context, event: Event): EventRenderModel {
         val ruleId = EventPresentationInternals.resolveRuleId(event)
         val ruleName = RuleRegistry.getRule(ruleId)?.name ?: ruleId
         val now = LocalDateTime.now()
@@ -56,12 +56,12 @@ object EventPresenter {
         val isInProgress = EventPresentationInternals.computeIsInProgress(event, now)
         val isComingSoon = EventPresentationInternals.computeIsComingSoon(event, now)
         val isTerminal = event.isCompleted || event.isCheckedIn
-        val isCourse = event.tag == EventTags.COURSE
+        val isCourse = event.tag == EventTags.COURSE || event.tag == "__removed_course__"
         val isAggregatePickup = EventPresentationInternals.isFoodPickup(event.description)
         val (title, subtitle, detail) = EventPresentationInternals.resolveDisplayContent(event, ruleId, isExpired, isTerminal)
 
         return EventRenderModel(
-            eventId = event.id,
+            eventId = event.idString,
             ruleId = ruleId,
             ruleName = ruleName,
             title = title,
@@ -78,18 +78,17 @@ object EventPresenter {
             isExpired = isExpired,
             isInProgress = isInProgress,
             isComingSoon = isComingSoon,
-            isCourse = isCourse,
-            isRecurringParent = event.isRecurringParent,
-            canEdit = !isCourse && !event.isRecurring && !event.isRecurringParent,
+            isRecurring = event.isRecurring,
+            canEdit = !event.isRecurring,
             isAggregatePickup = isAggregatePickup
         )
     }
 
-    fun presentCapsule(context: Context, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    fun presentCapsule(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         return EventPresentationInternals.composeCapsule(present(context, event), event, isExpired)
     }
 
-    fun presentCapsule(context: Context, events: List<MyEvent>): CapsuleDisplayModel {
+    fun presentCapsule(context: Context, events: List<Event>): CapsuleDisplayModel {
         if (events.size == 1) {
             val event = events[0]
             return presentCapsule(context, event, EventPresentationInternals.computeIsExpired(event, LocalDateTime.now()))
@@ -97,5 +96,5 @@ object EventPresenter {
         return EventPresentationInternals.composeAggregatePickupCapsule(events)
     }
 
-    fun resolveRuleId(event: MyEvent): String = EventPresentationInternals.resolveRuleId(event)
+    fun resolveRuleId(event: Event): String = EventPresentationInternals.resolveRuleId(event)
 }

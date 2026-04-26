@@ -1,7 +1,5 @@
 package com.antgskds.calendarassistant.core.rule
 
-import com.antgskds.calendarassistant.data.db.entity.EventStateEntity
-import com.antgskds.calendarassistant.data.db.entity.EventTransitionEntity
 
 object RuleActionDefaults {
     const val STATE_PENDING = "pending"

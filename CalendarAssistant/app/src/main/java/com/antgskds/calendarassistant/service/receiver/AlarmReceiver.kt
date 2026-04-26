@@ -12,7 +12,8 @@ import android.os.VibratorManager
 import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.query.AlarmRoute
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import kotlinx.coroutines.CoroutineScope
@@ -34,7 +35,7 @@ class AlarmReceiver : BroadcastReceiver() {
         private const val TAG = "AlarmReceiver"
 
         @JvmStatic
-        internal fun showStandardNotification(context: Context, event: MyEvent, label: String = "日程开始") {
+        internal fun showStandardNotification(context: Context, event: Event, label: String = "日程开始") {
             val app = context.applicationContext as App
             app.notificationCenter.showStandardNotificationForEvent(event = event, label = label)
         }

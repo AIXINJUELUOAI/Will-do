@@ -5,11 +5,11 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
-import com.antgskds.calendarassistant.core.calendar.CalendarPermissionHelper
 
 class PermissionCenter {
     fun hasCalendarPermissions(context: Context): Boolean {
-        return CalendarPermissionHelper.hasAllPermissions(context)
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED &&
+               ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
     }
 
     fun canDrawOverlays(context: Context): Boolean {

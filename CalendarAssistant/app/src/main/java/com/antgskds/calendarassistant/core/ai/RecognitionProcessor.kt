@@ -10,8 +10,8 @@ import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.ai.RulePatchProvider
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.ModelMessage
 import com.antgskds.calendarassistant.data.model.ModelRequest
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -37,9 +37,50 @@ import java.time.temporal.TemporalAdjusters
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * AI 返回的原始 JSON 事件 DTO —— 字段名与 prompt 约定一致。
+ * 仅用于反序列化，之后立即转成 RecognitionDraft。
+ */
+@Serializable
+data class AiEventDto(
+    val title: String = "",
+    val startTime: String = "",
+    val endTime: String = "",
+    val location: String = "",
+    val description: String = "",
+    val tag: String = "general",
+    val type: String = "event"       // 兼容旧 prompt，不再传播到 RecognitionDraft
+) {
+    fun toRecognitionDraft(): RecognitionDraft {
+        val resolvedTag = if (tag.isBlank() || tag == "general") {
+            if (type == "pickup") "pickup" else "general"
+        } else tag
+        return RecognitionDraft(
+            title = title,
+            startTS = parseDateTimeToEpoch(startTime),
+            endTS = parseDateTimeToEpoch(endTime),
+            location = location,
+            description = description,
+            tag = resolvedTag
+        )
+    }
+    companion object {
+        private val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        fun parseDateTimeToEpoch(value: String): Long {
+            val text = value.trim()
+            if (text.isBlank()) return 0L
+            return try {
+                LocalDateTime.parse(text, dtf)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toEpochSecond()
+            } catch (_: Exception) { 0L }
+        }
+    }
+}
+
 @Serializable
 data class AiResponse(
-    val events: List<CalendarEventData> = emptyList()
+    val events: List<AiEventDto> = emptyList()
 )
 
 data class AnalysisFailure(
@@ -65,7 +106,7 @@ data class OcrResult(
 )
 
 private data class AiEventFeature(
-    val event: CalendarEventData,
+    val event: RecognitionDraft,
     val normalizedTitle: String,
     val startTime: LocalDateTime?,
     val pickupCode: String?,
@@ -103,7 +144,7 @@ object RecognitionProcessor {
         }
     }
 
-    suspend fun parseUserText(text: String, settings: MySettings, context: Context): AnalysisResult<CalendarEventData> {
+    suspend fun parseUserText(text: String, settings: MySettings, context: Context): AnalysisResult<RecognitionDraft> {
         val appContext = context.applicationContext
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -119,7 +160,8 @@ object RecognitionProcessor {
             timeStr = timeStr,
             dateToday = dateToday,
             dayOfWeek = dayOfWeek,
-            rulePatch = rulePatch
+            rulePatch = rulePatch,
+            defaultDurationMinutes = settings.defaultEventDurationMinutes
         )
 
         Log.d(TAG, "========== [AI 自然语言输入] ==========")
@@ -172,7 +214,7 @@ object RecognitionProcessor {
         }
     }
 
-    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<CalendarEventData>> {
+    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<RecognitionDraft>> {
         val appContext = context.applicationContext
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
 
@@ -275,7 +317,7 @@ object RecognitionProcessor {
         extractedText: String,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -289,7 +331,8 @@ object RecognitionProcessor {
             dateYesterday = now.minusDays(1).format(dtfDate),
             dateBeforeYesterday = now.minusDays(2).format(dtfDate),
             dayOfWeek = getDayOfWeek(now),
-            rulePatch = rulePatch
+            rulePatch = rulePatch,
+            defaultDurationMinutes = settings.defaultEventDurationMinutes
         )
 
         return executeAiRequest(schedulePrompt, extractedText, settings, "日程识别")
@@ -299,7 +342,7 @@ object RecognitionProcessor {
         extractedText: String,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         val now = LocalDateTime.now()
         val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
         val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -308,7 +351,8 @@ object RecognitionProcessor {
             context = context.applicationContext,
             timeStr = now.format(dtfFull),
             nowTime = now.format(dtfTime),
-            nowPlusHourTime = now.plusHours(1).format(dtfTime)
+            nowPlusHourTime = now.plusHours(1).format(dtfTime),
+            defaultDurationMinutes = settings.defaultEventDurationMinutes
         )
 
         return executeAiRequest(pickupPrompt, extractedText, settings, "取件码识别")
@@ -319,7 +363,7 @@ object RecognitionProcessor {
         userText: String,
         settings: MySettings,
         debugTag: String
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
             Log.e(TAG, "[$debugTag] AI 配置缺失，无法请求")
@@ -379,7 +423,7 @@ object RecognitionProcessor {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
             Log.e(TAG, "多模态 AI 配置缺失，跳过识别")
@@ -402,7 +446,8 @@ object RecognitionProcessor {
             nowTime = now.format(dtfTime),
             nowPlusHourTime = now.plusHours(1).format(dtfTime),
             dayOfWeek = getDayOfWeek(now),
-            rulePatch = rulePatch
+            rulePatch = rulePatch,
+            defaultDurationMinutes = settings.defaultEventDurationMinutes
         )
 
         val imageBytes = bitmapToJpegBytes(bitmap)
@@ -424,10 +469,10 @@ object RecognitionProcessor {
                         val normalizedEvents = enforceRuleHeaders(events)
 
                         val pickupEvents = normalizedEvents.filter {
-                            it.tag == EventTags.PICKUP || it.type == "pickup"
+                            it.tag == EventTags.PICKUP
                         }
                         val scheduleEvents = normalizedEvents.filter {
-                            it.tag != EventTags.PICKUP && it.type != "pickup"
+                            it.tag != EventTags.PICKUP
                         }
                     val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
 
@@ -482,7 +527,7 @@ object RecognitionProcessor {
         return if (end >= start) trimmed.substring(start, end + 1).trim() else trimmed
     }
 
-    private fun parseCalendarEvents(cleanJson: String): List<CalendarEventData> {
+    private fun parseCalendarEvents(cleanJson: String): List<RecognitionDraft> {
         val parsed = jsonParser.parseToJsonElement(cleanJson)
         return when (parsed) {
             is JsonObject -> parseCalendarEventsFromObject(parsed)
@@ -491,19 +536,19 @@ object RecognitionProcessor {
         }
     }
 
-    private fun parseCalendarEventsFromObject(jsonObject: JsonObject): List<CalendarEventData> {
+    private fun parseCalendarEventsFromObject(jsonObject: JsonObject): List<RecognitionDraft> {
         val eventsElement = jsonObject["events"]
         return when (eventsElement) {
             is JsonArray -> parseCalendarEventsFromArray(eventsElement)
-            null -> listOf(jsonParser.decodeFromJsonElement(CalendarEventData.serializer(), jsonObject))
+            null -> listOf(jsonParser.decodeFromJsonElement(AiEventDto.serializer(), jsonObject).toRecognitionDraft())
             else -> emptyList()
         }
     }
 
-    private fun parseCalendarEventsFromArray(jsonArray: JsonArray): List<CalendarEventData> {
+    private fun parseCalendarEventsFromArray(jsonArray: JsonArray): List<RecognitionDraft> {
         return jsonArray.mapNotNull { element ->
             runCatching {
-                jsonParser.decodeFromJsonElement(CalendarEventData.serializer(), element)
+                jsonParser.decodeFromJsonElement(AiEventDto.serializer(), element).toRecognitionDraft()
             }.getOrNull()
         }
     }
@@ -513,7 +558,7 @@ object RecognitionProcessor {
         return AnalysisFailure(mapped.title, mapped.detail)
     }
 
-    private fun enforceRuleHeaders(events: List<CalendarEventData>): List<CalendarEventData> {
+    private fun enforceRuleHeaders(events: List<RecognitionDraft>): List<RecognitionDraft> {
         return events.map { event ->
             val ruleId = normalizeRuleId(event)
             val description = normalizeDescriptionHeader(event.description, ruleId)
@@ -524,7 +569,7 @@ object RecognitionProcessor {
         }
     }
 
-    private fun normalizeRuleId(event: CalendarEventData): String {
+    private fun normalizeRuleId(event: RecognitionDraft): String {
         val fromHeader = RuleMatchingEngine.resolvePayload(event.description, event.tag)?.ruleId
         if (!fromHeader.isNullOrBlank()) return fromHeader
 
@@ -537,8 +582,8 @@ object RecognitionProcessor {
             return raw
         }
 
-        val type = event.type.trim().lowercase()
-        return when (type) {
+        // type field removed from RecognitionDraft; tag already resolved in AiEventDto
+        return when (event.tag.trim().lowercase()) {
             "pickup" -> RuleMatchingEngine.RULE_PICKUP
             else -> RuleMatchingEngine.RULE_GENERAL
         }
@@ -687,9 +732,9 @@ object RecognitionProcessor {
      * - "开会后取件" + "顺丰 123" → 保留 "开会后取件"
      */
     private fun filterRedundantSchedules(
-        scheduleEvents: List<CalendarEventData>,
-        pickupEvents: List<CalendarEventData>
-    ): List<CalendarEventData> {
+        scheduleEvents: List<RecognitionDraft>,
+        pickupEvents: List<RecognitionDraft>
+    ): List<RecognitionDraft> {
         if (pickupEvents.isEmpty()) return scheduleEvents
 
         val pickupKeywordsRegex = Regex("(取|拿|收)(件|快递|餐|外卖|货)")
@@ -740,7 +785,7 @@ object RecognitionProcessor {
     private val trainNoRegex = Regex("[GCDZTKSYL]\\d{1,4}")
     private const val DUPLICATE_TIME_TOLERANCE_MINUTES = 10L
 
-    private fun deduplicateAiEvents(events: List<CalendarEventData>): List<CalendarEventData> {
+    private fun deduplicateAiEvents(events: List<RecognitionDraft>): List<RecognitionDraft> {
         if (events.size <= 1) return events
         val features = events.map { buildFeature(it) }
         val consumed = BooleanArray(events.size)
@@ -806,11 +851,15 @@ object RecognitionProcessor {
         return features.indices.filterNot { consumed[it] }.map { features[it].event }
     }
 
-    private fun buildFeature(event: CalendarEventData): AiEventFeature {
+    private fun buildFeature(event: RecognitionDraft): AiEventFeature {
         val title = event.title.trim()
         val description = event.description.trim()
         val normalizedTitle = normalizeText(title)
-        val startTime = parseDateTime(event.startTime)
+        val startTime = if (event.startTS > 0L) {
+            java.time.Instant.ofEpochSecond(event.startTS)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDateTime()
+        } else null
 
         val hasPickupMicro = description.startsWith("【取件】") || description.startsWith("【取餐】") || description.startsWith("【pickup】")
         val hasRideMicro = description.startsWith("【用车】") || description.startsWith("【taxi】")
@@ -834,7 +883,7 @@ object RecognitionProcessor {
         val trainNo = extractTrainNo(description).ifBlankOrNull()
             ?: extractTrainNo(title).ifBlankOrNull()
 
-        val isPickup = event.tag == EventTags.PICKUP || event.type == "pickup" || hasPickupMicro
+        val isPickup = event.tag == EventTags.PICKUP || hasPickupMicro
 
         return AiEventFeature(
             event = event,

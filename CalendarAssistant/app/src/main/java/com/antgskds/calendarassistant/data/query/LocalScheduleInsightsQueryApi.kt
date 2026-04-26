@@ -1,32 +1,27 @@
 package com.antgskds.calendarassistant.data.query
 
-import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class LocalScheduleInsightsQueryApi : ScheduleInsightsQueryApi {
-    override fun hasDuplicateAdvanceReminder(events: List<MyEvent>, minutes: Int): Boolean {
+    override fun hasDuplicateAdvanceReminder(events: List<Event>, minutes: Int): Boolean {
         return events.any { event ->
-            event.reminders.any { it <= minutes }
+            event.reminderMinutes.any { it <= minutes }
         }
     }
 
     override fun findNextRecurringInstance(
-        events: List<MyEvent>,
-        parentEventId: String,
+        events: List<Event>,
+        parentEventId: Long,
         nowMillis: Long
-    ): MyEvent? {
+    ): Event? {
         return events
-            .filter { it.isRecurring && !it.isRecurringParent && it.parentRecurringId == parentEventId }
-            .mapNotNull { child ->
-                val startMillis = RecurringEventUtils.eventStartMillis(child) ?: return@mapNotNull null
-                child to startMillis
-            }
-            .filter { (_, startMillis) -> startMillis >= nowMillis }
-            .minByOrNull { (_, startMillis) -> startMillis }
-            ?.first
+            .filter { it.parentId == parentEventId }
+            .filter { it.startMillis >= nowMillis }
+            .minByOrNull { it.startMillis }
     }
 
     override fun calculateTargetWeek(

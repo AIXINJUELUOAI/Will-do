@@ -2,7 +2,20 @@ package com.antgskds.calendarassistant.ui.page_display.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutConfig
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.TimeNode
+import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.WheelPicker
@@ -58,7 +72,6 @@ fun TimeTableEditorScreen(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
-    val initialJson = settings.timeTableJson
     val scope = rememberCoroutineScope()
     val jsonParser = remember { Json { ignoreUnknownKeys = true; prettyPrint = true } }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -76,10 +89,8 @@ fun TimeTableEditorScreen(
         TimeTableLayoutUtils.resolveLayoutConfig(settings.timeTableConfigJson, settings.timeTableJson)
     }
 
-    // 统一 FAB 尺寸为 72.dp，图标 34.dp
     val fabSize = 72.dp
     val fabIconSize = 34.dp
-
     val sectionHeaderStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary
@@ -101,16 +112,20 @@ fun TimeTableEditorScreen(
     var morningStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.morningStart) }
     var afternoonStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.afternoonStart) }
     var nightStart by remember(resolvedConfig) { mutableStateOf(resolvedConfig.nightStart) }
-    val customBreaks = remember(resolvedConfig) { mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customBreaks) } }
-    val customDurations = remember(resolvedConfig) { mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customDurations) } }
+    val customBreaks = remember(resolvedConfig) {
+        mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customBreaks) }
+    }
+    val customDurations = remember(resolvedConfig) {
+        mutableStateMapOf<Int, Int>().apply { putAll(resolvedConfig.customDurations) }
+    }
 
     var showLayoutConfigDialog by remember { mutableStateOf(false) }
     var showBreakPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showDurationPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showTimePickerForAnchor by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(settings.timeTableConfigJson, initialJson) {
-        if (settings.timeTableConfigJson.isBlank() && initialJson.isNotBlank()) {
+    LaunchedEffect(settings.timeTableConfigJson, settings.timeTableJson) {
+        if (settings.timeTableConfigJson.isBlank() && settings.timeTableJson.isNotBlank()) {
             viewModel.updateTimeTableConfig(TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig))
         }
     }
@@ -256,7 +271,7 @@ fun TimeTableEditorScreen(
                             Badge(containerColor = MaterialTheme.colorScheme.primary) {
                                 Text(nodeIndex.toString(), modifier = Modifier.padding(4.dp))
                             }
-                            Spacer(Modifier.width(16.dp))
+                            Spacer(Modifier.size(16.dp))
                             Text("${node.startTime} - ${node.endTime}", style = cardTimeStyle)
                         }
                         Text("${nodeDuration}分", style = cardDurationStyle)
@@ -416,7 +431,7 @@ fun TimeTableEditorScreen(
         var selectedBreak by remember(nodeIndex, initialBreak) { mutableIntStateOf(initialBreak) }
         AlertDialog(
             onDismissRequest = { showBreakPickerForNode = null },
-            title = { Text("课间时长") },
+            title = { CenteredDialogTitle("课间时长") },
             text = {
                 WheelPicker(
                     items = options.map { "$it 分钟" },
@@ -463,7 +478,7 @@ fun TimeTableEditorScreen(
 
         AlertDialog(
             onDismissRequest = { showDurationPickerForNode = null },
-            title = { Text("第 $nodeIndex 节时长") },
+            title = { CenteredDialogTitle("第 $nodeIndex 节时长") },
             text = {
                 WheelPicker(
                     items = options.map { "$it 分钟" },
@@ -497,9 +512,15 @@ fun TimeTableEditorScreen(
             "afternoon" -> afternoonStart
             else -> nightStart
         }
+        val pickerTitle = when (showTimePickerForAnchor) {
+            "morning" -> "上午开始时间"
+            "afternoon" -> "下午开始时间"
+            else -> "晚上开始时间"
+        }
         WheelTimePickerDialog(
             initialTime = initialTime.toString(),
             onDismiss = { showTimePickerForAnchor = null },
+            title = pickerTitle,
             onConfirm = {
                 try {
                     val selectedTime = LocalTime.parse(it)
@@ -562,7 +583,7 @@ private fun TimeTableStructureDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("课程结构", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+        title = { CenteredDialogTitle("课程结构") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -591,7 +612,7 @@ private fun TimeTableStructureDialog(
                         onValueChanged = { morningCount = it }
                     )
                     TimeTableCountWheel(
-                        title = "中午",
+                        title = "下午",
                         items = daySectionOptions,
                         selectedValue = afternoonCount,
                         modifier = Modifier.weight(1f),
@@ -608,9 +629,7 @@ private fun TimeTableStructureDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(morningCount, afternoonCount, nightCount) }
-            ) {
+            TextButton(onClick = { onConfirm(morningCount, afternoonCount, nightCount) }) {
                 Text("确定")
             }
         },
@@ -701,7 +720,6 @@ private fun nearestOption(options: List<Int>, target: Int): Int {
 
     var nearest = options.first()
     var bestDistance = kotlin.math.abs(nearest - target)
-
     for (option in options.drop(1)) {
         val distance = kotlin.math.abs(option - target)
         if (distance < bestDistance) {
@@ -709,7 +727,6 @@ private fun nearestOption(options: List<Int>, target: Int): Int {
             bestDistance = distance
         }
     }
-
     return nearest
 }
 

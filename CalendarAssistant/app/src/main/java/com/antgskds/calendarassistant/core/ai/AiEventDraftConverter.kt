@@ -1,58 +1,60 @@
 package com.antgskds.calendarassistant.core.ai
 
-import androidx.compose.ui.graphics.Color
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
-import com.antgskds.calendarassistant.ui.theme.EventColors
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
+import androidx.compose.ui.graphics.toArgb
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.ui.theme.AppEventColors
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
 
-fun convertAiEventToMyEvent(
-    eventData: CalendarEventData,
-    currentEventsCount: Int,
-    sourceImagePath: String?
-): MyEvent {
-    val now = LocalDateTime.now()
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+/**
+ * 将 AI 识别草稿转为 Event 对象（尚未持久化，id = null）。
+ * tag 在识别阶段已注入；识别导入事件统一分配 APP 内色盘颜色。
+ */
+fun convertDraftToEvent(
+    draft: RecognitionDraft,
+    sourceImagePath: String? = null,
+    defaultDurationMinutes: Int = 60
+): Event {
+    val resolvedTag = draft.tag.ifBlank { EventTags.GENERAL }
+    val resolvedEndTs = resolveEndTs(draft.startTS, defaultDurationMinutes)
 
-    val startDateTime = try {
-        if (eventData.startTime.isNotBlank()) LocalDateTime.parse(eventData.startTime, formatter) else now
-    } catch (_: Exception) {
-        now
-    }
-
-    val endDateTime = try {
-        if (eventData.endTime.isNotBlank()) LocalDateTime.parse(eventData.endTime, formatter) else startDateTime.plusHours(1)
-    } catch (_: Exception) {
-        startDateTime.plusHours(1)
-    }
-
-    val resolvedTag = when {
-        eventData.tag.isNotBlank() && eventData.tag != EventTags.GENERAL -> eventData.tag
-        eventData.type == "pickup" -> EventTags.PICKUP
-        else -> eventData.tag
-    }.ifBlank { EventTags.GENERAL }
-
-    val color = if (EventColors.isNotEmpty()) {
-        EventColors[currentEventsCount % EventColors.size]
-    } else {
-        Color.Gray
-    }
-
-    return MyEvent(
-        id = UUID.randomUUID().toString(),
-        title = eventData.title.trim(),
-        startDate = startDateTime.toLocalDate(),
-        endDate = endDateTime.toLocalDate(),
-        startTime = startDateTime.format(timeFormatter),
-        endTime = endDateTime.format(timeFormatter),
-        location = eventData.location,
-        description = eventData.description,
-        color = color,
-        sourceImagePath = sourceImagePath,
-        tag = resolvedTag
+    return Event(
+        id = null,
+        title = draft.title.trim(),
+        startTS = draft.startTS,
+        endTS = resolvedEndTs,
+        location = draft.location,
+        description = buildDescription(draft.description, sourceImagePath),
+        timeZone = draft.timeZone,
+        tag = resolvedTag,
+        color = randomRecognizedEventColor()
     )
 }
+
+private fun buildDescription(desc: String, sourceImagePath: String?): String {
+    if (sourceImagePath.isNullOrBlank()) return desc
+    return if (desc.isBlank()) "[img:$sourceImagePath]"
+    else "$desc\n[img:$sourceImagePath]"
+}
+
+private fun resolveEndTs(startTs: Long, defaultDurationMinutes: Int): Long {
+    if (startTs <= 0L) return startTs
+    return if (defaultDurationMinutes == END_OF_DAY_DURATION) {
+        val zoneId = ZoneId.systemDefault()
+        Instant.ofEpochSecond(startTs)
+            .atZone(zoneId)
+            .toLocalDate()
+            .atTime(LocalTime.of(23, 59))
+            .atZone(zoneId)
+            .toEpochSecond()
+    } else {
+        startTs + defaultDurationMinutes.coerceAtLeast(1).toLong() * 60L
+    }
+}
+
+private fun randomRecognizedEventColor(): Int = AppEventColors.random().toArgb()
+
+const val END_OF_DAY_DURATION = -1

@@ -1,12 +1,12 @@
 package com.antgskds.calendarassistant.data.query
 
-import com.antgskds.calendarassistant.core.course.CourseManager
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.HomeSnapshot
-import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -16,28 +16,28 @@ import java.time.temporal.ChronoUnit
 class LocalHomeQueryApi : HomeQueryApi {
     override fun buildSnapshot(
         selectedDate: LocalDate,
-        events: List<MyEvent>,
-        courses: List<Course>,
+        events: List<Event>,
         settings: MySettings
     ): HomeSnapshot {
-        val scheduleEvents = events.filter { it.tag != EventTags.NOTE && it.tag != EventTags.COURSE }
-        val noteEvents = events.filter { it.tag == EventTags.NOTE }
+        val activeEvents = events.filter { it.archivedAt == null }
+        val noteEvents = activeEvents.filter { it.tag == EventTags.NOTE }
+        val scheduleEvents = activeEvents.filter { it.tag != EventTags.NOTE }
 
-        val todayNormal = scheduleEvents.filter { event ->
-            !event.isRecurringParent && DateCalculator.overlapsDate(event, selectedDate)
-        }.distinctBy { it.id }
-        val todayCourses = CourseManager.getDailyCourses(selectedDate, courses, settings)
-        val todayMerged = sortEventsByDisplayPriority(todayNormal + todayCourses)
+        val expandTo = if (settings.showTomorrowEvents) selectedDate.plusDays(1) else selectedDate
+        val displayItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, selectedDate, expandTo)
+
+        val todayItems = displayItems.filter { item ->
+            overlapsDate(item, selectedDate)
+        }.distinctBy { it.stableKey }
+        val todayMerged = sortByDisplayPriority(todayItems)
 
         val tomorrowMerged = if (settings.showTomorrowEvents) {
             val tomorrow = selectedDate.plusDays(1)
-            val todayEventIds = todayMerged.map { it.id }.toSet()
-            val tomorrowNormal = scheduleEvents.filter { event ->
-                !event.isRecurringParent && DateCalculator.overlapsDate(event, tomorrow)
-            }.distinctBy { it.id }
-            val tomorrowCourses = CourseManager.getDailyCourses(tomorrow, courses, settings)
-            sortEventsByDisplayPriority(tomorrowNormal + tomorrowCourses)
-                .filter { it.id !in todayEventIds }
+            val todayKeys = todayMerged.map { it.stableKey }.toSet()
+            val tomorrowItems = displayItems.filter { item ->
+                overlapsDate(item, tomorrow)
+            }.distinctBy { it.stableKey }
+            sortByDisplayPriority(tomorrowItems).filter { it.stableKey !in todayKeys }
         } else {
             emptyList()
         }
@@ -49,45 +49,56 @@ class LocalHomeQueryApi : HomeQueryApi {
         )
     }
 
-    override fun calculateDelayToNextExpiration(events: List<MyEvent>, now: LocalDateTime): Long {
-        var nearestEndMillis = Long.MAX_VALUE
+    override fun calculateDelayToNextExpiration(events: List<Event>, now: LocalDateTime): Long {
+        val today = now.toLocalDate()
+        val scheduleEvents = events.filter { it.archivedAt == null && it.tag != EventTags.NOTE }
+        val displayItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, today, today)
 
-        for (event in events) {
-            if (event.isRecurringParent || event.tag == EventTags.NOTE || event.tag == EventTags.COURSE) continue
+        var nearestEndMillis = Long.MAX_VALUE
+        for (item in displayItems) {
             try {
-                val timeParts = event.endTime.split(":")
-                val hour = timeParts.getOrElse(0) { "23" }.toIntOrNull() ?: 23
-                val minute = timeParts.getOrElse(1) { "59" }.toIntOrNull() ?: 59
-                val endDateTime = LocalDateTime.of(event.endDate, LocalTime.of(hour, minute))
+                val endDateTime = LocalDateTime.of(item.endDate, item.endLocalTime)
                 if (endDateTime.isAfter(now)) {
                     val diff = ChronoUnit.MILLIS.between(now, endDateTime)
                     if (diff in 1 until nearestEndMillis) {
                         nearestEndMillis = diff
                     }
                 }
-            } catch (_: Exception) {
-                continue
-            }
+            } catch (_: Exception) { continue }
         }
-
         return if (nearestEndMillis == Long.MAX_VALUE) -1L else nearestEndMillis
     }
 
-    private fun sortEventsByDisplayPriority(events: List<MyEvent>): List<MyEvent> {
-        return events.sortedWith(
+    private fun overlapsDate(item: ScheduleDisplayItem, date: LocalDate): Boolean {
+        return try {
+            val startDt = LocalDateTime.of(item.startDate, item.startLocalTime)
+            val endDt = LocalDateTime.of(item.endDate, item.endLocalTime)
+            val dayStart = date.atStartOfDay()
+            val dayEnd = date.plusDays(1).atStartOfDay()
+            endDt > dayStart && startDt < dayEnd
+        } catch (_: Exception) {
+            date >= item.startDate && date <= item.endDate
+        }
+    }
+
+    private fun sortByDisplayPriority(items: List<ScheduleDisplayItem>): List<ScheduleDisplayItem> {
+        val now = LocalDateTime.now()
+        return items.sortedWith(
             compareBy(
-                { event ->
-                    val isExpired = DateCalculator.isEventExpired(event)
-                    val isImportant = event.isImportant
-                    val isMultiDay = event.startDate != event.endDate
+                { item ->
+                    val isExpired = try {
+                        LocalDateTime.of(item.endDate, item.endLocalTime).isBefore(now)
+                    } catch (_: Exception) { false }
+                    val isTransit = item.isTransit
+                    val isMultiDay = item.startDate != item.endDate
                     when {
-                        !isExpired && isImportant && isMultiDay -> 0
-                        !isExpired && isImportant && !isMultiDay -> 1
-                        !isExpired && !isImportant && isMultiDay -> 2
-                        !isExpired && !isImportant && !isMultiDay -> 3
-                        isExpired && isImportant && isMultiDay -> 4
-                        isExpired && isImportant && !isMultiDay -> 5
-                        isExpired && !isImportant && isMultiDay -> 6
+                        !isExpired && isTransit && isMultiDay -> 0
+                        !isExpired && isTransit && !isMultiDay -> 1
+                        !isExpired && !isTransit && isMultiDay -> 2
+                        !isExpired && !isTransit && !isMultiDay -> 3
+                        isExpired && isTransit && isMultiDay -> 4
+                        isExpired && isTransit && !isMultiDay -> 5
+                        isExpired && !isTransit && isMultiDay -> 6
                         else -> 7
                     }
                 },

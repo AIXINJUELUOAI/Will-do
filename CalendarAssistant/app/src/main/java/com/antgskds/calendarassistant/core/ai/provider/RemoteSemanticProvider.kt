@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 
 object RemoteSemanticProvider : SemanticProvider {
@@ -12,7 +12,7 @@ object RemoteSemanticProvider : SemanticProvider {
         text: String,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<CalendarEventData> {
+    ): AnalysisResult<RecognitionDraft> {
         return RecognitionProcessor.parseUserText(text, settings, context)
     }
 
@@ -20,7 +20,7 @@ object RemoteSemanticProvider : SemanticProvider {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         return RecognitionProcessor.analyzeImage(bitmap, settings, context)
     }
 }

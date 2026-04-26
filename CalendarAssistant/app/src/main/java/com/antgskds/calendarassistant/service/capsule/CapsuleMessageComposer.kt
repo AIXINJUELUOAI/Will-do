@@ -2,7 +2,8 @@ package com.antgskds.calendarassistant.service.capsule
 
 import android.content.Context
 import com.antgskds.calendarassistant.core.content.EventCapsulePresenter
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 
 object CapsuleMessageComposer {
 
@@ -41,15 +42,15 @@ object CapsuleMessageComposer {
 
     // --- 事件类胶囊 (委托 EventPresenter) ---
 
-    fun composeSchedule(context: Context, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    fun composeSchedule(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         return EventCapsulePresenter.present(context, event, isExpired).displayModel
     }
 
-    fun composePickup(context: Context, event: MyEvent, isExpired: Boolean): CapsuleDisplayModel {
+    fun composePickup(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         return EventCapsulePresenter.present(context, event, isExpired).displayModel
     }
 
-    fun composeAggregatePickup(context: Context, pickupEvents: List<MyEvent>): CapsuleDisplayModel {
+    fun composeAggregatePickup(context: Context, pickupEvents: List<Event>): CapsuleDisplayModel {
         return EventCapsulePresenter.present(context, pickupEvents).displayModel
     }
 }

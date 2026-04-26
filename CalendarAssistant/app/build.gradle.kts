@@ -34,8 +34,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "1.2.6 Beta"
+        versionCode = 30
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -99,6 +99,7 @@ dependencies {
 
     // === JSON 序列化 (核心数据地基) ===
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // === Ktor 网络库 (AI 请求用) ===
     implementation("io.ktor:ktor-client-android:2.3.7")

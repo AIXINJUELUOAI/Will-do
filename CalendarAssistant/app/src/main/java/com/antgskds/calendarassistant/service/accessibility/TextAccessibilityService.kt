@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.service.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -65,6 +66,8 @@ class TextAccessibilityService : AccessibilityService() {
     private var recognitionFailedSubscriptionJob: Job? = null
     private var ingestSucceededSubscriptionJob: Job? = null
     private var ingestFailedSubscriptionJob: Job? = null
+    private var keyFilterSettingsJob: Job? = null
+    private var baseAccessibilityFlags: Int? = null
 
     companion object {
         private const val TAG = "TextAccessibilityService"
@@ -99,9 +102,50 @@ class TextAccessibilityService : AccessibilityService() {
         instance = this
         lastConnectedAt = System.currentTimeMillis()
         launcherPackageName = getLauncherPackageName()
+        baseAccessibilityFlags = serviceInfo?.flags?.and(AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv())
+        refreshKeyEventFiltering()
+        subscribeKeyFilterSettings()
         subscribeRecognitionFailedEvents()
         subscribeIngestEvents()
         Log.d(TAG, "无障碍服务已连接")
+    }
+
+    private fun subscribeKeyFilterSettings() {
+        keyFilterSettingsJob?.cancel()
+        keyFilterSettingsJob = serviceScope.launch {
+            settingsQueryApi.settings.collect {
+                refreshKeyEventFiltering()
+            }
+        }
+    }
+
+    private fun refreshKeyEventFiltering() {
+        val info = serviceInfo ?: return
+        val baseFlags = baseAccessibilityFlags ?: info.flags.and(AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv())
+        val shouldFilterKeys = shouldFilterVolumeUpKeys()
+        val nextFlags = if (shouldFilterKeys) {
+            baseFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+        } else {
+            volumeLongPressJob?.cancel()
+            isLongPressTriggered = false
+            baseFlags
+        }
+
+        if (info.flags != nextFlags) {
+            info.flags = nextFlags
+            setServiceInfo(info)
+            Log.d(TAG, "按键过滤状态已更新: enabled=$shouldFilterKeys")
+        }
+    }
+
+    private fun shouldFilterVolumeUpKeys(): Boolean {
+        val settings = settingsQueryApi.settings.value
+        if (!settings.volumeUpLongPressEnabled) return false
+        return when (settings.volumeUpLongPressAction) {
+            ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
+            ACTION_VOLUME_LONG_PRESS_FLOATING -> settings.isFloatingWindowEnabled
+            else -> false
+        }
     }
 
     private fun subscribeRecognitionFailedEvents() {
@@ -183,15 +227,12 @@ class TextAccessibilityService : AccessibilityService() {
         }
 
         val longPressAction = currentSettings.volumeUpLongPressAction
-        val shouldHandleLongPress = currentSettings.volumeUpLongPressEnabled && when (longPressAction) {
-            ACTION_VOLUME_LONG_PRESS_NONE -> false
-            ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
-            ACTION_VOLUME_LONG_PRESS_FLOATING -> currentSettings.isFloatingWindowEnabled
-            else -> false
-        }
+        val shouldHandleLongPress = shouldFilterVolumeUpKeys()
 
         if (!shouldHandleLongPress) {
-            return super.onKeyEvent(event)
+            volumeLongPressJob?.cancel()
+            isLongPressTriggered = false
+            return false
         }
 
         // 1. 如果悬浮窗已显示，完全放行所有按键，确保用户可以正常调节音量或进行其他操作
@@ -331,6 +372,8 @@ class TextAccessibilityService : AccessibilityService() {
         ingestSucceededSubscriptionJob = null
         ingestFailedSubscriptionJob?.cancel()
         ingestFailedSubscriptionJob = null
+        keyFilterSettingsJob?.cancel()
+        keyFilterSettingsJob = null
         return super.onUnbind(intent)
     }
 
@@ -343,6 +386,8 @@ class TextAccessibilityService : AccessibilityService() {
         ingestSucceededSubscriptionJob = null
         ingestFailedSubscriptionJob?.cancel()
         ingestFailedSubscriptionJob = null
+        keyFilterSettingsJob?.cancel()
+        keyFilterSettingsJob = null
         serviceScope.cancel()
         super.onDestroy()
     }

@@ -1,9 +1,12 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.compose.animation.AnimatedVisibility
+import com.antgskds.calendarassistant.calendar.models.stubs.RecurringEventUtils
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -13,22 +16,27 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.calendar.RecurringEventUtils
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import kotlinx.coroutines.launch
-import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
+import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -43,12 +51,24 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 
 private data class RecurringEditSession(
-    val parentEventId: String,
-    val sourceInstanceId: String,
-    val sourceInstanceKey: String,
+    val parentEventId: Long?,
+    val occurrenceTs: Long,
     val nextOccurrenceText: String?,
     val editHint: String
 )
+
+private data class RecurringEditCommitSession(
+    val parentId: Long,
+    val occurrenceTs: Long,
+    val patch: com.antgskds.calendarassistant.data.model.EventPatch
+)
+
+/** 编辑上下文：记录当前编辑弹窗要操作的目标类型 */
+private sealed class EditContext {
+    object NewEvent : EditContext()
+    data class SingleEvent(val eventId: Long) : EditContext()
+    data class RecurringOccurrence(val parentId: Long, val occurrenceTs: Long) : EditContext()
+}
 
 @Composable
 fun HomeScreen(
@@ -66,9 +86,6 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
-    val maxNodes = remember(uiState.settings.timeTableJson) {
-        TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
-    }
 
     fun showToast(message: String, type: ToastType = ToastType.INFO) {
         currentToastType = type
@@ -225,13 +242,18 @@ fun HomeScreen(
 
     // 弹窗状态管理
     var showAddEventDialog by remember { mutableStateOf(false) }
-    var eventToEdit by remember { mutableStateOf<MyEvent?>(null) }
-    var draftEventToAdd by remember { mutableStateOf<MyEvent?>(null) }
-    var noteToEdit by remember { mutableStateOf<MyEvent?>(null) }
+    var editDraft by remember { mutableStateOf<com.antgskds.calendarassistant.data.model.EditDraft?>(null) }
+    var editContext by remember { mutableStateOf<EditContext?>(null) }
+    var eventToEdit by remember { mutableStateOf<Event?>(null) }  // 仅用于 Note 编辑和旧 beginEdit 桥接
+    var draftEventToAdd by remember { mutableStateOf<Event?>(null) }
+    var noteToEdit by remember { mutableStateOf<Event?>(null) }
     var showNoteEditor by remember { mutableStateOf(false) }
-    var noteEditorInitialNote by remember { mutableStateOf<MyEvent?>(null) }
-    var editingVirtualCourse by remember { mutableStateOf<MyEvent?>(null) }
+    var noteEditorInitialNote by remember { mutableStateOf<Event?>(null) }
+    var editingVirtualCourse by remember { mutableStateOf<Event?>(null) }
+    var courseItemToEdit by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
+    var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
+    var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var pendingAddDialog by remember { mutableStateOf(false) }
     var addDialogRequestId by remember { mutableIntStateOf(0) }
     val dialogDelayMs = 240L
@@ -253,12 +275,12 @@ fun HomeScreen(
         pendingAddDialog = false
     }
 
-    fun beginEdit(event: MyEvent) {
+    fun beginEdit(event: Event) {
         pendingAddDialog = false
         draftEventToAdd = null
         noteToEdit = null
         showNoteEditor = false
-        if (event.tag == EventTags.COURSE) {
+        if (event.tag == "__removed_course__") {
             editingVirtualCourse = event
             eventToEdit = null
             recurringEditSession = null
@@ -268,20 +290,20 @@ fun HomeScreen(
             eventToEdit = null
             editingVirtualCourse = null
             recurringEditSession = null
-        } else if (event.isRecurringParent) {
+        } else if (event.isRecurring) {
             val nextInstance = mainViewModel.findNextRecurringInstance(event)
             val previewEvent = if (nextInstance != null) {
                 nextInstance
-            } else if (!event.recurringInstanceKey.isNullOrBlank()) {
+            } else if (!event.idString.isNullOrBlank()) {
                 event.copy(
-                    id = "preview_${event.recurringInstanceKey}",
-                    isRecurringParent = false,
-                    parentRecurringId = event.id
+                    id = null,
+                    rrule = "",
+                    parentId = event.id ?: 0L
                 )
             } else {
                 null
             }
-            val instanceKey = previewEvent?.recurringInstanceKey
+            val instanceKey = previewEvent?.idString
             if (previewEvent == null || instanceKey.isNullOrBlank()) {
                 eventToEdit = null
                 recurringEditSession = null
@@ -291,27 +313,31 @@ fun HomeScreen(
                 editingVirtualCourse = null
                 recurringEditSession = RecurringEditSession(
                     parentEventId = event.id,
-                    sourceInstanceId = nextInstance?.id ?: "",
-                    sourceInstanceKey = instanceKey,
-                    nextOccurrenceText = RecurringEventUtils.formatMillis(event.nextOccurrenceStartMillis),
+                    occurrenceTs = previewEvent.startTS,
+                    nextOccurrenceText = RecurringEventUtils.formatMillis(event.startMillis),
                     editHint = "本次修改将应用到下次实例，并脱离重复系列"
                 )
             }
-        } else if (event.isRecurring) {
+        } else if (event.parentId != 0L) {
+            // 虚拟展开实例或已有的子实例（exception instance）
             val parentEvent = mainViewModel.findRecurringParent(event)
-            val instanceKey = event.recurringInstanceKey
-            if (parentEvent == null || instanceKey.isNullOrBlank()) {
+            if (parentEvent == null) {
                 eventToEdit = null
                 recurringEditSession = null
                 showToast("未找到对应的重复系列信息")
             } else {
-                eventToEdit = event
+                // 用父事件的信息构造预览，但保留当前实例的时间
+                eventToEdit = event.copy(
+                    id = null,  // 清掉负数合成 id，确保不会被当成真实记录更新
+                    importId = "",
+                    rrule = "",
+                    exdates = emptyList()
+                )
                 editingVirtualCourse = null
                 recurringEditSession = RecurringEditSession(
                     parentEventId = parentEvent.id,
-                    sourceInstanceId = event.id,
-                    sourceInstanceKey = instanceKey,
-                    nextOccurrenceText = RecurringEventUtils.formatMillis(parentEvent.nextOccurrenceStartMillis),
+                    occurrenceTs = event.startTS,
+                    nextOccurrenceText = RecurringEventUtils.formatMillis(parentEvent.startMillis),
                     editHint = "本次修改将应用到当前实例，并脱离重复系列"
                 )
             }
@@ -322,14 +348,74 @@ fun HomeScreen(
         }
     }
 
+    /**
+     * 新版编辑入口：从 ScheduleDisplayItem 路由到正确的编辑流程。
+     * Single → 加载真实 Event 走旧流程
+     * RecurringOccurrence → 加载母事件，设置 recurringEditSession
+     */
+    fun beginEditItem(item: ScheduleDisplayItem) {
+        pendingAddDialog = false
+        draftEventToAdd = null
+        noteToEdit = null
+        showNoteEditor = false
+        recurringEditCommitSession = null
+
+        when (val target = item.action) {
+            is ScheduleDisplayItem.ActionTarget.Single -> {
+                val event = mainViewModel.getEventById(target.eventId) ?: return
+                if (event.tag == EventTags.COURSE) {
+                    courseItemToEdit = item
+                    return
+                }
+                if (event.tag == EventTags.NOTE) {
+                    noteToEdit = event
+                    showNoteEditor = true
+                    return
+                }
+                // 单次事件或已有子实例
+                val draft = mainViewModel.prepareEditSingle(target.eventId)
+                if (draft != null) {
+                    editDraft = draft
+                    editContext = if (event.parentId != 0L) {
+                        // 已存在的异常子实例 → 按单次事件更新
+                        EditContext.SingleEvent(target.eventId)
+                    } else {
+                        EditContext.SingleEvent(target.eventId)
+                    }
+                    showAddEventDialog = true
+                }
+            }
+            is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
+                if (item.tag == EventTags.COURSE) {
+                    courseItemToEdit = item
+                    return
+                }
+                val draft = mainViewModel.prepareEditRecurringOccurrence(target.parentId, target.occurrenceTs)
+                if (draft != null) {
+                    editDraft = draft
+                    editContext = EditContext.RecurringOccurrence(target.parentId, target.occurrenceTs)
+                    showAddEventDialog = true
+                }
+            }
+        }
+    }
+
+    fun requestDeleteItem(item: ScheduleDisplayItem) {
+        mainViewModel.onRevealItem(null)
+        scheduleItemToDelete = item
+    }
+
     fun openAddEventDialog() {
         isActionExpanded = false
         addDialogRequestId += 1
         recurringEditSession = null
+        recurringEditCommitSession = null
         draftEventToAdd = null
         noteToEdit = null
         showNoteEditor = false
         eventToEdit = null
+        editDraft = null
+        editContext = EditContext.NewEvent
         showAddEventDialog = false
         pendingAddDialog = true
     }
@@ -338,6 +424,7 @@ fun HomeScreen(
         isActionExpanded = false
         if (settings.noteEnabled && selectedTab == 1) {
             recurringEditSession = null
+            recurringEditCommitSession = null
             draftEventToAdd = null
             eventToEdit = null
             editingVirtualCourse = null
@@ -353,7 +440,11 @@ fun HomeScreen(
     
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val floatingBarOffset =
+    val cardFloatingBarOffset =
+        IntegratedFloatingBarHeight +
+            IntegratedFloatingBarBottomSpacing +
+            bottomInset
+    val toastFloatingBarOffset =
         IntegratedFloatingBarVisualHeight +
             IntegratedFloatingBarToastGap +
             IntegratedFloatingBarBottomSpacing +
@@ -391,9 +482,10 @@ fun HomeScreen(
                         imageRequestId = imageRequestId,
                         isSidebarOpen = isSidebarOpen,
                         onTabChange = { selectedTab = it },
-                        onCourseClick = { _, _ -> },
                         onAddEventClick = { openPrimaryCreateDialog() },
-                        onEditEvent = { event -> beginEdit(event) },
+                        onEditItem = { item -> beginEditItem(item) },
+                        onRequestDeleteItem = { item -> requestDeleteItem(item) },
+                        onEditNote = { note -> beginEdit(note) },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) }
@@ -445,12 +537,101 @@ fun HomeScreen(
                 .zIndex(3f)
         )
 
+        val deleteItem = scheduleItemToDelete
+        val editCommitSession = recurringEditCommitSession
+        AnimatedVisibility(
+            visible = deleteItem != null || editCommitSession != null,
+            modifier = Modifier
+                .matchParentSize()
+                .zIndex(2f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            scheduleItemToDelete = null
+                            recurringEditCommitSession = null
+                        }
+                    )
+            )
+        }
+
+        val singleDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.Single }
+        FloatingActionCard(
+            visible = singleDeleteItem != null,
+            title = "删除日程",
+            content = "删除后无法恢复，确认删除这条日程吗？",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            onConfirm = {
+                val eventId = (singleDeleteItem?.action as? ScheduleDisplayItem.ActionTarget.Single)?.eventId
+                if (eventId != null) mainViewModel.deleteEvent(eventId)
+                scheduleItemToDelete = null
+            },
+            onDismiss = { scheduleItemToDelete = null },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+                .zIndex(5f)
+        )
+
+        val recurringDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.RecurringOccurrence }
+        RecurringDeleteActionCard(
+            visible = recurringDeleteItem != null,
+            onDeleteThis = {
+                recurringDeleteItem?.let { mainViewModel.deleteRecurringItem(it, RecurringMode.THIS) }
+                scheduleItemToDelete = null
+            },
+            onDeleteAll = {
+                recurringDeleteItem?.let { mainViewModel.deleteRecurringItem(it, RecurringMode.ALL) }
+                scheduleItemToDelete = null
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+                .zIndex(5f)
+        )
+
+        RecurringEditActionCard(
+            visible = editCommitSession != null,
+            onEditThis = {
+                val session = editCommitSession ?: return@RecurringEditActionCard
+                recurringEditCommitSession = null
+                mainViewModel.editRecurringFromPatch(
+                    session.parentId,
+                    session.occurrenceTs,
+                    RecurringMode.THIS,
+                    session.patch
+                )
+            },
+            onEditAll = {
+                val session = editCommitSession ?: return@RecurringEditActionCard
+                recurringEditCommitSession = null
+                mainViewModel.editRecurringFromPatch(
+                    session.parentId,
+                    session.occurrenceTs,
+                    RecurringMode.ALL,
+                    session.patch
+                )
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+                .zIndex(5f)
+        )
+
         // SnackbarHost 放在屏幕底部
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBarOffset),
+                .padding(bottom = toastFloatingBarOffset),
             snackbar = { snackbarData ->
                 UniversalToast(message = snackbarData.visuals.message, type = currentToastType)
             }
@@ -460,45 +641,47 @@ fun HomeScreen(
     // --- 全局弹窗处理 (仅保留日常操作) ---
 
     // 1. 普通日程编辑/添加
-    val mergedEventDraft = eventToEdit ?: draftEventToAdd
-    val isDialogVisible = showAddEventDialog || mergedEventDraft != null
-    val dialogKey = mergedEventDraft?.id ?: "add_$addDialogRequestId"
+    val isDialogVisible = showAddEventDialog || editDraft != null
+    val dialogKey = editDraft?.hashCode() ?: "add_$addDialogRequestId"
     key(dialogKey) {
         AddEventDialog(
             visible = isDialogVisible,
-            eventToEdit = mergedEventDraft,
-            currentEventsCount = uiState.allEvents.size,
+            editDraft = editDraft,
+            currentEventsCount = uiState.rawEventCount,
             settings = settings,
-            recurringNextOccurrenceText = recurringEditSession?.nextOccurrenceText,
-            recurringEditHint = recurringEditSession?.editHint,
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
                 pendingAddDialog = false
                 showAddEventDialog = false
-                eventToEdit = null
+                editDraft = null
+                editContext = null
+                recurringEditCommitSession = null
                 draftEventToAdd = null
-                recurringEditSession = null
             },
-            onConfirm = { newEvent ->
-                val recurringSession = recurringEditSession
-                val editingEvent = eventToEdit
-                if (recurringSession != null && editingEvent != null) {
-                    mainViewModel.detachRecurringInstance(
-                        parentEventId = recurringSession.parentEventId,
-                        sourceInstanceId = recurringSession.sourceInstanceId,
-                        sourceInstanceKey = recurringSession.sourceInstanceKey,
-                        detachedEvent = newEvent
-                    )
-                } else if (editingEvent == null) {
-                    mainViewModel.addEvent(newEvent)
-                } else {
-                    mainViewModel.updateEvent(newEvent)
+            onConfirm = { patch ->
+                val ctx = editContext
+                var nextRecurringCommit: RecurringEditCommitSession? = null
+                when (ctx) {
+                    is EditContext.SingleEvent -> {
+                        mainViewModel.updateSingleFromPatch(ctx.eventId, patch)
+                    }
+                    is EditContext.RecurringOccurrence -> {
+                        nextRecurringCommit = RecurringEditCommitSession(
+                            parentId = ctx.parentId,
+                            occurrenceTs = ctx.occurrenceTs,
+                            patch = patch
+                        )
+                    }
+                    is EditContext.NewEvent, null -> {
+                        mainViewModel.addEventFromPatch(patch)
+                    }
                 }
                 pendingAddDialog = false
                 showAddEventDialog = false
-                eventToEdit = null
+                editDraft = null
+                editContext = null
+                recurringEditCommitSession = nextRecurringCommit
                 draftEventToAdd = null
-                recurringEditSession = null
             }
         )
     }
@@ -510,7 +693,7 @@ fun HomeScreen(
     ) {
         NoteEditorScreen(
             initialNote = noteEditorInitialNote,
-            currentEventsCount = uiState.allEvents.size,
+            currentEventsCount = uiState.rawEventCount,
             settings = settings,
             onDismiss = {
                 showNoteEditor = false
@@ -534,42 +717,72 @@ fun HomeScreen(
         )
     }
 
-    // 2. 单次课程编辑
-    if (editingVirtualCourse != null) {
-        val event = editingVirtualCourse!!
-        val nodePattern = Regex("第(\\d+)-(\\d+)节")
-        val nodeMatch = nodePattern.find(event.description)
-        val sNode = nodeMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
-        val eNode = nodeMatch?.groupValues?.get(2)?.toIntOrNull() ?: 1
-        val cleanLocation = event.location.split(" | ").firstOrNull() ?: ""
-        val parts = event.id.split("_")
-        val originalDate = if (parts.size >= 3) {
-            try { LocalDate.parse(parts[2]) } catch (e: Exception) { event.startDate }
-        } else { event.startDate }
-
-        CourseSingleEditDialog(
-            initialName = event.title,
-            initialLocation = cleanLocation,
-            initialStartNode = sNode,
-            initialEndNode = eNode,
-            initialDate = originalDate,
-            maxNodes = maxNodes,
-            onDismiss = { editingVirtualCourse = null },
-            onDelete = {
-                mainViewModel.deleteEvent(event)
-                editingVirtualCourse = null
-            },
-            onConfirm = { name, loc, start, end, date ->
-                mainViewModel.updateSingleCourseInstance(
-                    virtualEventId = event.id,
-                    newName = name,
-                    newLoc = loc,
-                    newStartNode = start,
-                    newEndNode = end,
-                    newDate = date
-                )
-                editingVirtualCourse = null
-            }
-        )
+    courseItemToEdit?.let { item ->
+        val meta = CourseEventMapper.parseMeta(item.description)
+        val maxNodes = TimeTableLayoutUtils.nodeCountFromJson(settings.timeTableJson)
+        if (meta != null) {
+            CourseSingleEditDialog(
+                initialName = item.title,
+                initialLocation = item.location,
+                initialStartNode = meta.startNode,
+                initialEndNode = meta.endNode,
+                initialDate = item.startDate,
+                maxNodes = maxNodes,
+                onDismiss = { courseItemToEdit = null },
+                onDelete = {
+                    mainViewModel.deleteCourseOccurrence(item)
+                    courseItemToEdit = null
+                },
+                onConfirm = { name, location, startNode, endNode, date ->
+                    mainViewModel.updateCourseOccurrence(item, name, location, startNode, endNode, date)
+                    courseItemToEdit = null
+                }
+            )
+        } else {
+            LaunchedEffect(item.stableKey) { courseItemToEdit = null }
+        }
     }
+}
+
+@Composable
+private fun RecurringDeleteActionCard(
+    visible: Boolean,
+    onDeleteThis: () -> Unit,
+    onDeleteAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FloatingActionCard(
+        visible = visible,
+        title = "删除重复日程",
+        content = "删除本次还是全部？",
+        confirmText = "全部",
+        dismissText = "仅本次",
+        dismissIsDestructive = true,
+        isDestructive = true,
+        isLoading = false,
+        onConfirm = onDeleteAll,
+        onDismiss = onDeleteThis,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun RecurringEditActionCard(
+    visible: Boolean,
+    onEditThis: () -> Unit,
+    onEditAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FloatingActionCard(
+        visible = visible,
+        title = "编辑重复日程",
+        content = "保存到本次还是全部？",
+        confirmText = "全部",
+        dismissText = "仅本次",
+        isDestructive = false,
+        isLoading = false,
+        onConfirm = onEditAll,
+        onDismiss = onEditThis,
+        modifier = modifier
+    )
 }

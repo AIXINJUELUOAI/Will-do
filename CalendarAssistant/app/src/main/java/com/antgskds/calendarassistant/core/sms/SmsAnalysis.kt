@@ -20,8 +20,8 @@
 
 package com.antgskds.calendarassistant.core.sms
 
-import com.antgskds.calendarassistant.data.model.CalendarEventData
-import com.antgskds.calendarassistant.data.model.EventTags
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.calendar.models.EventTags
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
@@ -29,7 +29,7 @@ import java.util.regex.Pattern
 /**
  * 短信取件码解析器
  *
- * 正则匹配后直接返回 CalendarEventData，与 AI 识屏输出格式完全一致。
+ * 正则匹配后直接返回 RecognitionDraft，与 AI 识屏输出格式完全一致。
  * 下游（SmsReceiver、LaboratoryPage 测试）直接复用现有的入库管线。
  */
 object SmsAnalysis {
@@ -89,14 +89,14 @@ object SmsAnalysis {
     // ==================== 公开方法 ====================
 
     /**
-     * 解析短信，返回与 AI 识屏格式一致的 CalendarEventData
-     * @return CalendarEventData 或 null（无法识别时）
+     * 解析短信，返回与 AI 识屏格式一致的 RecognitionDraft
+     * @return RecognitionDraft 或 null（无法识别时）
      */
     fun parse(
         sender: String,
         body: String,
         ignoreKeywords: Set<String> = emptySet()
-    ): CalendarEventData? {
+    ): RecognitionDraft? {
         // 检查忽略关键词
         val allIgnore = defaultIgnoreKeywords + ignoreKeywords
         for (keyword in allIgnore) {
@@ -123,15 +123,16 @@ object SmsAnalysis {
 
         // 时间：使用当前系统时间，与 AI 取件识别一致
         val now = LocalDateTime.now()
-        val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        val zone = java.time.ZoneId.systemDefault()
+        val startSec = now.atZone(zone).toEpochSecond()
+        val endSec = now.plusHours(1).atZone(zone).toEpochSecond()
 
-        return CalendarEventData(
+        return RecognitionDraft(
             title = title,
-            startTime = now.format(dtf),
-            endTime = now.plusHours(1).format(dtf),
+            startTS = startSec,
+            endTS = endSec,
             location = locationPart,
             description = description,
-            type = "event",
             tag = tag
         )
     }

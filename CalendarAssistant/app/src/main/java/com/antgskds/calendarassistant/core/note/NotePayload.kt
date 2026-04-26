@@ -1,10 +1,14 @@
 package com.antgskds.calendarassistant.core.note
 
 import androidx.compose.ui.graphics.Color
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import androidx.compose.ui.graphics.toArgb
+import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
+import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
-import java.util.UUID
+import java.time.ZoneId
 
 data class MarkdownTaskItem(
     val lineIndex: Int,
@@ -48,25 +52,23 @@ fun markdownWithoutTasks(markdown: String): String {
         .trim()
 }
 
-fun MyEvent.noteMarkdown(): String {
+fun Event.noteMarkdown(): String {
     return description.trimEnd()
 }
 
-fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEvent {
+fun Event.withNoteMarkdown(title: String = this.title, markdown: String): Event {
     val normalizedMarkdown = markdown.trimEnd()
     val normalizedTitle = title.trim().take(28).ifBlank { "无标题" }
     val tasks = extractMarkdownTasks(normalizedMarkdown)
     val allDone = tasks.isNotEmpty() && tasks.all { it.isDone }
-    val nextCompletedAt = if (allDone) completedAt ?: System.currentTimeMillis() else null
+    val targetState = if (allDone) STATE_COMPLETED else STATE_PENDING
 
     if (
         this.title == normalizedTitle &&
         this.description == normalizedMarkdown &&
         this.tag == EventTags.NOTE &&
-        this.skipCalendarSync &&
-        this.reminders.isEmpty() &&
-        this.isCompleted == allDone &&
-        this.completedAt == nextCompletedAt
+        this.reminderMinutes.isEmpty() &&
+        this.state == targetState
     ) {
         return this
     }
@@ -75,15 +77,15 @@ fun MyEvent.withNoteMarkdown(title: String = this.title, markdown: String): MyEv
         title = normalizedTitle,
         description = normalizedMarkdown,
         tag = EventTags.NOTE,
-        skipCalendarSync = true,
-        reminders = emptyList(),
-        isCompleted = allDone,
-        completedAt = nextCompletedAt,
-        lastModified = System.currentTimeMillis()
+        reminder1Minutes = -1,
+        reminder2Minutes = -1,
+        reminder3Minutes = -1,
+        state = targetState,
+        lastUpdated = System.currentTimeMillis() / 1000L
     )
 }
 
-fun MyEvent.notePlainText(): String {
+fun Event.notePlainText(): String {
     return noteMarkdown()
 }
 
@@ -91,27 +93,29 @@ fun createNoteEvent(
     title: String,
     markdown: String,
     color: Color,
-    existingId: String? = null
-): MyEvent {
+    existingId: Long? = null
+): Event {
     val normalizedMarkdown = markdown.trimEnd()
     val normalizedTitle = title.trim().take(28).ifBlank { "无标题" }
     val tasks = extractMarkdownTasks(normalizedMarkdown)
     val allDone = tasks.isNotEmpty() && tasks.all { it.isDone }
+    val nowSec = System.currentTimeMillis() / 1000L
+    val todayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
+    val todayEnd = todayStart + 86399L
 
-    return MyEvent(
-        id = existingId ?: UUID.randomUUID().toString(),
+    return Event(
+        id = existingId,
         title = normalizedTitle,
-        startDate = LocalDate.now(),
-        endDate = LocalDate.now(),
-        startTime = "00:00",
-        endTime = "23:59",
+        startTS = todayStart,
+        endTS = todayEnd,
         location = "",
         description = normalizedMarkdown,
-        color = color,
-        reminders = emptyList(),
+        color = color.toArgb(),
+        reminder1Minutes = -1,
+        reminder2Minutes = -1,
+        reminder3Minutes = -1,
         tag = EventTags.NOTE,
-        isCompleted = allDone,
-        completedAt = if (allDone) System.currentTimeMillis() else null,
-        skipCalendarSync = true
+        state = if (allDone) STATE_COMPLETED else STATE_PENDING,
+        lastUpdated = nowSec
     )
 }

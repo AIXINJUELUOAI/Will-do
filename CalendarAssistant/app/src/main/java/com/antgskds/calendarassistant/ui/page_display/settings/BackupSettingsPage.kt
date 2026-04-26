@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -25,13 +27,14 @@ import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.core.ai.AiPrompts
-import com.antgskds.calendarassistant.core.importer.ImportMode
+import com.antgskds.calendarassistant.core.center.ImportMode
 import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
 import com.antgskds.calendarassistant.data.model.ImportResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -155,8 +158,11 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             scope.launch(Dispatchers.IO) {
                 try {
                     val jsonData = viewModel.exportEventsData()
-                    context.contentResolver.openOutputStream(uri)?.use { output -> output.write(jsonData.toByteArray()) }
-                    withContext(Dispatchers.Main) { showToast("日程数据导出成功，共 ${viewModel.getTotalEventsCount()} 条日程", ToastType.SUCCESS) }
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(jsonData.toByteArray())
+                    } ?: throw IOException("无法打开导出文件")
+                    val totalCount = viewModel.getTotalEventsCount()
+                    withContext(Dispatchers.Main) { showToast("日程数据导出成功，共 $totalCount 条日程", ToastType.SUCCESS) }
                 } catch (e: Exception) { withContext(Dispatchers.Main) { showToast("导出失败: ${e.message}", ToastType.ERROR) } }
             }
         }

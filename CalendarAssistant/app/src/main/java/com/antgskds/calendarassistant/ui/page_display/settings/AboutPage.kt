@@ -41,8 +41,7 @@ fun AboutPage(
     // --- 链接配置 ---
     // 您的 GitHub 仓库
     val githubUrl = "https://github.com/AIXINJUELUOAI/Will-do"
-    // 稳定的 GPLv3 协议链接 (Open Source Initiative)
-    val gplUrl = "https://opensource.org/licenses/GPL-3.0"
+    val blogUrl = "https://aixinjueluoonline.top/"
 
     // --- 样式定义 ---
     val cardTitleStyle = MaterialTheme.typography.headlineMedium
@@ -148,30 +147,29 @@ fun AboutPage(
                 )
             }
 
-            // 2. GPL 协议按钮
+            // 2. 个人博客按钮
             IconButton(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(gplUrl))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(blogUrl))
                     context.startActivity(intent)
                 },
                 modifier = Modifier.size(56.dp)
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_gpl),
-                    contentDescription = "GPLv3 License",
+                    painter = painterResource(id = R.drawable.ic_file),
+                    contentDescription = "个人博客",
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(32.dp)
                 )
             }
 
-            // 3. 捐赠按钮 (已替换为汽水瓶图片资源)
+            // 3. 捐赠按钮
             IconButton(
                 onClick = onNavigateToDonate,
                 modifier = Modifier.size(56.dp)
             ) {
                 Icon(
-                    // 请确保在 res/drawable/ 目录下放入了名为 ic_cola 的汽水瓶图标
-                    painter = painterResource(id = R.drawable.ic_cola),
+                    painter = painterResource(id = R.drawable.ic_coffee),
                     contentDescription = "捐赠开发者",
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(32.dp)

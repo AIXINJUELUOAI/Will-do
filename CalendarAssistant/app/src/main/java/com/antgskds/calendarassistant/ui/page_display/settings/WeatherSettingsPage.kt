@@ -1,5 +1,10 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -33,6 +38,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -68,6 +74,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.weather.WeatherApiAdapter
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
@@ -88,6 +97,7 @@ fun WeatherSettingsPage(
     val appContext = context.applicationContext
     val app = appContext as App
     val focusManager = LocalFocusManager.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val weatherData by app.weatherQueryApi.weatherData.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -104,9 +114,51 @@ fun WeatherSettingsPage(
         )
     }
     var apiKey by remember(settings) { mutableStateOf(settings.weatherApiKey) }
-    var city by remember(settings) { mutableStateOf(settings.weatherCity) }
     var refreshInterval by remember(settings) { mutableIntStateOf(settings.weatherRefreshInterval.coerceAtLeast(1)) }
     var showInFloating by remember(settings) { mutableStateOf(settings.showWeatherInFloating) }
+    var hasLocationPermission by remember { mutableStateOf(hasLocationPermissionGranted(context)) }
+    var pendingEnableByPermissionRequest by remember { mutableStateOf(false) }
+    var actionLoading by remember { mutableStateOf(false) }
+
+    fun showToast(message: String, type: ToastType) {
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        currentToastType = type
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        hasLocationPermission = granted
+        if (pendingEnableByPermissionRequest) {
+            enabled = granted
+            pendingEnableByPermissionRequest = false
+            if (!granted) {
+                showToast("需要定位权限才能启用天气", ToastType.ERROR)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        hasLocationPermission = hasLocationPermissionGranted(context)
+    }
+
+    LaunchedEffect(enabled) {
+        if (enabled && !hasLocationPermission) {
+            pendingEnableByPermissionRequest = true
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
@@ -124,14 +176,6 @@ fun WeatherSettingsPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 
-    fun showToast(message: String, type: ToastType) {
-        currentToastType = type
-        scope.launch {
-            snackbarHostState.currentSnackbarData?.dismiss()
-            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
-        }
-    }
-
     fun normalizeDraft(forceEnable: Boolean = enabled): MySettings {
         val normalizedProvider = WeatherApiAdapter.PROVIDER_QWEATHER
         val rawUrl = apiUrl.trim()
@@ -147,30 +191,33 @@ fun WeatherSettingsPage(
             weatherProvider = normalizedProvider,
             weatherApiUrl = normalizedUrl,
             weatherApiKey = apiKey.trim(),
-            weatherCity = city.trim(),
+            weatherCity = "",
             weatherRefreshInterval = refreshInterval.coerceIn(1, 6),
             showWeatherInFloating = showInFloating
         )
     }
 
-    suspend fun validateAndTest(draft: MySettings): Boolean {
-        if (draft.weatherCity.isBlank() || draft.weatherApiKey.isBlank()) {
-            showToast("请先填写区域代码和Key", ToastType.ERROR)
+    fun validateDraft(draft: MySettings): Boolean {
+        if (draft.weatherApiKey.isBlank()) {
+            showToast("请先填写 API Key", ToastType.ERROR)
             return false
         }
         if (draft.weatherApiUrl.isBlank()) {
             showToast("请填写API Host", ToastType.ERROR)
             return false
         }
-        val result = app.weatherOperationApi.forceRefresh(draft)
-        return if (result.isSuccess) {
-            showToast("天气连接成功", ToastType.SUCCESS)
-            true
-        } else {
-            val message = result.exceptionOrNull()?.message?.replace("HTTP ", "").orEmpty().take(18)
-            showToast(if (message.isBlank()) "天气连接失败" else "连接失败:$message", ToastType.ERROR)
-            false
+        if (!hasLocationPermission) {
+            pendingEnableByPermissionRequest = true
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+            showToast("请先授予定位权限", ToastType.ERROR)
+            return false
         }
+        return true
     }
 
     Box(
@@ -202,7 +249,21 @@ fun WeatherSettingsPage(
                         title = "启用天气",
                         subtitle = "未启用时主页与悬浮窗保持原状",
                         checked = enabled,
-                        onCheckedChange = { enabled = it },
+                        onCheckedChange = {
+                            if (!it) {
+                                enabled = false
+                            } else if (hasLocationPermission) {
+                                enabled = true
+                            } else {
+                                pendingEnableByPermissionRequest = true
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            }
+                        },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
@@ -214,18 +275,6 @@ fun WeatherSettingsPage(
                         value = "和风",
                         cardTitleStyle = cardTitleStyle,
                         cardValueStyle = cardValueStyle
-                    )
-
-                    WeatherDivider()
-
-                    WeatherTextInputItem(
-                        title = "区域代码",
-                        value = city,
-                        onValueChange = { city = it },
-                        placeholder = "如：101010100",
-                        cardTitleStyle = cardTitleStyle,
-                        cardValueStyle = cardValueStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
                     )
 
                     WeatherDivider()
@@ -339,7 +388,7 @@ fun WeatherSettingsPage(
                             )
                         }
                         Text(
-                            text = "${data.city.ifBlank { city.ifBlank { "未命名城市" } }} · 湿度 ${data.humidity.ifBlank { "--" }}% · 风力 ${data.windDir.ifBlank { "--" }} ${data.windScale.ifBlank { "--" }}",
+                            text = "${data.city.ifBlank { "当前位置" }} · 湿度 ${data.humidity.ifBlank { "--" }}% · 风力 ${data.windDir.ifBlank { "--" }} ${data.windScale.ifBlank { "--" }}",
                             style = cardSubtitleStyle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -352,23 +401,42 @@ fun WeatherSettingsPage(
 
         FloatingActionButton(
             onClick = {
+                if (actionLoading) return@FloatingActionButton
                 scope.launch {
                     val draft = normalizeDraft()
-                    if (draft.weatherEnabled && !validateAndTest(draft)) {
+                    if (draft.weatherEnabled && !validateDraft(draft)) {
                         return@launch
                     }
+
                     viewModel.updateWeatherSettings(
                         enabled = draft.weatherEnabled,
                         provider = WeatherApiAdapter.PROVIDER_QWEATHER,
                         apiUrl = draft.weatherApiUrl,
                         apiKey = draft.weatherApiKey,
-                        city = draft.weatherCity,
                         refreshInterval = draft.weatherRefreshInterval,
                         showInFloating = draft.showWeatherInFloating
                     )
                     WeatherSyncWorker.syncForSettings(appContext, draft)
+                    showToast("天气配置已保存", ToastType.SUCCESS)
+
                     if (!draft.weatherEnabled) {
-                        showToast("天气配置已保存", ToastType.SUCCESS)
+                        return@launch
+                    }
+
+                    actionLoading = true
+                    try {
+                        val result = app.weatherOperationApi.forceRefresh(draft)
+                        if (result.isSuccess) {
+                            showToast("天气连接成功", ToastType.SUCCESS)
+                        } else {
+                            val message = result.exceptionOrNull()?.message?.replace("HTTP ", "").orEmpty().take(18)
+                            showToast(
+                                if (message.isBlank()) "连接失败，不影响已保存配置" else "连接失败:$message（不影响已保存配置）",
+                                ToastType.ERROR
+                            )
+                        }
+                    } finally {
+                        actionLoading = false
                     }
                 }
             },
@@ -380,7 +448,15 @@ fun WeatherSettingsPage(
                 .padding(end = 24.dp, bottom = 32.dp + bottomInset)
                 .size(72.dp)
         ) {
-            Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(34.dp))
+            if (actionLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(30.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(34.dp))
+            }
         }
 
         SnackbarHost(
@@ -568,4 +644,16 @@ private fun WeatherTextInputItem(
             }
         )
     }
+}
+
+private fun hasLocationPermissionGranted(context: Context): Boolean {
+    val fineGranted = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val coarseGranted = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    return fineGranted || coarseGranted
 }

@@ -3,17 +3,18 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.core.query.EventActionButton
 import com.antgskds.calendarassistant.core.query.EventActionQueryApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 
 class LocalEventActionQueryApi : EventActionQueryApi {
-    override fun isEventStillValid(events: List<MyEvent>, eventId: String): Boolean {
+    override fun isEventStillValid(events: List<Event>, eventId: String): Boolean {
         if (events.isEmpty()) return true
-        return events.any { it.id == eventId }
+        return events.any { it.id?.toString() == eventId }
     }
 
-    override fun resolveEffectiveRuleId(intentRuleId: String?, fallbackTag: String, event: MyEvent?): String {
+    override fun resolveEffectiveRuleId(intentRuleId: String?, fallbackTag: String, event: Event?): String {
         if (!intentRuleId.isNullOrEmpty()) return intentRuleId
 
         val eventRuleId = event?.let { RuleMatchingEngine.resolvePayload(it)?.ruleId }
@@ -36,7 +37,7 @@ class LocalEventActionQueryApi : EventActionQueryApi {
         }
     }
 
-    override fun buildActionButton(ruleId: String, event: MyEvent?): EventActionButton? {
+    override fun buildActionButton(ruleId: String, event: Event?): EventActionButton? {
         if (event == null) return null
 
         val shouldShow = when (ruleId) {

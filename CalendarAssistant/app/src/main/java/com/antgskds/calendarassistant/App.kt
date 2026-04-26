@@ -7,11 +7,8 @@ import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
-import com.antgskds.calendarassistant.core.calendar.CalendarContentObserver
-import com.antgskds.calendarassistant.core.calendar.CalendarReverseSyncWorker
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.center.CapsuleCenter
-import com.antgskds.calendarassistant.core.center.BackupCenter
 import com.antgskds.calendarassistant.core.center.ContentIngestCenter
 import com.antgskds.calendarassistant.core.center.FloatingCenter
 import com.antgskds.calendarassistant.core.center.ImportCenter
@@ -29,10 +26,10 @@ import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
-import com.antgskds.calendarassistant.core.operation.BackupOperationApi
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.operation.ScheduleOperationApi
+import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
@@ -42,13 +39,11 @@ import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.NotificationPresentationQueryApi
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.core.query.WeatherQueryApi
 import com.antgskds.calendarassistant.data.operation.CapsuleStateManagerCommandApi
 import com.antgskds.calendarassistant.data.operation.WeatherRepositoryOperationApi
-import com.antgskds.calendarassistant.data.port.StoreDispatcher
 import com.antgskds.calendarassistant.data.query.CapsuleStateManagerQueryApi
 import com.antgskds.calendarassistant.data.query.LocalCapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.data.query.LocalAlarmRoutingQueryApi
@@ -60,63 +55,67 @@ import com.antgskds.calendarassistant.data.query.LocalNetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.data.query.LocalScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
 import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
+import com.antgskds.calendarassistant.data.repository.SettingsRepository
+import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
+import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 
 class App : Application() {
 
     companion object {
-        // 全局通知渠道常量
         const val CHANNEL_ID_POPUP = "calendar_assistant_popup_channel_v2"
         const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
-
         private const val TAG = "App"
-        
         lateinit var instance: App
             private set
     }
 
-    private val storeDispatcher by lazy {
-        StoreDispatcher.getInstance(this)
+    private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 新底层核心
+    // ══════════════════════════════════════════════════════════════════════
+
+    val calendarCenter: CalendarCenter by lazy {
+        CalendarCenter.getInstance(this)
     }
 
-    val scheduleOperationApi: ScheduleOperationApi by lazy {
-        storeDispatcher
+    val scheduleCenter: ScheduleCenter by lazy {
+        ScheduleCenter(calendarCenter, appScope)
+    }
+
+    val syncCenter: SyncCenter by lazy {
+        SyncCenter(calendarCenter, this)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 设置（独立于日程底层）
+    // ══════════════════════════════════════════════════════════════════════
+
+    private val settingsRepository by lazy { SettingsRepository(this) }
+
+    val settingsQueryApi: SettingsQueryApi by lazy {
+        object : SettingsQueryApi {
+            override val settings = settingsRepository.settingsFlow
+        }
     }
 
     val settingsOperationApi: SettingsOperationApi by lazy {
-        storeDispatcher
+        object : SettingsOperationApi {
+            override fun updateSettings(newSettings: com.antgskds.calendarassistant.data.model.MySettings) {
+                settingsRepository.saveSettings(newSettings)
+            }
+        }
     }
 
-    val backupOperationApi: BackupOperationApi by lazy {
-        storeDispatcher
-    }
-
-    val scheduleQueryApi: ScheduleQueryApi by lazy {
-        storeDispatcher
-    }
-
-    val settingsQueryApi: SettingsQueryApi by lazy {
-        storeDispatcher
-    }
-
-    val homeQueryApi: HomeQueryApi by lazy {
-        LocalHomeQueryApi()
-    }
-
-    val scheduleInsightsQueryApi: ScheduleInsightsQueryApi by lazy {
-        LocalScheduleInsightsQueryApi()
-    }
-
-    val dailySummaryQueryApi: DailySummaryQueryApi by lazy {
-        LocalDailySummaryQueryApi()
-    }
-
-    val settingsTransformApi: SettingsTransformApi by lazy {
-        LocalSettingsTransformApi()
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // 天气
+    // ══════════════════════════════════════════════════════════════════════
 
     private val weatherRepository by lazy {
         com.antgskds.calendarassistant.core.weather.WeatherRepository.getInstance(applicationContext)
@@ -130,38 +129,32 @@ class App : Application() {
         WeatherRepositoryOperationApi(weatherRepository)
     }
 
-    val domainEventBus: DomainEventBus by lazy {
-        DomainEventBus()
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // 查询 API (独立于日程底层)
+    // ══════════════════════════════════════════════════════════════════════
 
-    val eventActionQueryApi: EventActionQueryApi by lazy {
-        LocalEventActionQueryApi()
-    }
+    val domainEventBus: DomainEventBus by lazy { DomainEventBus() }
 
-    val notificationPresentationQueryApi: NotificationPresentationQueryApi by lazy {
-        LocalNotificationPresentationQueryApi()
-    }
+    val homeQueryApi: HomeQueryApi by lazy { LocalHomeQueryApi() }
+    val scheduleInsightsQueryApi: ScheduleInsightsQueryApi by lazy { LocalScheduleInsightsQueryApi() }
+    val dailySummaryQueryApi: DailySummaryQueryApi by lazy { LocalDailySummaryQueryApi() }
+    val settingsTransformApi: SettingsTransformApi by lazy { LocalSettingsTransformApi() }
+    val eventActionQueryApi: EventActionQueryApi by lazy { LocalEventActionQueryApi() }
+    val notificationPresentationQueryApi: NotificationPresentationQueryApi by lazy { LocalNotificationPresentationQueryApi() }
+    val alarmRoutingQueryApi: AlarmRoutingQueryApi by lazy { LocalAlarmRoutingQueryApi() }
+    val capsuleRoutingQueryApi: CapsuleRoutingQueryApi by lazy { LocalCapsuleRoutingQueryApi() }
+    val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi by lazy { LocalNetworkSpeedProbeQueryApi() }
 
-    val alarmRoutingQueryApi: AlarmRoutingQueryApi by lazy {
-        LocalAlarmRoutingQueryApi()
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // 识别 / 入库
+    // ══════════════════════════════════════════════════════════════════════
 
-    val capsuleRoutingQueryApi: CapsuleRoutingQueryApi by lazy {
-        LocalCapsuleRoutingQueryApi()
-    }
-
-    val scheduleCenter: ScheduleCenter by lazy {
-        ScheduleCenter(
-            scheduleOperationApi = scheduleOperationApi,
-            scheduleQueryApi = scheduleQueryApi,
-            settingsQueryApi = settingsQueryApi
-        )
+    val recognitionCenter: RecognitionCenter by lazy {
+        RecognitionCenter(domainEventBus = domainEventBus)
     }
 
     private val importCenter: ImportCenter by lazy {
-        ImportCenter(
-            scheduleCenter = scheduleCenter
-        )
+        ImportCenter(scheduleCenter = scheduleCenter, settingsQueryApi = settingsQueryApi)
     }
 
     val contentIngestCenter: ContentIngestCenter by lazy {
@@ -172,86 +165,44 @@ class App : Application() {
         )
     }
 
-    val recognitionCenter: RecognitionCenter by lazy {
-        RecognitionCenter(domainEventBus = domainEventBus)
-    }
+    val ingestCommandApi: IngestCommandApi by lazy { contentIngestCenter }
 
-    val ingestCommandApi: IngestCommandApi by lazy {
-        contentIngestCenter
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // 规则 / 胶囊 / 权限 / 通知
+    // ══════════════════════════════════════════════════════════════════════
 
-    val ruleCenter: RuleCenter by lazy {
-        RuleCenter(applicationContext)
-    }
+    val ruleCenter: RuleCenter by lazy { RuleCenter(applicationContext) }
 
-    val syncCenter: SyncCenter by lazy {
-        SyncCenter(
-            settingsOperationApi = settingsOperationApi,
-            settingsQueryApi = settingsQueryApi
-        )
-    }
-
-    val backupCenter: BackupCenter by lazy {
-        BackupCenter(backupOperationApi = backupOperationApi)
-    }
-
-    // 日历内容观察者（可选，仅在有权限时初始化）
-    private var calendarObserver: CalendarContentObserver? = null
-
-    // 短信内容观察者
-    private var smsObserver: SmsContentObserver? = null
-
-    private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    val permissionCenter: PermissionCenter by lazy { PermissionCenter() }
 
     val capsuleStateManager: CapsuleStateManager by lazy {
         CapsuleStateManager(
-            scheduleQueryApi = scheduleQueryApi,
+            scheduleCenter = scheduleCenter,
             settingsQueryApi = settingsQueryApi,
             appScope = appScope,
             context = applicationContext
         )
     }
 
-    val capsuleCommandApi: CapsuleCommandApi by lazy {
-        CapsuleStateManagerCommandApi(capsuleStateManager)
-    }
-
-    val capsuleQueryApi: CapsuleQueryApi by lazy {
-        CapsuleStateManagerQueryApi(capsuleStateManager)
-    }
+    val capsuleCommandApi: CapsuleCommandApi by lazy { CapsuleStateManagerCommandApi(capsuleStateManager) }
+    val capsuleQueryApi: CapsuleQueryApi by lazy { CapsuleStateManagerQueryApi(capsuleStateManager) }
 
     val capsuleCenter: CapsuleCenter by lazy {
-        CapsuleCenter(
-            capsuleCommandApi = capsuleCommandApi,
-            capsuleQueryApi = capsuleQueryApi
-        )
-    }
-
-    val permissionCenter: PermissionCenter by lazy {
-        PermissionCenter()
+        CapsuleCenter(capsuleCommandApi = capsuleCommandApi, capsuleQueryApi = capsuleQueryApi)
     }
 
     val floatingCenter: FloatingCenter by lazy {
-        FloatingCenter(
-            appContext = applicationContext,
-            permissionCenter = permissionCenter
-        )
+        FloatingCenter(appContext = applicationContext, permissionCenter = permissionCenter)
     }
 
-    val notificationCenter: NotificationCenter by lazy {
-        NotificationCenter(applicationContext)
-    }
-
-    val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi by lazy {
-        LocalNetworkSpeedProbeQueryApi()
-    }
+    val notificationCenter: NotificationCenter by lazy { NotificationCenter(applicationContext) }
 
     val reminderCenter: ReminderCenter by lazy {
         ReminderCenter(
             appContext = applicationContext,
             capsuleCenter = capsuleCenter,
             settingsQueryApi = settingsQueryApi,
-            scheduleQueryApi = scheduleQueryApi,
+            scheduleCenter = scheduleCenter,
             domainEventBus = domainEventBus,
             appScope = appScope
         )
@@ -269,119 +220,91 @@ class App : Application() {
         )
     }
 
+    // 短信内容观察者
+    private var smsObserver: SmsContentObserver? = null
+
+    val backupCenter: BackupCenter by lazy {
+        BackupCenter(
+            scheduleCenter = scheduleCenter,
+            settingsQueryApi = settingsQueryApi,
+            settingsOperationApi = settingsOperationApi,
+            legacyDataMigrationCoordinator = legacyDataMigrationCoordinator
+        )
+    }
+
+    private val legacyDataMigrationCoordinator: LegacyDataMigrationCoordinator by lazy {
+        LegacyDataMigrationCoordinator(
+            context = applicationContext,
+            calendarCenter = calendarCenter,
+            settingsRepository = settingsRepository
+        )
+    }
+
+    val scheduleQueryApi: ScheduleQueryApi by lazy {
+        object : ScheduleQueryApi {
+            override val events: kotlinx.coroutines.flow.StateFlow<List<com.antgskds.calendarassistant.calendar.models.Event>>
+                get() = scheduleCenter.events
+        }
+    }
+
+    fun initCalendarObserver() {
+        // 第一阶段：日历同步由 StoreRootNode 内部处理，此处为空实现
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+
     override fun onCreate() {
         super.onCreate()
         instance = this
-        
-        // 初始化全局崩溃捕获
-        CrashHandler.init(this)
 
-        // 启动轻量 ANR 监测
+        CrashHandler.init(this)
         AnrMonitor.start(this)
-        
-        // 初始化通知渠道
         createNotificationChannels()
 
-        storeDispatcher.bindCapsuleRefreshHandler {
-            capsuleCommandApi.forceRefresh()
+        // 首启自动迁移旧底层数据（Room/JSON）到新 events.db
+        runBlocking(Dispatchers.IO) {
+            legacyDataMigrationCoordinator.runAutoMigrationIfNeeded()
         }
 
-        // 预热入库中心，避免识别事件在订阅建立前发出导致“正在创建”无后续。
+        // 初始化日程数据
+        scheduleCenter.refreshEvents()
+
+        // 预热入库中心
         contentIngestCenter
 
-        // 注册内容源定义，后续便签/天气/语音可平滑接入统一时间轴和胶囊框架
-        ContentRegistry.register(
-            ContentDefinition(
-                sourceType = ContentSourceType.SCHEDULE,
-                displayName = "日程",
-                supportsTimeline = true,
-                supportsCapsule = true
-            )
-        )
-        ContentRegistry.register(
-            ContentDefinition(
-                sourceType = ContentSourceType.NOTE,
-                displayName = "便签",
-                supportsTimeline = true,
-                supportsCapsule = false
-            )
-        )
-        ContentRegistry.register(
-            ContentDefinition(
-                sourceType = ContentSourceType.WEATHER,
-                displayName = "天气",
-                supportsTimeline = true,
-                supportsCapsule = true
-            )
-        )
-        ContentRegistry.register(
-            ContentDefinition(
-                sourceType = ContentSourceType.VOICE_CAPTURE,
-                displayName = "语音输入",
-                supportsTimeline = true,
-                supportsCapsule = false
-            )
-        )
+        // 注册内容源
+        ContentRegistry.register(ContentDefinition(ContentSourceType.SCHEDULE, "日程", true, true))
+        ContentRegistry.register(ContentDefinition(ContentSourceType.NOTE, "便签", true, false))
+        ContentRegistry.register(ContentDefinition(ContentSourceType.WEATHER, "天气", true, true))
+        ContentRegistry.register(ContentDefinition(ContentSourceType.VOICE_CAPTURE, "语音输入", true, false))
 
-        // 初始化日历内容观察者（仅在已有权限时）
-        initCalendarObserverIfPermissionGranted()
+        // CalDAVUpdateListener 通过 JobScheduler 自动监听系统日历变化
+        // 需要在 sync 开启时主动注册一次 content observer job
+        if (syncCenter.getSyncStatus().isEnabled) {
+            try {
+                com.antgskds.calendarassistant.calendar.jobs.CalDAVUpdateListener()
+                    .scheduleJob(this)
+            } catch (_: Exception) { }
+        }
 
-        // 初始化短信 ContentObserver（监听短信数据库变化，自动提取取件码）
         initSmsObserver()
-
         runtimeCenter.startAppRoutines()
-
         reminderCenter.startEventSubscriptions()
     }
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(NotificationManager::class.java)
-
-            // A. 普通提醒渠道 (High Priority, 有声音/震动)
-            val popupChannel = NotificationChannel(
-                CHANNEL_ID_POPUP,
-                "日程提醒",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "普通日程的弹窗提醒"
-                enableLights(true)
-                enableVibration(true)
+            val popupChannel = NotificationChannel(CHANNEL_ID_POPUP, "日程提醒", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "普通日程的弹窗提醒"; enableLights(true); enableVibration(true)
             }
-
-            // B. 实况胶囊渠道 (High Priority, 但静音)
-            // 胶囊通常伴随系统闹钟，或者是静默显示的 Live Activity，所以不该自己乱叫
-            val liveChannel = NotificationChannel(
-                CHANNEL_ID_LIVE,
-                "实况胶囊",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "进行中日程的实况胶囊"
-                setSound(null, null) // 静音
-                setShowBadge(false)  // 不显示角标
+            val liveChannel = NotificationChannel(CHANNEL_ID_LIVE, "实况胶囊", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "进行中日程的实况胶囊"; setSound(null, null); setShowBadge(false)
             }
-
             notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel))
         }
     }
 
-    /**
-     * 初始化日历内容观察者（仅在已有权限时）
-     * 避免新安装未授权时崩溃或报错
-     */
-    private fun initCalendarObserverIfPermissionGranted() {
-        if (permissionCenter.hasCalendarPermissions(this)) {
-            initCalendarObserver()
-        } else {
-            Log.d(TAG, "日历权限未授予，跳过 Observer 初始化")
-        }
-    }
-
-    /**
-     * 初始化短信 ContentObserver
-     * 监听 content://sms 数据库变化，新短信到来时自动提取取件码。
-     * 依赖 READ_SMS 权限，内部已做权限检查。
-     */
     private fun initSmsObserver() {
         smsObserver = SmsContentObserver(
             context = this,
@@ -389,24 +312,4 @@ class App : Application() {
         )
         smsObserver?.register()
     }
-
-    /**
-     * 初始化日历内容观察者
-     * 监听系统日历的变化，用于反向同步
-     * 此方法为 public，可供外部在权限授予后调用
-     */
-    fun initCalendarObserver() {
-        if (calendarObserver != null) {
-            Log.d(TAG, "日历 Observer 已初始化，跳过")
-            return
-        }
-
-        calendarObserver = CalendarContentObserver(applicationContext) {
-            Log.d(TAG, "检测到系统日历变化，使用 WorkManager 触发反向同步")
-            CalendarReverseSyncWorker.enqueue(applicationContext)
-        }
-        calendarObserver?.register()
-        Log.d(TAG, "日历内容观察者已初始化并注册")
-    }
-
 }

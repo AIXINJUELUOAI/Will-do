@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.provider.RecognitionProviderFactory
-import com.antgskds.calendarassistant.data.model.CalendarEventData
+import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 
 internal object RecognitionMultimodalNode {
@@ -12,7 +12,7 @@ internal object RecognitionMultimodalNode {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context
-    ): AnalysisResult<List<CalendarEventData>> {
+    ): AnalysisResult<List<RecognitionDraft>> {
         return RecognitionProviderFactory.semanticProvider(settings).analyzeImage(bitmap, settings, context)
     }
 }

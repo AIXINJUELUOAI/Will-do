@@ -10,22 +10,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.antgskds.calendarassistant.data.model.EventTags
-import com.antgskds.calendarassistant.data.model.MyEvent
+import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.model.RepeatSpec
+import com.antgskds.calendarassistant.data.model.EditDraft
+import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog
@@ -74,7 +82,7 @@ private fun parseDateTimeValue(
 }
 
 private fun resolveInitialRange(
-    eventToEdit: MyEvent?,
+    eventToEdit: Event?,
     fallbackStart: LocalDateTime,
     formatter: DateTimeFormatter
 ): EventDateTimeRange {
@@ -123,26 +131,25 @@ private fun resolveManualEndChange(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddEventDialog(
-    eventToEdit: MyEvent? = null,
+    editDraft: EditDraft? = null,
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),
-    recurringNextOccurrenceText: String? = null,
-    recurringEditHint: String? = null,
     visible: Boolean = true,
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
-    onConfirm: (MyEvent) -> Unit
+    onConfirm: (EventPatch) -> Unit
 ) {
     val context = LocalContext.current
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    val defaultStartDateTime = remember {
-        LocalDateTime.now().withSecond(0).withNano(0)
-    }
-    val initialRange = remember(eventToEdit?.id) {
-        resolveInitialRange(eventToEdit, defaultStartDateTime, timeFormatter)
-    }
-    val initialAutoDurationMinutes = remember(initialRange) {
-        Duration.between(initialRange.start, initialRange.end).toMinutes().coerceAtLeast(1L)
+    val isEditing = editDraft != null
+    val draftKey = editDraft?.hashCode() ?: 0
+
+    val initialStart = editDraft?.let { LocalDateTime.of(it.startDate, it.startTime) }
+        ?: LocalDateTime.now().withSecond(0).withNano(0)
+    val initialEnd = editDraft?.let { LocalDateTime.of(it.endDate, it.endTime) }
+        ?: initialStart.plusHours(1)
+    val initialAutoDurationMinutes = remember(draftKey) {
+        Duration.between(initialStart, initialEnd).toMinutes().coerceAtLeast(1L)
     }
 
     // 计算过滤后的提醒选项
@@ -154,24 +161,27 @@ fun AddEventDialog(
         }
     }
 
-    var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
-    var startDate by remember { mutableStateOf(initialRange.start.toLocalDate()) }
-    var endDate by remember { mutableStateOf(initialRange.end.toLocalDate()) }
-    var startTime by remember { mutableStateOf(initialRange.start.toLocalTime().format(timeFormatter)) }
-    var endTime by remember { mutableStateOf(initialRange.end.toLocalTime().format(timeFormatter)) }
-    var location by remember { mutableStateOf(eventToEdit?.location ?: "") }
-    var desc by remember { mutableStateOf(eventToEdit?.description ?: "") }
-    var eventTag by remember { mutableStateOf(eventToEdit?.tag ?: EventTags.GENERAL) }
-    val reminders = remember { mutableStateListOf<Int>().apply { addAll(eventToEdit?.reminders ?: emptyList()) } }
+    var title by remember(draftKey) { mutableStateOf(editDraft?.title ?: "") }
+    var startDate by remember(draftKey) { mutableStateOf(initialStart.toLocalDate()) }
+    var endDate by remember(draftKey) { mutableStateOf(initialEnd.toLocalDate()) }
+    var startTime by remember(draftKey) { mutableStateOf(initialStart.toLocalTime().format(timeFormatter)) }
+    var endTime by remember(draftKey) { mutableStateOf(initialEnd.toLocalTime().format(timeFormatter)) }
+    var location by remember(draftKey) { mutableStateOf(editDraft?.location ?: "") }
+    var desc by remember(draftKey) { mutableStateOf(editDraft?.description ?: "") }
+    var eventTag by remember(draftKey) { mutableStateOf(editDraft?.tag ?: EventTags.GENERAL) }
+    val reminders = remember(draftKey) { mutableStateListOf<Int>().apply { addAll(editDraft?.reminders ?: emptyList()) } }
+    var repeatSpec by remember(draftKey) { mutableStateOf(RepeatSpec.fromRRule(editDraft?.rrule.orEmpty())) }
 
     var sourceBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(eventToEdit, visible) {
+    LaunchedEffect(draftKey, visible) {
         if (!visible) return@LaunchedEffect
-        val path = eventToEdit?.sourceImagePath
+        val desc = editDraft?.description.orEmpty()
+        val imgMatch = Regex("\\[img:(.+?)]").find(desc)
+        val path = imgMatch?.groupValues?.getOrNull(1)
         if (!path.isNullOrBlank()) {
             withContext(Dispatchers.IO) {
                 try {
-                    val file = File(path)
+                    val file = java.io.File(path)
                     if (file.exists()) sourceBitmap = BitmapFactory.decodeFile(file.absolutePath)
                 } catch (e: Exception) { e.printStackTrace() }
             }
@@ -183,6 +193,7 @@ fun AddEventDialog(
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var showReminderPicker by remember { mutableStateOf(false) }
+    var showRepeatPicker by remember { mutableStateOf(false) }
     var autoDurationMinutes by remember { mutableStateOf(initialAutoDurationMinutes) }
     var isEndTimeManuallySet by remember { mutableStateOf(false) }
 
@@ -203,7 +214,7 @@ fun AddEventDialog(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Text(if (eventToEdit == null) "新增日程" else "编辑日程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(if (!isEditing) "新增日程" else "编辑日程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
 
                 Column(
@@ -218,39 +229,27 @@ fun AddEventDialog(
                     Text("类型:", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
 
+                    val tagLabel = if (repeatSpec != null || editDraft?.isRecurring == true) {
+                        "重复"
+                    } else {
+                        when (eventTag) {
+                            EventTags.PICKUP  -> "取件"
+                            EventTags.TRAIN   -> "列车"
+                            EventTags.FLIGHT  -> "航班"
+                            EventTags.TAXI    -> "打车"
+                            EventTags.FOOD    -> "外卖"
+                            EventTags.TICKET  -> "票务"
+                            EventTags.SENDER  -> "快递"
+                            EventTags.NOTE    -> "备注"
+                            else              -> "日程"
+                        }
+                    }
                     AssistChip(
                         onClick = {},
-                        label = { Text("日程") },
+                        label = { Text(tagLabel) },
                         colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (eventTag == EventTags.GENERAL) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            labelColor = if (eventTag == EventTags.GENERAL) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = null
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("取件") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (eventTag == EventTags.PICKUP) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            labelColor = if (eventTag == EventTags.PICKUP) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = null
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("火车") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (eventTag == EventTags.TRAIN) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            labelColor = if (eventTag == EventTags.TRAIN) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = null
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("打车") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (eventTag == EventTags.TAXI) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            labelColor = if (eventTag == EventTags.TAXI) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            labelColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         border = null
                     )
@@ -275,13 +274,19 @@ fun AddEventDialog(
                     }
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showReminderPicker = true }.padding(vertical = 8.dp)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(Icons.Outlined.Notifications, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("添加提醒", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    InlineEventAction(
+                        icon = Icons.Outlined.Notifications,
+                        text = if (reminders.isEmpty()) "添加提醒" else "提醒 ${reminders.size} 个"
+                    ) { showReminderPicker = true }
+                    InlineEventAction(
+                        icon = Icons.Outlined.Repeat,
+                        text = repeatSpec?.summary() ?: "重复"
+                    ) { showRepeatPicker = true }
                 }
                 if (reminders.isNotEmpty()) {
                     FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -300,31 +305,6 @@ fun AddEventDialog(
                     Image(bitmap = sourceBitmap!!.asImageBitmap(), contentDescription = "Source", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.FillWidth)
                 }
 
-                if (recurringNextOccurrenceText != null || recurringEditHint != null) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("此日程为重复日程", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            if (recurringNextOccurrenceText != null) {
-                                Text(
-                                    "下一次提醒时间：$recurringNextOccurrenceText",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (recurringEditHint != null) {
-                                Text(
-                                    recurringEditHint,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
                 }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End) {
@@ -345,19 +325,25 @@ fun AddEventDialog(
                                 return@Button
                             }
 
+                            val zone = java.time.ZoneId.systemDefault()
+                            val startEpoch = finalStart.atZone(zone).toEpochSecond()
+                            val endEpoch = finalEnd.atZone(zone).toEpochSecond()
+                            val reminderList = reminders.toList()
                             val nextColor = if (EventColors.isNotEmpty()) EventColors[currentEventsCount % EventColors.size] else Color.Gray
-                            val newEvent = MyEvent(
-                                id = eventToEdit?.id ?: UUID.randomUUID().toString(),
+                            val patch = EventPatch(
                                 title = title,
-                                startDate = finalStart.toLocalDate(),
-                                endDate = finalEnd.toLocalDate(),
-                                startTime = finalStart.toLocalTime().format(timeFormatter),
-                                endTime = finalEnd.toLocalTime().format(timeFormatter),
-                                location = location, description = desc, color = eventToEdit?.color ?: nextColor,
-                                isImportant = eventToEdit?.isImportant ?: false, sourceImagePath = eventToEdit?.sourceImagePath,
-                                reminders = reminders.toList(), tag = eventTag
+                                startTS = startEpoch,
+                                endTS = endEpoch,
+                                location = location,
+                                description = desc,
+                                color = editDraft?.color ?: nextColor.toArgb(),
+                                tag = eventTag,
+                                rrule = repeatSpec?.toRRule().orEmpty(),
+                                reminder1Minutes = reminderList.getOrElse(0) { -1 },
+                                reminder2Minutes = reminderList.getOrElse(1) { -1 },
+                                reminder3Minutes = reminderList.getOrElse(2) { -1 }
                             )
-                            onConfirm(newEvent)
+                            onConfirm(patch)
                         }
                     }) { Text("确定") }
                 }
@@ -365,7 +351,7 @@ fun AddEventDialog(
         }
     }
 
-    if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }) {
+    if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }, title = "开始日期") {
         val newStart = parseDateTimeValue(it, startTime, timeFormatter)
         val currentEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
         if (newStart != null) {
@@ -383,7 +369,7 @@ fun AddEventDialog(
         }
         showStartDatePicker = false
     }
-    if (showEndDatePicker) WheelDatePickerDialog(endDate, { showEndDatePicker = false }) {
+    if (showEndDatePicker) WheelDatePickerDialog(endDate, { showEndDatePicker = false }, title = "结束日期") {
         val currentStart = parseDateTimeValue(startDate, startTime, timeFormatter)
         val candidateEnd = parseDateTimeValue(it, endTime, timeFormatter)
         if (currentStart != null && candidateEnd != null) {
@@ -397,7 +383,7 @@ fun AddEventDialog(
         isEndTimeManuallySet = true
         showEndDatePicker = false
     }
-    if (showStartTimePicker) WheelTimePickerDialog(startTime, { showStartTimePicker = false }) {
+    if (showStartTimePicker) WheelTimePickerDialog(startTime, { showStartTimePicker = false }, title = "开始时间") {
         val newStart = parseDateTimeValue(startDate, it, timeFormatter)
         val currentEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
         if (newStart != null) {
@@ -415,7 +401,7 @@ fun AddEventDialog(
         }
         showStartTimePicker = false
     }
-    if (showEndTimePicker) WheelTimePickerDialog(endTime, { showEndTimePicker = false }) {
+    if (showEndTimePicker) WheelTimePickerDialog(endTime, { showEndTimePicker = false }, title = "结束时间") {
         val currentStart = parseDateTimeValue(startDate, startTime, timeFormatter)
         val candidateEnd = parseDateTimeValue(endDate, it, timeFormatter)
         if (currentStart != null && candidateEnd != null) {
@@ -435,6 +421,43 @@ fun AddEventDialog(
             onDismiss = { showReminderPicker = false },
             onConfirm = { if (!reminders.contains(it)) reminders.add(it) },
             availableOptions = filteredReminderOptions  // 传入过滤后的选项
+        )
+    }
+    if (showRepeatPicker) {
+        RepeatRulePickerDialog(
+            currentSpec = repeatSpec,
+            startDate = startDate,
+            onDismiss = { showRepeatPicker = false },
+            onConfirm = {
+                repeatSpec = it
+                showRepeatPicker = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun InlineEventAction(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp)
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

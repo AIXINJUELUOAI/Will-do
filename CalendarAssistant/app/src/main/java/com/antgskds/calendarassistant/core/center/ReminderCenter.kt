@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.core.center
 
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.*
 import android.content.Context
 import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
@@ -10,7 +12,7 @@ import com.antgskds.calendarassistant.core.event.events.CapsuleRefreshRequestedE
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangeOrigin
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangeType
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangedEvent
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +26,7 @@ class ReminderCenter(
     private val appContext: Context,
     private val capsuleCenter: CapsuleCenter,
     private val settingsQueryApi: SettingsQueryApi,
-    private val scheduleQueryApi: ScheduleQueryApi,
+    private val scheduleCenter: ScheduleCenter,
     private val domainEventBus: DomainEventBus,
     private val appScope: CoroutineScope
 ) {
@@ -178,8 +180,8 @@ class ReminderCenter(
     private fun reconcileRemindersForChangedEvents(ops: Map<String, ReminderSyncAction>) {
         if (ops.isEmpty()) return
 
-        val activeById = scheduleQueryApi.events.value.associateBy { it.id }
-        val archivedById = scheduleQueryApi.archivedEvents.value.associateBy { it.id }
+        val activeById = scheduleCenter.events.value.associateBy { it.id?.toString() ?: "" }
+        val archivedById = scheduleCenter.archivedEvents.value.associateBy { it.id?.toString() ?: "" }
 
         ops.forEach { (eventId, action) ->
             val active = activeById[eventId]
@@ -215,8 +217,8 @@ class ReminderCenter(
     }
 
     private fun reconcileAllReminders() {
-        val activeEvents = scheduleQueryApi.events.value
-        val archivedEvents = scheduleQueryApi.archivedEvents.value
+        val activeEvents = scheduleCenter.events.value
+        val archivedEvents = scheduleCenter.archivedEvents.value
 
         activeEvents.forEach { event ->
             NotificationScheduler.cancelReminders(appContext, event)

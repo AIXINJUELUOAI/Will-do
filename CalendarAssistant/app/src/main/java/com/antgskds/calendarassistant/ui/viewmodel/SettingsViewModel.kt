@@ -1,23 +1,28 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
+import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
+import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.center.BackupCenter
-import com.antgskds.calendarassistant.core.calendar.CalendarManager
-import com.antgskds.calendarassistant.core.calendar.CalendarSyncManager
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.core.center.ImportMode
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.importer.ImportMode
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.data.model.MySettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
 
 class SettingsViewModel(
     private val scheduleCenter: ScheduleCenter,
@@ -37,6 +42,7 @@ class SettingsViewModel(
         hasPermission = false,
         targetCalendarId = -1L,
         sourceCalendarIds = emptyList(),
+        syncIntervalSeconds = 60,
         lastSyncTime = 0L,
         mappedEventCount = 0
     ))
@@ -101,6 +107,7 @@ class SettingsViewModel(
                 current.copy(timeTableJson = json)
             }
             settingsOperationApi.updateSettings(updated)
+            remapCourseEventsForSettings(updated)
         }
     }
 
@@ -123,6 +130,7 @@ class SettingsViewModel(
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
         autoArchive: Boolean? = null,
+        defaultEventDurationMinutes: Int? = null,
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
         localSemanticEnabled: Boolean? = null,
@@ -147,6 +155,7 @@ class SettingsViewModel(
                 advanceReminderEnabled = advanceReminderEnabled,
                 advanceReminderMinutes = advanceReminderMinutes,
                 autoArchive = autoArchive,
+                defaultEventDurationMinutes = defaultEventDurationMinutes,
                 useMultimodalAi = useMultimodalAi,
                 disableThinking = disableThinking,
                 localSemanticEnabled = localSemanticEnabled,
@@ -167,23 +176,20 @@ class SettingsViewModel(
         provider: String,
         apiUrl: String,
         apiKey: String,
-        city: String,
         refreshInterval: Int,
         showInFloating: Boolean
     ) {
-        viewModelScope.launch {
-            settingsOperationApi.updateSettings(
-                settings.value.copy(
-                    weatherEnabled = enabled,
-                    weatherProvider = provider,
-                    weatherApiUrl = apiUrl,
-                    weatherApiKey = apiKey,
-                    weatherCity = city,
-                    weatherRefreshInterval = refreshInterval,
-                    showWeatherInFloating = showInFloating
-                )
+        settingsOperationApi.updateSettings(
+            settings.value.copy(
+                weatherEnabled = enabled,
+                weatherProvider = provider,
+                weatherApiUrl = apiUrl,
+                weatherApiKey = apiKey,
+                weatherCity = "",
+                weatherRefreshInterval = refreshInterval,
+                showWeatherInFloating = showInFloating
             )
-        }
+        )
     }
 
     // 更新截图延迟
@@ -272,10 +278,56 @@ class SettingsViewModel(
 
     fun getEventsCount(): Int = scheduleCenter.getEventsCount()
     fun getTotalEventsCount(): Int = scheduleCenter.getTotalEventsCount()
-    fun getCoursesCount(): Int = CourseEventMapper.extractCourses(
+    fun getCoursesCount(): Int = CourseEventMapper.extractParentCourses(
         scheduleCenter.events.value,
         settingsQueryApi.settings.value
     ).size
+
+    private suspend fun remapCourseEventsForSettings(updatedSettings: MySettings) {
+        val events = scheduleCenter.events.value
+        val courseParents = events.filter { CourseEventMapper.isCourseParent(it) }
+        if (courseParents.isEmpty()) return
+
+        courseParents.forEach { parent ->
+            val parentId = parent.id ?: return@forEach
+            val course = CourseEventMapper.toCourse(parent, updatedSettings) ?: return@forEach
+            val detachedWeeks = events
+                .filter { it.parentId == parentId && CourseEventMapper.isCourseEvent(it) }
+                .mapNotNull { child -> CourseEventMapper.childOriginalWeek(child, updatedSettings) }
+                .distinct()
+            val detachedOccurrenceTs = detachedWeeks.mapNotNull { week ->
+                CourseEventMapper.occurrenceTsForWeek(course, updatedSettings, week)
+            }
+            val rebasedParent = CourseEventMapper.toParentEvent(
+                course = course,
+                settings = updatedSettings,
+                existingParent = parent.copy(exdates = emptyList()),
+                additionalExcludedOccurrenceTs = detachedOccurrenceTs
+            )
+            if (rebasedParent.startTS != parent.startTS ||
+                rebasedParent.endTS != parent.endTS ||
+                rebasedParent.exdates != parent.exdates
+            ) {
+                scheduleCenter.updateEvent(rebasedParent)
+            }
+        }
+
+        events.filter { CourseEventMapper.isCourseException(it) }.forEach { child ->
+            val meta = CourseEventMapper.parseMeta(child.description) ?: return@forEach
+            val actualDate = Instant.ofEpochSecond(child.startTS)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            val (startTs, endTs) = CourseEventMapper.mapNodesToEpochRange(
+                settings = updatedSettings,
+                date = actualDate,
+                startNode = meta.startNode,
+                endNode = meta.endNode
+            )
+            if (startTs != child.startTS || endTs != child.endTS) {
+                scheduleCenter.updateEvent(child.copy(startTS = startTs, endTS = endTs))
+            }
+        }
+    }
 
     fun hasDuplicateAdvanceReminder(minutes: Int): Boolean {
         return scheduleInsightsQueryApi.hasDuplicateAdvanceReminder(
@@ -364,6 +416,14 @@ class SettingsViewModel(
             refreshSyncStatus()
         }
         return result
+    }
+
+    fun updateSyncIntervalSeconds(seconds: Int, callback: suspend (Result<Unit>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = syncCenter.updateSyncIntervalSeconds(seconds)
+            refreshSyncStatus()
+            callback(result)
+        }
     }
 
     /**
