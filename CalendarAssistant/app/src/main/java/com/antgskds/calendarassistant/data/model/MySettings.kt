@@ -34,6 +34,9 @@ data class MySettings(
     // 【实验室】短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
 
+    // 【实验室】码类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
+    val forceInstantCodeTimeToNow: Boolean = false,
+
     // 【实验室】便签功能
     val noteEnabled: Boolean = false,
 

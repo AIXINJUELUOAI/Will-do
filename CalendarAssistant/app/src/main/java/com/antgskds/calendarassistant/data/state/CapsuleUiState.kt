@@ -19,6 +19,7 @@ sealed class CapsuleUiState {
             val content: String,
             val description: String,
             val color: Int,
+            val state: Int = 0,
             val startMillis: Long,
             val endMillis: Long,
             val display: CapsuleDisplayModel

@@ -664,8 +664,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     private fun convertToEvent(eventData: RecognitionDraft, sourceImagePath: String?): Event {
-        val durationMinutes = settingsQueryApi.settings.value.defaultEventDurationMinutes
-        return com.antgskds.calendarassistant.core.ai.convertDraftToEvent(eventData, sourceImagePath, defaultDurationMinutes = durationMinutes)
+        val settings = settingsQueryApi.settings.value
+        return com.antgskds.calendarassistant.core.ai.convertDraftToEvent(
+            eventData,
+            sourceImagePath,
+            defaultDurationMinutes = settings.defaultEventDurationMinutes,
+            forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow
+        )
     }
 
     private fun convertToNote(text: String): Event {

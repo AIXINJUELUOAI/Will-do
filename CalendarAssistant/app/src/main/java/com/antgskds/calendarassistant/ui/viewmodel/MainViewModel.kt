@@ -367,6 +367,16 @@ class MainViewModel(
         parent.id?.let { scheduleCenter.deleteEvent(it) }
     }
 
+    fun clearAllCourses() = viewModelScope.launch {
+        val events = scheduleCenter.events.value
+        val courses = CourseEventMapper.extractParentCourses(events, settingsQueryApi.settings.value)
+        courses.forEach { course ->
+            CourseEventMapper.findParentByCourseId(scheduleCenter.events.value, course.id)
+                ?.id
+                ?.let { scheduleCenter.deleteEvent(it) }
+        }
+    }
+
     fun updateCourseOccurrence(
         item: ScheduleDisplayItem,
         newName: String,

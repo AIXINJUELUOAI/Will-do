@@ -1,9 +1,13 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import android.content.ClipboardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -16,22 +20,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.antgskds.calendarassistant.core.ai.AiPrompts
+import com.antgskds.calendarassistant.core.center.ImportMode
+import com.antgskds.calendarassistant.core.center.ParsedCourseImport
+import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.core.ai.AiPrompts
-import com.antgskds.calendarassistant.core.center.ImportMode
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
-import com.antgskds.calendarassistant.data.model.ImportResult
 import kotlinx.coroutines.Dispatchers
-import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -48,11 +51,13 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
+    var showImportMethodDialog by remember { mutableStateOf(false) }
     var showImportConfirmDialog by remember { mutableStateOf(false) }
-    var pendingImportContent by remember { mutableStateOf<String?>(null) }
-    var detectedStartDate by remember { mutableStateOf<String?>(null) }
+    var pendingParsedImport by remember { mutableStateOf<ParsedCourseImport?>(null) }
     var importMode by remember { mutableStateOf(ImportMode.APPEND) }
     var importSettings by remember { mutableStateOf(true) }
+    var shareImportLoading by remember { mutableStateOf(false) }
+    var importMethodError by remember { mutableStateOf<String?>(null) }
     val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
     val promptSource by mainViewModel.promptSource.collectAsState()
     val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
@@ -67,7 +72,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
 
     // --- 字体样式优化 ---
     // 板块标题：Primary + ExtraBold
-val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary
     )
@@ -84,10 +89,6 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     val contentBodyStyle = MaterialTheme.typography.bodyMedium
-    val sectionHeaderStyle = MaterialTheme.typography.headlineSmall.copy(
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
 
     // 监听 Prompt 检查反馈
     LaunchedEffect(mainViewModel) {
@@ -95,19 +96,18 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             showToast(feedback.message, feedback.type)
         }
     }
-    // 辅助：快速检测文件中的日期
-    fun peekStartDate(jsonContent: String): String? {
-        return try {
-            jsonContent.lines().firstNotNullOfOrNull { line ->
-                when {
-                    line.trim().startsWith("{") && line.contains("\"startDate\"") -> {
-                        val settings = Json { ignoreUnknownKeys = true; isLenient = true }.decodeFromString<WakeUpSettingsDTO>(line.trim())
-                        settings.startDate
-                    }
-                    else -> null
-                }
-            }
-        } catch (e: Exception) { null }
+    fun prepareExternalImport(parsed: ParsedCourseImport) {
+        pendingParsedImport = parsed
+        importMode = ImportMode.APPEND
+        importSettings = parsed.canImportSettings && currentSettings.semesterStartDate.isBlank()
+        showImportConfirmDialog = true
+    }
+
+    fun readClipboardText(): String {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val clip = clipboard?.primaryClip ?: return ""
+        if (clip.itemCount <= 0) return ""
+        return clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
     }
 
     // 课程数据导出
@@ -132,13 +132,11 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 try {
                     val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     if (content != null) {
-                        val isExternalFormat = content.contains("\"courseLen\"") || (content.contains("\"startNode\"") && content.contains("\"step\""))
-                        if (isExternalFormat) {
-                            pendingImportContent = content
-                            detectedStartDate = peekStartDate(content)
-                            importSettings = currentSettings.semesterStartDate.isBlank()
-                            importMode = ImportMode.APPEND
-                            showImportConfirmDialog = true
+                        val externalResult = viewModel.parseExternalCourseImport(content)
+                        if (externalResult.isSuccess) {
+                            withContext(Dispatchers.Main) {
+                                prepareExternalImport(externalResult.getOrThrow())
+                            }
                         } else {
                             val result = viewModel.importCoursesData(content)
                             withContext(Dispatchers.Main) {
@@ -260,7 +258,10 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                     exportCoursesLauncher.launch("calendar_courses_$timestamp.json")
                 },
-                onImport = { importCoursesLauncher.launch(arrayOf("*/*")) },
+                onImport = {
+                    importMethodError = null
+                    showImportMethodDialog = true
+                },
                 cardTitleStyle = cardTitleStyle,
                 cardSubtitleStyle = cardSubtitleStyle
             )
@@ -324,106 +325,286 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 .padding(bottom = 16.dp + bottomInset),
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
-    }
 
-    // 确认导入弹窗
-    if (showImportConfirmDialog && pendingImportContent != null) {
-        Dialog(
-            onDismissRequest = {
-                showImportConfirmDialog = false
-                pendingImportContent = null
-            },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+        AnimatedVisibility(
+            visible = showImportMethodDialog,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.matchParentSize()
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Text("导入外部课表", style = sectionHeaderStyle)
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text("检测到文件中的学期开始日期: ${detectedStartDate ?: "未知"}", style = contentBodyStyle)
-
-                        if (currentSettings.semesterStartDate.isNotBlank()) {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Upload, null, tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            "当前 App 内的日期: ${currentSettings.semesterStartDate}",
-                                            style = cardValueStyle,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                        Text(
-                                            "如需覆盖，请勾选下方选项",
-                                            style = cardValueStyle,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            if (showImportMethodDialog && !shareImportLoading) {
+                                showImportMethodDialog = false
+                                importMethodError = null
                             }
                         }
+                    )
+            )
+        }
 
-                        HorizontalDivider()
-
-                        Text("配置", style = sectionTitleStyle)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = importSettings,
-                                onCheckedChange = { importSettings = it }
-                            )
-                            Text("导入文件中的开学日期 (总周数)", modifier = Modifier.clickable { importSettings = !importSettings }, style = contentBodyStyle)
-                        }
-
-                        Text("课程", style = sectionTitleStyle)
-                        ImportOptionRadio(importMode, contentBodyStyle) { importMode = it }
-
-                        if (importMode == ImportMode.OVERWRITE) {
-                            Text(
-                                "⚠️ 警告：覆盖模式将删除当前所有课程数据！",
-                                color = MaterialTheme.colorScheme.error,
-                                style = cardValueStyle,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
-
-                        HorizontalDivider()
-
-                        Text(
-                            "注：作息时间表始终使用 App 内的设置，不会从文件导入",
-                            style = cardValueStyle
-                        )
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showImportConfirmDialog = false; pendingImportContent = null }) { Text("取消") }
-                        Spacer(Modifier.width(8.dp))
-                        Button(onClick = {
-                            val content = pendingImportContent
-                            if (content != null) {
-                                viewModel.importWakeUpFile(content, importMode, importSettings) { result ->
-                                    if (result.isSuccess) showToast("成功导入 ${result.getOrNull()} 门课程", ToastType.SUCCESS)
-                                    else showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
-                                }
-                            }
-                            showImportConfirmDialog = false
-                            pendingImportContent = null
-                        }) { Text("导入") }
+        FloatingActionCard(
+            visible = showImportMethodDialog,
+            title = "选择导入方式",
+            content = importMethodError?.let { "从口令导入失败：$it" }
+                ?: "文件导入支持本应用备份、WakeUp 文件和 ICS；口令导入会读取剪贴板中的 WakeUp 分享文本。",
+            confirmText = "从口令",
+            dismissText = "从文件",
+            isLoading = shareImportLoading,
+            onConfirm = {
+                importMethodError = null
+                shareImportLoading = true
+                val clipboardText = readClipboardText()
+                scope.launch {
+                    val result = viewModel.fetchWakeUpShareImport(clipboardText)
+                    shareImportLoading = false
+                    if (result.isSuccess) {
+                        showImportMethodDialog = false
+                        prepareExternalImport(result.getOrThrow())
+                    } else {
+                        importMethodError = result.exceptionOrNull()?.message ?: "WakeUp 口令导入失败"
                     }
                 }
+            },
+            onDismiss = {
+                importMethodError = null
+                showImportMethodDialog = false
+                importCoursesLauncher.launch(arrayOf("*/*"))
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomInset)
+        )
+
+        val parsedImport = pendingParsedImport
+        if (showImportConfirmDialog && parsedImport != null) {
+            CourseImportConfirmSheet(
+                parsed = parsedImport,
+                currentSemesterStartDate = currentSettings.semesterStartDate,
+                importMode = importMode,
+                importSettings = importSettings,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                onModeChange = { importMode = it },
+                onImportSettingsChange = { importSettings = it },
+                onDismiss = {
+                    showImportConfirmDialog = false
+                    pendingParsedImport = null
+                },
+                onConfirm = {
+                    viewModel.importParsedCourseImport(parsedImport, importMode, importSettings && parsedImport.canImportSettings) { result ->
+                        if (result.isSuccess) showToast("成功导入 ${result.getOrNull()} 门课程", ToastType.SUCCESS)
+                        else showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
+                    }
+                    showImportConfirmDialog = false
+                    pendingParsedImport = null
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CourseImportConfirmSheet(
+    parsed: ParsedCourseImport,
+    currentSemesterStartDate: String,
+    importMode: ImportMode,
+    importSettings: Boolean,
+    cardValueStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    onModeChange: (ImportMode) -> Unit,
+    onImportSettingsChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp)
+        ) {
+            Text("导入外部课表", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "确认导入内容，并选择是否同步课表设置。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ImportSummaryCard(parsed, cardValueStyle)
+
+                if (currentSemesterStartDate.isNotBlank() && parsed.semesterStartDate != null &&
+                    currentSemesterStartDate != parsed.semesterStartDate
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("当前 App 开学日期：$currentSemesterStartDate", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("导入来源开学日期：${parsed.semesterStartDate}", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+
+                Text(
+                    text = "同步设置",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = parsed.canImportSettings) { onImportSettingsChange(!importSettings) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = importSettings && parsed.canImportSettings,
+                        enabled = parsed.canImportSettings,
+                        onCheckedChange = onImportSettingsChange
+                    )
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text("同步课表设置", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (parsed.canImportSettings) "同步已检测到的开学日期、总周数和每节课时间" else "未检测到可同步的课表设置",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Text(
+                    text = "导入方式",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                ImportOptionRadio(importMode, MaterialTheme.typography.bodyLarge, onModeChange)
+
+                if (importMode == ImportMode.OVERWRITE) {
+                    Text(
+                        "覆盖模式会清空当前所有课程，仅保留本次导入内容。",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                HorizontalDivider()
+                CoursePreviewSection(parsed.courses, cardValueStyle, cardSubtitleStyle)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onConfirm,
+                enabled = parsed.courses.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("导入")
             }
         }
+    }
+}
+
+@Composable
+private fun ImportSummaryCard(parsed: ParsedCourseImport, cardValueStyle: TextStyle) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("导入摘要", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            SummaryRow("来源", parsed.sourceName, cardValueStyle)
+            SummaryRow("课程", "${parsed.courses.size} 门", cardValueStyle)
+            SummaryRow("开学日期", parsed.semesterStartDate ?: "未检测到", cardValueStyle)
+            SummaryRow("总周数", parsed.totalWeeks?.let { "$it 周" } ?: "未检测到", cardValueStyle)
+            SummaryRow("作息时间", if (parsed.hasTimeTable) "可同步 ${parsed.timeNodeCount} 节" else "未检测到", cardValueStyle)
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String, style: TextStyle) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = style, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CoursePreviewSection(courses: List<Course>, cardValueStyle: TextStyle, cardSubtitleStyle: TextStyle) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("课程预览", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        courses.take(5).forEach { course ->
+            Column {
+                Text(course.name, style = cardValueStyle, fontWeight = FontWeight.Medium)
+                Text(course.previewText(), style = cardSubtitleStyle)
+            }
+        }
+        if (courses.size > 5) {
+            Text("还有 ${courses.size - 5} 门课程将在导入时一并处理", style = cardSubtitleStyle)
+        }
+    }
+}
+
+private fun Course.previewText(): String {
+    return buildString {
+        append(weekdayText(dayOfWeek))
+        append(" 第")
+        append(startNode)
+        append('-')
+        append(endNode)
+        append("节")
+        append(" · 第")
+        append(startWeek)
+        append('-')
+        append(endWeek)
+        append("周")
+        weekTypeText(weekType).takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
+        if (location.isNotBlank()) append(" · ").append(location)
+        if (teacher.isNotBlank()) append(" · ").append(teacher)
+    }
+}
+
+private fun weekdayText(dayOfWeek: Int): String {
+    return when (dayOfWeek) {
+        1 -> "周一"
+        2 -> "周二"
+        3 -> "周三"
+        4 -> "周四"
+        5 -> "周五"
+        6 -> "周六"
+        7 -> "周日"
+        else -> "周$dayOfWeek"
+    }
+}
+
+private fun weekTypeText(weekType: Int): String {
+    return when (weekType) {
+        1 -> "单周"
+        2 -> "双周"
+        else -> ""
     }
 }
 
@@ -435,7 +616,7 @@ fun ImportOptionRadio(currentMode: ImportMode, contentBodyStyle: TextStyle, onMo
                 selected = currentMode == ImportMode.APPEND,
                 onClick = { onModeChange(ImportMode.APPEND) }
             )
-            Text("加入 (保留现有课程，追加新课)", modifier = Modifier.clickable { onModeChange(ImportMode.APPEND) }, style = contentBodyStyle)
+            Text("追加 (保留现有课程，追加新课)", modifier = Modifier.clickable { onModeChange(ImportMode.APPEND) }, style = contentBodyStyle)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(

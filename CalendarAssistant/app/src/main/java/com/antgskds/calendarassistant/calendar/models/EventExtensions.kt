@@ -30,6 +30,43 @@ fun normalizeEventTag(tag: String?): String = tag?.trim()?.lowercase().orEmpty()
 
 fun isNoteTag(tag: String?): Boolean = normalizeEventTag(tag) == EventTags.NOTE
 
+fun inferEventTagFromDescription(description: String?, fallbackTag: String = EventTags.GENERAL): String {
+    val header = extractDescriptionHeader(description)
+    val headerTag = when (header?.trim()?.lowercase()) {
+        "general", "日程" -> EventTags.GENERAL
+        "train", "列车", "火车", "高铁" -> EventTags.TRAIN
+        "flight", "航班", "飞机" -> EventTags.FLIGHT
+        "taxi", "用车", "打车" -> EventTags.TAXI
+        "pickup", "取件" -> EventTags.PICKUP
+        "food", "取餐", "外卖" -> EventTags.FOOD
+        "ticket", "取票" -> EventTags.TICKET
+        "sender", "寄件" -> EventTags.SENDER
+        "course", "课程" -> EventTags.COURSE
+        "note", "便签" -> EventTags.NOTE
+        else -> null
+    }
+    return headerTag ?: normalizeEventTag(fallbackTag).ifBlank { EventTags.GENERAL }
+}
+
+private fun extractDescriptionHeader(description: String?): String? {
+    val clean = description?.trim().orEmpty()
+    if (clean.isBlank()) return null
+
+    val cnStart = clean.indexOf('【')
+    val cnEnd = if (cnStart >= 0) clean.indexOf('】', cnStart + 1) else -1
+    if (cnStart >= 0 && cnEnd > cnStart) {
+        return clean.substring(cnStart + 1, cnEnd)
+    }
+
+    val enStart = clean.indexOf('[')
+    val enEnd = if (enStart >= 0) clean.indexOf(']', enStart + 1) else -1
+    if (enStart >= 0 && enEnd > enStart) {
+        return clean.substring(enStart + 1, enEnd)
+    }
+
+    return null
+}
+
 // ── 时间相关 ──────────────────────────────────────────────────────────
 
 private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
@@ -83,8 +120,8 @@ val Event.reminderMinutes: List<Int> get() = listOfNotNull(
 val Event.idString: String get() = (id ?: 0L).toString()
 
 /** 是否是交通类事件 */
-val Event.isTransit: Boolean get() = tag == EventTags.FLIGHT || tag == EventTags.TRAIN
-val Event.isCourse: Boolean get() = tag == EventTags.COURSE
+val Event.isTransit: Boolean get() = inferEventTagFromDescription(description, tag).let { it == EventTags.FLIGHT || it == EventTags.TRAIN }
+val Event.isCourse: Boolean get() = inferEventTagFromDescription(description, tag) == EventTags.COURSE
 
 // ── 构造辅助 ──────────────────────────────────────────────────────────
 

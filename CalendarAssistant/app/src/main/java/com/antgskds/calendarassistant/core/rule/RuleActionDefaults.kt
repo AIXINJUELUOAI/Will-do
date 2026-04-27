@@ -48,7 +48,7 @@ object RuleActionDefaults {
             )
             RuleMatchingEngine.RULE_FLIGHT -> RuleDefaults(
                 pending = StateDefinition(STATE_PENDING, "待登机", false, "登机口 登机"),
-                terminal = StateDefinition(STATE_DONE, "已登机", true, "座位号"),
+                terminal = StateDefinition(STATE_CHECKED_IN, "已登机", true, "座位号"),
                 actionLabel = "已登机",
                 undoLabel = "撤销登机"
             )
@@ -74,8 +74,8 @@ object RuleActionDefaults {
     }
 
     fun resolveStateSuffix(ruleId: String, isCompleted: Boolean, isCheckedIn: Boolean): String {
-        return if (ruleId == RuleMatchingEngine.RULE_TRAIN) {
-            if (isCheckedIn) STATE_CHECKED_IN else STATE_PENDING
+        return if (ruleId == RuleMatchingEngine.RULE_TRAIN || ruleId == RuleMatchingEngine.RULE_FLIGHT) {
+            if (isCheckedIn || isCompleted) STATE_CHECKED_IN else STATE_PENDING
         } else {
             if (isCompleted) STATE_DONE else STATE_PENDING
         }

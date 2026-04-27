@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.ui.theme.AppEventColors
 import java.time.Instant
 import java.time.LocalTime
@@ -16,15 +17,17 @@ import java.time.ZoneId
 fun convertDraftToEvent(
     draft: RecognitionDraft,
     sourceImagePath: String? = null,
-    defaultDurationMinutes: Int = 60
+    defaultDurationMinutes: Int = 60,
+    forceInstantCodeTimeToNow: Boolean = false
 ): Event {
-    val resolvedTag = draft.tag.ifBlank { EventTags.GENERAL }
-    val resolvedEndTs = resolveEndTs(draft.startTS, defaultDurationMinutes)
+    val resolvedTag = inferEventTagFromDescription(draft.description, draft.tag.ifBlank { EventTags.GENERAL })
+    val resolvedStartTs = resolveStartTs(draft.startTS, resolvedTag, forceInstantCodeTimeToNow)
+    val resolvedEndTs = resolveEndTs(resolvedStartTs, defaultDurationMinutes)
 
     return Event(
         id = null,
         title = draft.title.trim(),
-        startTS = draft.startTS,
+        startTS = resolvedStartTs,
         endTS = resolvedEndTs,
         location = draft.location,
         description = buildDescription(draft.description, sourceImagePath),
@@ -32,6 +35,24 @@ fun convertDraftToEvent(
         tag = resolvedTag,
         color = randomRecognizedEventColor()
     )
+}
+
+private fun resolveStartTs(startTs: Long, tag: String, forceInstantCodeTimeToNow: Boolean): Long {
+    return if (forceInstantCodeTimeToNow && isInstantCodeTag(tag)) {
+        Instant.now().epochSecond
+    } else {
+        startTs
+    }
+}
+
+private fun isInstantCodeTag(tag: String): Boolean {
+    return when (tag.trim().lowercase()) {
+        EventTags.PICKUP,
+        EventTags.FOOD,
+        EventTags.TICKET,
+        EventTags.SENDER -> true
+        else -> false
+    }
 }
 
 private fun buildDescription(desc: String, sourceImagePath: String?): String {

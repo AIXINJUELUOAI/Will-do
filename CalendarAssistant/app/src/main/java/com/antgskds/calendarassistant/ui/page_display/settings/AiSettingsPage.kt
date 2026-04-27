@@ -90,7 +90,7 @@ private data class ProviderPreset(
 
 private val providerPresets = mapOf(
     PROVIDER_DEEPSEEK to ProviderPreset(
-        models = listOf("deepseek-chat", "deepseek-reasoner", "deepseek-coder"),
+        models = listOf("deepseek-v4-flash", "deepseek-v4-pro"),
         endpointBuilder = { "https://api.deepseek.com/chat/completions" }
     ),
     PROVIDER_OPENAI to ProviderPreset(
@@ -125,14 +125,14 @@ fun AiSettingsPage(
     var textModelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
     var textModelName by remember(settings) { mutableStateOf(settings.modelName) }
     var textModelKey by remember(settings) { mutableStateOf(settings.modelKey) }
-    var textProvider by remember(settings) { mutableStateOf(detectProvider(settings.modelUrl)) }
+    var textProvider by remember(settings) { mutableStateOf(detectPresetProvider(settings.modelUrl, settings.modelName)) }
     var textCustomModels by remember { mutableStateOf(emptyList<String>()) }
     var textFetchedSignature by remember { mutableStateOf<String?>(null) }
 
     var mmModelUrl by remember(settings) { mutableStateOf(settings.mmModelUrl) }
     var mmModelName by remember(settings) { mutableStateOf(settings.mmModelName) }
     var mmModelKey by remember(settings) { mutableStateOf(settings.mmModelKey) }
-    var mmProvider by remember(settings) { mutableStateOf(detectProvider(settings.mmModelUrl)) }
+    var mmProvider by remember(settings) { mutableStateOf(detectPresetProvider(settings.mmModelUrl, settings.mmModelName)) }
     var mmCustomModels by remember { mutableStateOf(emptyList<String>()) }
     var mmFetchedSignature by remember { mutableStateOf<String?>(null) }
 
@@ -205,8 +205,6 @@ fun AiSettingsPage(
     fun applyProviderPreset(provider: String) {
         setActiveProvider(provider)
         if (provider == PROVIDER_CUSTOM) {
-            setActiveUrl("")
-            setActiveName("")
             setActiveFetchedSignature(null)
             setActiveCustomModels(emptyList())
             return
@@ -326,13 +324,6 @@ fun AiSettingsPage(
         if (activeProvider == PROVIDER_CUSTOM) {
             setActiveFetchedSignature(null)
             setActiveCustomModels(emptyList())
-
-            val inferredProvider = detectProvider(newValue)
-            if (inferredProvider != PROVIDER_CUSTOM) {
-                applyProviderPreset(inferredProvider)
-                isProviderExpanded = true
-                isModelExpanded = true
-            }
         }
     }
 
@@ -738,15 +729,19 @@ private fun TextInputItem(
     }
 }
 
-private fun detectProvider(url: String): String {
-    if (url.isBlank()) return PROVIDER_CUSTOM
-    val lower = url.lowercase()
-    return when {
-        "deepseek" in lower -> PROVIDER_DEEPSEEK
-        "openai" in lower -> PROVIDER_OPENAI
-        "googleapis" in lower || "generativelanguage" in lower || "gemini" in lower -> PROVIDER_GEMINI
-        else -> PROVIDER_CUSTOM
-    }
+private fun detectPresetProvider(url: String, modelName: String): String {
+    val normalizedUrl = normalizePresetComparableUrl(url)
+    val normalizedModel = modelName.trim()
+    if (normalizedUrl.isBlank() || normalizedModel.isBlank()) return PROVIDER_CUSTOM
+
+    return providerPresets.entries.firstOrNull { (_, preset) ->
+        normalizedModel in preset.models &&
+            normalizePresetComparableUrl(preset.endpointBuilder(normalizedModel)) == normalizedUrl
+    }?.key ?: PROVIDER_CUSTOM
+}
+
+private fun normalizePresetComparableUrl(url: String): String {
+    return url.trim().trimEnd('/').lowercase()
 }
 
 private fun normalizeCustomApiUrl(rawUrl: String): String {

@@ -6,8 +6,10 @@ import android.content.Intent
 import android.graphics.drawable.Icon
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
+import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
@@ -335,10 +337,24 @@ object MiuiIslandManager {
             CapsuleStateManager.TYPE_OCR_PROGRESS,
             CapsuleStateManager.TYPE_NETWORK_SPEED -> "进行中"
             else -> {
-                val now = System.currentTimeMillis()
-                if (now < item.startMillis) "即将进行" else "进行中"
+                when (item.eventType) {
+                    RuleMatchingEngine.RULE_PICKUP -> if (isFoodPickup(item.description)) "待取餐" else "待取件"
+                    RuleMatchingEngine.RULE_FOOD -> "待取餐"
+                    RuleMatchingEngine.RULE_TAXI -> "待用车"
+                    RuleMatchingEngine.RULE_TICKET -> "待取票"
+                    RuleMatchingEngine.RULE_SENDER -> "待寄件"
+                    RuleMatchingEngine.RULE_TRAIN -> if (item.state == STATE_CHECKED_IN) "待落座" else "待检票"
+                    RuleMatchingEngine.RULE_FLIGHT -> if (item.state == STATE_CHECKED_IN) "待落座" else "待登机"
+                    RuleMatchingEngine.RULE_COURSE -> buildTimeStatus(item)
+                    else -> buildTimeStatus(item)
+                }
             }
         }
+    }
+
+    private fun buildTimeStatus(item: CapsuleUiState.Active.CapsuleItem): String {
+        val now = System.currentTimeMillis()
+        return if (now < item.startMillis) "即将进行" else "进行中"
     }
 
     private fun buildSummaryTitle(display: CapsuleDisplayModel): String {

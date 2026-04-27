@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
+import com.antgskds.calendarassistant.service.receiver.ReminderReconcileReceiver
 import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -31,6 +32,7 @@ class RuntimeCenter(
         restoreSmsNotificationListenerIfNeeded()
         startPeriodicSync()
         scheduleKeepAlive()
+        scheduleReminderReconcile()
         startNetworkSpeedMonitoring()
         startEdgeBarIfNeeded()
     }
@@ -38,6 +40,7 @@ class RuntimeCenter(
     fun restoreAfterBoot() {
         scheduleDailySummary()
         scheduleKeepAlive()
+        scheduleReminderReconcile()
         startPeriodicSync()
         restoreSmsNotificationListenerIfNeeded()
     }
@@ -51,6 +54,10 @@ class RuntimeCenter(
 
     fun scheduleKeepAlive() {
         KeepAliveReceiver.schedule(appContext)
+    }
+
+    fun scheduleReminderReconcile() {
+        ReminderReconcileReceiver.schedule(appContext)
     }
 
     fun restoreSmsNotificationListenerIfNeeded() {

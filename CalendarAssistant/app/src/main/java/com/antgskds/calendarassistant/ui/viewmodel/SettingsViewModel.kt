@@ -7,6 +7,7 @@ import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
 import com.antgskds.calendarassistant.core.center.ImportMode
@@ -139,6 +140,7 @@ class SettingsViewModel(
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
+        forceInstantCodeTimeToNow: Boolean? = null,
         noteEnabled: Boolean? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null
@@ -165,6 +167,7 @@ class SettingsViewModel(
                 volumeUpLongPressEnabled = volumeUpLongPressEnabled,
                 volumeUpLongPressAction = volumeUpLongPressAction,
                 smsMonitoring = smsMonitoring,
+                forceInstantCodeTimeToNow = forceInstantCodeTimeToNow,
                 noteEnabled = noteEnabled,
                 homeBottomItems = homeBottomItems,
                 homeStartPageKey = homeStartPageKey
@@ -353,6 +356,26 @@ class SettingsViewModel(
     ) {
         viewModelScope.launch {
             val result = backupCenter.importWakeUpFile(content, mode, importSettings)
+            callback(result)
+        }
+    }
+
+    suspend fun parseExternalCourseImport(content: String): Result<ParsedCourseImport> {
+        return backupCenter.parseExternalCourseImport(content)
+    }
+
+    suspend fun fetchWakeUpShareImport(shareText: String): Result<ParsedCourseImport> {
+        return backupCenter.fetchWakeUpShareImport(shareText)
+    }
+
+    fun importParsedCourseImport(
+        parsed: ParsedCourseImport,
+        mode: ImportMode,
+        importSettings: Boolean,
+        callback: suspend (Result<Int>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = backupCenter.importParsedCourseImport(parsed, mode, importSettings)
             callback(result)
         }
     }

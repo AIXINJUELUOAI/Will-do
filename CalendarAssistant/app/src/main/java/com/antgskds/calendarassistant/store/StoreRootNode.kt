@@ -12,17 +12,20 @@ import com.antgskds.calendarassistant.calendar.helpers.TYPE_TASK
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.EventType
+import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationErrorCode
 import com.antgskds.calendarassistant.core.operation.OperationResult
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.store.config.SyncConfigStore
 import com.antgskds.calendarassistant.store.local.LocalEventStoreNode
 import com.antgskds.calendarassistant.store.reminder.ReminderStoreNode
 import com.antgskds.calendarassistant.store.sync.SystemCalendarStoreNode
 import com.antgskds.calendarassistant.store.SyncLoopGuard
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -53,7 +56,7 @@ class StoreRootNode(context: Context) {
     }
 
     fun createEvent(event: Event, syncToSystem: Boolean = true): Long {
-        val localEvent = event.copy(lastUpdated = nowSeconds())
+        val localEvent = event.withInferredTag().copy(lastUpdated = nowSeconds())
         val id = localNode.upsertEvent(localEvent)
         var stored = localEvent.copy(id = id)
 
@@ -107,7 +110,7 @@ class StoreRootNode(context: Context) {
             return
         }
 
-        val updated = event.copy(lastUpdated = nowSeconds())
+        val updated = event.withInferredTag().copy(lastUpdated = nowSeconds())
         localNode.upsertEvent(updated)
 
         val pushDecision = evaluateSystemPush(syncRequested = syncToSystem, tag = updated.tag)
@@ -255,11 +258,11 @@ class StoreRootNode(context: Context) {
     // 查询
     // ══════════════════════════════════════════════════════════════════════
 
-    fun getEvents(): List<Event> = localNode.getEvents()
+    fun getEvents(): List<Event> = localNode.getEvents().map { it.withInferredTag() }
 
-    fun getEventsInRange(fromTS: Long, toTS: Long): List<Event> = localNode.getEventsInRange(fromTS, toTS)
+    fun getEventsInRange(fromTS: Long, toTS: Long): List<Event> = localNode.getEventsInRange(fromTS, toTS).map { it.withInferredTag() }
 
-    fun getEvent(id: Long): Event? = localNode.getEvent(id)
+    fun getEvent(id: Long): Event? = localNode.getEvent(id)?.withInferredTag()
 
     fun getEventTypes(): List<EventType> = localNode.getEventTypes()
 
@@ -349,7 +352,7 @@ class StoreRootNode(context: Context) {
             syncNode.recheckCalendars(scheduleNextCalDAVSync = true)
             val events = localNode.getEvents()
             Log.d("SyncChain", "manualSyncNow completed localEvents=${events.size}")
-            reminderNode.resetAndRebuildAll(events)
+            reconcileNotificationsFromStore()
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -380,7 +383,7 @@ class StoreRootNode(context: Context) {
             syncNode.recheckCalendars(scheduleNextCalDAVSync = true)
             val events = localNode.getEvents()
             Log.d("SyncChain", "onScheduledSyncTick completed localEvents=${events.size}")
-            reminderNode.resetAndRebuildAll(events)
+            reconcileNotificationsFromStore()
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -400,7 +403,7 @@ class StoreRootNode(context: Context) {
             syncNode.recheckCalendars(scheduleNextCalDAVSync = false)
             val events = localNode.getEvents()
             Log.d("SyncChain", "onSystemCalendarChanged completed localEvents=${events.size}")
-            reminderNode.resetAndRebuildAll(events)
+            reconcileNotificationsFromStore()
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -420,6 +423,18 @@ class StoreRootNode(context: Context) {
         reminderNode.refreshForWindow(displayItems, parentMap)
     }
 
+    fun reconcileNotificationsFromStore(windowDays: Long = 7L) {
+        val today = LocalDate.now()
+        val events = localNode.getEvents()
+            .map { it.withInferredTag() }
+            .filter { it.archivedAt == null }
+        reminderNode.reconcileForEvents(events)
+
+        val displayItems = ScheduleDisplayHelper.buildDisplayItems(events, today, today.plusDays(windowDays))
+        val parentMap = events.filter { it.isRecurring }.associateBy { it.id ?: 0L }
+        reminderNode.refreshForWindow(displayItems, parentMap)
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // 内部方法
     // ══════════════════════════════════════════════════════════════════════
@@ -435,6 +450,7 @@ class StoreRootNode(context: Context) {
     private fun materializeOccurrence(parentId: Long, occurrenceTs: Long, syncToSystem: Boolean = true): Long? {
         val parent = localNode.getEvent(parentId) ?: return null
         val duration = parent.endTS - parent.startTS
+        val parentTag = inferEventTagFromDescription(parent.description, parent.tag)
 
         // 检查是否已有子事件
         val existing = localNode.getChildEventWithParentAndStart(parentId, occurrenceTs)
@@ -444,6 +460,7 @@ class StoreRootNode(context: Context) {
         return localNode.runInTransaction {
             val exdateUtc = formatExdateUtc(occurrenceTs)
             val updatedParent = parent.copy(
+                tag = parentTag,
                 exdates = (parent.exdates + exdateUtc).distinct(),
                 lastUpdated = nowSeconds()
             )
@@ -454,6 +471,7 @@ class StoreRootNode(context: Context) {
                 startTS = occurrenceTs,
                 endTS = occurrenceTs + duration,
                 parentId = parentId,
+                tag = parentTag,
                 rrule = "",
                 exdates = emptyList(),
                 importId = "",
@@ -648,16 +666,19 @@ class StoreRootNode(context: Context) {
         val event = localNode.getEvent(eventId)
             ?: return OperationResult.Failure(OperationErrorCode.NOT_FOUND, "Event not found")
 
-        val validation = validateTargetStateForTag(event.tag, targetState)
+        val effectiveTag = inferEventTagFromDescription(event.description, event.tag)
+        val validation = validateTargetStateForTag(effectiveTag, targetState)
         if (validation != null) {
             return OperationResult.Failure(validation)
         }
 
+        val normalizedEvent = if (event.tag == effectiveTag) event else event.copy(tag = effectiveTag)
+
         val now = nowSeconds()
 
         // 非重复事件 或 已有子事件 或 没有 occurrenceTs → 直接改状态
-        if (event.rrule.isBlank() || event.parentId != 0L || occurrenceTs == null) {
-            val updated = applyState(event, targetState, now)
+        if (normalizedEvent.rrule.isBlank() || normalizedEvent.parentId != 0L || occurrenceTs == null) {
+            val updated = applyState(normalizedEvent, targetState, now)
             return runCatching {
                 updateEvent(updated, syncToSystem)
                 OperationResult.Success(updated.id ?: eventId)
@@ -673,12 +694,13 @@ class StoreRootNode(context: Context) {
             val child = localNode.getEvent(childId)
                 ?: return OperationResult.Failure(OperationErrorCode.NOT_FOUND, "Materialized child not found")
 
-            val childValidation = validateTargetStateForTag(child.tag, targetState)
+            val normalizedChild = child.copy(tag = inferEventTagFromDescription(child.description, child.tag))
+            val childValidation = validateTargetStateForTag(normalizedChild.tag, targetState)
             if (childValidation != null) {
                 return OperationResult.Failure(childValidation)
             }
 
-            val updated = applyState(child, targetState, now)
+            val updated = applyState(normalizedChild, targetState, now)
             updateEvent(updated, syncToSystem)
             OperationResult.Success(childId)
         }.getOrElse {
@@ -708,6 +730,11 @@ class StoreRootNode(context: Context) {
             endTS = endTs,
             flags = taskFlags
         )
+    }
+
+    private fun Event.withInferredTag(): Event {
+        val inferredTag = inferEventTagFromDescription(description, tag)
+        return if (tag == inferredTag) this else copy(tag = inferredTag)
     }
 
     private fun nowSeconds(): Long = System.currentTimeMillis() / 1000L

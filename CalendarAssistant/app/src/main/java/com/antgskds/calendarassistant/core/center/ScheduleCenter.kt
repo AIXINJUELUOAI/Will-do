@@ -189,7 +189,7 @@ class ScheduleCenter(
     @Deprecated("Use performPrimaryActionOnItem(ScheduleDisplayItem) or completeItem/checkInItem(ActionTarget) instead")
     fun performPrimaryAction(event: Event) {
         if (event.isTransit) {
-            if (event.isCheckedIn) markPendingWithUndo(event)
+            if (event.isCheckedIn || event.isCompleted) markPendingWithUndo(event)
             else checkInEventWithUndo(event)
         } else {
             if (event.isCompleted) markPendingWithUndo(event)
@@ -494,7 +494,7 @@ class ScheduleCenter(
             return
         }
         when {
-            item.isTransit && item.isCheckedIn -> markPendingItemWithUndo(item)
+            item.isTransit && (item.isCheckedIn || item.isCompleted) -> markPendingItemWithUndo(item)
             item.isTransit -> checkInItemWithUndo(item)
             item.isCompleted -> markPendingItemWithUndo(item)
             else -> completeItemWithUndo(item)
@@ -506,7 +506,8 @@ class ScheduleCenter(
     }
 
     fun checkInItemWithUndo(item: ScheduleDisplayItem) {
-        launchStatusOperation { submitStateItemWithUndo(item, STATE_CHECKED_IN, "已检票") }
+        val label = if (item.tag == EventTags.FLIGHT) "已登机" else "已检票"
+        launchStatusOperation { submitStateItemWithUndo(item, STATE_CHECKED_IN, label) }
     }
 
     fun markPendingItemWithUndo(item: ScheduleDisplayItem) {

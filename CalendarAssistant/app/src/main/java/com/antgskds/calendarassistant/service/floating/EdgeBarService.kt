@@ -16,7 +16,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.WindowManager
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -42,11 +41,9 @@ class EdgeBarService : Service() {
     private var barView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var hiddenByFloating = false
-    private var touchSlop = 0
     private val app by lazy { applicationContext as App }
     private val permissionCenter by lazy { app.permissionCenter }
     private val settingsQueryApi by lazy { app.settingsQueryApi }
-    private val settingsOperationApi by lazy { app.settingsOperationApi }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -70,7 +67,6 @@ class EdgeBarService : Service() {
             return
         }
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        touchSlop = ViewConfiguration.get(this).scaledTouchSlop
 
         val filter = IntentFilter().apply {
             addAction(FloatingScheduleService.ACTION_FLOATING_SHOWN)
@@ -231,8 +227,6 @@ class EdgeBarService : Service() {
     private fun createTouchListener(settings: MySettings): View.OnTouchListener {
         var downX = 0f
         var downY = 0f
-        var startY = 0
-        var isDragging = false
         val triggerDistance = dpToPx(48f)
         val velocityThreshold = dpToPx(800f)
 
@@ -241,62 +235,28 @@ class EdgeBarService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.rawX
                     downY = event.rawY
-                    startY = layoutParams?.y ?: 0
-                    isDragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - downX
-                    val dy = event.rawY - downY
-                    if (!isDragging && kotlin.math.abs(dy) > touchSlop && kotlin.math.abs(dy) > kotlin.math.abs(dx)) {
-                        isDragging = true
-                    }
-                    if (isDragging) {
-                        val newY = (startY + dy).toInt()
-                        updateY(newY)
-                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val dx = event.rawX - downX
+                    val dy = event.rawY - downY
                     val dt = (event.eventTime - event.downTime).coerceAtLeast(1)
                     val velocity = kotlin.math.abs(dx) / dt * 1000f
 
-                    if (!isDragging) {
-                        val shouldTrigger = kotlin.math.abs(dx) >= triggerDistance || velocity >= velocityThreshold
-                        val isRightSide = settings.edgeBarSide != SIDE_LEFT
-                        val directionOk = if (isRightSide) dx < 0 else dx > 0
-                        if (shouldTrigger && directionOk && !FloatingScheduleService.isShowing) {
-                            startFloatingSchedule()
-                        }
-                    } else {
-                        saveCurrentYPercent()
+                    val shouldTrigger =
+                        kotlin.math.abs(dx) > kotlin.math.abs(dy) &&
+                            (kotlin.math.abs(dx) >= triggerDistance || velocity >= velocityThreshold)
+                    val isRightSide = settings.edgeBarSide != SIDE_LEFT
+                    val directionOk = if (isRightSide) dx < 0 else dx > 0
+                    if (shouldTrigger && directionOk && !FloatingScheduleService.isShowing) {
+                        startFloatingSchedule()
                     }
                     true
                 }
                 else -> false
-            }
-        }
-    }
-
-    private fun updateY(y: Int) {
-        val params = layoutParams ?: return
-        val maxY = getScreenHeight() - params.height
-        params.y = y.coerceIn(0, maxY.coerceAtLeast(0))
-        try {
-            barView?.let { windowManager.updateViewLayout(it, params) }
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun saveCurrentYPercent() {
-        val params = layoutParams ?: return
-        val maxY = (getScreenHeight() - params.height).coerceAtLeast(1)
-        val percent = (params.y.toFloat() / maxY * 100f).coerceIn(0f, 100f)
-        serviceScope.launch {
-            val current = settingsQueryApi.settings.value
-            if (kotlin.math.abs(current.edgeBarYPercent - percent) >= 0.5f) {
-                settingsOperationApi.updateSettings(current.copy(edgeBarYPercent = percent))
             }
         }
     }

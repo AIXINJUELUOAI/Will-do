@@ -24,6 +24,7 @@ interface SettingsTransformApi {
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
+        forceInstantCodeTimeToNow: Boolean? = null,
         noteEnabled: Boolean? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null
