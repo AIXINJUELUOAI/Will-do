@@ -471,6 +471,7 @@ class CapsuleStateManager(
                 eventType = resolveCapsuleEventType(event),
                 description = event.description,
                 color = event.color,
+                state = event.state,
                 startMillis = toMillis(event, event.startTime),
                 endMillis = toMillis(event, event.endTime),
                 display = display
@@ -541,6 +542,7 @@ class CapsuleStateManager(
                     eventType = RuleMatchingEngine.RULE_PICKUP,
                     description = event.description,
                     color = android.graphics.Color.GREEN,
+                    state = event.state,
                     startMillis = toMillis(event, event.startTime),
                     endMillis = toMillis(event, event.endTime),
                     display = display
@@ -559,6 +561,7 @@ class CapsuleStateManager(
         eventType: String,
         description: String,
         color: Int,
+        state: Int = 0,
         startMillis: Long,
         endMillis: Long,
         display: CapsuleDisplayModel
@@ -573,6 +576,7 @@ class CapsuleStateManager(
                 ?: listOfNotNull(display.secondaryText, display.tertiaryText).joinToString("\n"),
             description = description,
             color = color,
+            state = state,
             startMillis = startMillis,
             endMillis = endMillis,
             display = display

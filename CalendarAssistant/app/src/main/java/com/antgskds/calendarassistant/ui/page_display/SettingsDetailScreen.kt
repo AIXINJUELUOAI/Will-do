@@ -1,13 +1,22 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -21,14 +30,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
@@ -164,77 +177,136 @@ private fun SettingsPageContent(
     onBack: () -> Unit,
     onNavigateTo: (SettingsDestination) -> Unit
 ) {
+    val uiState by mainViewModel.uiState.collectAsState()
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val courseCount = remember(destination, uiState.rawEvents, uiState.settings) {
+        if (destination == SettingsDestination.CourseManage) {
+            CourseEventMapper.extractParentCourses(uiState.rawEvents, uiState.settings).size
+        } else {
+            0
+        }
+    }
+    var showClearCoursesConfirm by rememberSaveable(destination) { mutableStateOf(false) }
+
     when (destination) {
         SettingsDestination.Archives -> ArchivesPage(
             viewModel = mainViewModel,
             onBack = onBack
         )
 
-        else -> Scaffold(
-            contentWindowInsets = WindowInsets(0),
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text(settingsTitle(destination)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                                modifier = Modifier.size(
-                                    when (uiSize) {
-                                        1 -> 24.dp
-                                        2 -> 28.dp
-                                        else -> 32.dp
-                                    }
+        else -> Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                contentWindowInsets = WindowInsets(0),
+                topBar = {
+                    CenterAlignedTopAppBar(
+                        title = { Text(settingsTitle(destination)) },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回",
+                                    modifier = Modifier.size(
+                                        when (uiSize) {
+                                            1 -> 24.dp
+                                            2 -> 28.dp
+                                            else -> 32.dp
+                                        }
+                                    )
                                 )
-                            )
+                            }
+                        },
+                        actions = {
+                            if (destination == SettingsDestination.CourseManage && courseCount > 0) {
+                                IconButton(onClick = { showClearCoursesConfirm = true }) {
+                                    Icon(
+                                        Icons.Default.DeleteSweep,
+                                        contentDescription = "清空课程",
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
                         }
+                    )
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .fillMaxSize()
+                ) {
+                    when (destination) {
+                        SettingsDestination.AI -> AiSettingsPage(
+                            viewModel = settingsViewModel,
+                            mainViewModel = mainViewModel,
+                            uiSize = uiSize
+                        )
+                        SettingsDestination.Weather -> WeatherSettingsPage(settingsViewModel, uiSize)
+                        SettingsDestination.Schedule,
+                        SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
+                            viewModel = settingsViewModel,
+                            onNavigateTo = onNavigateTo,
+                            uiSize = uiSize
+                        )
+                        SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
+                        SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
+                        SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
+                        SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
+                        SettingsDestination.About -> AboutPage(
+                            uiSize = uiSize,
+                            onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) },
+                            settingsViewModel = settingsViewModel
+                        )
+                        SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
+                        SettingsDestination.Laboratory -> LaboratoryPage(
+                            uiSize = uiSize,
+                            settingsViewModel = settingsViewModel,
+                            onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
+                        )
+                        SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize
+                        )
+                        SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
+                        SettingsDestination.Archives,
+                        SettingsDestination.Logout -> Unit
                     }
-                )
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize()
-            ) {
-                when (destination) {
-                    SettingsDestination.AI -> AiSettingsPage(
-                        viewModel = settingsViewModel,
-                        mainViewModel = mainViewModel,
-                        uiSize = uiSize
-                    )
-                    SettingsDestination.Weather -> WeatherSettingsPage(settingsViewModel, uiSize)
-                    SettingsDestination.Schedule,
-                    SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
-                        viewModel = settingsViewModel,
-                        onNavigateTo = onNavigateTo,
-                        uiSize = uiSize
-                    )
-                    SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
-                    SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
-                    SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
-                    SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
-                    SettingsDestination.About -> AboutPage(
-                        uiSize = uiSize,
-                        onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) },
-                        settingsViewModel = settingsViewModel
-                    )
-                    SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
-                    SettingsDestination.Laboratory -> LaboratoryPage(
-                        uiSize = uiSize,
-                        settingsViewModel = settingsViewModel,
-                        onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
-                    )
-                    SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
-                        settingsViewModel = settingsViewModel,
-                        uiSize = uiSize
-                    )
-                    SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
-                    SettingsDestination.Archives,
-                    SettingsDestination.Logout -> Unit
                 }
             }
+
+            AnimatedVisibility(
+                visible = showClearCoursesConfirm,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { showClearCoursesConfirm = false }
+                        )
+                )
+            }
+
+            FloatingActionCard(
+                visible = showClearCoursesConfirm,
+                title = "确认清空",
+                content = "此操作将删除当前 $courseCount 门课程。\n删除后将无法恢复。",
+                confirmText = "删除",
+                dismissText = "取消",
+                isDestructive = true,
+                isLoading = false,
+                onConfirm = {
+                    showClearCoursesConfirm = false
+                    mainViewModel.clearAllCourses()
+                },
+                onDismiss = { showClearCoursesConfirm = false },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomInset)
+            )
         }
     }
 }

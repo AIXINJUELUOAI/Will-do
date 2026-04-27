@@ -25,7 +25,7 @@ data class WakeUpScheduleDTO(
     val step: Int,
     val startWeek: Int,
     val endWeek: Int,
-    val type: Int,
+    val type: Int = 0,
     val teacher: String = "",
     val room: String = ""
 )

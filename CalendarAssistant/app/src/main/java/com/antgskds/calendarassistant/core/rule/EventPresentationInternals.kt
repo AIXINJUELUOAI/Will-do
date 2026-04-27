@@ -61,7 +61,7 @@ internal object EventPresentationInternals {
         return when {
             event.isRecurring -> "重复"
             isExpired -> "已结束"
-            event.isCheckedIn -> "已检票"
+            event.isCheckedIn -> RuleActionDefaults.defaultsFor(ruleId).terminal.name
             event.isCompleted -> RuleActionDefaults.defaultsFor(ruleId).terminal.name
             isInProgress -> "进行中"
             isComingSoon -> "即将开始"
@@ -90,7 +90,8 @@ internal object EventPresentationInternals {
         if (event.isCompleted || event.isCheckedIn || isExpired || isCourse || event.isRecurring) return null
         val defaults = RuleActionDefaults.defaultsFor(ruleId)
         val receiverAction = when (ruleId) {
-            RuleMatchingEngine.RULE_TRAIN -> EventActionReceiver.ACTION_CHECKIN
+            RuleMatchingEngine.RULE_TRAIN,
+            RuleMatchingEngine.RULE_FLIGHT -> EventActionReceiver.ACTION_CHECKIN
             else -> EventActionReceiver.ACTION_COMPLETE_SCHEDULE
         }
         return EventAction(defaults.actionLabel, receiverAction, isUndo = false)
@@ -125,6 +126,7 @@ internal object EventPresentationInternals {
             ActionIconSpec(ActionIconType.UNDO, 0xFFFFA726)
         } else when (ruleId) {
             RuleMatchingEngine.RULE_TRAIN -> ActionIconSpec(ActionIconType.CHECKIN, 0xFF4CAF50)
+            RuleMatchingEngine.RULE_FLIGHT -> ActionIconSpec(ActionIconType.CHECKIN, 0xFF4CAF50)
             RuleMatchingEngine.RULE_TAXI -> ActionIconSpec(ActionIconType.RIDE, 0xFFFF9800)
             RuleMatchingEngine.RULE_PICKUP -> ActionIconSpec(ActionIconType.PICKUP, 0xFF2196F3)
             else -> ActionIconSpec(ActionIconType.COMPLETE, 0xFF4CAF50)
@@ -344,7 +346,7 @@ internal object EventPresentationInternals {
     private fun composeFlightCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val secondaryText = model.subtitle
         val expandedText = joinLines(secondaryText, sanitize(event.location))
-        val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已登机", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
+        val action = if (!event.isCheckedIn && !event.isCompleted && !isExpired) CapsuleActionSpec("已登机", EventActionReceiver.ACTION_CHECKIN) else null
         return CapsuleDisplayModel(
             shortText = model.title,
             primaryText = model.title,
@@ -402,7 +404,7 @@ internal object EventPresentationInternals {
         if (event.description.isBlank()) return TransportInfo("none", "", "", false)
         val payload = RuleMatchingEngine.resolvePayload(event.description, null)
         return when (payload?.ruleId) {
-            RuleMatchingEngine.RULE_TRAIN -> parseTrainPayload(payload.payload, event.isCheckedIn)
+            RuleMatchingEngine.RULE_TRAIN -> parseTrainPayload(payload.payload, event.isCheckedIn || event.isCompleted)
             RuleMatchingEngine.RULE_TAXI -> parseTaxiPayload(payload.payload, event.isCompleted)
             else -> TransportInfo("none", "", "", false)
         }

@@ -16,6 +16,9 @@ class ImportCenter(
     private val defaultDurationMinutes: Int
         get() = settingsQueryApi.settings.value.defaultEventDurationMinutes
 
+    private val forceInstantCodeTimeToNow: Boolean
+        get() = settingsQueryApi.settings.value.forceInstantCodeTimeToNow
+
     override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? {
         val existingEvents = scheduleCenter.events.value
         val isDuplicate = existingEvents.any { existing ->
@@ -27,7 +30,11 @@ class ImportCenter(
             return null
         }
 
-        val event = convertDraftToEvent(eventData, defaultDurationMinutes = defaultDurationMinutes)
+        val event = convertDraftToEvent(
+            eventData,
+            defaultDurationMinutes = defaultDurationMinutes,
+            forceInstantCodeTimeToNow = forceInstantCodeTimeToNow
+        )
         scheduleCenter.addEvent(event)
         return event
     }
@@ -44,7 +51,12 @@ class ImportCenter(
         events.forEach { eventData ->
             if (eventData.title.isBlank()) return@forEach
 
-            val event = convertDraftToEvent(eventData, sourceImagePath, defaultDurationMinutes = durationMinutes)
+            val event = convertDraftToEvent(
+                eventData,
+                sourceImagePath,
+                defaultDurationMinutes = durationMinutes,
+                forceInstantCodeTimeToNow = forceInstantCodeTimeToNow
+            )
             val isDuplicate = knownEvents.any { existing ->
                 val isExpired = existing.endDate.isBefore(LocalDate.now())
                 if (isExpired) return@any false

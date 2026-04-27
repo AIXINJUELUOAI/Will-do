@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.core.center
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -74,6 +74,7 @@ object ScheduleDisplayHelper {
      * 单个事件转展示项
      */
     fun eventToSingleItem(event: Event): ScheduleDisplayItem {
+        val effectiveTag = inferEventTagFromDescription(event.description, event.tag)
         return ScheduleDisplayItem(
             stableKey = "single:${event.id}",
             title = event.title,
@@ -81,7 +82,7 @@ object ScheduleDisplayHelper {
             endTS = event.endTS,
             location = event.location,
             description = event.description,
-            tag = event.tag,
+            tag = effectiveTag,
             color = event.color,
             state = event.state,
             isAllDay = event.getIsAllDay(),
@@ -107,6 +108,7 @@ object ScheduleDisplayHelper {
         val zone = try { ZoneId.of(parent.getTimeZoneString()) } catch (_: Exception) { ZoneId.systemDefault() }
         val eventStart = Instant.ofEpochSecond(parent.startTS).atZone(zone)
         val duration = parent.endTS - parent.startTS
+        val effectiveTag = inferEventTagFromDescription(parent.description, parent.tag)
 
         val exdateSet = parent.exdates.mapNotNull { parseExdateToEpochSecond(it) }.toHashSet()
         val childStartTsSet = existingChildren.map { it.startTS }.toHashSet()
@@ -134,7 +136,7 @@ object ScheduleDisplayHelper {
                                 endTS = occTs + duration,
                                 location = parent.location,
                                 description = parent.description,
-                                tag = parent.tag,
+                                tag = effectiveTag,
                                 color = parent.color,
                                 state = parent.state,
                                 isAllDay = parent.getIsAllDay(),

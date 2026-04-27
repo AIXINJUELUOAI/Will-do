@@ -97,8 +97,7 @@ object MiuiIslandDispatcher {
                 right = ImageTextInfoRight(
                     type = 2,
                     textInfo = TextInfo(
-                        title = request.summaryTitle?.ifBlank { null } ?: content,
-                        narrowFont = true
+                        title = request.summaryTitle?.ifBlank { null } ?: content
                     ),
                 ),
             )

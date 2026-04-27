@@ -28,6 +28,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         volumeUpLongPressEnabled: Boolean?,
         volumeUpLongPressAction: Int?,
         smsMonitoring: Boolean?,
+        forceInstantCodeTimeToNow: Boolean?,
         noteEnabled: Boolean?,
         homeBottomItems: List<String>?,
         homeStartPageKey: String?
@@ -53,6 +54,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
         if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction)
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
+        if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
         if (noteEnabled != null) updated = updated.copy(noteEnabled = noteEnabled)
         if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
         if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)

@@ -1,18 +1,24 @@
 package com.antgskds.calendarassistant.core.center
 
-import android.graphics.Color
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.ImportResult
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpCourseBaseDTO
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpScheduleDTO
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.url
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class BackupCenter(
     private val scheduleCenter: ScheduleCenter,
@@ -27,6 +33,7 @@ class BackupCenter(
         prettyPrint = true
         isLenient = true
     }
+    private val httpClient by lazy { HttpClient(Android) }
 
     suspend fun exportCoursesData(): String {
         val courses = CourseEventMapper.extractParentCourses(scheduleCenter.events.value, settingsQueryApi.settings.value)
@@ -54,22 +61,66 @@ class BackupCenter(
         return result
     }
 
+    suspend fun parseExternalCourseImport(content: String): Result<ParsedCourseImport> = runCatching {
+        val parsed = CourseImportParser.parseExternalContent(content)
+        if (parsed.courses.isEmpty()) error("未解析到有效课程")
+        parsed
+    }
+
+    suspend fun fetchWakeUpShareImport(shareText: String): Result<ParsedCourseImport> = runCatching {
+        val key = CourseImportParser.extractWakeUpKey(shareText) ?: error("剪贴板中未识别到 WakeUp 分享口令")
+        val response = httpClient.get {
+            url("https://i.wakeup.fun/share_schedule/get")
+            parameter("key", key)
+            header("User-Agent", "WillDo/2.0")
+        }
+        if (!response.status.isSuccess()) {
+            error("WakeUp 请求失败：HTTP ${response.status.value}")
+        }
+
+        val body = response.bodyAsText()
+        val root = json.parseToJsonElement(body).jsonObject
+        val status = root["status"]?.jsonPrimitive?.content?.toIntOrNull()
+        if (status != 1) {
+            error(root["message"]?.jsonPrimitive?.content ?: "WakeUp 返回错误状态")
+        }
+        val data = root["data"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+            ?: error("WakeUp 返回数据为空")
+        CourseImportParser.parseWakeUpShareData(data)
+    }
+
+    suspend fun importParsedCourseImport(
+        parsed: ParsedCourseImport,
+        mode: ImportMode,
+        importSettings: Boolean
+    ): Result<Int> = runCatching {
+        importParsed(parsed, mode, importSettings)
+    }
+
     suspend fun importWakeUpFile(content: String, mode: ImportMode, importSettings: Boolean): Result<Int> = runCatching {
-        val parsed = parseWakeUp(content)
+        val parsed = CourseImportParser.parseExternalContent(content)
+        importParsed(parsed, mode, importSettings)
+    }
+
+    private suspend fun importParsed(parsed: ParsedCourseImport, mode: ImportMode, importSettings: Boolean): Int {
         if (parsed.courses.isEmpty()) error("未解析到有效课程")
 
-        if (importSettings) {
+        val effectiveSettings = if (importSettings) {
             val current = settingsQueryApi.settings.value
-            settingsOperationApi.updateSettings(
-                current.copy(
-                    semesterStartDate = parsed.semesterStartDate ?: current.semesterStartDate,
-                    totalWeeks = parsed.totalWeeks ?: current.totalWeeks
-                )
+            val updated = current.copy(
+                semesterStartDate = parsed.semesterStartDate ?: current.semesterStartDate,
+                totalWeeks = parsed.totalWeeks ?: current.totalWeeks,
+                timeTableJson = parsed.timeTableJson ?: current.timeTableJson,
+                timeTableConfigJson = parsed.timeTableConfigJson ?: current.timeTableConfigJson
             )
+            if (updated != current) settingsOperationApi.updateSettings(updated)
+            updated
+        } else {
+            settingsQueryApi.settings.value
         }
 
         if (mode == ImportMode.OVERWRITE) {
-            CourseEventMapper.extractParentCourses(scheduleCenter.events.value, settingsQueryApi.settings.value)
+            CourseEventMapper.extractParentCourses(scheduleCenter.events.value, effectiveSettings)
                 .forEach { course ->
                     CourseEventMapper.findParentByCourseId(scheduleCenter.events.value, course.id)
                         ?.id
@@ -77,7 +128,6 @@ class BackupCenter(
                 }
         }
 
-        val settings = settingsQueryApi.settings.value
         var imported = 0
         parsed.courses.forEach { course ->
             val existingParent = if (mode == ImportMode.OVERWRITE) {
@@ -86,88 +136,10 @@ class BackupCenter(
                 CourseEventMapper.findParentByCourseId(scheduleCenter.events.value, course.id)
             }
             if (existingParent != null && mode == ImportMode.APPEND) return@forEach
-            val event = CourseEventMapper.toParentEvent(course, settings, existingParent)
+            val event = CourseEventMapper.toParentEvent(course, effectiveSettings, existingParent)
             if (existingParent == null) scheduleCenter.addEvent(event) else scheduleCenter.updateEvent(event)
             imported++
         }
-        imported
+        return imported
     }
-
-    private fun parseWakeUp(content: String): ParsedWakeUpCourses {
-        val lines = content.lines().map { it.trim() }.filter { it.isNotBlank() }
-        val baseMap = mutableMapOf<Int, WakeUpCourseBaseDTO>()
-        val courses = mutableListOf<Course>()
-        var semesterStartDate: String? = null
-        var totalWeeks: Int? = null
-
-        lines.forEach { line ->
-            when {
-                line.startsWith("{") && line.contains("\"startDate\"") -> {
-                    runCatching { json.decodeFromString<WakeUpSettingsDTO>(line) }.getOrNull()?.let { settings ->
-                        semesterStartDate = settings.startDate.takeIf { it.isNotBlank() }
-                        totalWeeks = settings.maxWeek.takeIf { it > 0 }
-                    }
-                }
-
-                line.startsWith("[") && line.contains("\"courseName\"") -> {
-                    runCatching { json.decodeFromString<List<WakeUpCourseBaseDTO>>(line) }.getOrNull()
-                        ?.forEach { baseMap[it.id] = it }
-                }
-
-                line.startsWith("[") && line.contains("\"startNode\"") && line.contains("\"step\"") && line.contains("\"day\"") -> {
-                    val schedules = runCatching { json.decodeFromString<List<WakeUpScheduleDTO>>(line) }.getOrNull().orEmpty()
-                    schedules.forEachIndexed { index, schedule ->
-                        val base = baseMap[schedule.id] ?: return@forEachIndexed
-                        val teacher = schedule.teacher.ifBlank { base.teacher }
-                        val room = schedule.room
-                        val id = CourseEventMapper.stableImportId(
-                            name = base.courseName,
-                            teacher = teacher,
-                            room = room,
-                            dayOfWeek = schedule.day,
-                            startNode = schedule.startNode,
-                            endNode = schedule.startNode + schedule.step - 1,
-                            startWeek = schedule.startWeek,
-                            endWeek = schedule.endWeek,
-                            weekType = schedule.type
-                        )
-                        courses += Course(
-                            id = id,
-                            name = base.courseName,
-                            location = room,
-                            teacher = teacher,
-                            color = paletteColor(courses.size + index),
-                            dayOfWeek = schedule.day,
-                            startNode = schedule.startNode,
-                            endNode = schedule.startNode + schedule.step - 1,
-                            startWeek = schedule.startWeek,
-                            endWeek = schedule.endWeek,
-                            weekType = schedule.type.coerceIn(0, 2)
-                        )
-                    }
-                }
-            }
-        }
-        return ParsedWakeUpCourses(courses, semesterStartDate, totalWeeks)
-    }
-
-    private fun paletteColor(index: Int): Int {
-        val colors = intArrayOf(
-            Color.rgb(66, 133, 244),
-            Color.rgb(52, 168, 83),
-            Color.rgb(251, 188, 5),
-            Color.rgb(234, 67, 53),
-            Color.rgb(156, 39, 176),
-            Color.rgb(0, 150, 136),
-            Color.rgb(255, 112, 67),
-            Color.rgb(63, 81, 181)
-        )
-        return colors[index % colors.size]
-    }
-
-    private data class ParsedWakeUpCourses(
-        val courses: List<Course>,
-        val semesterStartDate: String?,
-        val totalWeeks: Int?
-    )
 }

@@ -64,6 +64,7 @@ class CalendarCenter private constructor(context: Context) : CalendarOperationAp
     override fun onScheduledSyncTick() = dispatcher.onScheduledSyncTick()
     override fun onSystemCalendarChanged() = dispatcher.onSystemCalendarChanged()
     override fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>) = dispatcher.refreshNotificationsForWindow(items)
+    fun reconcileNotificationsFromStore(windowDays: Long = 7L) = dispatcher.reconcileNotificationsFromStore(windowDays)
 
     // ── CalendarQueryApi ──
 

@@ -29,6 +29,7 @@ import com.antgskds.calendarassistant.calendar.models.CalDAVCalendar
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventType
 import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.calendar.receivers.CalDAVSyncReceiver
 import java.time.Duration
@@ -383,6 +384,7 @@ class SystemCalendarSyncManager(private val context: Context) {
 
                 val remoteId = cursor.getLong(idIndex)
                 val title = cursor.getString(titleIndex) ?: ""
+                val description = cursor.getString(descriptionIndex) ?: ""
                 val status = cursor.getInt(statusIndex)
 
                 val startTs = cursor.getLong(startIndex) / 1000L
@@ -412,10 +414,13 @@ class SystemCalendarSyncManager(private val context: Context) {
                     val parentEvent = db.eventsDao().getEventOrTaskWithImportId(parentImportId)
                     if (parentEvent != null) {
                         val occurrenceToken = formatExdateUtc(originalInstanceTime)
-                        val parentUpdated = if (occurrenceToken in parentEvent.exdates) {
-                            parentEvent
+                        val parentWithTag = parentEvent.copy(
+                            tag = inferEventTagFromDescription(parentEvent.description, parentEvent.tag)
+                        )
+                        val parentUpdated = if (occurrenceToken in parentWithTag.exdates) {
+                            parentWithTag
                         } else {
-                            parentEvent.copy(exdates = (parentEvent.exdates + occurrenceToken).distinct())
+                            parentWithTag.copy(exdates = (parentWithTag.exdates + occurrenceToken).distinct())
                         }
                         if (!isSameForSync(parentEvent, parentUpdated)) {
                             db.eventsDao().insertOrUpdate(parentUpdated)
@@ -428,7 +433,7 @@ class SystemCalendarSyncManager(private val context: Context) {
                                 endTS = endTs,
                                 title = title,
                                 location = cursor.getString(locationIndex) ?: "",
-                                description = cursor.getString(descriptionIndex) ?: "",
+                                description = description,
                                 reminder1Minutes = reminders.getOrNull(0)?.minutes ?: REMINDER_OFF,
                                 reminder2Minutes = reminders.getOrNull(1)?.minutes ?: REMINDER_OFF,
                                 reminder3Minutes = reminders.getOrNull(2)?.minutes ?: REMINDER_OFF,
@@ -454,9 +459,8 @@ class SystemCalendarSyncManager(private val context: Context) {
                                 type = base?.type ?: 0,
                                 state = base?.state ?: STATE_PENDING,
                                 tag = when {
-                                    base == null -> TAG_GENERAL
-                                    isNoteTag(base.tag) -> EventTags.NOTE
-                                    else -> base.tag
+                                    isNoteTag(base?.tag) -> EventTags.NOTE
+                                    else -> inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL)
                                 }
                             )
                             db.eventsDao().insertOrUpdate(exceptionEvent)
@@ -479,7 +483,7 @@ class SystemCalendarSyncManager(private val context: Context) {
                     endTS = endTs,
                     title = title,
                     location = cursor.getString(locationIndex) ?: "",
-                    description = cursor.getString(descriptionIndex) ?: "",
+                    description = description,
                     reminder1Minutes = reminders.getOrNull(0)?.minutes ?: REMINDER_OFF,
                     reminder2Minutes = reminders.getOrNull(1)?.minutes ?: REMINDER_OFF,
                     reminder3Minutes = reminders.getOrNull(2)?.minutes ?: REMINDER_OFF,
@@ -505,9 +509,8 @@ class SystemCalendarSyncManager(private val context: Context) {
                     type = base?.type ?: 0,
                     state = base?.state ?: STATE_PENDING,
                     tag = when {
-                        base == null -> TAG_GENERAL
-                        isNoteTag(base.tag) -> EventTags.NOTE
-                        else -> base.tag
+                        isNoteTag(base?.tag) -> EventTags.NOTE
+                        else -> inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL)
                     }
                 )
 

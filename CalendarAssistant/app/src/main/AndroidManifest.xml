@@ -201,6 +201,11 @@
             android:enabled="true"
             android:exported="false" />
 
+        <receiver
+            android:name=".service.receiver.ReminderReconcileReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Shizuku Provider (静默提权核心组件) -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

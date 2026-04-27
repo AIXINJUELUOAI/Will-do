@@ -78,6 +78,7 @@ class StoreDispatcher private constructor(context: Context) {
     fun onSystemCalendarChanged() = rootNode.onSystemCalendarChanged()
 
     fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>) = rootNode.refreshNotificationsForWindow(items)
+    fun reconcileNotificationsFromStore(windowDays: Long = 7L) = rootNode.reconcileNotificationsFromStore(windowDays)
 
     companion object {
         @Volatile
