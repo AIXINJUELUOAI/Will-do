@@ -7,7 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
-import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +23,7 @@ import kotlinx.coroutines.launch
  */
 class SmsContentObserver(
     private val context: Context,
-    private val getIngestCommandApi: () -> IngestCommandApi?
+    private val getSmsPickupIngestCoordinator: () -> SmsPickupIngestCoordinator?
 ) : ContentObserver(Handler(Looper.getMainLooper())) {
 
     companion object {
@@ -127,7 +126,7 @@ class SmsContentObserver(
 
     private fun scanNewMessages(reason: String) {
         val contentResolver = context.contentResolver
-        val ingestCommandApi = getIngestCommandApi() ?: return
+        val ingestCoordinator = getSmsPickupIngestCoordinator() ?: return
 
         val settings = SettingsDataSource(context).loadSettings()
         if (!settings.isSmsMonitoringEnabled) return
@@ -162,7 +161,7 @@ class SmsContentObserver(
         scope.launch {
             for ((id, sender, body) in newMessages) {
                 try {
-                    processSms(ingestCommandApi, sender, body, id)
+                    processSms(ingestCoordinator, sender, body, id)
                 } catch (e: Exception) {
                     Log.e(TAG, "[探针] 处理短信异常 id=$id", e)
                 }
@@ -170,28 +169,18 @@ class SmsContentObserver(
         }
     }
 
-    private suspend fun processSms(
-        ingestCommandApi: IngestCommandApi,
+    private fun processSms(
+        ingestCoordinator: SmsPickupIngestCoordinator,
         sender: String,
         body: String,
         smsId: Long
     ) {
-        Log.d(TAG, "[探针] 处理短信 id=$smsId from=$sender, body=${body.take(80)}...")
-
-        val eventData = SmsAnalysis.parse(sender, body)
-        if (eventData == null) {
-            Log.d(TAG, "[探针] SmsAnalysis.parse 返回 null，未识别到取件码")
-            return
-        }
-
-        Log.d(TAG, "[探针] 解析成功: title=${eventData.title}, tag=${eventData.tag}, desc=${eventData.description}")
-
-        val added = ingestCommandApi.ingestSmsPickup(eventData)
-        if (added == null) {
-            Log.d(TAG, "[探针] 重复取件码已跳过: ${eventData.title}")
-            return
-        }
-
-        Log.d(TAG, "[探针] ✅ 取件码已入库: ${added.title} from $sender")
+        Log.d(TAG, "[探针] 提交短信候选 id=$smsId from=$sender, body=${body.take(80)}...")
+        ingestCoordinator.submit(
+            source = SmsPickupSource.CONTENT_OBSERVER,
+            sender = sender,
+            body = body,
+            smsId = smsId
+        )
     }
 }

@@ -80,6 +80,10 @@ class ScheduleCenter(
         scheduleNotificationRefresh()
     }
 
+    suspend fun getLatestActiveEvents(): List<Event> = withContext(Dispatchers.IO) {
+        calendarCenter.getEvents().filter { it.archivedAt == null }
+    }
+
     // ── 通知调度 ─────────────────────────────────────────────────
 
     private var notificationRefreshJob: Job? = null

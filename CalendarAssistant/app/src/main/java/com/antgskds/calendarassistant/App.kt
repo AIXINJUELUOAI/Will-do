@@ -58,6 +58,7 @@ import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
 import com.antgskds.calendarassistant.data.repository.SettingsRepository
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
+import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -166,6 +167,13 @@ class App : Application() {
     }
 
     val ingestCommandApi: IngestCommandApi by lazy { contentIngestCenter }
+
+    val smsPickupIngestCoordinator: SmsPickupIngestCoordinator by lazy {
+        SmsPickupIngestCoordinator(
+            appScope = appScope,
+            getIngestCommandApi = { try { ingestCommandApi } catch (_: Exception) { null } }
+        )
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // 规则 / 胶囊 / 权限 / 通知
@@ -308,7 +316,7 @@ class App : Application() {
     private fun initSmsObserver() {
         smsObserver = SmsContentObserver(
             context = this,
-            getIngestCommandApi = { try { ingestCommandApi } catch (_: Exception) { null } }
+            getSmsPickupIngestCoordinator = { try { smsPickupIngestCoordinator } catch (_: Exception) { null } }
         )
         smsObserver?.register()
     }

@@ -150,12 +150,12 @@ class StoreRootNode(context: Context) {
             if (allowSystemPush(deleteFromSystem)) {
                 syncNode.deleteFromSystem(child)
             }
-            child.id?.let { reminderNode.cancelForEvent(it) }
+            child.id?.let { reminderNode.cancelForInactiveEvent(it) }
         }
         localNode.deleteChildEvents(id)
 
         localNode.deleteEvent(id)
-        reminderNode.cancelForEvent(id)
+        reminderNode.cancelForInactiveEvent(id)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -208,7 +208,7 @@ class StoreRootNode(context: Context) {
                     if (allowSystemPush(deleteFromSystem)) {
                         syncNode.deleteFromSystem(child)
                     }
-                    child.id?.let { reminderNode.cancelForEvent(it) }
+                    child.id?.let { reminderNode.cancelForInactiveEvent(it) }
                 }
                 localNode.deleteChildEventsFrom(parentEventId, occurrenceTs)
                 reminderNode.rebuildForEvent(updatedParent)
@@ -275,7 +275,7 @@ class StoreRootNode(context: Context) {
     fun archiveEvent(eventId: Long) {
         val event = localNode.getEvent(eventId) ?: return
         localNode.archiveEvent(eventId, nowSeconds())
-        event.id?.let { reminderNode.cancelForEvent(it) }
+        event.id?.let { reminderNode.cancelForInactiveEvent(it) }
     }
 
     /**
@@ -285,7 +285,7 @@ class StoreRootNode(context: Context) {
     fun archiveOccurrence(parentId: Long, occurrenceTs: Long, syncToSystem: Boolean = true) {
         val childId = materializeOccurrence(parentId, occurrenceTs, syncToSystem) ?: return
         localNode.archiveEvent(childId, nowSeconds())
-        reminderNode.cancelForEvent(childId)
+        reminderNode.cancelForInactiveEvent(childId)
     }
 
     fun restoreEvent(eventId: Long) {
@@ -321,7 +321,7 @@ class StoreRootNode(context: Context) {
             // 只归档非重复母体、已过期且未归档的事件
             if (event.archivedAt == null && event.endTS < beforeTs && !event.isRecurring) {
                 localNode.archiveEvent(id, now)
-                reminderNode.cancelForEvent(id)
+                reminderNode.cancelForInactiveEvent(id)
                 count++
             }
         }
@@ -522,7 +522,7 @@ class StoreRootNode(context: Context) {
         }
 
         localNode.deleteEvent(eventId)
-        reminderNode.cancelForEvent(eventId)
+        reminderNode.cancelForInactiveEvent(eventId)
         reminderNode.rebuildForEvent(storedParent)
         return true
     }
@@ -609,7 +609,7 @@ class StoreRootNode(context: Context) {
             if (allowSystemPush(syncToSystem)) {
                 syncNode.deleteFromSystem(child)
             }
-            child.id?.let { reminderNode.cancelForEvent(it) }
+            child.id?.let { reminderNode.cancelForInactiveEvent(it) }
         }
         localNode.deleteChildEventsFrom(parent.id ?: 0L, occurrenceTs)
 

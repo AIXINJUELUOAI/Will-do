@@ -11,6 +11,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.AlarmRoute
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -19,6 +20,9 @@ import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * 广播接收器：AlarmReceiver
@@ -33,6 +37,9 @@ import kotlinx.coroutines.launch
 class AlarmReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AlarmReceiver"
+        private const val RECURRING_INSTANCE_PREFIX = "rec:"
+        private const val EXTRA_EVENT_PARENT_ID = "EVENT_PARENT_ID"
+        private const val EXTRA_EVENT_OCCURRENCE_TS = "EVENT_OCCURRENCE_TS"
 
         @JvmStatic
         internal fun showStandardNotification(context: Context, event: Event, label: String = "日程开始") {
@@ -73,7 +80,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         // 安全加固：第一道防线 - 检查事件是否还存在
         // 如果事件已被删除，直接返回，不进行任何后续操作
-        if (!isEventStillValid(context, eventId)) {
+        if (!isEventStillValid(context, intent, eventId)) {
             Log.i(TAG, "事件 $eventId 已不存在，跳过通知/服务启动")
             return
         }
@@ -127,28 +134,53 @@ class AlarmReceiver : BroadcastReceiver() {
      * @param eventId 事件ID
      * @return true 如果事件仍存在，false 如果事件已被删除
      */
-    private fun isEventStillValid(context: Context, eventId: String): Boolean {
-        return try {
+    private suspend fun isEventStillValid(context: Context, intent: Intent, eventId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (eventId.startsWith(RECURRING_INSTANCE_PREFIX)) {
+                return@withContext isRecurringInstanceStillValid(context, intent, eventId)
+            }
+
             val app = context.applicationContext as App
-            val events = app.scheduleCenter.events.value
-
-            if (events.isEmpty()) {
-                Log.w(TAG, "事件列表尚未加载完成，跳过存在性校验: eventId=$eventId")
-                return true
-            }
-
-            val isValid = app.eventActionQueryApi.isEventStillValid(events, eventId)
-
-            if (!isValid) {
-                Log.w(TAG, "事件验证失败: eventId=$eventId 不存在")
-            }
-
+            val numericId = eventId.toLongOrNull() ?: return@withContext true
+            val event = app.calendarCenter.getEvent(numericId)
+            val isValid = event != null && event.archivedAt == null && !event.isCompleted
+            if (!isValid) Log.w(TAG, "事件验证失败: eventId=$eventId 不存在或已失效")
             isValid
         } catch (e: Exception) {
             Log.e(TAG, "检查事件存在性时出错: ${e.message}", e)
             // 出错时默认返回 true，避免误杀正常通知
             true
         }
+    }
+
+    private fun isRecurringInstanceStillValid(context: Context, intent: Intent, eventId: String): Boolean {
+        val app = context.applicationContext as App
+        val events = app.calendarCenter.getEvents().filter { it.archivedAt == null }
+        if (events.isEmpty()) {
+            Log.w(TAG, "事件列表为空，重复实例无效: eventId=$eventId")
+            return false
+        }
+
+        val parentId = intent.getLongExtra(EXTRA_EVENT_PARENT_ID, parseRecurringParentId(eventId))
+        val occurrenceTs = intent.getLongExtra(EXTRA_EVENT_OCCURRENCE_TS, parseRecurringOccurrenceTs(eventId))
+        if (parentId <= 0L || occurrenceTs <= 0L) return true
+
+        val parentExists = events.any { it.id == parentId && it.archivedAt == null }
+        if (!parentExists) return false
+
+        val occurrenceDate = Instant.ofEpochSecond(occurrenceTs)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+        return ScheduleDisplayHelper.buildDisplayItems(events, occurrenceDate, occurrenceDate)
+            .any { it.stableKey == eventId }
+    }
+
+    private fun parseRecurringParentId(eventId: String): Long {
+        return eventId.split(':').getOrNull(1)?.toLongOrNull() ?: 0L
+    }
+
+    private fun parseRecurringOccurrenceTs(eventId: String): Long {
+        return eventId.split(':').getOrNull(2)?.toLongOrNull() ?: 0L
     }
 
     private fun handleCapsuleStart(context: Context, intent: Intent, eventId: String, title: String, eventRuleId: String) {
@@ -179,6 +211,11 @@ class AlarmReceiver : BroadcastReceiver() {
                     eventId = eventId,
                     title = title,
                     label = "日程开始",
+                    eventLocation = intent.getStringExtra("EVENT_LOCATION") ?: "",
+                    eventStartTime = intent.getStringExtra("EVENT_START_TIME") ?: "",
+                    eventEndTime = intent.getStringExtra("EVENT_END_TIME") ?: "",
+                    eventTag = intent.getStringExtra("EVENT_TAG") ?: "",
+                    eventColor = intent.getIntExtra("EVENT_COLOR", 0),
                     eventRuleId = eventRuleId.ifEmpty { null }
                 )
             }

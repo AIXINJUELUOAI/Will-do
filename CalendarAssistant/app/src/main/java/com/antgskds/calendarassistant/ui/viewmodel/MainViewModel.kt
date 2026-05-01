@@ -41,6 +41,8 @@ data class MainUiState(
     val revealedItemKey: String? = null,
     val rawEvents: List<Event> = emptyList(),
     val allScheduleItems: List<ScheduleDisplayItem> = emptyList(),
+    val allEventsFutureDays: Int = 7,
+    val allEventsFutureLimit: LocalDate = LocalDate.now().plusDays(7),
     val courseScheduleItems: List<ScheduleDisplayItem> = emptyList(),
     val noteEvents: List<Event> = emptyList(),
     val settings: MySettings = MySettings(),
@@ -122,6 +124,7 @@ class MainViewModel(
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _revealedItemKey = MutableStateFlow<String?>(null)
+    private val _allEventsFutureDays = MutableStateFlow(INITIAL_ALL_EVENTS_FUTURE_DAYS)
 
     val uiState: StateFlow<MainUiState> = combine(
         _selectedDate,
@@ -129,7 +132,8 @@ class MainViewModel(
         scheduleCenter.events,
         settingsQueryApi.settings,
         weatherQueryApi.weatherData,
-        _timeTrigger
+        _timeTrigger,
+        _allEventsFutureDays
     ) { values ->
         val date = values[0] as LocalDate
         val revealedKey = values[1] as String?
@@ -137,6 +141,7 @@ class MainViewModel(
         val activeEvents = events.filter { it.archivedAt == null }
         val settings = values[3] as MySettings
         val weatherData = values[4] as WeatherData?
+        val allEventsFutureDays = values[6] as Int
         val snapshot = homeQueryApi.buildSnapshot(
             selectedDate = date,
             events = activeEvents,
@@ -145,7 +150,7 @@ class MainViewModel(
 
         // 为"全部日程"页展开所有历史日程到未来 7 天
         val today = LocalDate.now()
-        val futureLimit = today.plusDays(7)
+        val futureLimit = today.plusDays(allEventsFutureDays.toLong())
         val scheduleEvents = activeEvents.filter { it.tag != EventTags.NOTE }
         val allItemsStart = scheduleEvents.minOfOrNull { it.startDate } ?: today
         val allItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, allItemsStart, futureLimit)
@@ -162,6 +167,8 @@ class MainViewModel(
             revealedItemKey = revealedKey,
             rawEvents = activeEvents,
             allScheduleItems = allItems,
+            allEventsFutureDays = allEventsFutureDays,
+            allEventsFutureLimit = futureLimit,
             courseScheduleItems = courseItems,
             noteEvents = snapshot.noteEvents,
             settings = settings,
@@ -179,6 +186,10 @@ class MainViewModel(
 
     fun updateSelectedDate(date: LocalDate) { _selectedDate.value = date; _revealedItemKey.value = null }
     fun onRevealItem(key: String?) { _revealedItemKey.value = key }
+    fun loadMoreFutureAllEvents() {
+        _allEventsFutureDays.value += ALL_EVENTS_LOAD_MORE_DAYS
+        _revealedItemKey.value = null
+    }
 
     fun checkPromptUpdatesManually() {
         if (_promptCheckInProgress.value) return
@@ -600,5 +611,10 @@ class MainViewModel(
         if (archivedCount > 0) {
             Log.d(logTag, "自动归档了 $archivedCount 条事件")
         }
+    }
+
+    private companion object {
+        private const val INITIAL_ALL_EVENTS_FUTURE_DAYS = 7
+        private const val ALL_EVENTS_LOAD_MORE_DAYS = 15
     }
 }
