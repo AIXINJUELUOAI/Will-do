@@ -21,6 +21,7 @@ import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
+import kotlin.math.pow
 
 /**
  * Flyme 实况胶囊提供者
@@ -42,9 +43,11 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             iconDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
         }
 
+        val capsuleBgColor = normalizeCapsuleBgColor(item.color)
+        val capsuleContentColor = resolveReadableContentColor(capsuleBgColor)
         val rawBitmap = iconDrawable?.let { CapsuleUiUtils.drawableToBitmap(it) }
-        val whiteIconBitmap = rawBitmap?.let { CapsuleUiUtils.tintBitmap(it, Color.WHITE) }
-        val capsuleIcon = whiteIconBitmap?.let { Icon.createWithBitmap(it) }
+        val capsuleIconBitmap = rawBitmap?.let { CapsuleUiUtils.tintBitmap(it, capsuleContentColor) }
+        val capsuleIcon = capsuleIconBitmap?.let { Icon.createWithBitmap(it) }
 
         val remoteViews = if (item.type == CapsuleStateManager.TYPE_NETWORK_SPEED) {
             createNetworkSpeedRemoteViews(context, display.primaryText, subtitleText)
@@ -69,7 +72,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             .setOngoing(true)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
-            .setColor(item.color)
+            .setColor(capsuleBgColor)
             .setCategory(Notification.CATEGORY_EVENT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setCustomContentView(remoteViews)
@@ -99,7 +102,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                 context = context,
                 title = display.primaryText,
                 collapsedShortText = collapsedShortText,
-                color = item.color,
+                color = capsuleBgColor,
+                contentColor = capsuleContentColor,
                 capsuleIcon = capsuleIcon
             )
         )
@@ -156,6 +160,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         title: String,
         collapsedShortText: String,
         color: Int,
+        contentColor: Int,
         capsuleIcon: Icon?
     ): Bundle {
         val capsuleBundle = Bundle().apply {
@@ -163,7 +168,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             putInt("notification.live.capsuleType", 1)
             putString("notification.live.capsuleContent", collapsedShortText)
             putInt("notification.live.capsuleBgColor", color)
-            putInt("notification.live.capsuleContentColor", Color.WHITE)
+            putInt("notification.live.capsuleContentColor", contentColor)
             if (capsuleIcon != null) {
                 putParcelable("notification.live.capsuleIcon", capsuleIcon)
             }
@@ -268,5 +273,38 @@ class FlymeCapsuleProvider : ICapsuleProvider {
 
     private fun collapseShortText(text: String): String {
         return if (text.length > 10) text.take(10) else text
+    }
+
+    private fun normalizeCapsuleBgColor(color: Int): Int {
+        val rgb = color and 0x00FFFFFF
+        if (rgb == 0) return DEFAULT_CAPSULE_BG_COLOR
+        return Color.rgb(Color.red(color), Color.green(color), Color.blue(color))
+    }
+
+    private fun resolveReadableContentColor(backgroundColor: Int): Int {
+        val luminance = relativeLuminance(backgroundColor)
+        val blackContrast = (luminance + 0.05) / 0.05
+        val whiteContrast = 1.05 / (luminance + 0.05)
+        return if (blackContrast >= whiteContrast) Color.BLACK else Color.WHITE
+    }
+
+    private fun relativeLuminance(color: Int): Double {
+        fun channel(value: Int): Double {
+            val normalized = value / 255.0
+            return if (normalized <= 0.03928) {
+                normalized / 12.92
+            } else {
+                ((normalized + 0.055) / 1.055).pow(2.4)
+            }
+        }
+
+        val r = channel(Color.red(color))
+        val g = channel(Color.green(color))
+        val b = channel(Color.blue(color))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+
+    private companion object {
+        private val DEFAULT_CAPSULE_BG_COLOR = Color.rgb(180, 195, 161)
     }
 }

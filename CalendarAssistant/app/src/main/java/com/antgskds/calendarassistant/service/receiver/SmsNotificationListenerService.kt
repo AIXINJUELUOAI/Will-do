@@ -10,12 +10,8 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.sms.SmsAnalysis
+import com.antgskds.calendarassistant.core.sms.SmsPickupSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 /**
  * 短信通知监听服务
@@ -143,48 +139,22 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
             Log.d(TAG, "[探针] 收到短信通知, pkg=$pkg, text=${text.take(80)}...")
 
-            // 延迟处理，确保短信已写入数据库（避免与广播通道重复入库）
-            Thread {
-                try {
-                    Thread.sleep(1000L)
-                    processNotification(context, text, pkg)
-                } catch (e: Exception) {
-                    Log.e(TAG, "[探针] 通知处理异常", e)
-                }
-            }.start()
+            processNotification(context, text, pkg, sbn.postTime)
         } catch (e: Exception) {
             Log.e(TAG, "[探针] onNotificationPosted 异常", e)
         }
     }
 
-    /**
-     * 解析通知文本，提取取件码入库
-     */
-    private fun processNotification(context: Context, text: String, pkg: String) {
-        val eventData = SmsAnalysis.parse(pkg, text)
-        if (eventData == null) {
-            Log.d(TAG, "[探针] SmsAnalysis.parse 返回 null，未识别到取件码")
-            return
-        }
-
-        Log.d(TAG, "[探针] 解析成功: title=${eventData.title}, tag=${eventData.tag}")
-
+    /** 将通知文本作为短信候选提交到统一协调器。 */
+    private fun processNotification(context: Context, text: String, pkg: String, postTime: Long) {
         val app = context.applicationContext as? App ?: return
-        val ingestCommandApi = app.ingestCommandApi
-        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-        scope.launch {
-            try {
-                val added = ingestCommandApi.ingestSmsPickup(eventData)
-                if (added == null) {
-                    Log.d(TAG, "[探针] 重复取件码已跳过: ${eventData.title}")
-                    return@launch
-                }
-                Log.d(TAG, "[探针] ✅ 通知通道取件码已入库: ${added.title}")
-            } catch (e: Exception) {
-                Log.e(TAG, "[探针] 入库异常", e)
-            }
-        }
+        app.smsPickupIngestCoordinator.submit(
+            source = SmsPickupSource.NOTIFICATION_LISTENER,
+            sender = pkg,
+            body = text,
+            smsId = postTime
+        )
+        Log.d(TAG, "[探针] 已提交短信通知候选, pkg=$pkg")
     }
 
     /**

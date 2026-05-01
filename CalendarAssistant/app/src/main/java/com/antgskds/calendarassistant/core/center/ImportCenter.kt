@@ -4,8 +4,11 @@ import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
 class ImportCenter(
@@ -13,30 +16,40 @@ class ImportCenter(
     private val settingsQueryApi: SettingsQueryApi
 ) : IngestCommandApi {
 
+    private val smsIngestMutex = Mutex()
+
     private val defaultDurationMinutes: Int
         get() = settingsQueryApi.settings.value.defaultEventDurationMinutes
 
     private val forceInstantCodeTimeToNow: Boolean
         get() = settingsQueryApi.settings.value.forceInstantCodeTimeToNow
 
-    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? {
-        val existingEvents = scheduleCenter.events.value
-        val isDuplicate = existingEvents.any { existing ->
-            existing.tag == eventData.tag &&
-                existing.description == eventData.description &&
-                !existing.endDate.isBefore(LocalDate.now())
-        }
-        if (isDuplicate) {
-            return null
-        }
-
+    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? = smsIngestMutex.withLock {
         val event = convertDraftToEvent(
             eventData,
             defaultDurationMinutes = defaultDurationMinutes,
             forceInstantCodeTimeToNow = forceInstantCodeTimeToNow
         )
+
+        val incomingFingerprint = SmsPickupFingerprint.fromDraft(eventData)
+            ?: SmsPickupFingerprint.fromEvent(event)
+        val existingEvents = scheduleCenter.getLatestActiveEvents()
+        val isDuplicate = existingEvents.any { existing ->
+            !existing.endDate.isBefore(LocalDate.now()) &&
+                isSameSmsPickupEvent(existing, event, incomingFingerprint)
+        }
+        if (isDuplicate) return@withLock null
+
         scheduleCenter.addEvent(event)
-        return event
+        event
+    }
+
+    private fun isSameSmsPickupEvent(existing: Event, incoming: Event, incomingFingerprint: String?): Boolean {
+        val existingFingerprint = SmsPickupFingerprint.fromEvent(existing)
+        if (incomingFingerprint != null && existingFingerprint != null) {
+            return incomingFingerprint == existingFingerprint
+        }
+        return existing.tag == incoming.tag && existing.description == incoming.description
     }
 
     override suspend fun ingestRecognizedEvents(

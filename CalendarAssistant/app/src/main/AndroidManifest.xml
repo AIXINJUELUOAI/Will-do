@@ -165,6 +165,12 @@
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".service.receiver.AlarmReceiver" />
 
+        <!-- Store 层日程提醒接收器（含重复日程实例） -->
+        <receiver
+            android:name=".calendar.receivers.EventReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 日历定时同步接收器 -->
         <receiver
             android:name=".calendar.receivers.CalDAVSyncReceiver"

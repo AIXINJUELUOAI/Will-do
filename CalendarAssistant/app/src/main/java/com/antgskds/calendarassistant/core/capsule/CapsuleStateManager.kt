@@ -1,11 +1,13 @@
 package com.antgskds.calendarassistant.core.capsule
 
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
 
+import com.antgskds.calendarassistant.calendar.helpers.FLAG_ALL_DAY
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.FlymeUtils
@@ -24,6 +26,7 @@ import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.xposed.XposedModuleStatus
+import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
@@ -72,6 +75,7 @@ class CapsuleStateManager(
         private const val OCR_UPDATE_THROTTLE_MS = 600L
         private const val EVENT_TYPE_OCR_PROGRESS = "ocr_progress"
         private const val EVENT_TYPE_OCR_RESULT = "ocr_result"
+        private val DEFAULT_PICKUP_CAPSULE_COLOR = android.graphics.Color.rgb(180, 195, 161)
 
         // ✅ 核心修复 1：改用 MutableStateFlow(0)
         // StateFlow 总是持有最新值，保证 combine 永远不会因为等待信号而卡死或丢状态
@@ -405,68 +409,38 @@ class CapsuleStateManager(
         return if (capsules.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(capsules)
     }
 
+    private data class CapsuleScheduleEntry(
+        val id: String,
+        val notifId: Int,
+        val event: Event
+    )
+
     private fun computeScheduleCapsules(
         events: List<Event>,
         settings: MySettings
     ): List<CapsuleUiState.Active.CapsuleItem> {
-
         val now = LocalDateTime.now()
-        val today = LocalDate.now()
-
-        val allEvents = events
-
-        // 4. 过滤活跃事件
-        val activeEvents = allEvents.filter { event ->
-            try {
-                if (event.isRecurring) {
-                    return@filter false
-                }
-                if (event.tag == EventTags.NOTE) {
-                    return@filter false
-                }
-
-                // ⚠️ 注意：如果你在测试时创建的时间已经过去了（哪怕只过去1秒），
-                // 这里的 now.isBefore(endDateTime) 就会返回 false，胶囊就会消失。
-                // 建议测试时，将结束时间设置在未来 5-10 分钟。
-                val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
-                val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
-
-                val effectiveStartTime = if (settings.isAdvanceReminderEnabled &&
-                                               settings.advanceReminderMinutes > 0) {
-                    startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
-                } else {
-                    startDateTime.minusMinutes(1)
-                }
-
-                val isActive = !event.isCompleted && now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
-
-                // 调试日志：如果胶囊消失，请检查 Logcat 中这一行的 isActive 是 true 还是 false
-                // Log.d(TAG, "Event: ${event.title}, End: $endDateTime, Now: $now, IsActive: $isActive")
-
-                isActive
-            } catch (e: Exception) {
-                Log.e(TAG, "解析事件时间失败: ${event.title}", e)
-                false
-            }
+        val activeEntries = buildCapsuleScheduleEntries(events, settings).filter { entry ->
+            isActiveCapsuleEntry(entry.event, settings, now)
         }
 
-        if (activeEvents.isEmpty()) {
+        if (activeEntries.isEmpty()) {
             Log.d(TAG, "无活跃事件 (Active list empty)")
             return emptyList()
         }
 
-        // ... 后续构建胶囊逻辑保持不变 ...
-        val (pickupEvents, scheduleEvents) = activeEvents.partition { isPickupRule(it) }
+        val (pickupEntries, scheduleEntries) = activeEntries.partition { isPickupRule(it.event) }
         val capsules = mutableListOf<CapsuleUiState.Active.CapsuleItem>()
 
-        scheduleEvents.forEach { event ->
+        scheduleEntries.forEach { entry ->
+            val event = entry.event
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
             val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired)
 
             capsules.add(createCapsuleItem(
-                id = event.idString,
-                notifId = (event.id ?: 0L).hashCode(),
+                id = entry.id,
+                notifId = entry.notifId,
                 type = TYPE_SCHEDULE,
                 eventType = resolveCapsuleEventType(event),
                 description = event.description,
@@ -478,10 +452,10 @@ class CapsuleStateManager(
             ))
         }
 
+        val pickupEvents = pickupEntries.map { it.event }
         val aggregateMode = settings.isPickupAggregationEnabled && pickupEvents.size > 1
 
         if (aggregateMode) {
-            // ==================== 聚合模式：只创建聚合胶囊，不创建独立胶囊 ====================
             Log.d(TAG, "聚合模式: ${pickupEvents.size} 个取件码")
             val latestEndMillis = pickupEvents.mapNotNull {
                 try {
@@ -490,7 +464,6 @@ class CapsuleStateManager(
                 } catch (e: Exception) { null }
             }.maxOrNull() ?: (System.currentTimeMillis() + 2 * 60 * 60 * 1000)
 
-            // ✅ 修复：根据过期状态决定胶囊类型
             val isAnyExpired = pickupEvents.any { event ->
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
                 now.isAfter(endDateTime)
@@ -504,44 +477,29 @@ class CapsuleStateManager(
                 type = capsuleType,
                 eventType = RuleMatchingEngine.RULE_PICKUP,
                 description = pickupEvents.firstOrNull()?.description ?: "",
-                color = android.graphics.Color.GREEN,
+                color = resolveAggregatePickupCapsuleColor(pickupEvents),
                 startMillis = System.currentTimeMillis(),
                 endMillis = latestEndMillis,
                 display = display
             ))
         } else {
-            // ==================== 非聚合模式：创建独立胶囊 ====================
             Log.d(TAG, "非聚合模式: ${pickupEvents.size} 个取件码")
-            pickupEvents.forEach { event ->
-                // 1. 计算过期状态
+            pickupEntries.forEach { entry ->
+                val event = entry.event
                 val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
                 val isExpired = now.isAfter(endDateTime)
-
-                // ✅ 详细日志：输出每个取件码的状态
-                Log.d(TAG, "取件码: ${event.title}, 结束时间: $endDateTime, 当前: $now, 过期: $isExpired")
-
-                // 3. ✅ 关键：根据过期状态决定胶囊类型
-                // 如果过期，直接传 TYPE_PICKUP_EXPIRED (3)，不让 Provider 瞎猜
-                val capsuleType = if (isExpired) {
-                    TYPE_PICKUP_EXPIRED
-                } else {
-                    TYPE_PICKUP
-                }
-
-                // 4. ID 保持稳定，不再 +1
-                val dynamicNotifId = (event.id ?: 0L).hashCode()
+                val capsuleType = if (isExpired) TYPE_PICKUP_EXPIRED else TYPE_PICKUP
                 val display = CapsuleMessageComposer.composePickup(context, event, isExpired)
 
-                // ✅ 详细日志：输出生成的胶囊信息
-                Log.d(TAG, "生成胶囊: id=${event.id}, type=$capsuleType, notifId=$dynamicNotifId, title=${display.shortText}")
+                Log.d(TAG, "生成胶囊: id=${entry.id}, type=$capsuleType, notifId=${entry.notifId}, title=${display.shortText}")
 
                 capsules.add(createCapsuleItem(
-                    id = event.idString,
-                    notifId = dynamicNotifId, // ID 保持不变
+                    id = entry.id,
+                    notifId = entry.notifId,
                     type = capsuleType,
                     eventType = RuleMatchingEngine.RULE_PICKUP,
                     description = event.description,
-                    color = android.graphics.Color.GREEN,
+                    color = resolvePickupCapsuleColor(event),
                     state = event.state,
                     startMillis = toMillis(event, event.startTime),
                     endMillis = toMillis(event, event.endTime),
@@ -552,6 +510,87 @@ class CapsuleStateManager(
 
         Log.d(TAG, "最终胶囊数量: ${capsules.size}")
         return capsules
+    }
+
+    private fun buildCapsuleScheduleEntries(events: List<Event>, settings: MySettings): List<CapsuleScheduleEntry> {
+        val today = LocalDate.now()
+        val advanceDays = if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
+            settings.advanceReminderMinutes / (24 * 60) + 1
+        } else {
+            1
+        }
+        val from = today.minusDays(1)
+        val to = today.plusDays(advanceDays.toLong() + 1)
+        val activeEvents = events.filter { it.archivedAt == null && it.tag != EventTags.NOTE }
+        val eventsById = activeEvents.mapNotNull { event -> event.id?.let { id -> id to event } }.toMap()
+
+        return ScheduleDisplayHelper.buildDisplayItems(activeEvents, from, to).mapNotNull { item ->
+            when (val target = item.action) {
+                is ScheduleDisplayItem.ActionTarget.Single -> {
+                    val event = eventsById[target.eventId]
+                        ?.copy(tag = item.tag, state = item.state)
+                        ?: item.toCapsuleEvent(id = target.eventId, parentId = 0L)
+                    CapsuleScheduleEntry(
+                        id = target.eventId.toString(),
+                        notifId = target.eventId.hashCode(),
+                        event = event
+                    )
+                }
+                is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
+                    val parent = eventsById[target.parentId] ?: return@mapNotNull null
+                    val rawVirtualId = item.stableKey.hashCode().toLong()
+                    val virtualId = if (rawVirtualId < 0L) -rawVirtualId else rawVirtualId
+                    val event = item.toCapsuleEvent(id = virtualId, parentId = target.parentId, parent = parent)
+                    CapsuleScheduleEntry(
+                        id = item.stableKey,
+                        notifId = item.stableKey.hashCode(),
+                        event = event
+                    )
+                }
+            }
+        }
+    }
+
+    private fun ScheduleDisplayItem.toCapsuleEvent(
+        id: Long,
+        parentId: Long,
+        parent: Event? = null
+    ): Event {
+        return Event(
+            id = id,
+            startTS = startTS,
+            endTS = endTS,
+            title = title,
+            location = location,
+            description = description,
+            timeZone = timeZone,
+            flags = if (isAllDay) FLAG_ALL_DAY else 0,
+            color = color,
+            state = state,
+            tag = tag,
+            parentId = parentId,
+            eventType = parent?.eventType ?: 0L,
+            type = parent?.type ?: 0
+        )
+    }
+
+    private fun isActiveCapsuleEntry(event: Event, settings: MySettings, now: LocalDateTime): Boolean {
+        return try {
+            if (event.tag == EventTags.NOTE) return false
+
+            val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
+            val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
+            val effectiveStartTime = if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
+                startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
+            } else {
+                startDateTime.minusMinutes(1)
+            }
+
+            !event.isCompleted && now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
+        } catch (e: Exception) {
+            Log.e(TAG, "解析事件时间失败: ${event.title}", e)
+            false
+        }
     }
 
     private fun createCapsuleItem(
@@ -607,6 +646,15 @@ class CapsuleStateManager(
 
     private fun isPickupRule(event: Event): Boolean {
         return resolveRuleId(event) == RuleMatchingEngine.RULE_PICKUP
+    }
+
+    private fun resolveAggregatePickupCapsuleColor(events: List<Event>): Int {
+        return events.firstNotNullOfOrNull { event -> event.color.takeIf { it != 0 } }
+            ?: DEFAULT_PICKUP_CAPSULE_COLOR
+    }
+
+    private fun resolvePickupCapsuleColor(event: Event): Int {
+        return event.color.takeIf { it != 0 } ?: DEFAULT_PICKUP_CAPSULE_COLOR
     }
 
     private fun toMillis(event: Event, timeStr: String): Long {

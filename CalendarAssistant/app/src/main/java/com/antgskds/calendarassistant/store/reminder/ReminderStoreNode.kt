@@ -4,13 +4,18 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.Reminder
 import com.antgskds.calendarassistant.calendar.receivers.EventReminderReceiver
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 
 class ReminderStoreNode(context: Context) {
     private val appContext = context.applicationContext
@@ -27,8 +32,7 @@ class ReminderStoreNode(context: Context) {
         if (event.isRecurring) return
         // 跳过已完成/非待办事件
         if (event.state != STATE_PENDING) {
-            cancelForEvent(eventId)
-            clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
+            cancelForInactiveEvent(eventId)
             return
         }
 
@@ -36,14 +40,20 @@ class ReminderStoreNode(context: Context) {
         val nowSec = now / 1000L
         val notificationKey = singleNotificationKey(eventId)
         if (event.endTS <= nowSec) {
-            cancelForEvent(eventId)
+            cancelForInactiveEvent(eventId)
+            return
+        }
+
+        val currentSettings = settings()
+        cancelForEvent(eventId)
+        if (currentSettings.isLiveCapsuleEnabled) {
+            cancelDisplayedNotificationsForEvent(eventId)
             clearActiveMarkersForNotificationKey(notificationKey)
             return
         }
 
-        cancelForEvent(eventId)
         val requestCodes = mutableSetOf<Int>()
-        ReminderPolicy.effectiveReminders(event, settings()).forEach { reminder ->
+        ReminderPolicy.effectiveReminders(event, currentSettings).forEach { reminder ->
             val triggerMillis = (event.startTS - reminder.minutes * 60L) * 1000L
             val requestCode = buildRequestCode(eventId, reminder.minutes, reminder.type)
             if (triggerMillis > now) {
@@ -77,6 +87,12 @@ class ReminderStoreNode(context: Context) {
             alarmManager.cancel(pendingIntent)
         }
         prefs.edit().remove(keyForEvent(eventId)).apply()
+    }
+
+    fun cancelForInactiveEvent(eventId: Long) {
+        cancelForEvent(eventId)
+        cancelDisplayedNotificationsForEvent(eventId)
+        clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -114,15 +130,13 @@ class ReminderStoreNode(context: Context) {
             }
             shouldNotifyKeys.add(item.stableKey)
 
-            val reminders = when (val target = item.action) {
+            val parent = when (val target = item.action) {
                 is ScheduleDisplayItem.ActionTarget.Single -> {
                     // 单次事件的通知由 rebuildForEvent 管理，这里跳过
                     continue
                 }
                 is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
-                    // 从母事件获取提醒分钟数
-                    val parent = parentEvents[target.parentId] ?: continue
-                    ReminderPolicy.effectiveReminders(parent, settings())
+                    parentEvents[target.parentId] ?: continue
                 }
             }
 
@@ -130,30 +144,21 @@ class ReminderStoreNode(context: Context) {
             val existingCodes = loadRequestCodes(instanceKey).toSet()
 
             // 注册新通知
-            val requestCodes = existingCodes.toMutableSet()
-            for (reminder in reminders) {
-                val triggerMillis = (item.startTS - reminder.minutes * 60L) * 1000L
-                val requestCode = buildInstanceRequestCode(instanceKey, reminder.minutes, reminder.type)
-                if (triggerMillis > now) {
-                    if (requestCode in existingCodes) continue
-                    val pendingIntent = createPendingIntent(
-                        requestCode = requestCode,
-                        eventId = (item.action as? ScheduleDisplayItem.ActionTarget.RecurringOccurrence)?.parentId ?: 0L,
-                        title = item.title,
-                        description = item.description
-                    )
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
-                    requestCodes.add(requestCode)
-                } else if (shouldSendImmediateReminder(triggerMillis, item.startTS * 1000L, item.endTS * 1000L, reminder, now) &&
-                    markImmediateReminderIfNeeded(instanceKey, reminder.minutes)
+            val requestCodes = mutableSetOf<Int>()
+            for (spec in buildRecurringAlarmSpecs(item, parent, instanceKey, now)) {
+                val requestCode = spec.requestCode
+                if (spec.triggerMillis > now) {
+                    val pendingIntent = createRecurringAlarmPendingIntent(spec, item, parent, instanceKey)
+                    if (scheduleReminderAlarm(spec.triggerMillis, pendingIntent)) {
+                        requestCodes.add(requestCode)
+                    }
+                } else if (shouldSendImmediateAlarm(spec, item, now) &&
+                    markImmediateReminderIfNeeded(instanceKey, spec.marker)
                 ) {
-                    sendImmediateReminder(
-                        eventId = (item.action as? ScheduleDisplayItem.ActionTarget.RecurringOccurrence)?.parentId ?: 0L,
-                        title = item.title,
-                        description = item.description
-                    )
+                    sendImmediateRecurringAlarm(spec, item, parent, instanceKey)
                 }
             }
+            (existingCodes - requestCodes).forEach { cancelRequestCode(it) }
             saveRequestCodes(instanceKey, requestCodes)
         }
         clearActiveMarkersExcept(shouldNotifyKeys)
@@ -184,17 +189,18 @@ class ReminderStoreNode(context: Context) {
     // 内部方法
     // ══════════════════════════════════════════════════════════════════════
 
+    private data class AlarmSpec(
+        val action: String,
+        val triggerMillis: Long,
+        val requestCode: Int,
+        val marker: Int,
+        val label: String = "",
+        val actualStartMillis: Long = -1L
+    )
+
     private fun cancelForInstanceKey(instanceKey: String) {
         val codes = loadRequestCodes(instanceKey)
-        codes.forEach { requestCode ->
-            val pendingIntent = PendingIntent.getBroadcast(
-                appContext,
-                requestCode,
-                Intent(appContext, EventReminderReceiver::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarmManager.cancel(pendingIntent)
-        }
+        codes.forEach { requestCode -> cancelRequestCode(requestCode) }
         prefs.edit().remove(keyForInstance(instanceKey)).apply()
     }
 
@@ -230,12 +236,216 @@ class ReminderStoreNode(context: Context) {
         }
     }
 
+    private fun buildRecurringAlarmSpecs(
+        item: ScheduleDisplayItem,
+        parent: Event,
+        instanceKey: String,
+        now: Long
+    ): List<AlarmSpec> {
+        val currentSettings = settings()
+        val startMillis = item.startTS * 1000L
+        val endMillis = item.endTS * 1000L
+        if (endMillis <= now) return emptyList()
+
+        return if (currentSettings.isLiveCapsuleEnabled) {
+            buildCapsuleAlarmSpecs(instanceKey, startMillis, endMillis, currentSettings)
+        } else {
+            ReminderPolicy.effectiveReminders(parent, currentSettings).map { reminder ->
+                val marker = reminder.minutes.coerceAtLeast(0)
+                AlarmSpec(
+                    action = NotificationScheduler.ACTION_REMINDER,
+                    triggerMillis = startMillis - marker * 60_000L,
+                    requestCode = buildInstanceRequestCode(instanceKey, NotificationScheduler.ACTION_REMINDER, marker, reminder.type),
+                    marker = marker,
+                    label = reminderLabel(marker)
+                )
+            }
+        }
+    }
+
+    private fun buildCapsuleAlarmSpecs(
+        instanceKey: String,
+        startMillis: Long,
+        endMillis: Long,
+        currentSettings: MySettings
+    ): List<AlarmSpec> {
+        val specs = mutableListOf<AlarmSpec>()
+        val advanceEnabled = currentSettings.isAdvanceReminderEnabled && currentSettings.advanceReminderMinutes > 0
+        val capsuleStartMillis = if (advanceEnabled) {
+            startMillis - currentSettings.advanceReminderMinutes * 60_000L
+        } else {
+            startMillis
+        }
+
+        specs.add(
+            AlarmSpec(
+                action = NotificationScheduler.ACTION_CAPSULE_START,
+                triggerMillis = capsuleStartMillis,
+                requestCode = buildInstanceRequestCode(instanceKey, NotificationScheduler.ACTION_CAPSULE_START, CAPSULE_START_MARKER, 0),
+                marker = CAPSULE_START_MARKER,
+                actualStartMillis = startMillis
+            )
+        )
+
+        if (advanceEnabled) {
+            specs.add(
+                AlarmSpec(
+                    action = NotificationScheduler.ACTION_REFRESH_CAPSULE,
+                    triggerMillis = startMillis,
+                    requestCode = buildInstanceRequestCode(instanceKey, NotificationScheduler.ACTION_REFRESH_CAPSULE, CAPSULE_REFRESH_MARKER, 0),
+                    marker = CAPSULE_REFRESH_MARKER,
+                    actualStartMillis = startMillis
+                )
+            )
+        }
+
+        specs.add(
+            AlarmSpec(
+                action = NotificationScheduler.ACTION_CAPSULE_END,
+                triggerMillis = endMillis,
+                requestCode = buildInstanceRequestCode(instanceKey, NotificationScheduler.ACTION_CAPSULE_END, CAPSULE_END_MARKER, 0),
+                marker = CAPSULE_END_MARKER
+            )
+        )
+
+        return specs
+    }
+
+    private fun shouldSendImmediateAlarm(spec: AlarmSpec, item: ScheduleDisplayItem, now: Long): Boolean {
+        val startMillis = item.startTS * 1000L
+        val endMillis = item.endTS * 1000L
+        if (now >= endMillis) return false
+
+        return when (spec.action) {
+            NotificationScheduler.ACTION_REMINDER -> {
+                val minutes = spec.marker.coerceAtLeast(0)
+                shouldSendImmediateReminder(
+                    triggerMillis = spec.triggerMillis,
+                    startMillis = startMillis,
+                    endMillis = endMillis,
+                    reminder = Reminder(minutes, 0),
+                    now = now
+                )
+            }
+            NotificationScheduler.ACTION_CAPSULE_START -> spec.triggerMillis <= now
+            NotificationScheduler.ACTION_REFRESH_CAPSULE -> spec.triggerMillis <= now && now >= startMillis
+            else -> false
+        }
+    }
+
+    private fun reminderLabel(minutes: Int): String {
+        return NotificationScheduler.REMINDER_OPTIONS.firstOrNull { it.first == minutes }?.second
+            ?: if (minutes > 0) "提前${minutes}分钟" else "日程开始"
+    }
+
+    private fun createRecurringAlarmPendingIntent(
+        spec: AlarmSpec,
+        item: ScheduleDisplayItem,
+        parent: Event,
+        instanceKey: String
+    ): PendingIntent {
+        return PendingIntent.getBroadcast(
+            appContext,
+            spec.requestCode,
+            createRecurringAlarmIntent(spec, item, parent, instanceKey),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun createRecurringAlarmIntent(
+        spec: AlarmSpec,
+        item: ScheduleDisplayItem,
+        parent: Event,
+        instanceKey: String
+    ): Intent {
+        val parentId = (item.action as? ScheduleDisplayItem.ActionTarget.RecurringOccurrence)?.parentId ?: parent.id ?: 0L
+        return Intent(appContext, AlarmReceiver::class.java).apply {
+            action = spec.action
+            putExtra("EVENT_ID", instanceKey)
+            putExtra("EVENT_PARENT_ID", parentId)
+            putExtra("EVENT_OCCURRENCE_TS", item.startTS)
+            putExtra("EVENT_TITLE", item.title)
+            putExtra("REMINDER_LABEL", spec.label)
+            putExtra("EVENT_LOCATION", item.location)
+            putExtra("EVENT_START_TIME", item.startTime)
+            putExtra("EVENT_END_TIME", item.endTime)
+            putExtra("EVENT_TAG", item.tag)
+            putExtra("EVENT_COLOR", item.color)
+            putExtra("EVENT_RULE_ID", RuleMatchingEngine.resolvePayload(parent)?.ruleId ?: item.tag)
+            if (spec.actualStartMillis > 0L) {
+                putExtra("ACTUAL_START_MILLIS", spec.actualStartMillis)
+            }
+        }
+    }
+
+    private fun sendImmediateRecurringAlarm(
+        spec: AlarmSpec,
+        item: ScheduleDisplayItem,
+        parent: Event,
+        instanceKey: String
+    ) {
+        appContext.sendBroadcast(createRecurringAlarmIntent(spec, item, parent, instanceKey))
+    }
+
+    private fun cancelRequestCode(requestCode: Int) {
+        cancelBroadcast(requestCode, EventReminderReceiver::class.java, null)
+        listOf(
+            NotificationScheduler.ACTION_REMINDER,
+            NotificationScheduler.ACTION_CAPSULE_START,
+            NotificationScheduler.ACTION_REFRESH_CAPSULE,
+            NotificationScheduler.ACTION_CAPSULE_END
+        ).forEach { action ->
+            cancelBroadcast(requestCode, AlarmReceiver::class.java, action)
+        }
+    }
+
+    private fun cancelBroadcast(
+        requestCode: Int,
+        receiverClass: Class<*>,
+        actionName: String?
+    ) {
+        val intent = Intent(appContext, receiverClass).apply {
+            if (actionName != null) action = actionName
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) ?: return
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+    }
+
+    private fun scheduleReminderAlarm(triggerMillis: Long, pendingIntent: PendingIntent): Boolean {
+        return try {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            true
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Exact reminder alarm permission missing, falling back to inexact alarm", e)
+            scheduleInexactReminderAlarm(triggerMillis, pendingIntent)
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Alarm quota reached, skip reminder scheduling", e)
+            false
+        }
+    }
+
+    private fun scheduleInexactReminderAlarm(triggerMillis: Long, pendingIntent: PendingIntent): Boolean {
+        return try {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule fallback reminder alarm", e)
+            false
+        }
+    }
+
     private fun buildRequestCode(eventId: Long, minutes: Int, type: Int): Int {
         return (eventId.toString() + ":" + minutes + ":" + type).hashCode()
     }
 
-    private fun buildInstanceRequestCode(instanceKey: String, minutes: Int, type: Int): Int {
-        return "$instanceKey:$minutes:$type".hashCode()
+    private fun buildInstanceRequestCode(instanceKey: String, action: String, marker: Int, type: Int): Int {
+        return "$instanceKey:$action:$marker:$type".hashCode()
     }
 
     private fun createPendingIntent(requestCode: Int, eventId: Long, title: String, description: String): PendingIntent {
@@ -260,6 +470,16 @@ class ReminderStoreNode(context: Context) {
             putExtra(EventReminderReceiver.EXTRA_DESCRIPTION, description)
         }
         appContext.sendBroadcast(intent)
+    }
+
+    private fun cancelDisplayedNotificationsForEvent(eventId: Long) {
+        val notificationManager = NotificationManagerCompat.from(appContext)
+        setOf(
+            eventId.hashCode(),
+            eventId.toInt(),
+            eventId.toString().hashCode(),
+            eventId.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF
+        ).forEach { notificationManager.cancel(it) }
     }
 
     private fun shouldSendImmediateReminder(
@@ -333,9 +553,13 @@ class ReminderStoreNode(context: Context) {
     private fun singleNotificationKey(eventId: Long): String = "single:$eventId"
 
     companion object {
+        private const val TAG = "ReminderStoreNode"
         private const val PREF_NAME = "event_reminder_registry"
         private const val KEY_PREFIX = "event_"
         private const val INSTANCE_KEY_PREFIX = "inst_"
         private const val ACTIVE_KEY_PREFIX = "active_"
+        private const val CAPSULE_START_MARKER = -100_001
+        private const val CAPSULE_REFRESH_MARKER = -100_002
+        private const val CAPSULE_END_MARKER = -100_003
     }
 }

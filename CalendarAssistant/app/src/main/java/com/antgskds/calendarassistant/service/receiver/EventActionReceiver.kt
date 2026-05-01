@@ -3,18 +3,15 @@ package com.antgskds.calendarassistant.service.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
-import com.antgskds.calendarassistant.ui.components.UniversalToastUtil
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.isCompleted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 事件动作接收器：处理通知上的「完成」「签到」按钮。
@@ -26,6 +23,7 @@ class EventActionReceiver : BroadcastReceiver() {
         const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
         const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
         const val EXTRA_EVENT_ID = "event_id"
+        private const val RECURRING_INSTANCE_PREFIX = "rec:"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -48,6 +46,12 @@ class EventActionReceiver : BroadcastReceiver() {
                                 val id = event.id ?: return@forEach
                                 scheduleCenter.completeItem(ActionTarget.Single(id))
                             }
+                        } else if (eventIdStr.startsWith(RECURRING_INSTANCE_PREFIX)) {
+                            val target = parseRecurringTarget(eventIdStr) ?: return@launch
+                            when (intent.action) {
+                                ACTION_CHECKIN -> scheduleCenter.checkInItem(target)
+                                else -> scheduleCenter.completeItem(target)
+                            }
                         } else {
                             val targetEventId = eventIdStr.toLongOrNull() ?: return@launch
                             val event = scheduleCenter.events.value.find { it.id == targetEventId } ?: return@launch
@@ -64,5 +68,12 @@ class EventActionReceiver : BroadcastReceiver() {
                 }
             }
         }
+    }
+
+    private fun parseRecurringTarget(eventId: String): ActionTarget.RecurringOccurrence? {
+        val parts = eventId.split(':')
+        val parentId = parts.getOrNull(1)?.toLongOrNull() ?: return null
+        val occurrenceTs = parts.getOrNull(2)?.toLongOrNull() ?: return null
+        return ActionTarget.RecurringOccurrence(parentId, occurrenceTs)
     }
 }
