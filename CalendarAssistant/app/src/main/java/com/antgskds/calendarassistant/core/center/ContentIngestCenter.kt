@@ -99,7 +99,7 @@ class ContentIngestCenter(
                     ingestChannel.send(
                         RecognizedIngestTask(
                             events = payload.candidates,
-                            sourceImagePath = null,
+                            sourceImagePath = payload.sourceImagePath,
                             traceId = event.traceId,
                             sourceType = payload.sourceType,
                             sourceId = payload.sourceId,

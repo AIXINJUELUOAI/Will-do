@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.rule
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 
 object RuleMatchingEngine {
     const val RULE_GENERAL = "general"
@@ -38,7 +39,7 @@ object RuleMatchingEngine {
     }
 
     fun resolvePayload(description: String?, fallbackRuleId: String? = null): RulePayload? {
-        val clean = description?.trim().orEmpty()
+        val clean = stripSourceImageMarkers(description)
         if (clean.isBlank()) {
             return fallbackRuleId?.let { RulePayload(it, "", null) }
         }
@@ -65,7 +66,7 @@ object RuleMatchingEngine {
     }
 
     fun extractPayloadText(description: String?): String? {
-        val clean = description?.trim().orEmpty()
+        val clean = stripSourceImageMarkers(description)
         if (clean.isBlank()) return null
         val payload = resolvePayload(clean, null) ?: return clean
         return payload.payload.trim().ifBlank { null }

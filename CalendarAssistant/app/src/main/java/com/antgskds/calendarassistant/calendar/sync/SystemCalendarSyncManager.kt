@@ -32,6 +32,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.calendar.receivers.CalDAVSyncReceiver
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -522,11 +523,27 @@ class SystemCalendarSyncManager(private val context: Context) {
         }
 
         if (existing.isNotEmpty()) {
-            val idsToDelete = existing.values.mapNotNull { it.id }
+            val idsToDelete = existing.values
+                .filter { shouldDeleteMissingSystemEvent(it, source) }
+                .mapNotNull { it.id }
             if (idsToDelete.isNotEmpty()) {
                 db.eventsDao().deleteEvents(idsToDelete)
             }
+            val protectedCount = existing.size - idsToDelete.size
+            if (protectedCount > 0) {
+                android.util.Log.i(
+                    "CalDAVSync",
+                    "fetchCalDAVCalendarEvents protected missing local bindings source=$source count=$protectedCount"
+                )
+            }
         }
+    }
+
+    private fun shouldDeleteMissingSystemEvent(event: Event, expectedSource: String): Boolean {
+        return event.source == expectedSource &&
+            event.importId.startsWith("$expectedSource-") &&
+            event.getCalDAVEventId() > 0L &&
+            event.parentId == 0L
     }
 
     private fun parseDurationSeconds(durationRaw: String): Long {
@@ -625,7 +642,7 @@ class SystemCalendarSyncManager(private val context: Context) {
         return ContentValues().apply {
             put(Events.CALENDAR_ID, calendarId)
             put(Events.TITLE, event.title)
-            put(Events.DESCRIPTION, event.description)
+            put(Events.DESCRIPTION, stripSourceImageMarkers(event.description))
             put(Events.EVENT_LOCATION, event.location)
             put(Events.STATUS, Events.STATUS_CONFIRMED)
             put(Events.AVAILABILITY, event.availability)

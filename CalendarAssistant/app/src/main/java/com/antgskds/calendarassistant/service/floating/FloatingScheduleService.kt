@@ -542,7 +542,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             handleManualInput(
                 text = ocrText,
-                
+                sourceImagePath = imageFile.absolutePath,
                 onComplete = ::finishPendingImagePick
             )
         }
@@ -576,7 +576,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                             context = applicationContext,
                             sourceType = RECOGNITION_SOURCE_TYPE,
                             sourceId = RECOGNITION_SOURCE_ID,
-                            
+                            sourceImagePath = sourceImagePath,
                             ingestRequested = true,
                             traceId = traceId
                         )

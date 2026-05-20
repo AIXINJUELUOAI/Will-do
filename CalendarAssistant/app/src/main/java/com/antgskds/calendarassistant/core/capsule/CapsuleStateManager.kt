@@ -12,6 +12,7 @@ import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.core.util.OsUtils
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -25,6 +26,7 @@ import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvi
 import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
+import com.antgskds.calendarassistant.service.notification.NotificationIds
 import com.antgskds.calendarassistant.xposed.XposedModuleStatus
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import kotlinx.coroutines.Dispatchers
@@ -255,6 +257,7 @@ class CapsuleStateManager(
             val notification = provider.buildNotification(context, item, iconResId)
             notificationManager.notify(item.notifId, notification)
             activeNotifIds.add(item.notifId)
+            cancelLegacyCapsuleNotification(item)
         }
 
         // 清理不再需要的通知
@@ -310,6 +313,13 @@ class CapsuleStateManager(
             notificationManager.cancel(id)
         }
         activeNotifIds.clear()
+    }
+
+    private fun cancelLegacyCapsuleNotification(item: CapsuleUiState.Active.CapsuleItem) {
+        if (item.type != TYPE_SCHEDULE && item.type != TYPE_PICKUP && item.type != TYPE_PICKUP_EXPIRED) return
+        NotificationIds.legacyKeyIds(item.id)
+            .filter { it != item.notifId }
+            .forEach(notificationManager::cancel)
     }
 
     private fun createCapsuleStateFlow(): StateFlow<CapsuleUiState> {
@@ -443,7 +453,7 @@ class CapsuleStateManager(
                 notifId = entry.notifId,
                 type = TYPE_SCHEDULE,
                 eventType = resolveCapsuleEventType(event),
-                description = event.description,
+                description = stripSourceImageMarkers(event.description),
                 color = event.color,
                 state = event.state,
                 startMillis = toMillis(event, event.startTime),
@@ -476,7 +486,7 @@ class CapsuleStateManager(
                 notifId = AGGREGATE_NOTIF_ID,
                 type = capsuleType,
                 eventType = RuleMatchingEngine.RULE_PICKUP,
-                description = pickupEvents.firstOrNull()?.description ?: "",
+                description = stripSourceImageMarkers(pickupEvents.firstOrNull()?.description),
                 color = resolveAggregatePickupCapsuleColor(pickupEvents),
                 startMillis = System.currentTimeMillis(),
                 endMillis = latestEndMillis,
@@ -498,7 +508,7 @@ class CapsuleStateManager(
                     notifId = entry.notifId,
                     type = capsuleType,
                     eventType = RuleMatchingEngine.RULE_PICKUP,
-                    description = event.description,
+                    description = stripSourceImageMarkers(event.description),
                     color = resolvePickupCapsuleColor(event),
                     state = event.state,
                     startMillis = toMillis(event, event.startTime),
@@ -532,7 +542,7 @@ class CapsuleStateManager(
                         ?: item.toCapsuleEvent(id = target.eventId, parentId = 0L)
                     CapsuleScheduleEntry(
                         id = target.eventId.toString(),
-                        notifId = target.eventId.hashCode(),
+                        notifId = NotificationIds.liveCapsule(target.eventId),
                         event = event
                     )
                 }
@@ -543,7 +553,7 @@ class CapsuleStateManager(
                     val event = item.toCapsuleEvent(id = virtualId, parentId = target.parentId, parent = parent)
                     CapsuleScheduleEntry(
                         id = item.stableKey,
-                        notifId = item.stableKey.hashCode(),
+                        notifId = NotificationIds.liveCapsule(item.stableKey),
                         event = event
                     )
                 }
