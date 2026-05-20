@@ -1,11 +1,15 @@
 package com.antgskds.calendarassistant.core.migration
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.calendar.helpers.CALDAV
+import com.antgskds.calendarassistant.calendar.helpers.CalendarConfig
 import com.antgskds.calendarassistant.calendar.helpers.REMINDER_NOTIFICATION
 import com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF
 import com.antgskds.calendarassistant.calendar.helpers.SOURCE_SIMPLE_CALENDAR
@@ -14,6 +18,8 @@ import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.calendar.models.isNoteTag
+import com.antgskds.calendarassistant.calendar.sync.SystemCalendarSyncManager
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.data.model.Course
@@ -172,8 +178,20 @@ class LegacyDataMigrationCoordinator(
 
     fun importEventsData(jsonString: String): Result<ImportResult> = runCatching {
         val settings = settingsRepository.loadSettings()
-        val candidates = deduplicateCandidatePool(parseBackupContentCandidates(jsonString, settings))
-        val mergeResult = mergeCandidatesIntoCurrentStore(candidates)
+        val rawCandidates = parseBackupContentCandidates(jsonString, settings)
+        val hasCrossDeviceSystemBindings = rawCandidates.any(::hasSystemCalendarBinding)
+        val candidates = deduplicateImportCandidatePool(
+            rawCandidates.map(::normalizeManualImportCandidate),
+            preferSignatureKey = hasCrossDeviceSystemBindings
+        )
+        val mergeResult = mergeImportCandidatesIntoCurrentStore(candidates)
+        val pushedToSystem = pushImportedEventsToSystemCalendar(mergeResult.eventsForSystemSync)
+        Log.i(
+            TAG,
+            "Manual event import result: candidates=${mergeResult.candidateCount}, inserted=${mergeResult.inserted}, " +
+                "updated=${mergeResult.updated}, skipped=${mergeResult.skipped}, queuedForSystem=${mergeResult.eventsForSystemSync.size}, " +
+                "pushedToSystem=$pushedToSystem"
+        )
         ImportResult(
             successCount = mergeResult.inserted,
             skippedCount = mergeResult.skipped,
@@ -509,21 +527,32 @@ class LegacyDataMigrationCoordinator(
     }
 
     private fun deduplicateCandidatePool(candidates: List<Event>): List<Event> {
+        return deduplicateImportCandidatePool(candidates.map { ImportCandidate(it) }).map { it.event }
+    }
+
+    private fun deduplicateImportCandidatePool(
+        candidates: List<ImportCandidate>,
+        preferSignatureKey: Boolean = false
+    ): List<ImportCandidate> {
         if (candidates.isEmpty()) return emptyList()
-        val sorted = candidates.sortedByDescending { normalizedComparisonMillis(it.lastUpdated) }
-        val output = mutableListOf<Event>()
+        val sorted = candidates.sortedByDescending { normalizedComparisonMillis(it.event.lastUpdated) }
+        val output = mutableListOf<ImportCandidate>()
         val seen = HashSet<String>()
 
-        sorted.forEach { event ->
-            val key = candidatePrimaryKey(event)
+        sorted.forEach { candidate ->
+            val key = candidatePrimaryKey(candidate.event, preferSignatureKey)
             if (key in seen) return@forEach
             seen += key
-            output += event
+            output += candidate
         }
         return output
     }
 
     private fun mergeCandidatesIntoCurrentStore(candidates: List<Event>): MergeResult {
+        return mergeImportCandidatesIntoCurrentStore(candidates.map { ImportCandidate(it) })
+    }
+
+    private fun mergeImportCandidatesIntoCurrentStore(candidates: List<ImportCandidate>): MergeResult {
         if (candidates.isEmpty()) {
             return MergeResult(inserted = 0, updated = 0, skipped = 0, candidateCount = 0)
         }
@@ -536,20 +565,29 @@ class LegacyDataMigrationCoordinator(
             .toMutableList()
 
         val index = ExistingIndex(existing)
-        val inserts = mutableListOf<Event>()
-        val updates = mutableListOf<Event>()
+        val inserts = mutableListOf<ImportCandidate>()
+        val updates = mutableListOf<ImportCandidate>()
         var skipped = 0
 
-        candidates.forEach { candidate ->
+        candidates.forEach { importCandidate ->
+            val candidate = importCandidate.event
             val directConflict = index.findDirectConflict(candidate)
             if (directConflict != null) {
                 if (shouldReplaceExisting(directConflict, candidate)) {
-                    val merged = mergeEvent(directConflict, candidate)
-                    updates += merged
+                    val merged = mergeEvent(
+                        existing = directConflict,
+                        candidate = candidate,
+                        detachSystemBinding = importCandidate.detachedSystemBinding
+                    )
+                    updates += importCandidate.copy(event = merged)
                     index.replace(directConflict, merged)
+                } else if (shouldDetachExistingSystemBinding(directConflict, importCandidate)) {
+                    val detached = directConflict.copy(importId = "", source = SOURCE_SIMPLE_CALENDAR)
+                    updates += importCandidate.copy(event = detached, detachedSystemBinding = true)
+                    index.replace(directConflict, detached)
                 } else if (shouldPreserveLegacyVisuals(directConflict, candidate)) {
                     val merged = directConflict.copy(color = candidate.color)
-                    updates += merged
+                    updates += importCandidate.copy(event = merged)
                     index.replace(directConflict, merged)
                 } else {
                     skipped++
@@ -567,14 +605,28 @@ class LegacyDataMigrationCoordinator(
                 return@forEach
             }
 
-            inserts += candidate
+            inserts += importCandidate
             index.add(candidate)
         }
 
+        val eventsForSystemSync = mutableListOf<Event>()
         if (inserts.isNotEmpty() || updates.isNotEmpty()) {
             db.runInTransaction {
-                updates.forEach { dao.insertOrUpdate(it) }
-                inserts.forEach { dao.insertOrUpdate(it.copy(id = null)) }
+                updates.forEach { importCandidate ->
+                    val event = importCandidate.event
+                    dao.insertOrUpdate(event)
+                    if (shouldQueueForSystemPushAfterImport(event)) {
+                        eventsForSystemSync += event
+                    }
+                }
+                inserts.forEach { importCandidate ->
+                    val event = importCandidate.event.copy(id = null)
+                    val id = dao.insertOrUpdate(event)
+                    val stored = event.copy(id = id)
+                    if (shouldQueueForSystemPushAfterImport(stored)) {
+                        eventsForSystemSync += stored
+                    }
+                }
             }
         }
 
@@ -582,7 +634,8 @@ class LegacyDataMigrationCoordinator(
             inserted = inserts.size,
             updated = updates.size,
             skipped = skipped,
-            candidateCount = candidates.size
+            candidateCount = candidates.size,
+            eventsForSystemSync = eventsForSystemSync
         )
     }
 
@@ -769,6 +822,85 @@ class LegacyDataMigrationCoordinator(
         return if (source.startsWith(CALDAV, ignoreCase = true)) "$source-$syncId" else ""
     }
 
+    private fun normalizeManualImportCandidate(event: Event): ImportCandidate {
+        val hadSystemBinding = hasSystemCalendarBinding(event)
+        return ImportCandidate(
+            event = if (hadSystemBinding) {
+                event.copy(importId = "", source = SOURCE_SIMPLE_CALENDAR)
+            } else {
+                event.copy(source = event.source.ifBlank { SOURCE_SIMPLE_CALENDAR })
+            },
+            detachedSystemBinding = hadSystemBinding,
+            originalImportId = event.importId,
+            originalSource = event.source
+        )
+    }
+
+    private fun hasSystemCalendarBinding(event: Event): Boolean {
+        return event.source.startsWith(CALDAV, ignoreCase = true) ||
+            event.importId.startsWith(CALDAV, ignoreCase = true)
+    }
+
+    private fun shouldQueueForSystemPushAfterImport(event: Event): Boolean {
+        return event.archivedAt == null &&
+            event.importId.isBlank() &&
+            event.parentId == 0L &&
+            !isNoteTag(event.tag)
+    }
+
+    private fun shouldDetachExistingSystemBinding(existing: Event, candidate: ImportCandidate): Boolean {
+        if (!candidate.detachedSystemBinding || !hasSystemCalendarBinding(existing)) return false
+        val originalImportId = candidate.originalImportId.trim()
+        val originalSource = candidate.originalSource.trim()
+        return (originalImportId.isNotBlank() && existing.importId == originalImportId) ||
+            (originalSource.isNotBlank() && existing.source == originalSource && existing.importId.startsWith("$originalSource-"))
+    }
+
+    private fun pushImportedEventsToSystemCalendar(events: List<Event>): Int {
+        if (events.isEmpty()) return 0
+        val config = CalendarConfig.newInstance(appContext)
+        if (!config.caldavSync) {
+            Log.i(TAG, "Skipped pushing imported events to system calendar: sync disabled, count=${events.size}")
+            return 0
+        }
+        if (!hasCalendarPermission()) {
+            Log.i(TAG, "Skipped pushing imported events to system calendar: missing calendar permission, count=${events.size}")
+            return 0
+        }
+
+        val syncManager = SystemCalendarSyncManager(appContext)
+        var pushed = 0
+        events.forEach { event ->
+            val id = event.id ?: return@forEach
+            val latest = db.eventsDao().getEventOrTaskWithId(id) ?: event
+            if (!shouldQueueForSystemPushAfterImport(latest)) return@forEach
+            runCatching {
+                val synced = syncManager.insertCalDAVEvent(
+                    latest.copy(
+                        importId = "",
+                        source = SOURCE_SIMPLE_CALENDAR,
+                        lastUpdated = System.currentTimeMillis() / 1000L
+                    )
+                )
+                if (hasSystemCalendarBinding(synced)) {
+                    db.eventsDao().insertOrUpdate(synced.copy(id = id, lastUpdated = System.currentTimeMillis() / 1000L))
+                    pushed++
+                } else {
+                    Log.w(TAG, "Imported event was not bound to system calendar: localId=$id title=${latest.title}")
+                }
+            }.onFailure {
+                Log.w(TAG, "Failed to push imported event to system calendar: localId=$id title=${latest.title}", it)
+            }
+        }
+        return pushed
+    }
+
+    private fun hasCalendarPermission(): Boolean {
+        val read = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR)
+        val write = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR)
+        return read == PackageManager.PERMISSION_GRANTED && write == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun resolveTag(ruleId: String?): String {
         val normalized = ruleId?.trim()?.lowercase().orEmpty()
         return when (normalized) {
@@ -865,7 +997,14 @@ class LegacyDataMigrationCoordinator(
         return if (value > 9_999_999_999L) value / 1000L else value
     }
 
-    private fun candidatePrimaryKey(event: Event): String {
+    private fun candidatePrimaryKey(event: Event, preferSignatureKey: Boolean = false): String {
+        if (preferSignatureKey) {
+            return if (event.isRecurring) {
+                "rec:${recurringSignature(event)}"
+            } else {
+                "single:${singleSignature(event)}"
+            }
+        }
         if (event.importId.isNotBlank()) return "import:${event.importId}"
         if (event.isRecurring) return "rec:${recurringSignature(event)}"
         return "single:${singleSignature(event)}"
@@ -920,11 +1059,19 @@ class LegacyDataMigrationCoordinator(
         return if (value > 9_999_999_999L) value else value * 1000L
     }
 
-    private fun mergeEvent(existing: Event, candidate: Event): Event {
+    private fun mergeEvent(existing: Event, candidate: Event, detachSystemBinding: Boolean = false): Event {
         return candidate.copy(
             id = existing.id,
-            importId = if (candidate.importId.isNotBlank()) candidate.importId else existing.importId,
-            source = if (candidate.source.isNotBlank()) candidate.source else existing.source,
+            importId = when {
+                detachSystemBinding -> candidate.importId
+                candidate.importId.isNotBlank() -> candidate.importId
+                else -> existing.importId
+            },
+            source = when {
+                detachSystemBinding -> candidate.source.ifBlank { SOURCE_SIMPLE_CALENDAR }
+                candidate.source.isNotBlank() -> candidate.source
+                else -> existing.source
+            },
             attendees = if (candidate.attendees.isNotEmpty()) candidate.attendees else existing.attendees,
             eventType = if (existing.eventType > 0) existing.eventType else candidate.eventType,
             parentId = if (candidate.parentId != 0L) candidate.parentId else existing.parentId,
@@ -1228,7 +1375,15 @@ class LegacyDataMigrationCoordinator(
         val inserted: Int,
         val updated: Int,
         val skipped: Int,
-        val candidateCount: Int
+        val candidateCount: Int,
+        val eventsForSystemSync: List<Event> = emptyList()
+    )
+
+    private data class ImportCandidate(
+        val event: Event,
+        val detachedSystemBinding: Boolean = false,
+        val originalImportId: String = "",
+        val originalSource: String = ""
     )
 
     private data class LegacyMaster(

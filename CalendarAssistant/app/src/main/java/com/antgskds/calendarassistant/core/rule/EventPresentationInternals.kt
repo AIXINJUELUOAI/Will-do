@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
@@ -527,7 +528,7 @@ internal object EventPresentationInternals {
     }
 
     private fun sanitize(value: String?): String? {
-        val clean = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val clean = stripSourceImageMarkers(value).takeIf { it.isNotEmpty() } ?: return null
         return if (clean.equals("null", ignoreCase = true)) null else clean
     }
 }

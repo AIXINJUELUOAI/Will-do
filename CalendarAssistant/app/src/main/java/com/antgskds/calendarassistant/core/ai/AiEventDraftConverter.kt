@@ -5,6 +5,7 @@ import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
+import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.ui.theme.AppEventColors
 import java.time.Instant
 import java.time.LocalTime
@@ -30,7 +31,7 @@ fun convertDraftToEvent(
         startTS = resolvedStartTs,
         endTS = resolvedEndTs,
         location = draft.location,
-        description = buildDescription(draft.description, sourceImagePath),
+        description = mergeSourceImageMarker(draft.description, sourceImagePath),
         timeZone = draft.timeZone,
         tag = resolvedTag,
         color = randomRecognizedEventColor()
@@ -53,12 +54,6 @@ private fun isInstantCodeTag(tag: String): Boolean {
         EventTags.SENDER -> true
         else -> false
     }
-}
-
-private fun buildDescription(desc: String, sourceImagePath: String?): String {
-    if (sourceImagePath.isNullOrBlank()) return desc
-    return if (desc.isBlank()) "[img:$sourceImagePath]"
-    else "$desc\n[img:$sourceImagePath]"
 }
 
 private fun resolveEndTs(startTs: Long, defaultDurationMinutes: Int): Long {

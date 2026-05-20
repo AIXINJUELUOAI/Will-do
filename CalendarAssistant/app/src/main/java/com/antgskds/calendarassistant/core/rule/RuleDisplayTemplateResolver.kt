@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.rule
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -58,6 +59,7 @@ object RuleDisplayTemplateResolver {
             ?: event.tag.ifBlank { null }
         val processed = convertFriendlyPlaceholders(template, ruleId)
         val payload = RuleMatchingEngine.extractPayloadText(event.description).orEmpty()
+        val description = stripSourceImageMarkers(event.description)
         val fields = RuleMatchingEngine.splitFields(payload, 5)
         val replacements = mapOf(
             "{title}" to event.title,
@@ -67,7 +69,7 @@ object RuleDisplayTemplateResolver {
             "{startDate}" to event.startDate.toString(),
             "{endDate}" to event.endDate.toString(),
             "{date}" to event.startDate.toString(),
-            "{description}" to event.description,
+            "{description}" to description,
             "{payload}" to payload,
             "{field1}" to fields.getOrNull(0).orEmpty(),
             "{field2}" to fields.getOrNull(1).orEmpty(),

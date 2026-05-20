@@ -20,6 +20,7 @@ import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
@@ -292,11 +293,14 @@ object NotificationScheduler {
         // 4. 取消刷新胶囊闹钟
         cancelPendingIntent(context, (event.id ?: 0L).hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
 
-        // ✅ 取消胶囊通知
-        notificationManager.cancel((event.id ?: 0L).hashCode())
-
-        // ✅ 取消取件码初始通知（如果存在）
-        notificationManager.cancel((event.id ?: 0L).hashCode() + OFFSET_PICKUP_INITIAL_NOTIF)
+        val eventId = event.id ?: 0L
+        if (eventId != 0L) {
+            (setOf(
+                NotificationIds.standardReminder(eventId),
+                NotificationIds.liveCapsule(eventId),
+                NotificationIds.pickupInitial(eventId)
+            ) + NotificationIds.legacyEventIds(eventId)).forEach(notificationManager::cancel)
+        }
 
         // ✅ 新架构：Dumb Service 不需要手动停止
         // Service 会通过 uiState 自动管理生命周期
@@ -329,7 +333,7 @@ object NotificationScheduler {
         }
         val pendingComplete = PendingIntent.getBroadcast(
             context,
-            (event.id ?: 0L).hashCode() + 1,
+            NotificationIds.pickupInitial(event.id ?: 0L) + 1,
             completeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -342,7 +346,7 @@ object NotificationScheduler {
             .setContentText(model.subtitle ?: "取件码")
             .setStyle(NotificationCompat.BigTextStyle()
                 .setBigContentTitle(model.title)
-                .bigText(model.subtitle ?: model.detail ?: event.description)
+                .bigText(model.subtitle ?: model.detail ?: stripSourceImageMarkers(event.description))
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_EVENT)
@@ -352,7 +356,7 @@ object NotificationScheduler {
             .build()
 
         // 【修复问题2】使用带偏移的 ID，避免与胶囊通知冲突
-        notificationManager.notify((event.id ?: 0L).hashCode() + OFFSET_PICKUP_INITIAL_NOTIF, notification)
+        event.id?.let { notificationManager.notify(NotificationIds.pickupInitial(it), notification) }
 
         Log.d("NotificationScheduler", "取件码初始通知已显示: ${event.title}")
     }
