@@ -177,14 +177,16 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                         withContext(Dispatchers.Main) {
                             if (result.isSuccess) {
                                 val importResult = result.getOrNull()
+                                val successCount = importResult?.successCount ?: 0
+                                val skippedCount = importResult?.skippedCount ?: 0
+                                val archiveStatusUpdateCount = importResult?.archiveStatusUpdateCount ?: 0
                                 val message = buildString {
-                                    append("日程数据导入成功\n")
-                                    append("新增: ${importResult?.successCount ?: 0} 条")
-                                    if ((importResult?.skippedCount ?: 0) > 0) {
-                                        append("\n跳过: ${importResult?.skippedCount} 条（重复）")
+                                    append("日程数据导入成功：新增 $successCount 条")
+                                    if (skippedCount > 0) {
+                                        append("，跳过 $skippedCount 条（重复）")
                                     }
-                                    if ((importResult?.archiveStatusUpdateCount ?: 0) > 0) {
-                                        append("\n归档状态更新: ${importResult?.archiveStatusUpdateCount} 条")
+                                    if (archiveStatusUpdateCount > 0) {
+                                        append("，归档状态更新 $archiveStatusUpdateCount 条")
                                     }
                                 }
                                 showToast(message, ToastType.SUCCESS)

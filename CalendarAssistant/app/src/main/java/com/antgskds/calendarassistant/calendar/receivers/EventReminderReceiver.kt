@@ -16,6 +16,8 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.service.notification.NotificationIds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,7 +43,9 @@ class EventReminderReceiver : BroadcastReceiver() {
     private fun handleReminder(context: Context, eventId: Long, titleExtra: String, descriptionExtra: String) {
         val event = resolveDisplayableEvent(context, eventId)
         if (event == null) {
-            NotificationManagerCompat.from(context).cancel(eventId.toInt())
+            val notificationManager = NotificationManagerCompat.from(context)
+            (setOf(NotificationIds.standardReminder(eventId)) + NotificationIds.legacyEventIds(eventId))
+                .forEach(notificationManager::cancel)
             return
         }
 
@@ -55,7 +59,7 @@ class EventReminderReceiver : BroadcastReceiver() {
 
         ensureChannel(context)
         val title = titleExtra.ifBlank { event.title.ifBlank { context.getString(R.string.app_name) } }
-        val description = descriptionExtra.ifBlank { event.description }
+        val description = stripSourceImageMarkers(descriptionExtra.ifBlank { event.description })
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -65,7 +69,7 @@ class EventReminderReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(context).notify(eventId.toInt(), notification)
+        NotificationManagerCompat.from(context).notify(NotificationIds.standardReminder(eventId), notification)
     }
 
     private fun resolveDisplayableEvent(context: Context, eventId: Long): Event? {

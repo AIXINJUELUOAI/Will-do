@@ -13,6 +13,7 @@ import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.service.notification.NotificationIds
 
 class NotificationCenter(
     private val appContext: Context
@@ -24,12 +25,14 @@ class NotificationCenter(
     fun showStandardNotificationForEvent(event: Event, label: String = "日程开始") {
         val channelId = App.CHANNEL_ID_POPUP
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationId = event.id?.let { NotificationIds.standardReminder(it) }
+            ?: NotificationIds.standardReminder(event.title.ifBlank { "event" })
         val tapIntent = Intent(appContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             appContext,
-            (event.id ?: 0L).hashCode(),
+            notificationId,
             tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -76,7 +79,7 @@ class NotificationCenter(
                 }
                 val pendingAction = PendingIntent.getBroadcast(
                     appContext,
-                    (event.id ?: 0L).hashCode() + 100,
+                    notificationId + 100,
                     actionIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
@@ -86,7 +89,7 @@ class NotificationCenter(
             Log.e(TAG, "检查事件状态失败: ${e.message}")
         }
 
-        manager.notify((event.id ?: 0L).hashCode(), builder.build())
+        manager.notify(notificationId, builder.build())
     }
 
     fun showStandardNotification(
@@ -102,12 +105,13 @@ class NotificationCenter(
     ) {
         val channelId = App.CHANNEL_ID_POPUP
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationId = NotificationIds.standardReminder(eventId)
         val tapIntent = Intent(appContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             appContext,
-            eventId.hashCode(),
+            notificationId,
             tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -156,7 +160,7 @@ class NotificationCenter(
                 }
                 val pendingAction = PendingIntent.getBroadcast(
                     appContext,
-                    eventId.hashCode() + 100,
+                    notificationId + 100,
                     actionIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
@@ -166,6 +170,6 @@ class NotificationCenter(
             Log.e(TAG, "检查事件状态失败: ${e.message}")
         }
 
-        manager.notify(eventId.hashCode(), builder.build())
+        manager.notify(notificationId, builder.build())
     }
 }

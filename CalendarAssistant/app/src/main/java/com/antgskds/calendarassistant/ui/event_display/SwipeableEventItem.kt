@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -217,7 +218,7 @@ fun SwipeableEventItem(
                         val displayDescription = if (item.tag == EventTags.COURSE) {
                             CourseEventMapper.displayDescription(item.description, item.location)
                         } else {
-                            item.description
+                            stripSourceImageMarkers(item.description)
                         }
                         if (displayDescription.isNotBlank()) {
                             Text(

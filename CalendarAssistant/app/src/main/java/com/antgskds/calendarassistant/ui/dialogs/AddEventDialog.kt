@@ -32,6 +32,9 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.core.model.RepeatSpec
+import com.antgskds.calendarassistant.core.util.extractSourceImagePath
+import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EditDraft
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -161,30 +164,29 @@ fun AddEventDialog(
         }
     }
 
+    val initialDescription = editDraft?.description.orEmpty()
+    val sourceImagePath = remember(draftKey) { extractSourceImagePath(initialDescription) }
+
     var title by remember(draftKey) { mutableStateOf(editDraft?.title ?: "") }
     var startDate by remember(draftKey) { mutableStateOf(initialStart.toLocalDate()) }
     var endDate by remember(draftKey) { mutableStateOf(initialEnd.toLocalDate()) }
     var startTime by remember(draftKey) { mutableStateOf(initialStart.toLocalTime().format(timeFormatter)) }
     var endTime by remember(draftKey) { mutableStateOf(initialEnd.toLocalTime().format(timeFormatter)) }
     var location by remember(draftKey) { mutableStateOf(editDraft?.location ?: "") }
-    var desc by remember(draftKey) { mutableStateOf(editDraft?.description ?: "") }
+    var desc by remember(draftKey) { mutableStateOf(stripSourceImageMarkers(initialDescription)) }
     var eventTag by remember(draftKey) { mutableStateOf(editDraft?.tag ?: EventTags.GENERAL) }
     val reminders = remember(draftKey) { mutableStateListOf<Int>().apply { addAll(editDraft?.reminders ?: emptyList()) } }
     var repeatSpec by remember(draftKey) { mutableStateOf(RepeatSpec.fromRRule(editDraft?.rrule.orEmpty())) }
 
-    var sourceBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(draftKey, visible) {
-        if (!visible) return@LaunchedEffect
-        val desc = editDraft?.description.orEmpty()
-        val imgMatch = Regex("\\[img:(.+?)]").find(desc)
-        val path = imgMatch?.groupValues?.getOrNull(1)
-        if (!path.isNullOrBlank()) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val file = java.io.File(path)
-                    if (file.exists()) sourceBitmap = BitmapFactory.decodeFile(file.absolutePath)
-                } catch (e: Exception) { e.printStackTrace() }
-            }
+    var sourceBitmap by remember(draftKey) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(draftKey, visible, sourceImagePath) {
+        sourceBitmap = null
+        if (!visible || sourceImagePath.isNullOrBlank()) return@LaunchedEffect
+        sourceBitmap = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = File(sourceImagePath)
+                if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+            }.getOrNull()
         }
     }
 
@@ -335,7 +337,7 @@ fun AddEventDialog(
                                 startTS = startEpoch,
                                 endTS = endEpoch,
                                 location = location,
-                                description = desc,
+                                description = mergeSourceImageMarker(desc, sourceImagePath),
                                 color = editDraft?.color ?: nextColor.toArgb(),
                                 tag = eventTag,
                                 rrule = repeatSpec?.toRRule().orEmpty(),

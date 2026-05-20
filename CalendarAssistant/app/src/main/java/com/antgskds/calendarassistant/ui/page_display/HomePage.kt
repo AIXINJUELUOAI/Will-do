@@ -180,7 +180,7 @@ fun HomePage(
                             context = context.applicationContext,
                             sourceType = RecognitionFeedbackSource.HOME_SOURCE_TYPE,
                             sourceId = RecognitionFeedbackSource.HOME_SOURCE_ID,
-                            
+                            sourceImagePath = imageFile.absolutePath,
                             ingestRequested = true
                         )
                 }

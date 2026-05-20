@@ -14,6 +14,7 @@ import com.antgskds.calendarassistant.calendar.models.Reminder
 import com.antgskds.calendarassistant.calendar.receivers.EventReminderReceiver
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.service.notification.NotificationIds
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
 import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
 
@@ -47,7 +48,7 @@ class ReminderStoreNode(context: Context) {
         val currentSettings = settings()
         cancelForEvent(eventId)
         if (currentSettings.isLiveCapsuleEnabled) {
-            cancelDisplayedNotificationsForEvent(eventId)
+            cancelDisplayedStandardNotificationsForEvent(eventId)
             clearActiveMarkersForNotificationKey(notificationKey)
             return
         }
@@ -91,7 +92,7 @@ class ReminderStoreNode(context: Context) {
 
     fun cancelForInactiveEvent(eventId: Long) {
         cancelForEvent(eventId)
-        cancelDisplayedNotificationsForEvent(eventId)
+        cancelDisplayedNotificationsForInactiveEvent(eventId)
         clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
     }
 
@@ -201,6 +202,7 @@ class ReminderStoreNode(context: Context) {
     private fun cancelForInstanceKey(instanceKey: String) {
         val codes = loadRequestCodes(instanceKey)
         codes.forEach { requestCode -> cancelRequestCode(requestCode) }
+        cancelDisplayedNotificationsForInstance(instanceKey)
         prefs.edit().remove(keyForInstance(instanceKey)).apply()
     }
 
@@ -218,6 +220,7 @@ class ReminderStoreNode(context: Context) {
             .filter { eventId -> eventId !in liveEventIds }
             .forEach { eventId ->
                 cancelForEvent(eventId)
+                cancelDisplayedNotificationsForInactiveEvent(eventId)
                 clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
             }
     }
@@ -472,14 +475,27 @@ class ReminderStoreNode(context: Context) {
         appContext.sendBroadcast(intent)
     }
 
-    private fun cancelDisplayedNotificationsForEvent(eventId: Long) {
+    private fun cancelDisplayedStandardNotificationsForEvent(eventId: Long) {
         val notificationManager = NotificationManagerCompat.from(appContext)
-        setOf(
-            eventId.hashCode(),
-            eventId.toInt(),
-            eventId.toString().hashCode(),
-            eventId.hashCode() + NotificationScheduler.OFFSET_PICKUP_INITIAL_NOTIF
-        ).forEach { notificationManager.cancel(it) }
+        (setOf(NotificationIds.standardReminder(eventId)) + NotificationIds.legacyEventIds(eventId))
+            .forEach { notificationManager.cancel(it) }
+    }
+
+    private fun cancelDisplayedNotificationsForInactiveEvent(eventId: Long) {
+        val notificationManager = NotificationManagerCompat.from(appContext)
+        (setOf(
+            NotificationIds.standardReminder(eventId),
+            NotificationIds.liveCapsule(eventId),
+            NotificationIds.pickupInitial(eventId)
+        ) + NotificationIds.legacyEventIds(eventId)).forEach { notificationManager.cancel(it) }
+    }
+
+    private fun cancelDisplayedNotificationsForInstance(instanceKey: String) {
+        val notificationManager = NotificationManagerCompat.from(appContext)
+        (setOf(
+            NotificationIds.standardReminder(instanceKey),
+            NotificationIds.liveCapsule(instanceKey)
+        ) + NotificationIds.legacyKeyIds(instanceKey)).forEach { notificationManager.cancel(it) }
     }
 
     private fun shouldSendImmediateReminder(

@@ -135,6 +135,9 @@ import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.core.rule.ActionIconType
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.core.rule.StatusColor
+import com.antgskds.calendarassistant.core.util.extractSourceImagePath
+import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.components.MarkdownText
@@ -1307,7 +1310,7 @@ fun ScheduleCard(
     var draftEndDate by remember { mutableStateOf(item.endDate) }
     var draftEndTime by remember { mutableStateOf(item.endTime) }
     var draftLocation by remember { mutableStateOf(item.location) }
-    var draftDescription by remember { mutableStateOf(item.description) }
+    var draftDescription by remember { mutableStateOf(stripSourceImageMarkers(item.description)) }
 
     LaunchedEffect(item.stableKey, item.startTS, item.endTS, item.state) {
         if (!isEditing && !isSaving) {
@@ -1317,7 +1320,7 @@ fun ScheduleCard(
             draftEndDate = item.endDate
             draftEndTime = item.endTime
             draftLocation = item.location
-            draftDescription = item.description
+            draftDescription = stripSourceImageMarkers(item.description)
         }
     }
 
@@ -1462,7 +1465,7 @@ fun ScheduleCard(
                         draftTitle = item.title
                         draftStartDate = item.startDate; draftStartTime = item.startTime
                         draftEndDate = item.endDate; draftEndTime = item.endTime
-                        draftLocation = item.location; draftDescription = item.description
+                        draftLocation = item.location; draftDescription = stripSourceImageMarkers(item.description)
                         isExpanded = true; isEditing = true
                     }
                     offsetX.animateTo(0f, swipeSpringSpec)
@@ -1856,7 +1859,10 @@ fun ScheduleCard(
                                                             startTS = toEpochSeconds(draftStartDate, draftStartTime),
                                                             endTS = toEpochSeconds(draftEndDate, draftEndTime),
                                                             location = draftLocation.trim(),
-                                                            description = draftDescription.trim(),
+                                                            description = mergeSourceImageMarker(
+                                                                draftDescription.trim(),
+                                                                extractSourceImagePath(item.description)
+                                                            ),
                                                             tag = item.tag,
                                                             color = item.color
                                                         )
@@ -1913,7 +1919,7 @@ private fun ScheduleDisplayItem.toRenderEvent(): Event {
         endTS = endTS,
         title = title,
         location = location,
-        description = description,
+        description = stripSourceImageMarkers(description),
         timeZone = timeZone,
         color = color,
         state = state,
