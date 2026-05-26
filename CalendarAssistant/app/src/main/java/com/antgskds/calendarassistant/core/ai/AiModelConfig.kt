@@ -38,3 +38,19 @@ fun AiModelConfig.missingConfigMessage(): String {
         "请先填写文本AI配置"
     }
 }
+
+fun MySettings.isRecognitionConfigReady(): Boolean {
+    return if (isLocalSemanticEnabled) {
+        selectedLocalModelId.isNotBlank()
+    } else {
+        activeAiConfig().isConfigured()
+    }
+}
+
+fun MySettings.recognitionConfigMissingMessage(): String {
+    return if (isLocalSemanticEnabled) {
+        "请先选择本地模型"
+    } else {
+        activeAiConfig().missingConfigMessage()
+    }
+}

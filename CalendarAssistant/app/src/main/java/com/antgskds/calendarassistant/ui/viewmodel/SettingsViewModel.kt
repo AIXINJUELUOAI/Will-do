@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
+import android.net.Uri
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
 import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
@@ -11,6 +12,8 @@ import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
 import com.antgskds.calendarassistant.core.center.ImportMode
+import com.antgskds.calendarassistant.core.localmodel.LocalModelImportProgress
+import com.antgskds.calendarassistant.core.localmodel.LocalModelManager
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
@@ -18,6 +21,9 @@ import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.UiStyle
+import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
+import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +38,8 @@ class SettingsViewModel(
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
-    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi
+    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
+    private val localModelManager: LocalModelManager
 ) : ViewModel() {
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
@@ -51,6 +58,10 @@ class SettingsViewModel(
 
     private val _availableSyncCalendars = MutableStateFlow<List<CalendarManager.CalendarInfo>>(emptyList())
     val availableSyncCalendars: StateFlow<List<CalendarManager.CalendarInfo>> = _availableSyncCalendars.asStateFlow()
+
+    val localModels = localModelManager.models
+    private val _localModelImportProgress = MutableStateFlow<LocalModelImportProgress?>(null)
+    val localModelImportProgress: StateFlow<LocalModelImportProgress?> = _localModelImportProgress.asStateFlow()
 
     init {
         refreshSyncStatus()
@@ -135,6 +146,7 @@ class SettingsViewModel(
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
         localSemanticEnabled: Boolean? = null,
+        selectedLocalModelId: String? = null,
         floatingEventRange: Int? = null,
         floatingExpandSide: String? = null,
         volumeUpLongPressEnabled: Boolean? = null,
@@ -146,6 +158,7 @@ class SettingsViewModel(
         homeStartPageKey: String? = null
     ) {
         viewModelScope.launch {
+            localSemanticEnabled?.let { localModelManager.setLocalModelLoggingEnabled(it) }
             val updated = settingsTransformApi.applyPreferenceUpdate(
                 current = settings.value,
                 showTomorrow = showTomorrow,
@@ -162,6 +175,7 @@ class SettingsViewModel(
                 useMultimodalAi = useMultimodalAi,
                 disableThinking = disableThinking,
                 localSemanticEnabled = localSemanticEnabled,
+                selectedLocalModelId = selectedLocalModelId,
                 floatingEventRange = floatingEventRange,
                 floatingExpandSide = floatingExpandSide,
                 volumeUpLongPressEnabled = volumeUpLongPressEnabled,
@@ -221,6 +235,18 @@ class SettingsViewModel(
         }
     }
 
+    fun updateCustomThemeColorHex(hex: String) {
+        val normalized = normalizeThemeHexColor(hex) ?: return
+        viewModelScope.launch {
+            settingsOperationApi.updateSettings(
+                settings.value.copy(
+                    themeColorScheme = ThemeColorScheme.CUSTOM.name,
+                    customThemeColorHex = normalized
+                )
+            )
+        }
+    }
+
     // 更新深色模式（兼容旧接口）
     fun updateDarkMode(isDark: Boolean) {
         viewModelScope.launch {
@@ -235,6 +261,13 @@ class SettingsViewModel(
     fun updateUiSize(size: Int) {
         viewModelScope.launch {
             settingsOperationApi.updateSettings(settings.value.copy(uiSize = size))
+        }
+    }
+
+    fun updateUiStyle(style: String) {
+        val normalizedStyle = UiStyle.fromName(style).name
+        viewModelScope.launch {
+            settingsOperationApi.updateSettings(settings.value.copy(uiStyle = normalizedStyle))
         }
     }
 
@@ -357,6 +390,44 @@ class SettingsViewModel(
         viewModelScope.launch {
             val result = backupCenter.importWakeUpFile(content, mode, importSettings)
             callback(result)
+        }
+    }
+
+    fun importLocalModel(uri: Uri, onComplete: (Result<String>) -> Unit = {}) {
+        viewModelScope.launch {
+            _localModelImportProgress.value = LocalModelImportProgress("", 0L, 0L)
+            try {
+                val result = localModelManager.importModel(uri) { progress ->
+                    _localModelImportProgress.value = progress
+                }
+                val current = settings.value
+                settingsOperationApi.updateSettings(
+                    current.copy(
+                        selectedLocalModelId = result.model.id,
+                        isLocalSemanticEnabled = true
+                    )
+                )
+                onComplete(Result.success(result.model.displayName))
+            } catch (e: Exception) {
+                onComplete(Result.failure(e))
+            } finally {
+                _localModelImportProgress.value = null
+            }
+        }
+    }
+
+    fun updateSelectedLocalModel(modelId: String) {
+        updatePreference(selectedLocalModelId = modelId)
+    }
+
+    fun deleteLocalModel(modelId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val deleted = localModelManager.deleteModel(modelId)
+            if (deleted && settings.value.selectedLocalModelId == modelId) {
+                val nextId = localModelManager.models.value.firstOrNull()?.id.orEmpty()
+                settingsOperationApi.updateSettings(settings.value.copy(selectedLocalModelId = nextId))
+            }
+            onComplete(deleted)
         }
     }
 

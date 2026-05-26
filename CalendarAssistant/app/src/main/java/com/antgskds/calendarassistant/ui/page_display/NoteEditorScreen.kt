@@ -39,9 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.isConfigured
-import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.createNoteEvent
 import com.antgskds.calendarassistant.core.note.noteMarkdown
 import com.antgskds.calendarassistant.core.note.withNoteMarkdown
@@ -167,9 +166,8 @@ fun NoteEditorScreen(
             onClick = {
                 val committedMarkdown = editorController.commit() ?: bodyText
                 bodyText = committedMarkdown
-                val config = settings.activeAiConfig()
-                if (!config.isConfigured()) {
-                    onShowMessage(config.missingConfigMessage(), ToastType.ERROR)
+                if (!settings.isRecognitionConfigReady()) {
+                    onShowMessage(settings.recognitionConfigMissingMessage(), ToastType.ERROR)
                     return@FloatingActionButton
                 }
                 val markdown = committedMarkdown.trim()

@@ -60,6 +60,9 @@ import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
+import com.antgskds.calendarassistant.core.localmodel.LocalModelManager
+import com.antgskds.calendarassistant.core.localmodel.LocalModelLogScheduler
+import com.antgskds.calendarassistant.core.localmodel.LiteRtAiEngineClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -175,6 +178,14 @@ class App : Application() {
         )
     }
 
+    val localModelManager: LocalModelManager by lazy {
+        LocalModelManager(applicationContext)
+    }
+
+    val liteRtAiEngineClient: LiteRtAiEngineClient by lazy {
+        LiteRtAiEngineClient(applicationContext)
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // 规则 / 胶囊 / 权限 / 通知
     // ══════════════════════════════════════════════════════════════════════
@@ -265,6 +276,11 @@ class App : Application() {
         super.onCreate()
         instance = this
 
+        if (currentProcessName().endsWith(":ai_engine")) {
+            Log.d(TAG, "AI engine process started; skipping main app initialization")
+            return
+        }
+
         CrashHandler.init(this)
         AnrMonitor.start(this)
         createNotificationChannels()
@@ -296,6 +312,9 @@ class App : Application() {
         }
 
         initSmsObserver()
+        if (settingsQueryApi.settings.value.isLocalSemanticEnabled) {
+            LocalModelLogScheduler.scheduleNext(this)
+        }
         runtimeCenter.startAppRoutines()
         reminderCenter.startEventSubscriptions()
     }
@@ -319,5 +338,19 @@ class App : Application() {
             getSmsPickupIngestCoordinator = { try { smsPickupIngestCoordinator } catch (_: Exception) { null } }
         )
         smsObserver?.register()
+    }
+
+    private fun currentProcessName(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return getProcessName().orEmpty()
+        }
+        return runCatching {
+            val pid = android.os.Process.myPid()
+            val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            manager.runningAppProcesses
+                ?.firstOrNull { it.pid == pid }
+                ?.processName
+                .orEmpty()
+        }.getOrDefault("")
     }
 }
