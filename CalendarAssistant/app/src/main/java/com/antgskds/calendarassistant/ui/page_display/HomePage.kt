@@ -55,9 +55,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.isConfigured
-import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
@@ -138,9 +137,8 @@ fun HomePage(
             isImageImporting = true
             try {
                 val settings = uiState.settings
-                val config = settings.activeAiConfig()
-                if (!config.isConfigured()) {
-                    Toast.makeText(context, config.missingConfigMessage(), Toast.LENGTH_SHORT).show()
+                if (!settings.isRecognitionConfigReady()) {
+                    Toast.makeText(context, settings.recognitionConfigMissingMessage(), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -161,21 +159,11 @@ fun HomePage(
                     return@launch
                 }
 
-                val ocrText = withContext(Dispatchers.IO) {
-                    (context.applicationContext as App).recognitionCenter.recognizeText(bitmap)
-                }
-                bitmap.recycle()
-
-                if (ocrText.isBlank()) {
-                    Toast.makeText(context, "OCR 结果为空", Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-
                 val analysisResult = withContext(Dispatchers.IO) {
                     (context.applicationContext as App)
                         .recognitionCenter
-                        .parseUserText(
-                            text = ocrText,
+                        .analyzeImage(
+                            bitmap = bitmap,
                             settings = settings,
                             context = context.applicationContext,
                             sourceType = RecognitionFeedbackSource.HOME_SOURCE_TYPE,
@@ -184,6 +172,7 @@ fun HomePage(
                             ingestRequested = true
                         )
                 }
+                bitmap.recycle()
 
                 when (analysisResult) {
                     is AnalysisResult.Success -> {

@@ -21,6 +21,7 @@ enum class ThemeColorScheme(
     LIME("青柠绿", Color(0xFF558B2F)),
     GOLDEN("蜂蜜金", Color(0xFFC77800)),
     PINK("樱桃红", Color(0xFFC2185B)),
+    CUSTOM("自定义", Color(0xFF6750A4)),
     DEFAULT("跟随系统", Color(0xFF6750A4));
 
     companion object {

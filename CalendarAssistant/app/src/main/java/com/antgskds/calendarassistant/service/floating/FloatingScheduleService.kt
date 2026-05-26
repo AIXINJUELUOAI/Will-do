@@ -32,9 +32,9 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.isConfigured
-import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
+import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
@@ -55,9 +55,10 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
-import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
+import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
@@ -178,7 +179,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     }
                     Toast.makeText(
                         applicationContext,
-                        payload.message.ifBlank { "分析失败" },
+                        RecognitionFailureMessageMapper.userMessage(payload),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -320,12 +321,85 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 }
                 val themeColorSchemeEnum = ThemeColorScheme.fromName(settings.themeColorScheme)
 
-                CalendarAssistantTheme(
+                CalendarAssistantStyleTheme(
+                    uiStyle = UiStyle.fromName(settings.uiStyle),
                     darkTheme = isDarkTheme,
                     dynamicColor = themeColorSchemeEnum == ThemeColorScheme.DEFAULT,
-                    themeColorScheme = themeColorSchemeEnum
+                    themeColorScheme = themeColorSchemeEnum,
+                    customThemeColorHex = settings.customThemeColorHex
                 ) {
-                    FloatingScheduleScreen(
+                    val floatingContent: @androidx.compose.runtime.Composable () -> Unit = {
+                        when (UiStyle.fromName(settings.uiStyle)) {
+                            UiStyle.MIUI -> com.antgskds.calendarassistant.miui.floating.FloatingScheduleScreen(
+                                scheduleItems = scheduleItems,
+                                noteEvents = noteEvents,
+                                weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
+                                noteEnabled = settings.noteEnabled,
+                                expandSide = settings.floatingExpandSide,
+                                onClose = { requestClose() },
+                                onManualInput = { text, isNote, onComplete ->
+                                    handleManualInput(text = text, isNote = isNote,  onComplete = onComplete)
+                                },
+                                onPickImageRequest = { onComplete ->
+                                    startScreenshotAnalysisFlow(onComplete)
+                                },
+                                onUpdateEvent = { updatedEvent, onComplete ->
+                                    serviceScope.launch {
+                                        try {
+                                            scheduleCenter.updateEvent(updatedEvent)
+                                            Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Failed to update event", e)
+                                            Toast.makeText(applicationContext, "更新失败", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            onComplete()
+                                        }
+                                    }
+                                },
+                                onUpdateScheduleItem = { item, patch, onComplete ->
+                                    handleUpdateScheduleItem(item, patch, onComplete)
+                                },
+                                onArchiveScheduleItem = { item ->
+                                    serviceScope.launch {
+                                        try {
+                                            scheduleCenter.archiveItem(item.action)
+                                            Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Failed to archive item", e)
+                                            Toast.makeText(applicationContext, "归档失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onStatusAction = { item ->
+                                    scheduleCenter.performPrimaryActionOnItemWithUndo(item)
+                                },
+                                pendingStatusKeys = pendingItemStates.keys,
+                                undoPendingLabel = undoPending?.label,
+                                onUndoAction = {
+                                    scheduleCenter.undoStatusAction()
+                                },
+                                onDeleteNote = { note, onComplete ->
+                                    serviceScope.launch {
+                                        try {
+                                            val nid = note.id ?: return@launch
+                                            scheduleCenter.deleteEvent(nid)
+                                        } finally {
+                                            onComplete()
+                                        }
+                                    }
+                                },
+                                onRestoreNote = { note, onComplete ->
+                                    serviceScope.launch {
+                                        try {
+                                            scheduleCenter.addEvent(note)
+                                        } finally {
+                                            onComplete()
+                                        }
+                                    }
+                                },
+                                onLoadingChange = { _ -> }
+                            )
+                            UiStyle.MATERIAL3 -> FloatingScheduleScreen(
                         scheduleItems = scheduleItems,
                         noteEvents = noteEvents,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
@@ -392,10 +466,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                 }
                             }
                         },
-                        onLoadingChange = { loading -> 
-                            // 状态由 FloatingScheduleScreen 管理，这里可以留空或用于其他同步
+                                onLoadingChange = { _ -> }
+                            )
                         }
-                    )
+                    }
+                    floatingContent()
                 }
             }
         }
@@ -503,9 +578,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private fun handlePickedImage(uri: Uri) {
         serviceScope.launch {
             val settings = settingsQueryApi.settings.value
-            val config = settings.activeAiConfig()
-            if (!config.isConfigured()) {
-                Toast.makeText(applicationContext, config.missingConfigMessage(), Toast.LENGTH_SHORT).show()
+            if (!settings.isRecognitionConfigReady()) {
+                Toast.makeText(applicationContext, settings.recognitionConfigMissingMessage(), Toast.LENGTH_SHORT).show()
                 finishPendingImagePick()
                 return@launch
             }
@@ -529,22 +603,26 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 return@launch
             }
 
-            val ocrText = withContext(Dispatchers.IO) {
-                app.recognitionCenter.recognizeText(bitmap)
+            val traceId = EventIdentity.newTraceId("floating_image")
+            val result = withContext(Dispatchers.IO) {
+                app.recognitionCenter.analyzeImage(
+                    bitmap = bitmap,
+                    settings = settings,
+                    context = applicationContext,
+                    sourceType = RECOGNITION_SOURCE_TYPE,
+                    sourceId = RECOGNITION_SOURCE_ID,
+                    sourceImagePath = imageFile.absolutePath,
+                    ingestRequested = true,
+                    traceId = traceId
+                )
             }
             bitmap.recycle()
-
-            if (ocrText.isBlank()) {
-                Toast.makeText(applicationContext, "OCR 结果为空", Toast.LENGTH_SHORT).show()
-                finishPendingImagePick()
-                return@launch
+            when (result) {
+                is AnalysisResult.Success -> Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
+                is AnalysisResult.Empty -> Unit
+                is AnalysisResult.Failure -> Unit
             }
-
-            handleManualInput(
-                text = ocrText,
-                sourceImagePath = imageFile.absolutePath,
-                onComplete = ::finishPendingImagePick
-            )
+            finishPendingImagePick()
         }
     }
 

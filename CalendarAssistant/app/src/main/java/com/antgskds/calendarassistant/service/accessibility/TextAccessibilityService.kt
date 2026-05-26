@@ -4,8 +4,10 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.media.AudioManager
 import android.os.Build
@@ -23,9 +25,10 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.activeAiConfig
-import com.antgskds.calendarassistant.core.ai.isConfigured
-import com.antgskds.calendarassistant.core.ai.missingConfigMessage
+import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
+import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.provider.LocalSemanticProvider
+import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
@@ -68,6 +71,14 @@ class TextAccessibilityService : AccessibilityService() {
     private var ingestFailedSubscriptionJob: Job? = null
     private var keyFilterSettingsJob: Job? = null
     private var baseAccessibilityFlags: Int? = null
+    private var localModelReadyReceiverRegistered = false
+
+    private val localModelReadyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != LocalSemanticProvider.ACTION_LOCAL_MODEL_READY) return
+            showProgressNotification("正在分析", "正在分析屏幕内容...")
+        }
+    }
 
     companion object {
         private const val TAG = "TextAccessibilityService"
@@ -107,6 +118,7 @@ class TextAccessibilityService : AccessibilityService() {
         subscribeKeyFilterSettings()
         subscribeRecognitionFailedEvents()
         subscribeIngestEvents()
+        registerLocalModelReadyReceiver()
         Log.d(TAG, "无障碍服务已连接")
     }
 
@@ -374,6 +386,7 @@ class TextAccessibilityService : AccessibilityService() {
         ingestFailedSubscriptionJob = null
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = null
+        unregisterLocalModelReadyReceiver()
         return super.onUnbind(intent)
     }
 
@@ -388,6 +401,7 @@ class TextAccessibilityService : AccessibilityService() {
         ingestFailedSubscriptionJob = null
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = null
+        unregisterLocalModelReadyReceiver()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -498,7 +512,9 @@ class TextAccessibilityService : AccessibilityService() {
      */
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        showProgressNotification("正在分析", "正在分析屏幕内容...")
+        if (!settingsQueryApi.settings.value.isLocalSemanticEnabled) {
+            showProgressNotification("正在分析", "正在分析屏幕内容...")
+        }
 
         // ✅ 主线程调用 takeScreenshot（系统要求）
         takeScreenshot(
@@ -557,13 +573,12 @@ class TextAccessibilityService : AccessibilityService() {
             }
 
             val settings = settingsQueryApi.settings.value
-            val config = settings.activeAiConfig()
-            if (!config.isConfigured()) {
+            if (!settings.isRecognitionConfigReady()) {
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
                     showResultNotification(
                         "配置缺失",
-                        config.missingConfigMessage(),
+                        settings.recognitionConfigMissingMessage(),
                         autoLaunch = true,
                         useOcrCapsule = true,
                         durationMs = 12000L
@@ -589,9 +604,9 @@ class TextAccessibilityService : AccessibilityService() {
             withContext(Dispatchers.Main) {
                 when (analysisResult) {
                     is AnalysisResult.Success -> {
-                        cancelProgressNotification()
                         val validEvents = analysisResult.data.filter { it.title.isNotBlank() }
                         if (validEvents.isEmpty()) {
+                            cancelProgressNotification()
                             showResultNotification(
                                 "分析完成",
                                 "未识别到有效日程",
@@ -603,15 +618,17 @@ class TextAccessibilityService : AccessibilityService() {
                             }, 5000)
                             return@withContext
                         }
-                        showResultNotification(
-                            "分析完成",
-                            "识别到 ${validEvents.size} 条候选，正在保存...",
-                            useOcrCapsule = true,
-                            durationMs = 6000L
-                        )
                     }
                     is AnalysisResult.Empty -> Unit
-                    is AnalysisResult.Failure -> Unit
+                    is AnalysisResult.Failure -> {
+                        cancelProgressNotification()
+                        showResultNotification(
+                            analysisResult.failure.title,
+                            analysisResult.failure.detail,
+                            useOcrCapsule = true,
+                            durationMs = 8000L
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -635,6 +652,24 @@ class TextAccessibilityService : AccessibilityService() {
         } else {
             showBaseNotification(NOTIFICATION_ID_PROGRESS, title, content, isProgress = true, autoLaunch = false)
         }
+    }
+
+    private fun registerLocalModelReadyReceiver() {
+        if (localModelReadyReceiverRegistered) return
+        val filter = IntentFilter(LocalSemanticProvider.ACTION_LOCAL_MODEL_READY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(localModelReadyReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(localModelReadyReceiver, filter)
+        }
+        localModelReadyReceiverRegistered = true
+    }
+
+    private fun unregisterLocalModelReadyReceiver() {
+        if (!localModelReadyReceiverRegistered) return
+        runCatching { unregisterReceiver(localModelReadyReceiver) }
+        localModelReadyReceiverRegistered = false
     }
 
     private fun cancelProgressNotification() {
@@ -670,13 +705,7 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     private fun buildRecognitionFailureContent(payload: RecognitionFailedEvent): String {
-        val message = payload.message.ifBlank { "分析失败" }
-        return when {
-            message.isNotBlank() && message != "分析失败" -> message
-            payload.errorCode == "EMPTY_RESULT" -> "未识别到有效日程"
-            payload.errorCode == "ANALYSIS_FAILURE" -> "分析失败，请稍后重试"
-            else -> message
-        }
+        return RecognitionFailureMessageMapper.userMessage(payload)
     }
 
     private fun buildScreenshotFailureContent(errorCode: Int): String {
