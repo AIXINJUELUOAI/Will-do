@@ -144,6 +144,62 @@ object RecognitionProcessor {
         }
     }
 
+    suspend fun recognizeOptimizedText(bitmap: Bitmap, context: Context): String {
+        return try {
+            val ocrResult = buildOptimizedOcrResult(bitmap, context.applicationContext)
+            if (ocrResult.reconstructedText.isBlank()) {
+                Log.w(TAG, "OCR 结果为空！")
+                ""
+            } else {
+                val anchoredText = injectDateAnchors(ocrResult.reconstructedText, LocalDate.now())
+                Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
+                Log.d(TAG, anchoredText)
+                Log.d(TAG, "============================================")
+                anchoredText
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "OCR 优化识别失败", e)
+            ""
+        }
+    }
+
+    private suspend fun buildOptimizedOcrResult(bitmap: Bitmap, context: Context): OcrResult {
+        val appContext = context.applicationContext
+        val visionText = processImageWithMlKit(bitmap)
+
+        return withContext(Dispatchers.Default) {
+            val screenWidth = bitmap.width
+            val screenHeight = bitmap.height
+
+            val ocrElements = visionText.textBlocks
+                .flatMap { it.lines }
+                .flatMap { it.elements }
+                .filter { it.text.isNotBlank() }
+                .map { element ->
+                    OcrElement(
+                        text = element.text,
+                        boundingBox = element.boundingBox ?: Rect(),
+                        confidence = element.confidence ?: 0f
+                    )
+                }
+
+            val filteredElements = LayoutAnalyzer.filterNoise(
+                ocrElements,
+                ScreenMetrics.getStatusBarHeight(appContext),
+                ScreenMetrics.getNavigationBarHeight(appContext),
+                screenHeight
+            )
+
+            val reconstructedText = LayoutAnalyzer.reconstructLayout(filteredElements, screenWidth)
+
+            val rawText = filteredElements
+                .sortedBy { it.boundingBox.top }
+                .joinToString("\n") { it.text }
+
+            OcrResult(rawText, reconstructedText, screenWidth, screenHeight)
+        }
+    }
+
     suspend fun parseUserText(text: String, settings: MySettings, context: Context): AnalysisResult<RecognitionDraft> {
         val appContext = context.applicationContext
         val now = LocalDateTime.now()
@@ -223,39 +279,7 @@ object RecognitionProcessor {
         }
 
         val ocrResult = try {
-            val visionText = processImageWithMlKit(bitmap)
-
-            withContext(Dispatchers.Default) {
-                val screenWidth = bitmap.width
-                val screenHeight = bitmap.height
-
-                val ocrElements = visionText.textBlocks
-                    .flatMap { it.lines }
-                    .flatMap { it.elements }
-                    .filter { it.text.isNotBlank() }
-                    .map { element ->
-                        OcrElement(
-                            text = element.text,
-                            boundingBox = element.boundingBox ?: Rect(),
-                            confidence = element.confidence ?: 0f
-                        )
-                    }
-
-                val filteredElements = LayoutAnalyzer.filterNoise(
-                    ocrElements,
-                    ScreenMetrics.getStatusBarHeight(appContext),
-                    ScreenMetrics.getNavigationBarHeight(appContext),
-                    screenHeight
-                )
-
-                val reconstructedText = LayoutAnalyzer.reconstructLayout(filteredElements, screenWidth)
-
-                val rawText = filteredElements
-                    .sortedBy { it.boundingBox.top }
-                    .joinToString("\n") { it.text }
-
-                OcrResult(rawText, reconstructedText, screenWidth, screenHeight)
-            }
+            buildOptimizedOcrResult(bitmap, appContext)
         } catch (e: Exception) {
             Log.e(TAG, "OCR 过程发生异常", e)
             return AnalysisResult.Empty()
@@ -505,35 +529,11 @@ object RecognitionProcessor {
     }
 
     private fun cleanJsonString(response: String): String {
-        val trimmed = response.trim().removePrefix("\uFEFF")
-        if (trimmed.contains("```")) {
-            val fenced = Regex("```(?:json)?\\s*(.*?)```", RegexOption.DOT_MATCHES_ALL)
-                .find(trimmed)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.trim()
-            if (!fenced.isNullOrBlank()) return fenced
-        }
-
-        val objectStart = trimmed.indexOf('{')
-        val arrayStart = trimmed.indexOf('[')
-        val start = listOf(objectStart, arrayStart)
-            .filter { it >= 0 }
-            .minOrNull() ?: return trimmed
-
-        val objectEnd = trimmed.lastIndexOf('}')
-        val arrayEnd = trimmed.lastIndexOf(']')
-        val end = maxOf(objectEnd, arrayEnd)
-        return if (end >= start) trimmed.substring(start, end + 1).trim() else trimmed
+        return RecognitionJsonParser.cleanJsonString(response.removePrefix("\uFEFF"))
     }
 
     private fun parseCalendarEvents(cleanJson: String): List<RecognitionDraft> {
-        val parsed = jsonParser.parseToJsonElement(cleanJson)
-        return when (parsed) {
-            is JsonObject -> parseCalendarEventsFromObject(parsed)
-            is JsonArray -> parseCalendarEventsFromArray(parsed)
-            else -> emptyList()
-        }
+        return RecognitionJsonParser.parseCalendarEvents(cleanJson)
     }
 
     private fun parseCalendarEventsFromObject(jsonObject: JsonObject): List<RecognitionDraft> {

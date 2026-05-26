@@ -57,7 +57,7 @@ class RecognitionCenter(
                     payload = RecognitionFailedEvent(
                         sourceType = sourceType,
                         sourceId = sourceId,
-                        errorCode = "EMPTY_RESULT",
+                        errorCode = result.message.takeIf { it.isLocalModelStatusCode() } ?: "EMPTY_RESULT",
                         retryable = false,
                         message = result.message
                     )
@@ -73,7 +73,7 @@ class RecognitionCenter(
                     payload = RecognitionFailedEvent(
                         sourceType = sourceType,
                         sourceId = sourceId,
-                        errorCode = "ANALYSIS_FAILURE",
+                        errorCode = result.failure.detail.takeIf { it.isLocalModelStatusCode() } ?: "ANALYSIS_FAILURE",
                         retryable = true,
                         message = result.failure.fullMessage()
                     )
@@ -120,7 +120,7 @@ class RecognitionCenter(
                     payload = RecognitionFailedEvent(
                         sourceType = sourceType,
                         sourceId = sourceId,
-                        errorCode = "EMPTY_RESULT",
+                        errorCode = result.message.takeIf { it.isLocalModelStatusCode() } ?: "EMPTY_RESULT",
                         retryable = false,
                         message = result.message
                     )
@@ -136,7 +136,7 @@ class RecognitionCenter(
                     payload = RecognitionFailedEvent(
                         sourceType = sourceType,
                         sourceId = sourceId,
-                        errorCode = "ANALYSIS_FAILURE",
+                        errorCode = result.failure.detail.takeIf { it.isLocalModelStatusCode() } ?: "ANALYSIS_FAILURE",
                         retryable = true,
                         message = result.failure.fullMessage()
                     )
@@ -146,4 +146,8 @@ class RecognitionCenter(
         return result
     }
 
+}
+
+private fun String.isLocalModelStatusCode(): Boolean {
+    return matches(Regex("[A-Z_]+")) && (contains("ENGINE") || contains("MODEL") || contains("TIMEOUT") || startsWith("INVALID") || this == "EMPTY_EVENTS" || this == "USER_CANCELLED" || this == "FOREGROUND_START_FAILED" || this == "UNKNOWN_ERROR")
 }

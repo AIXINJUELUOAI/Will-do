@@ -43,6 +43,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.ui.components.FloatingActionCard
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
@@ -53,7 +54,7 @@ import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
-import com.antgskds.calendarassistant.ui.theme.CalendarAssistantTheme
+import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
@@ -129,7 +130,8 @@ class MainActivity : ComponentActivity() {
                         settingsOperationApi = app.settingsOperationApi,
                         settingsQueryApi = app.settingsQueryApi,
                         settingsTransformApi = app.settingsTransformApi,
-                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi
+                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
+                        localModelManager = app.localModelManager
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
@@ -143,6 +145,7 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
             val settings by settingsViewModel.settings.collectAsState()
             val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
+            val uiStyle = UiStyle.fromName(settings.uiStyle)
 
             LaunchedEffect(settings.uiSize) {
                 if (currentUiSize != settings.uiSize) {
@@ -151,10 +154,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LaunchedEffect(settings.themeMode, settings.themeColorScheme) {
-                if (currentThemeMode != settings.themeMode || currentThemeColorScheme != settings.themeColorScheme) {
+            LaunchedEffect(settings.themeMode, settings.themeColorScheme, settings.customThemeColorHex, settings.uiStyle) {
+                if (
+                    currentThemeMode != settings.themeMode ||
+                    currentThemeColorScheme != settings.themeColorScheme ||
+                    currentUiStyle != settings.uiStyle
+                ) {
                     currentThemeMode = settings.themeMode
                     currentThemeColorScheme = settings.themeColorScheme
+                    currentUiStyle = settings.uiStyle
                     recreate()
                 }
             }
@@ -169,10 +177,12 @@ class MainActivity : ComponentActivity() {
             val themeColorSchemeEnum = ThemeColorScheme.fromName(settings.themeColorScheme)
 
             // ✅ 修复缩进问题
-            CalendarAssistantTheme(
+            CalendarAssistantStyleTheme(
+                uiStyle = uiStyle,
                 darkTheme = isDarkTheme,
                 dynamicColor = themeColorSchemeEnum == ThemeColorScheme.DEFAULT,
-                themeColorScheme = themeColorSchemeEnum
+                themeColorScheme = themeColorSchemeEnum,
+                customThemeColorHex = settings.customThemeColorHex
             ) {
                 val view = LocalView.current
                 if (!view.isInEditMode) {
@@ -203,18 +213,32 @@ class MainActivity : ComponentActivity() {
                             popEnterTransition = { navBackwardEnterTransition() },
                             popExitTransition = { null }
                         ) {
-                            HomeScreen(
-                                mainViewModel = mainViewModel,
-                                settingsViewModel = settingsViewModel,
-                                pickupTimestamp = pickupEventTimestamp.value,
-                                onNavigateToSettings = { destination ->
-                                    if (destination == SettingsDestination.Logout) {
-                                        finish()
-                                    } else {
-                                        navController.navigate("settings/${destination.name}")
+                            when (uiStyle) {
+                                UiStyle.MIUI -> com.antgskds.calendarassistant.miui.page_display.HomeScreen(
+                                    mainViewModel = mainViewModel,
+                                    settingsViewModel = settingsViewModel,
+                                    pickupTimestamp = pickupEventTimestamp.value,
+                                    onNavigateToSettings = { destination ->
+                                        if (destination.name == SettingsDestination.Logout.name) {
+                                            finish()
+                                        } else {
+                                            navController.navigate("settings/${destination.name}")
+                                        }
                                     }
-                                }
-                            )
+                                )
+                                UiStyle.MATERIAL3 -> HomeScreen(
+                                    mainViewModel = mainViewModel,
+                                    settingsViewModel = settingsViewModel,
+                                    pickupTimestamp = pickupEventTimestamp.value,
+                                    onNavigateToSettings = { destination ->
+                                        if (destination == SettingsDestination.Logout) {
+                                            finish()
+                                        } else {
+                                            navController.navigate("settings/${destination.name}")
+                                        }
+                                    }
+                                )
+                            }
                         }
 
                         composable(
@@ -226,14 +250,24 @@ class MainActivity : ComponentActivity() {
                             popExitTransition = { navBackwardExitTransition() }
                         ) { backStackEntry ->
                             val typeName = backStackEntry.arguments?.getString("type") ?: ""
-                            SettingsDetailScreen(
-                                destinationStr = typeName,
-                                mainViewModel = mainViewModel,
-                                settingsViewModel = settingsViewModel,
-                                onExitSettings = { navController.popBackStack() },
-                                onLogout = { finish() },
-                                uiSize = settings.uiSize
-                            )
+                            when (uiStyle) {
+                                UiStyle.MIUI -> com.antgskds.calendarassistant.miui.page_display.SettingsDetailScreen(
+                                    destinationStr = typeName,
+                                    mainViewModel = mainViewModel,
+                                    settingsViewModel = settingsViewModel,
+                                    onExitSettings = { navController.popBackStack() },
+                                    onLogout = { finish() },
+                                    uiSize = settings.uiSize
+                                )
+                                UiStyle.MATERIAL3 -> SettingsDetailScreen(
+                                    destinationStr = typeName,
+                                    mainViewModel = mainViewModel,
+                                    settingsViewModel = settingsViewModel,
+                                    onExitSettings = { navController.popBackStack() },
+                                    onLogout = { finish() },
+                                    uiSize = settings.uiSize
+                                )
+                            }
                         }
                     }
 
@@ -375,5 +409,6 @@ class MainActivity : ComponentActivity() {
         private var currentUiSize: Int = -1
         private var currentThemeMode: Int = -1
         private var currentThemeColorScheme: String = ""
+        private var currentUiStyle: String = ""
     }
 }

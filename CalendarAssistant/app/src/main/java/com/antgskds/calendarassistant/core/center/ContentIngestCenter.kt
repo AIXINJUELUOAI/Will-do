@@ -93,8 +93,17 @@ class ContentIngestCenter(
                 .collect { event ->
                     val payload = event.payload
                     if (!payload.ingestRequested || payload.candidates.isEmpty()) {
+                        Log.d(
+                            "ContentIngestCenter",
+                            "跳过识别结果入库: ingestRequested=${payload.ingestRequested}, candidates=${payload.candidates.size}"
+                        )
                         return@collect
                     }
+
+                    Log.d(
+                        "ContentIngestCenter",
+                        "收到识别结果准备入库: candidates=${payload.candidates.size}, traceId=${event.traceId}"
+                    )
 
                     ingestChannel.send(
                         RecognizedIngestTask(
@@ -171,11 +180,19 @@ class ContentIngestCenter(
     }
 
     private suspend fun processRecognizedTask(task: RecognizedIngestTask) {
+        Log.d(
+            "ContentIngestCenter",
+            "开始入库识别结果: events=${task.events.size}, sourceType=${task.sourceType}, traceId=${task.traceId}"
+        )
         val created = importCenter.ingestRecognizedEvents(task.events, task.sourceImagePath)
         task.result?.complete(created)
 
         val dedupedCount = (task.events.size - created.size).coerceAtLeast(0)
         if (created.isNotEmpty()) {
+            Log.d(
+                "ContentIngestCenter",
+                "识别结果入库成功: created=${created.size}, deduped=$dedupedCount, traceId=${task.traceId}"
+            )
             emitIngestSucceeded(
                 traceId = task.traceId,
                 sourceType = task.sourceType,
@@ -185,6 +202,10 @@ class ContentIngestCenter(
                 createdCount = created.size
             )
         } else {
+            Log.d(
+                "ContentIngestCenter",
+                "识别结果未入库: candidates=${task.events.size}, traceId=${task.traceId}"
+            )
             emitIngestFailed(
                 traceId = task.traceId,
                 sourceType = task.sourceType,

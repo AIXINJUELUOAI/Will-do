@@ -71,7 +71,7 @@ object RuleDisplayTemplateResolver {
             "{date}" to event.startDate.toString(),
             "{description}" to description,
             "{payload}" to payload,
-            "{field1}" to fields.getOrNull(0).orEmpty(),
+            "{field1}" to RuleMatchingEngine.stripInstantCodeLabel(ruleId, fields.getOrNull(0).orEmpty()),
             "{field2}" to fields.getOrNull(1).orEmpty(),
             "{field3}" to fields.getOrNull(2).orEmpty(),
             "{field4}" to fields.getOrNull(3).orEmpty(),

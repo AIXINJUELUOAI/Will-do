@@ -72,6 +72,36 @@ object RuleMatchingEngine {
         return payload.payload.trim().ifBlank { null }
     }
 
+    fun isInstantCodeRule(ruleId: String?): Boolean {
+        return when (ruleId) {
+            RULE_PICKUP,
+            RULE_FOOD,
+            RULE_TICKET,
+            RULE_SENDER -> true
+            else -> false
+        }
+    }
+
+    fun stripInstantCodeLabel(ruleId: String?, value: String): String {
+        val clean = stripSourceImageMarkers(value).trim()
+        if (!isInstantCodeRule(ruleId) || clean.isBlank()) return clean
+
+        val labels = when (ruleId) {
+            RULE_PICKUP -> listOf("取件码", "提货号", "取货码", "提货码", "签收码", "签收编号")
+            RULE_FOOD -> listOf("取餐码", "取餐号", "餐码", "外卖码")
+            RULE_TICKET -> listOf("取票码", "取票号", "票码", "票号", "凭证码", "验票码")
+            RULE_SENDER -> listOf("寄件码", "寄件号", "运单码")
+            else -> emptyList()
+        }
+        if (labels.isEmpty()) return clean
+
+        val labelPattern = labels.joinToString("|") { Regex.escape(it) }
+        return clean
+            .replace(Regex("^\\s*(?:$labelPattern)\\s*(?:[:：=\\-]|为|是)?\\s*"), "")
+            .trim()
+            .trim(':', '：', ',', '，', '。', ' ')
+    }
+
     private data class HeaderInfo(
         val header: String,
         val payload: String
@@ -98,22 +128,10 @@ object RuleMatchingEngine {
     }
 
     private fun normalizeRuleId(rawHeader: String?): String? {
-        val header = rawHeader?.trim().orEmpty()
-        if (header.isBlank()) return null
-        return when (header) {
-            "pickup", "取件" -> RULE_PICKUP
-            "food", "取餐", "外卖" -> RULE_FOOD
-            "train", "列车" -> RULE_TRAIN
-            "taxi", "用车", "打车" -> RULE_TAXI
-            "flight", "航班", "飞机" -> RULE_FLIGHT
-            "ticket", "取票" -> RULE_TICKET
-            "sender", "寄件" -> RULE_SENDER
-            "course", "课程" -> RULE_COURSE
-            "general", "日程" -> RULE_GENERAL
-            else -> {
-                val lower = header.lowercase()
-                if (lower.matches(Regex("[a-z0-9_]+"))) lower else null
-            }
-        }
+        val normalized = RecognitionRuleCatalog.normalizeKnownTag(rawHeader)
+        if (normalized != null) return normalized
+
+        val lower = rawHeader?.trim()?.lowercase().orEmpty()
+        return if (lower.matches(Regex("[a-z0-9_]+"))) lower else null
     }
 }

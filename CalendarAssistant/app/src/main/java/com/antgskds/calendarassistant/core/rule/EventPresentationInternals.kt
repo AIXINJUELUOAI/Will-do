@@ -445,13 +445,29 @@ internal object EventPresentationInternals {
     private fun parsePickupMicroFormat(description: String): Triple<String, String, String> {
         if (description.isBlank()) return Triple("", "", "")
         val payload = RuleMatchingEngine.resolvePayload(description, RuleMatchingEngine.RULE_PICKUP)
-        if (payload?.ruleId == RuleMatchingEngine.RULE_PICKUP) {
+        if (payload?.ruleId != null && RuleMatchingEngine.isInstantCodeRule(payload.ruleId)) {
             val fields = RuleMatchingEngine.splitFields(payload.payload, 3)
-            return Triple(fields[0], fields[1], fields[2])
+            return Triple(
+                RuleMatchingEngine.stripInstantCodeLabel(payload.ruleId, fields[0]),
+                fields[1],
+                fields[2]
+            )
         }
-        val pattern = Regex("【取(件|餐)】([^|]+)\\|([^|]+)(?:\\|(.*))?")
+        val pattern = Regex("【(取件|取餐|取票|寄件)】([^|]+)\\|([^|]+)(?:\\|(.*))?")
         val match = pattern.find(description)
-        return if (match != null) Triple(match.groupValues[2], match.groupValues[3], match.groupValues[4]) else Triple("", "", "")
+        return if (match != null) {
+            val ruleId = when (match.groupValues[1]) {
+                "取餐" -> RuleMatchingEngine.RULE_FOOD
+                "取票" -> RuleMatchingEngine.RULE_TICKET
+                "寄件" -> RuleMatchingEngine.RULE_SENDER
+                else -> RuleMatchingEngine.RULE_PICKUP
+            }
+            Triple(
+                RuleMatchingEngine.stripInstantCodeLabel(ruleId, match.groupValues[2]),
+                match.groupValues[3],
+                match.groupValues[4]
+            )
+        } else Triple("", "", "")
     }
 
     private fun formatTrainSubtitle(trainNo: String?, destination: String?): String? {

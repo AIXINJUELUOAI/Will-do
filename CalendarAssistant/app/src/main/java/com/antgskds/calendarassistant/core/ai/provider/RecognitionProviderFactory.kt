@@ -7,7 +7,11 @@ object RecognitionProviderFactory {
         return CustomOcrProvider
     }
 
-    fun semanticProvider(@Suppress("UNUSED_PARAMETER") settings: MySettings): SemanticProvider {
-        return RemoteSemanticProvider
+    fun semanticProvider(settings: MySettings): SemanticProvider {
+        return if (settings.isLocalSemanticEnabled) {
+            LocalSemanticProvider
+        } else {
+            RemoteSemanticProvider
+        }
     }
 }

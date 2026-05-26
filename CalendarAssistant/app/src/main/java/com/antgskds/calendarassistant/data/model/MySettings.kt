@@ -15,6 +15,7 @@ data class MySettings(
     val mmModelUrl: String = "",
     val disableThinking: Boolean = false,
     val isLocalSemanticEnabled: Boolean = false,
+    val selectedLocalModelId: String = "",
 
     // 功能开关
     val showTomorrowEvents: Boolean = false,
@@ -31,7 +32,7 @@ data class MySettings(
     // 【新增】取件码聚合开关 (Beta)
     val isPickupAggregationEnabled: Boolean = false,
 
-    // 【实验室】短信自动解析取件码
+    // 短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
 
     // 【实验室】码类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
@@ -62,9 +63,11 @@ data class MySettings(
 
     // 主题配色方案：DEFAULT/PURPLE/BLUE/GREEN/PINK/ORANGE/TEAL/NEUTRAL=固定配色
     val themeColorScheme: String = "DEFAULT",
+    val customThemeColorHex: String = "#6750A4",
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
     val uiSize: Int = 2,
+    val uiStyle: String = UiStyle.MATERIAL3.name,
 
     // 【实验室】网速胶囊开关
     val isNetworkSpeedCapsuleEnabled: Boolean = false,

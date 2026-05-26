@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -28,14 +29,14 @@ fun escapeBuildConfigString(value: String): String {
 
 android {
     namespace = "com.antgskds.calendarassistant"
-    compileSdk = 36
+    compileSdkVersion("android-37.0")
 
     defaultConfig {
         applicationId = "com.antgskds.calendarassistant"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 36
-        versionCode = 37
-        versionName = "2.0.4"
+        versionCode = 44
+        versionName = "2.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -68,16 +69,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
+    }
+}
+
 dependencies {
+    implementation(project(":ai-engine"))
+
     // === 基础库 (使用默认生成的引用) ===
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

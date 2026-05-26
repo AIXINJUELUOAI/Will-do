@@ -249,7 +249,11 @@ private fun SettingsPageContent(
                         )
                         SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
                         SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
-                        SettingsDestination.Preference -> PreferenceSettingsPage(settingsViewModel, uiSize)
+                        SettingsDestination.Preference -> PreferenceSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
+                        )
                         SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                         SettingsDestination.About -> AboutPage(
                             uiSize = uiSize,
@@ -259,8 +263,7 @@ private fun SettingsPageContent(
                         SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
                         SettingsDestination.Laboratory -> LaboratoryPage(
                             uiSize = uiSize,
-                            settingsViewModel = settingsViewModel,
-                            onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
+                            settingsViewModel = settingsViewModel
                         )
                         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
                             settingsViewModel = settingsViewModel,

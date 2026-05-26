@@ -65,7 +65,7 @@ enum class SettingsDestination {
 
     // 实验室
     Laboratory,        // 实验室功能
-    BottomBarEditor    // 底栏编辑（从实验室入口进入）
+    BottomBarEditor    // 底栏编辑（从偏好设置入口进入）
 }
 
 @Composable

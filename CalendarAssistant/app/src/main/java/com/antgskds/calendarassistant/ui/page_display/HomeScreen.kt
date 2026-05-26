@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
@@ -108,7 +109,7 @@ fun HomeScreen(
                         payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
                 if (!isHomeSource && !isNoteSource) return@collect
 
-                val message = payload.message.ifBlank { "识别失败（${payload.errorCode}）" }
+                val message = RecognitionFailureMessageMapper.userMessage(payload)
                 showToast(message, ToastType.ERROR)
             }
     }

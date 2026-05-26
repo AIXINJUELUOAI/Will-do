@@ -19,6 +19,7 @@ interface SettingsTransformApi {
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
         localSemanticEnabled: Boolean? = null,
+        selectedLocalModelId: String? = null,
         floatingEventRange: Int? = null,
         floatingExpandSide: String? = null,
         volumeUpLongPressEnabled: Boolean? = null,

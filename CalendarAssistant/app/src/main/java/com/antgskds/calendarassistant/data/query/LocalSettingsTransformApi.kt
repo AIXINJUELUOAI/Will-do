@@ -23,6 +23,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         useMultimodalAi: Boolean?,
         disableThinking: Boolean?,
         localSemanticEnabled: Boolean?,
+        selectedLocalModelId: String?,
         floatingEventRange: Int?,
         floatingExpandSide: String?,
         volumeUpLongPressEnabled: Boolean?,
@@ -49,6 +50,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (useMultimodalAi != null) updated = updated.copy(useMultimodalAi = useMultimodalAi)
         if (disableThinking != null) updated = updated.copy(disableThinking = disableThinking)
         if (localSemanticEnabled != null) updated = updated.copy(isLocalSemanticEnabled = localSemanticEnabled)
+        if (selectedLocalModelId != null) updated = updated.copy(selectedLocalModelId = selectedLocalModelId)
         if (floatingEventRange != null) updated = updated.copy(floatingEventRange = floatingEventRange)
         if (floatingExpandSide != null) updated = updated.copy(floatingExpandSide = sanitizeFloatingSide(floatingExpandSide))
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
