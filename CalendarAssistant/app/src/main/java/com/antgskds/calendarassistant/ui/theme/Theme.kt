@@ -3,12 +3,16 @@ package com.antgskds.calendarassistant.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarAssistantTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -28,11 +32,13 @@ fun CalendarAssistantTheme(
         else -> ThemeColorGenerator.generateColorScheme(themeColorScheme.primaryColor, darkTheme, themeColorScheme.name)
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalRippleConfiguration provides null) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
 
 fun parseThemeHexColor(hex: String, fallback: Color = Color(0xFF6750A4)): Color {

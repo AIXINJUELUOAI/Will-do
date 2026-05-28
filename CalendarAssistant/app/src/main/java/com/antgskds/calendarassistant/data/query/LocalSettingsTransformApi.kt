@@ -13,6 +13,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         dailySummary: Boolean?,
         liveCapsule: Boolean?,
         pickupAggregation: Boolean?,
+        hapticFeedbackEnabled: Boolean?,
         edgeBarEnabled: Boolean?,
         networkSpeedCapsule: Boolean?,
         floatingWindow: Boolean?,
@@ -31,6 +32,13 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         smsMonitoring: Boolean?,
         forceInstantCodeTimeToNow: Boolean?,
         noteEnabled: Boolean?,
+        predictiveBackEnabled: Boolean?,
+        clipboardCodeRecognitionEnabled: Boolean?,
+        widgetThemeMode: Int?,
+        widgetBackgroundAlpha: Float?,
+        developerOptionsUnlocked: Boolean?,
+        developerOptionsEnabled: Boolean?,
+        developerOptionsDisabledAtMillis: Long?,
         homeBottomItems: List<String>?,
         homeStartPageKey: String?
     ): MySettings {
@@ -40,6 +48,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (dailySummary != null) updated = updated.copy(isDailySummaryEnabled = dailySummary)
         if (liveCapsule != null) updated = updated.copy(isLiveCapsuleEnabled = liveCapsule)
         if (pickupAggregation != null) updated = updated.copy(isPickupAggregationEnabled = pickupAggregation)
+        if (hapticFeedbackEnabled != null) updated = updated.copy(hapticFeedbackEnabled = hapticFeedbackEnabled)
         if (edgeBarEnabled != null) updated = updated.copy(edgeBarEnabled = edgeBarEnabled)
         if (networkSpeedCapsule != null) updated = updated.copy(isNetworkSpeedCapsuleEnabled = networkSpeedCapsule)
         if (floatingWindow != null) updated = updated.copy(isFloatingWindowEnabled = floatingWindow)
@@ -58,6 +67,13 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
         if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
         if (noteEnabled != null) updated = updated.copy(noteEnabled = noteEnabled)
+        if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
+        if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
+        if (widgetThemeMode != null) updated = updated.copy(widgetThemeMode = widgetThemeMode.coerceIn(0, 2))
+        if (widgetBackgroundAlpha != null) updated = updated.copy(widgetBackgroundAlpha = widgetBackgroundAlpha.coerceIn(0.6f, 1f))
+        if (developerOptionsUnlocked != null) updated = updated.copy(developerOptionsUnlocked = developerOptionsUnlocked)
+        if (developerOptionsEnabled != null) updated = updated.copy(developerOptionsEnabled = developerOptionsEnabled)
+        if (developerOptionsDisabledAtMillis != null) updated = updated.copy(developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis)
         if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
         if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)
 

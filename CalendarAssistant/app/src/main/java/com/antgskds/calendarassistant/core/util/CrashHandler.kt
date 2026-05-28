@@ -74,6 +74,7 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
         Log.e(TAG, "捕获到未处理异常", exception)
 
         try {
+            AppLogger.e(TAG, "uncaught exception in thread=${thread.name}", exception)
             val crashLog = buildCrashLog(exception)
             ExceptionLogStore.append(context, TAG, crashLog)
             markCrashed(context)

@@ -26,21 +26,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.UiStyle
+import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
+import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
 import com.antgskds.calendarassistant.ui.theme.parseThemeHexColor
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 @Composable
@@ -53,6 +57,21 @@ fun ThemeSettingsPage(
     val context = LocalContext.current
     val isCustomTheme = settings.themeColorScheme == ThemeColorScheme.CUSTOM.name
     val selectedUiStyle = UiStyle.fromName(settings.uiStyle)
+    var isHexFocused by remember { mutableStateOf(false) }
+    val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = when {
+        imeBottomPadding > 0.dp -> imeBottomPadding + 96.dp
+        isHexFocused -> 320.dp
+        else -> navigationBottomPadding + 32.dp
+    }
+
+    LaunchedEffect(isCustomTheme, isHexFocused, imeBottomPadding) {
+        if (isCustomTheme && isHexFocused) {
+            delay(300)
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
 
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
@@ -70,11 +89,13 @@ fun ThemeSettingsPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
+    CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
+            .padding(16.dp)
+            .padding(bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 主题模式
@@ -168,6 +189,7 @@ fun ThemeSettingsPage(
                     CustomThemeColorEditor(
                         hex = settings.customThemeColorHex,
                         onColorChange = viewModel::updateCustomThemeColorHex,
+                        onHexFocusChange = { isHexFocused = it },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
@@ -175,10 +197,7 @@ fun ThemeSettingsPage(
                 }
             }
         }
-
-        // 底部留白 + 导航栏避让
-        Spacer(modifier = Modifier.height(32.dp))
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
     }
 }
 
@@ -194,11 +213,15 @@ private fun UiStyleSettingItem(
         Text("选择主界面和悬浮窗的前端样式", style = cardSubtitleStyle)
         Spacer(modifier = Modifier.height(12.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             UiStyle.entries.forEach { style ->
-                UiStyleOptionCard(
+                UiStyleOptionChip(
                     style = style,
                     selected = selectedStyle == style,
                     onClick = { onStyleSelected(style) },
@@ -210,35 +233,26 @@ private fun UiStyleSettingItem(
 }
 
 @Composable
-private fun UiStyleOptionCard(
+private fun UiStyleOptionChip(
     style: UiStyle,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(14.dp)
-    Column(
+    val haptics = rememberAppHaptics()
+    Box(
         modifier = modifier
-            .clip(shape)
-            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                shape = shape
-            )
-            .clickable(onClick = onClick)
-            .padding(12.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+            .clickable { haptics.selection(); onClick() }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = style.label,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = style.description,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -253,6 +267,7 @@ private fun ThemeModeSliderSettingItem(
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle,
     cardValueStyle: androidx.compose.ui.text.TextStyle
 ) {
+    HapticValueChangeEffect(valueKey = value)
     val modeLabels = mapOf(1 to "跟随系统", 2 to "浅色模式", 3 to "深色模式")
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
@@ -339,11 +354,12 @@ private fun ThemeColorModeChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberAppHaptics()
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .clickable(onClick = onClick)
+            .clickable { haptics.selection(); onClick() }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -359,6 +375,7 @@ private fun ThemeColorModeChip(
 private fun CustomThemeColorEditor(
     hex: String,
     onColorChange: (String) -> Unit,
+    onHexFocusChange: (Boolean) -> Unit,
     cardTitleStyle: androidx.compose.ui.text.TextStyle,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle,
     cardValueStyle: androidx.compose.ui.text.TextStyle
@@ -421,6 +438,7 @@ private fun CustomThemeColorEditor(
                     onColorChange(normalized)
                 }
             },
+            onFocusChange = onHexFocusChange,
             cardTitleStyle = cardTitleStyle,
             cardValueStyle = cardValueStyle,
             cardSubtitleStyle = cardSubtitleStyle
@@ -436,6 +454,7 @@ private fun RgbSliderItem(
     cardValueStyle: androidx.compose.ui.text.TextStyle,
     onValueChange: (Int) -> Unit
 ) {
+    HapticValueChangeEffect(valueKey = sliderHapticBucket(value.toFloat(), 0f..255f, 0, continuousBucketCount = 16))
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -459,17 +478,21 @@ private fun HexColorInputItem(
     value: String,
     isError: Boolean,
     onValueChange: (String) -> Unit,
+    onFocusChange: (Boolean) -> Unit,
     cardTitleStyle: androidx.compose.ui.text.TextStyle,
     cardValueStyle: androidx.compose.ui.text.TextStyle,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
     val interactionSource = remember { MutableInteractionSource() }
-    var fieldValue by remember(value) { mutableStateOf(TextFieldValue(value)) }
+    var fieldValue by remember(value) {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
 
     LaunchedEffect(value) {
-        if (value != fieldValue.text) fieldValue = TextFieldValue(value)
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+        }
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -481,11 +504,13 @@ private fun HexColorInputItem(
             BasicTextField(
                 value = fieldValue,
                 onValueChange = { newValue ->
-                    val filtered = newValue.text
-                        .filter { it == '#' || it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
-                        .take(7)
-                    fieldValue = TextFieldValue(filtered)
-                    onValueChange(filtered)
+                    val previousText = fieldValue.text
+                    val filtered = filterThemeHexInput(newValue.text)
+                    val selection = remapThemeHexSelection(newValue.text, newValue.selection)
+                    fieldValue = TextFieldValue(text = filtered, selection = selection)
+                    if (filtered != previousText) {
+                        onValueChange(filtered)
+                    }
                 },
                 textStyle = cardValueStyle.copy(
                     color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
@@ -496,14 +521,16 @@ private fun HexColorInputItem(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .weight(1f)
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState -> isFocused = focusState.isFocused },
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                        onFocusChange(focusState.isFocused)
+                    },
                 decorationBox = { innerTextField ->
                     Box(
                         modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 24.dp),
                         contentAlignment = Alignment.CenterEnd
                     ) {
-                        if (value.isEmpty()) {
+                        if (fieldValue.text.isEmpty()) {
                             Text(
                                 "#6750A4",
                                 style = cardSubtitleStyle,
@@ -529,6 +556,35 @@ private fun HexColorInputItem(
     }
 }
 
+private fun filterThemeHexInput(text: String): String {
+    val builder = StringBuilder(7)
+    for (char in text) {
+        if (builder.length >= 7) break
+        if (isThemeHexInputChar(char)) builder.append(char)
+    }
+    return builder.toString()
+}
+
+private fun remapThemeHexSelection(text: String, selection: TextRange): TextRange {
+    val start = filteredThemeHexOffset(text, selection.start)
+    val end = filteredThemeHexOffset(text, selection.end)
+    return TextRange(start, end)
+}
+
+private fun filteredThemeHexOffset(text: String, offset: Int): Int {
+    var filteredOffset = 0
+    val safeOffset = offset.coerceIn(0, text.length)
+    for (index in 0 until safeOffset) {
+        if (filteredOffset >= 7) break
+        if (isThemeHexInputChar(text[index])) filteredOffset++
+    }
+    return filteredOffset
+}
+
+private fun isThemeHexInputChar(char: Char): Boolean {
+    return char == '#' || char in '0'..'9' || char in 'a'..'f' || char in 'A'..'F'
+}
+
 private fun rgbToHex(red: Int, green: Int, blue: Int): String {
     return "#%02X%02X%02X".format(red.coerceIn(0, 255), green.coerceIn(0, 255), blue.coerceIn(0, 255))
 }
@@ -540,9 +596,10 @@ private fun ThemeColorSchemeItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.clickable { haptics.selection(); onClick() }
     ) {
         Box(
             modifier = Modifier

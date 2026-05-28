@@ -246,6 +246,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         return when (capsuleType) {
             CapsuleStateManager.TYPE_OCR_PROGRESS -> R.drawable.ic_stat_scan
             CapsuleStateManager.TYPE_OCR_RESULT -> R.drawable.ic_stat_success
+            CapsuleStateManager.TYPE_MODEL_LOADING -> R.drawable.ic_model_loading
+            CapsuleStateManager.TYPE_WEATHER_ALERT -> R.drawable.ic_weather_rain_heavy
             else -> {
                 // 使用 RuleMatchingEngine 解析，fallback 到 eventType
                 val payload = RuleMatchingEngine.resolvePayload(null, eventType)

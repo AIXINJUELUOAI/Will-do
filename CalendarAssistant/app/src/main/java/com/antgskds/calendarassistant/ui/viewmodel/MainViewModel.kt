@@ -1,6 +1,8 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +10,7 @@ import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
@@ -69,7 +72,8 @@ class MainViewModel(
     private val homeQueryApi: HomeQueryApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
     private val weatherQueryApi: WeatherQueryApi,
-    private val weatherOperationApi: WeatherOperationApi
+    private val weatherOperationApi: WeatherOperationApi,
+    private val attachmentManager: EventAttachmentManager
 ) : ViewModel() {
 
     // ✅ 精确过期触发器：仅在事件实际过期时触发 UI 刷新，避免无效轮询
@@ -318,7 +322,16 @@ class MainViewModel(
     }
 
     fun addEventFromPatch(patch: com.antgskds.calendarassistant.data.model.EventPatch) = viewModelScope.launch {
-        scheduleCenter.addEventFromPatch(patch)
+        val eventId = scheduleCenter.addEventFromPatchWithResult(patch)
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            patch.pendingAttachmentUris.forEach { uri ->
+                runCatching { attachmentManager.addManualAttachment(eventId, uri) }
+            }
+        }
+    }
+
+    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long {
+        return scheduleCenter.addEventFromPatchWithResult(patch)
     }
 
     fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.data.model.EventPatch) = viewModelScope.launch {
@@ -331,11 +344,78 @@ class MainViewModel(
         mode: RecurringMode,
         patch: com.antgskds.calendarassistant.data.model.EventPatch
     ) = viewModelScope.launch {
-        scheduleCenter.editRecurringFromPatch(
+        val editedId = scheduleCenter.editRecurringFromPatch(
             parentId, occurrenceTs,
             mode,
             patch
         )
+        editedId?.let { refreshAttachmentKey(it) }
+    }
+
+    suspend fun editRecurringFromPatchWithResult(
+        parentId: Long,
+        occurrenceTs: Long,
+        mode: RecurringMode,
+        patch: com.antgskds.calendarassistant.data.model.EventPatch
+    ): Long? {
+        val editedId = scheduleCenter.editRecurringFromPatch(parentId, occurrenceTs, mode, patch)
+        editedId?.let { refreshAttachmentKey(it) }
+        return editedId
+    }
+
+    suspend fun getEventAttachments(eventId: Long): List<EventAttachment> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.getAttachments(eventId)
+        }
+    }
+
+    suspend fun addAttachmentToEvent(eventId: Long, uri: Uri): EventAttachment {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.addManualAttachment(eventId, uri)
+        }
+    }
+
+    suspend fun addPendingAttachment(eventKey: String, uri: Uri): EventAttachment {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.addPendingManualAttachment(eventKey, uri)
+        }
+    }
+
+    suspend fun bindPendingAttachmentsToEvent(eventId: Long, pendingEventKey: String) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.bindPendingAttachments(eventId, pendingEventKey)
+        }
+    }
+
+    suspend fun deletePendingAttachments(eventKey: String) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.deleteAttachmentsForEventKey(eventKey)
+        }
+    }
+
+    suspend fun refreshAttachmentKey(eventId: Long) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.updateEventKey(eventId)
+        }
+    }
+
+    suspend fun deleteAttachment(attachment: EventAttachment) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.deleteAttachment(attachment)
+        }
+    }
+
+    private suspend fun deleteAttachmentsForEventOnIo(eventId: Long) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.deleteAttachmentsForEvent(eventId)
+        }
+    }
+
+    suspend fun openAttachment(attachment: EventAttachment): Boolean {
+        return kotlinx.coroutines.withContext(Dispatchers.Main) {
+            val intent = attachmentManager.openAttachmentIntent(attachment) ?: return@withContext false
+            runCatching { appContext.startActivity(Intent.createChooser(intent, "打开附件")) }.isSuccess
+        }
     }
 
     fun findNextRecurringInstance(parentEvent: Event): Event? {
@@ -478,7 +558,10 @@ class MainViewModel(
                     com.antgskds.calendarassistant.core.model.RecurringMode.THIS
                 )
             }
-            is ScheduleDisplayItem.ActionTarget.Single -> scheduleCenter.deleteEvent(target.eventId)
+            is ScheduleDisplayItem.ActionTarget.Single -> {
+                deleteAttachmentsForEventOnIo(target.eventId)
+                scheduleCenter.deleteEvent(target.eventId)
+            }
         }
         _revealedItemKey.value = null
     }
@@ -488,7 +571,10 @@ class MainViewModel(
             is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
                 scheduleCenter.deleteRecurringFromUi(target.parentId, target.occurrenceTs, mode)
             }
-            is ScheduleDisplayItem.ActionTarget.Single -> scheduleCenter.deleteEvent(target.eventId)
+            is ScheduleDisplayItem.ActionTarget.Single -> {
+                deleteAttachmentsForEventOnIo(target.eventId)
+                scheduleCenter.deleteEvent(target.eventId)
+            }
         }
         _revealedItemKey.value = null
     }
@@ -496,6 +582,7 @@ class MainViewModel(
     fun deleteEvent(event: Event) {
         viewModelScope.launch {
             val eid = event.id ?: return@launch
+            deleteAttachmentsForEventOnIo(eid)
             scheduleCenter.deleteEvent(eid)
             _revealedItemKey.value = null
         }
@@ -503,9 +590,21 @@ class MainViewModel(
 
     fun deleteEvent(eventId: Long) {
         viewModelScope.launch {
+            deleteAttachmentsForEventOnIo(eventId)
             scheduleCenter.deleteEvent(eventId)
             _revealedItemKey.value = null
         }
+    }
+
+    fun clearDeveloperTestEvents(): Int {
+        val testEvents = scheduleCenter.events.value.filter { it.title.startsWith("[DEV]") }
+        viewModelScope.launch {
+            testEvents.mapNotNull { it.id }.forEach { eventId ->
+                scheduleCenter.deleteEvent(eventId)
+            }
+            _revealedItemKey.value = null
+        }
+        return testEvents.size
     }
 
     fun toggleImportant(event: Event) {

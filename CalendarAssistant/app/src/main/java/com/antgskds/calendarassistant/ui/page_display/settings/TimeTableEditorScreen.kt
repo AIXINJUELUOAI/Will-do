@@ -59,6 +59,8 @@ import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
+import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -73,6 +75,7 @@ fun TimeTableEditorScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val jsonParser = remember { Json { ignoreUnknownKeys = true; prettyPrint = true } }
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
@@ -191,6 +194,7 @@ fun TimeTableEditorScreen(
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -255,7 +259,7 @@ fun TimeTableEditorScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDurationPickerForNode = nodeIndex },
+                        .clickable { haptics.click(); showDurationPickerForNode = nodeIndex },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -307,7 +311,7 @@ fun TimeTableEditorScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(36.dp)
-                                    .clickable { showBreakPickerForNode = nodeIndex },
+                                    .clickable { haptics.click(); showBreakPickerForNode = nodeIndex },
                                 contentAlignment = Alignment.Center
                             ) {
                                 HorizontalDivider(
@@ -339,7 +343,7 @@ fun TimeTableEditorScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             FloatingActionButton(
-                onClick = { showLayoutConfigDialog = true },
+                onClick = { haptics.click(); showLayoutConfigDialog = true },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -355,8 +359,10 @@ fun TimeTableEditorScreen(
             FloatingActionButton(
                 onClick = {
                     if (!isChronologicalTimeTable(generatedNodes)) {
+                        haptics.error()
                         showToast("作息时间有重叠，请调整各时段开始时间", ToastType.ERROR)
                     } else {
+                        haptics.confirm()
                         val jsonStr = jsonParser.encodeToString(generatedNodes)
                         val configJson = TimeTableLayoutUtils.encodeLayoutConfig(layoutConfig)
                         viewModel.updateTimeTable(jsonStr, configJson)
@@ -441,6 +447,7 @@ fun TimeTableEditorScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     if (selectedBreak == TimeTableLayoutUtils.DEFAULT_BREAK_MINUTES) {
                         customBreaks.remove(nodeIndex)
                     } else {
@@ -452,7 +459,7 @@ fun TimeTableEditorScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showBreakPickerForNode = null }) {
+                TextButton(onClick = { haptics.click(); showBreakPickerForNode = null }) {
                     Text("取消")
                 }
             }
@@ -488,6 +495,7 @@ fun TimeTableEditorScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     if (selectedDuration == TimeTableLayoutUtils.DEFAULT_COURSE_DURATION_MINUTES) {
                         customDurations.remove(nodeIndex)
                     } else {
@@ -499,7 +507,7 @@ fun TimeTableEditorScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDurationPickerForNode = null }) {
+                TextButton(onClick = { haptics.click(); showDurationPickerForNode = null }) {
                     Text("取消")
                 }
             }
@@ -522,6 +530,7 @@ fun TimeTableEditorScreen(
             onDismiss = { showTimePickerForAnchor = null },
             title = pickerTitle,
             onConfirm = {
+                haptics.confirm()
                 try {
                     val selectedTime = LocalTime.parse(it)
                     when (showTimePickerForAnchor) {
@@ -535,6 +544,7 @@ fun TimeTableEditorScreen(
             }
         )
     }
+    }
 }
 
 @Composable
@@ -545,6 +555,7 @@ private fun TimeTableStructureDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int, Int, Int) -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     val daySectionOptions = remember {
         (TimeTableLayoutUtils.MIN_SECTION_COUNT..TimeTableLayoutUtils.MAX_SECTION_COUNT).toList()
     }
@@ -629,12 +640,12 @@ private fun TimeTableStructureDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(morningCount, afternoonCount, nightCount) }) {
+            TextButton(onClick = { haptics.confirm(); onConfirm(morningCount, afternoonCount, nightCount) }) {
                 Text("确定")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { haptics.click(); onDismiss() }) {
                 Text("取消")
             }
         },
@@ -678,10 +689,11 @@ private fun SectionHeader(
     contentBodyStyle: TextStyle,
     onClick: () -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable { haptics.click(); onClick() }
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

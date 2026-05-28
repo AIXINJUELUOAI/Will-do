@@ -9,6 +9,7 @@ interface SettingsTransformApi {
         dailySummary: Boolean? = null,
         liveCapsule: Boolean? = null,
         pickupAggregation: Boolean? = null,
+        hapticFeedbackEnabled: Boolean? = null,
         edgeBarEnabled: Boolean? = null,
         networkSpeedCapsule: Boolean? = null,
         floatingWindow: Boolean? = null,
@@ -27,6 +28,13 @@ interface SettingsTransformApi {
         smsMonitoring: Boolean? = null,
         forceInstantCodeTimeToNow: Boolean? = null,
         noteEnabled: Boolean? = null,
+        predictiveBackEnabled: Boolean? = null,
+        clipboardCodeRecognitionEnabled: Boolean? = null,
+        widgetThemeMode: Int? = null,
+        widgetBackgroundAlpha: Float? = null,
+        developerOptionsUnlocked: Boolean? = null,
+        developerOptionsEnabled: Boolean? = null,
+        developerOptionsDisabledAtMillis: Long? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null
     ): MySettings

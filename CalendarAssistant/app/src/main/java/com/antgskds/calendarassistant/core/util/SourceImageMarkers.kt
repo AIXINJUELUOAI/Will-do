@@ -3,11 +3,16 @@ package com.antgskds.calendarassistant.core.util
 private val SOURCE_IMAGE_MARKER_REGEX = Regex("\\[img:([^\\]]+)]")
 
 fun extractSourceImagePath(description: String?): String? {
-    return SOURCE_IMAGE_MARKER_REGEX.find(description.orEmpty())
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
+    return extractSourceImagePaths(description).firstOrNull()
+}
+
+fun extractSourceImagePaths(description: String?): List<String> {
+    return SOURCE_IMAGE_MARKER_REGEX.findAll(description.orEmpty())
+        .mapNotNull { match ->
+            match.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        }
+        .distinct()
+        .toList()
 }
 
 fun stripSourceImageMarkers(description: String?): String {

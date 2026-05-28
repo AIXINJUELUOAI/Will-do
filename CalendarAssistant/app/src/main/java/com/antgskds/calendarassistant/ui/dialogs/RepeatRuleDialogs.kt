@@ -39,6 +39,7 @@ import com.antgskds.calendarassistant.core.model.RepeatFrequency
 import com.antgskds.calendarassistant.core.model.RepeatSpec
 import com.antgskds.calendarassistant.core.model.shortCn
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -49,6 +50,7 @@ fun RepeatRulePickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (RepeatSpec?) -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     var page by remember(currentSpec) { mutableStateOf(RepeatDialogPage.MAIN) }
     var selectedSpec by remember(currentSpec) { mutableStateOf(currentSpec) }
     var byDays by remember(currentSpec, startDate) {
@@ -96,6 +98,7 @@ fun RepeatRulePickerDialog(
                 },
                 showBack = page != RepeatDialogPage.MAIN,
                 onBack = {
+                    haptics.click()
                     page = when (page) {
                         RepeatDialogPage.MAIN -> RepeatDialogPage.MAIN
                         RepeatDialogPage.CUSTOM_WEEKLY -> RepeatDialogPage.MAIN
@@ -115,7 +118,7 @@ fun RepeatRulePickerDialog(
                     RepeatDialogPage.MAIN -> RepeatMainPage(
                         currentSpec = currentSpec,
                         selectedSpec = selectedSpec,
-                        onSelect = { selectedSpec = it },
+                        onSelect = { haptics.selection(); selectedSpec = it },
                         onCustom = { openCustomPage() }
                     )
 
@@ -125,11 +128,13 @@ fun RepeatRulePickerDialog(
                         endMode = endMode,
                         untilDate = untilDate,
                         onToggleDay = { day ->
+                            haptics.selection()
                             val next = if (day in byDays) byDays - day else byDays + day
                             byDays = next.ifEmpty { setOf(startDate.dayOfWeek) }
                         },
-                        onNeverEnd = { endMode = RepeatEndMode.NEVER },
+                        onNeverEnd = { haptics.selection(); endMode = RepeatEndMode.NEVER },
                         onUntil = {
+                            haptics.selection()
                             endMode = RepeatEndMode.UNTIL
                             pendingUntilDate = untilDate
                             page = RepeatDialogPage.UNTIL_DATE
@@ -149,7 +154,7 @@ fun RepeatRulePickerDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (page != RepeatDialogPage.UNTIL_DATE && (currentSpec != null || selectedSpec != null)) {
-                    TextButton(onClick = { onConfirm(null) }) { Text("不重复") }
+                    TextButton(onClick = { haptics.confirm(); onConfirm(null) }) { Text("不重复") }
                 }
                 TextButton(
                     onClick = {
@@ -159,9 +164,10 @@ fun RepeatRulePickerDialog(
                 TextButton(
                     onClick = {
                         when (page) {
-                            RepeatDialogPage.MAIN -> onConfirm(selectedSpec)
-                            RepeatDialogPage.CUSTOM_WEEKLY -> onConfirm(buildCustomSpec())
+                            RepeatDialogPage.MAIN -> { haptics.confirm(); onConfirm(selectedSpec) }
+                            RepeatDialogPage.CUSTOM_WEEKLY -> { haptics.confirm(); onConfirm(buildCustomSpec()) }
                             RepeatDialogPage.UNTIL_DATE -> {
+                                haptics.confirm()
                                 untilDate = pendingUntilDate
                                 endMode = RepeatEndMode.UNTIL
                                 page = RepeatDialogPage.CUSTOM_WEEKLY
@@ -317,6 +323,7 @@ private fun RepeatCustomWeeklyPage(
 
 @Composable
 private fun CircularDayButton(text: String, selected: Boolean, onClick: () -> Unit) {
+    val haptics = rememberAppHaptics()
     val bgColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
     val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
 
@@ -325,7 +332,7 @@ private fun CircularDayButton(text: String, selected: Boolean, onClick: () -> Un
             .size(38.dp)
             .clip(CircleShape)
             .background(bgColor)
-            .clickable(onClick = onClick),
+            .clickable { haptics.selection(); onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -344,15 +351,16 @@ private fun EndConditionRow(
     onClick: () -> Unit,
     trailing: @Composable (() -> Unit)? = null
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .clickable { haptics.selection(); onClick() }
             .padding(vertical = 4.dp, horizontal = 4.dp)
     ) {
-        RadioButton(selected = selected, onClick = onClick)
+        RadioButton(selected = selected, onClick = { haptics.selection(); onClick() })
         Spacer(Modifier.width(8.dp))
         Text(text, style = MaterialTheme.typography.bodyLarge)
 
@@ -370,12 +378,13 @@ private fun RepeatRuleOptionRow(
     trailing: String? = null,
     onClick: () -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .clickable { haptics.selection(); onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

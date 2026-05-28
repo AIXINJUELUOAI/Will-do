@@ -18,7 +18,12 @@ import kotlin.coroutines.resume
 data class WeatherLocation(
     val latitude: Double,
     val longitude: Double,
-    val source: String
+    val source: String,
+    val locationId: String = "",
+    val name: String = "",
+    val adm1: String = "",
+    val adm2: String = "",
+    val country: String = ""
 )
 
 class WeatherLocationProvider(context: Context) {

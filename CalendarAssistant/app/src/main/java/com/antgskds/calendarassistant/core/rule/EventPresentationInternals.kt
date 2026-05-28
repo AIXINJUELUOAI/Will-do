@@ -387,11 +387,16 @@ internal object EventPresentationInternals {
 
     private fun composeGeneralCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
         val primaryText = preferText(model.title, "日程提醒")
-        val detailText = sanitize(event.location) ?: summaryText(event.description)
         val timeText = formatTimeRange(event)
-        val secondaryText = detailText ?: timeText
-        val tertiaryText = if (detailText != null) timeText else null
-        val expandedText = joinLines(detailText, tertiaryText, summaryText(event.description)?.takeUnless { it == detailText })
+        val locationText = sanitize(event.location)
+        val descriptionText = summaryText(event.description)
+        val secondaryText = timeText ?: locationText ?: descriptionText
+        val tertiaryText = when {
+            timeText != null -> null
+            locationText != null -> null
+            else -> null
+        }
+        val expandedText = joinRawLines(primaryText, timeText, locationText, descriptionText)
         val action = if (!event.isCompleted && !isExpired && event.tag != "__removed_course__" && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
         return CapsuleDisplayModel(primaryText, primaryText, secondaryText, expandedText = expandedText, tertiaryText = tertiaryText, action = action)
     }
@@ -537,6 +542,10 @@ internal object EventPresentationInternals {
 
     private fun joinLines(vararg values: String?): String? {
         return values.mapNotNull { sanitize(it) }.distinct().takeIf { it.isNotEmpty() }?.joinToString("\n")
+    }
+
+    private fun joinRawLines(vararg values: String?): String? {
+        return values.mapNotNull { sanitize(it) }.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
     private fun preferText(vararg values: String): String {

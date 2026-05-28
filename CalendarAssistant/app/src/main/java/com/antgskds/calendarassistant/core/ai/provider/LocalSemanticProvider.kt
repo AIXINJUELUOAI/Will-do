@@ -13,12 +13,15 @@ import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.LocalRecognitionPromptBuilder
 import com.antgskds.calendarassistant.core.ai.RecognitionJsonParser
 import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
+import com.antgskds.calendarassistant.core.instantcode.InstantCodeRoute
 import com.antgskds.calendarassistant.core.localmodel.LocalModelInfo
 import com.antgskds.calendarassistant.core.localmodel.LocalModelRuntime
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -35,7 +38,8 @@ object LocalSemanticProvider : SemanticProvider {
         settings: MySettings,
         context: Context
     ): AnalysisResult<RecognitionDraft> {
-        val result = analyzeText(text, settings, context, source = LocalRecognitionPromptBuilder.Source.USER_TEXT)
+        val kind = routePromptKind(text)
+        val result = analyzeText(text, settings, context, source = LocalRecognitionPromptBuilder.Source.USER_TEXT, kind = kind)
         return when (result) {
             is AnalysisResult.Success -> result.data.firstOrNull()?.let { AnalysisResult.Success(it) } ?: AnalysisResult.Empty()
             is AnalysisResult.Empty -> result
@@ -54,17 +58,48 @@ object LocalSemanticProvider : SemanticProvider {
             ?: return AnalysisResult.Failure(AnalysisFailure("分析失败", "请先选择本地模型"))
         AiEngineLog.setEnabled(context.applicationContext, true)
 
-        if (settings.useMultimodalAi) {
-            if (model.runtime == LocalModelRuntime.LITERT_LM && model.supportsMultimodal) {
-                return analyzeImageWithLiteRt(bitmap, model, settings, context, app)
-            }
+        val useVision = settings.useMultimodalAi && model.runtime == LocalModelRuntime.LITERT_LM && model.supportsMultimodal
+        if (settings.useMultimodalAi && !useVision) {
             return AnalysisResult.Failure(AnalysisFailure("分析失败", "当前本地模型不支持图片识别，请关闭使用多模态AI或切换支持多模态的模型"))
         }
 
-        val ocrText = RecognitionProcessor.recognizeOptimizedText(bitmap, context)
-        if (ocrText.isBlank()) return AnalysisResult.Empty("OCR 结果为空")
-        Log.d(TAG, "[本地推理] 优化 OCR 文本(${ocrText.length} chars): $ocrText")
-        return analyzeText(ocrText, settings, context, source = LocalRecognitionPromptBuilder.Source.OCR_TEXT, preselectedModel = model, preselectedApp = app)
+        return coroutineScope {
+            val prepareDeferred = async {
+                app.liteRtAiEngineClient.prepare(
+                    model = model,
+                    enableVision = useVision,
+                    maxTokens = LITERT_MAX_TOKENS
+                )
+            }
+            val ocrDeferred = async { RecognitionProcessor.recognizeOptimizedText(bitmap, context) }
+
+            val ocrText = ocrDeferred.await()
+            val kind = if (ocrText.isBlank()) {
+                Log.w(TAG, "[本地推理] OCR 结果为空，${if (useVision) "使用多模态兜底" else "无法继续"}")
+                if (useVision) LocalRecognitionPromptBuilder.Kind.UNIFIED_MULTIMODAL else return@coroutineScope AnalysisResult.Empty("OCR 结果为空")
+            } else {
+                Log.d(TAG, "[本地推理] 优化 OCR 文本(${ocrText.length} chars): $ocrText")
+                routePromptKind(ocrText)
+            }
+
+            runCatching { prepareDeferred.await() }
+                .onSuccess { loadElapsed -> Log.d(TAG, "[本地推理] 模型预加载完成 load=${loadElapsed}ms") }
+                .getOrElse { throw it }
+
+            if (useVision) {
+                analyzeImageWithLiteRt(bitmap, model, settings, context, app, kind)
+            } else {
+                analyzeText(
+                    ocrText,
+                    settings,
+                    context,
+                    source = LocalRecognitionPromptBuilder.Source.OCR_TEXT,
+                    kind = kind,
+                    preselectedModel = model,
+                    preselectedApp = app
+                )
+            }
+        }
     }
 
     private suspend fun analyzeText(
@@ -72,6 +107,7 @@ object LocalSemanticProvider : SemanticProvider {
         settings: MySettings,
         context: Context,
         source: LocalRecognitionPromptBuilder.Source,
+        kind: LocalRecognitionPromptBuilder.Kind = LocalRecognitionPromptBuilder.Kind.SCHEDULE,
         preselectedModel: LocalModelInfo? = null,
         preselectedApp: App? = null
     ): AnalysisResult<List<RecognitionDraft>> {
@@ -82,7 +118,7 @@ object LocalSemanticProvider : SemanticProvider {
         AiEngineLog.setEnabled(context.applicationContext, true)
 
         return try {
-            val prompt = LocalRecognitionPromptBuilder.build(settings, source, text = text)
+            val prompt = LocalRecognitionPromptBuilder.build(settings, source, text = text, kind = kind)
             AiEngineLog.write(context, "DEBUG", TAG, "LiteRT text prompt\n$prompt")
             val result = app.liteRtAiEngineClient.generate(
                 model = model,
@@ -125,10 +161,11 @@ object LocalSemanticProvider : SemanticProvider {
         model: LocalModelInfo,
         settings: MySettings,
         context: Context,
-        app: App
+        app: App,
+        kind: LocalRecognitionPromptBuilder.Kind = LocalRecognitionPromptBuilder.Kind.UNIFIED_MULTIMODAL
     ): AnalysisResult<List<RecognitionDraft>> {
         AiEngineLog.setEnabled(context.applicationContext, true)
-        val prompt = LocalRecognitionPromptBuilder.build(settings, LocalRecognitionPromptBuilder.Source.IMAGE)
+        val prompt = LocalRecognitionPromptBuilder.build(settings, LocalRecognitionPromptBuilder.Source.IMAGE, kind = kind)
         return try {
             val imageFile = writeTempImage(context, bitmap)
             try {
@@ -242,6 +279,14 @@ object LocalSemanticProvider : SemanticProvider {
     private fun sendModelLoadedBroadcast(context: Context) {
         val appContext = context.applicationContext
         appContext.sendBroadcast(Intent(ACTION_LOCAL_MODEL_READY).setPackage(appContext.packageName))
+    }
+
+    private fun routePromptKind(text: String): LocalRecognitionPromptBuilder.Kind {
+        return if (InstantCodeRoute.shouldUseInstantCodePrompt(text)) {
+            LocalRecognitionPromptBuilder.Kind.INSTANT_CODE
+        } else {
+            LocalRecognitionPromptBuilder.Kind.SCHEDULE
+        }
     }
 
     private sealed class LocalParseResult {

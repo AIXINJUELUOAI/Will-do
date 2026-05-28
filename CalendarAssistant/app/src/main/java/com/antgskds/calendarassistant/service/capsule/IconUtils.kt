@@ -24,6 +24,8 @@ object IconUtils {
             CapsuleStateManager.TYPE_NETWORK_SPEED -> return R.drawable.ic_stat_net
             CapsuleStateManager.TYPE_OCR_PROGRESS -> return R.drawable.ic_stat_scan
             CapsuleStateManager.TYPE_OCR_RESULT -> return R.drawable.ic_stat_success
+            CapsuleStateManager.TYPE_MODEL_LOADING -> return R.drawable.ic_model_loading
+            CapsuleStateManager.TYPE_WEATHER_ALERT -> return R.drawable.ic_weather_rain_heavy
         }
 
         // 优先从 RuleRegistry 获取用户自定义图标

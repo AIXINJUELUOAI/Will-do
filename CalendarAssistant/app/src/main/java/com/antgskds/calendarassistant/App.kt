@@ -7,9 +7,11 @@ import android.os.Build
 import android.util.Log
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
+import com.antgskds.calendarassistant.core.util.AppLogger
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.center.CapsuleCenter
 import com.antgskds.calendarassistant.core.center.ContentIngestCenter
+import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
 import com.antgskds.calendarassistant.core.center.FloatingCenter
 import com.antgskds.calendarassistant.core.center.ImportCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
@@ -20,7 +22,9 @@ import com.antgskds.calendarassistant.core.center.RuleCenter
 import com.antgskds.calendarassistant.core.center.RuntimeCenter
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.core.center.WidgetCenter
 import com.antgskds.calendarassistant.core.event.DomainEventBus
+import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
@@ -54,9 +58,11 @@ import com.antgskds.calendarassistant.data.query.LocalNotificationPresentationQu
 import com.antgskds.calendarassistant.data.query.LocalNetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.data.query.LocalScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
+import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
 import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
 import com.antgskds.calendarassistant.data.repository.SettingsRepository
 import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.core.center.ClipboardCodeCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
@@ -67,6 +73,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 class App : Application() {
@@ -74,6 +81,7 @@ class App : Application() {
     companion object {
         const val CHANNEL_ID_POPUP = "calendar_assistant_popup_channel_v2"
         const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
+        const val CHANNEL_ID_WEATHER = "calendar_assistant_weather_channel_v1"
         private const val TAG = "App"
         lateinit var instance: App
             private set
@@ -95,6 +103,10 @@ class App : Application() {
 
     val syncCenter: SyncCenter by lazy {
         SyncCenter(calendarCenter, this)
+    }
+
+    val eventAttachmentManager: EventAttachmentManager by lazy {
+        EventAttachmentManager(applicationContext)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -148,6 +160,7 @@ class App : Application() {
     val alarmRoutingQueryApi: AlarmRoutingQueryApi by lazy { LocalAlarmRoutingQueryApi() }
     val capsuleRoutingQueryApi: CapsuleRoutingQueryApi by lazy { LocalCapsuleRoutingQueryApi() }
     val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi by lazy { LocalNetworkSpeedProbeQueryApi() }
+    val widgetScheduleQueryApi by lazy { LocalWidgetScheduleQueryApi() }
 
     // ══════════════════════════════════════════════════════════════════════
     // 识别 / 入库
@@ -158,7 +171,11 @@ class App : Application() {
     }
 
     private val importCenter: ImportCenter by lazy {
-        ImportCenter(scheduleCenter = scheduleCenter, settingsQueryApi = settingsQueryApi)
+        ImportCenter(
+            scheduleCenter = scheduleCenter,
+            settingsQueryApi = settingsQueryApi,
+            attachmentManager = eventAttachmentManager
+        )
     }
 
     val contentIngestCenter: ContentIngestCenter by lazy {
@@ -170,6 +187,15 @@ class App : Application() {
     }
 
     val ingestCommandApi: IngestCommandApi by lazy { contentIngestCenter }
+
+    val clipboardCodeCenter: ClipboardCodeCenter by lazy {
+        ClipboardCodeCenter(
+            appContext = applicationContext,
+            settingsQueryApi = settingsQueryApi,
+            ingestCommandApi = ingestCommandApi,
+            appScope = appScope
+        )
+    }
 
     val smsPickupIngestCoordinator: SmsPickupIngestCoordinator by lazy {
         SmsPickupIngestCoordinator(
@@ -184,6 +210,10 @@ class App : Application() {
 
     val liteRtAiEngineClient: LiteRtAiEngineClient by lazy {
         LiteRtAiEngineClient(applicationContext)
+    }
+
+    val diagnosticLogCenter: DiagnosticLogCenter by lazy {
+        DiagnosticLogCenter(applicationContext)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -244,10 +274,22 @@ class App : Application() {
 
     val backupCenter: BackupCenter by lazy {
         BackupCenter(
+            context = applicationContext,
             scheduleCenter = scheduleCenter,
             settingsQueryApi = settingsQueryApi,
             settingsOperationApi = settingsOperationApi,
+            attachmentManager = eventAttachmentManager,
             legacyDataMigrationCoordinator = legacyDataMigrationCoordinator
+        )
+    }
+
+    val widgetCenter: WidgetCenter by lazy {
+        WidgetCenter(
+            appContext = applicationContext,
+            calendarQueryApi = calendarCenter,
+            settingsQueryApi = settingsQueryApi,
+            widgetScheduleQueryApi = widgetScheduleQueryApi,
+            appScope = appScope
         )
     }
 
@@ -281,17 +323,29 @@ class App : Application() {
             return
         }
 
+        AppLogger.init(this)
+        AppLogger.i(TAG, "main app process started")
         CrashHandler.init(this)
         AnrMonitor.start(this)
         createNotificationChannels()
 
         // 首启自动迁移旧底层数据（Room/JSON）到新 events.db
         runBlocking(Dispatchers.IO) {
+            AppLogger.i(TAG, "legacy data migration check started")
             legacyDataMigrationCoordinator.runAutoMigrationIfNeeded()
+            AppLogger.i(TAG, "legacy data migration check finished")
         }
 
         // 初始化日程数据
         scheduleCenter.refreshEvents()
+        AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
+        scheduleCenter.onScheduleChanged = { widgetCenter.requestRefresh() }
+
+        appScope.launch(Dispatchers.IO) {
+            runCatching { eventAttachmentManager.migrateLegacyDescriptionMarkers() }
+                .onFailure { Log.w(TAG, "Failed to migrate legacy source image markers", it) }
+            scheduleCenter.refreshEvents()
+        }
 
         // 预热入库中心
         contentIngestCenter
@@ -317,6 +371,8 @@ class App : Application() {
         }
         runtimeCenter.startAppRoutines()
         reminderCenter.startEventSubscriptions()
+        widgetCenter.startSubscriptions()
+        AppLogger.i(TAG, "main app routines started")
     }
 
     private fun createNotificationChannels() {
@@ -328,7 +384,10 @@ class App : Application() {
             val liveChannel = NotificationChannel(CHANNEL_ID_LIVE, "实况胶囊", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "进行中日程的实况胶囊"; setSound(null, null); setShowBadge(false)
             }
-            notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel))
+            val weatherChannel = NotificationChannel(CHANNEL_ID_WEATHER, "天气预警", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "天气预警和风险提醒"; enableLights(true); enableVibration(true)
+            }
+            notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel, weatherChannel))
         }
     }
 

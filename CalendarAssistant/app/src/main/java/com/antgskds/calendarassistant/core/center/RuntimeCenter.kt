@@ -8,6 +8,7 @@ import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
 import com.antgskds.calendarassistant.service.receiver.ReminderReconcileReceiver
 import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
+import com.antgskds.calendarassistant.service.clipboard.ClipboardCodeMonitorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -27,6 +28,7 @@ class RuntimeCenter(
     }
 
     private var networkSpeedMonitorJob: Job? = null
+    private var clipboardCodeMonitorJob: Job? = null
 
     fun startAppRoutines() {
         restoreSmsNotificationListenerIfNeeded()
@@ -35,6 +37,7 @@ class RuntimeCenter(
         scheduleReminderReconcile()
         startNetworkSpeedMonitoring()
         startEdgeBarIfNeeded()
+        startClipboardCodeMonitoring()
     }
 
     fun restoreAfterBoot() {
@@ -43,6 +46,7 @@ class RuntimeCenter(
         scheduleReminderReconcile()
         startPeriodicSync()
         restoreSmsNotificationListenerIfNeeded()
+        startClipboardCodeMonitoring()
     }
 
     fun startPeriodicSync() {
@@ -76,7 +80,7 @@ class RuntimeCenter(
 
         networkSpeedMonitorJob = appScope.launch {
             settingsQueryApi.settings.collectLatest { settings ->
-                if (!settings.isNetworkSpeedCapsuleEnabled) {
+                if (!settings.isLiveCapsuleEnabled || !settings.isNetworkSpeedCapsuleEnabled) {
                     capsuleCenter.updateNetworkSpeed(null)
                     return@collectLatest
                 }
@@ -97,6 +101,19 @@ class RuntimeCenter(
             }
         } catch (e: Exception) {
             Log.w(TAG, "Start edge bar failed", e)
+        }
+    }
+
+    fun startClipboardCodeMonitoring() {
+        if (clipboardCodeMonitorJob?.isActive == true) return
+        clipboardCodeMonitorJob = appScope.launch {
+            settingsQueryApi.settings.collectLatest { settings ->
+                if (settings.clipboardCodeRecognitionEnabled) {
+                    ClipboardCodeMonitorService.startIfNeeded(appContext)
+                } else {
+                    ClipboardCodeMonitorService.stop(appContext)
+                }
+            }
         }
     }
 }

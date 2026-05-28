@@ -17,6 +17,7 @@ import android.os.Messenger
 import android.os.PowerManager
 import android.os.RemoteException
 import android.util.Log
+import org.json.JSONObject
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.KEY_BACKEND
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.KEY_ENABLE_VISION
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.KEY_ERROR
@@ -39,6 +40,8 @@ import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE_ERROR
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE_RESULT
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_MODEL_LOADED
+import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_PREPARE_MODEL
+import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_PREPARE_RESULT
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -52,6 +55,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -68,6 +72,7 @@ class AiEngineService : Service() {
     private val messenger by lazy { Messenger(IncomingHandler()) }
     private val activeReplyTos = ConcurrentHashMap<Long, Messenger>()
     private val activeJobs = ConcurrentHashMap<Long, Job>()
+    private var idleStopJob: Job? = null
     private val watchdogExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "AiEngineWatchdog").apply { isDaemon = true }
     }
@@ -114,9 +119,51 @@ class AiEngineService : Service() {
         override fun handleMessage(msg: Message) {
             when (msg.what) {
                 MSG_GENERATE -> handleGenerate(msg)
+                MSG_PREPARE_MODEL -> handlePrepareModel(msg)
                 else -> super.handleMessage(msg)
             }
         }
+    }
+
+    private fun handlePrepareModel(msg: Message) {
+        val replyTo = msg.replyTo ?: return
+        val data = msg.data
+        val requestId = data.getLong(KEY_REQUEST_ID)
+        val request = data.toRequest()
+        idleStopJob?.cancel()
+        activeRequests += 1
+        startAsForeground()
+        acquireWakeLock(request.timeoutMillis + 30_000L)
+        AiEngineLog.write(
+            this,
+            "INFO",
+            TAG,
+            "request#$requestId prepare mode=${if (request.enableVision) "vision" else "text"} runtime=LITERT_LM backend=${request.backend} model=${File(request.modelPath).name} maxTokens=${request.maxTokens} timeout=${request.timeoutMillis}"
+        )
+        activeReplyTos[requestId] = replyTo
+        val job = serviceScope.launch {
+            try {
+                val loadElapsed = runtime.prepare(applicationContext, request)
+                AiEngineLog.write(applicationContext, "INFO", TAG, "request#$requestId prepared load=${loadElapsed}ms")
+                replyTo.sendPrepareResult(requestId, loadElapsed)
+            } catch (e: Exception) {
+                val status = e.toStatus()
+                val error = e.message ?: "AI 引擎模型加载失败"
+                Log.e(TAG, "LiteRT prepare failed", e)
+                AiEngineLog.write(applicationContext, "ERROR", TAG, "request#$requestId prepare failed status=$status error=$error")
+                replyTo.sendError(requestId, status, error)
+            } finally {
+                activeReplyTos.remove(requestId)
+                activeJobs.remove(requestId)
+                activeRequests = (activeRequests - 1).coerceAtLeast(0)
+                if (activeRequests == 0) {
+                    releaseWakeLock()
+                    scheduleIdleStop()
+                }
+            }
+        }
+        activeJobs[requestId] = job
+        launchRequestWatchdog(requestId, request.timeoutMillis)
     }
 
     private fun handleGenerate(msg: Message) {
@@ -124,6 +171,7 @@ class AiEngineService : Service() {
         val data = msg.data
         val requestId = data.getLong(KEY_REQUEST_ID)
         val request = data.toRequest()
+        idleStopJob?.cancel()
         activeRequests += 1
         startAsForeground()
         acquireWakeLock(request.timeoutMillis + 30_000L)
@@ -190,6 +238,7 @@ class AiEngineService : Service() {
     }
 
     private fun cancelActiveRequests() {
+        idleStopJob?.cancel()
         activeReplyTos.forEach { (requestId, replyTo) ->
             replyTo.sendError(requestId, AiEngineStatus.USER_CANCELLED, "用户取消本地模型识别")
         }
@@ -199,6 +248,19 @@ class AiEngineService : Service() {
         activeRequests = 0
         runtime.close()
         releaseWakeLock()
+    }
+
+    private fun scheduleIdleStop() {
+        idleStopJob?.cancel()
+        idleStopJob = serviceScope.launch {
+            delay(IDLE_STOP_DELAY_MS)
+            if (activeRequests == 0) {
+                AiEngineLog.write(applicationContext, "INFO", TAG, "idle stop after prepare")
+                runtime.close()
+                stopForegroundCompat(removeNotification = true)
+                stopSelf()
+            }
+        }
     }
 
     private fun acquireWakeLock(timeoutMillis: Long) {
@@ -247,6 +309,17 @@ class AiEngineService : Service() {
                 putLong(KEY_INFERENCE_ELAPSED, result.inferenceElapsedMillis)
                 putLong(KEY_TOTAL_ELAPSED, result.totalElapsedMillis)
                 putString(KEY_STATUS, result.status.name)
+            }
+        }
+        trySend(message)
+    }
+
+    private fun Messenger.sendPrepareResult(requestId: Long, loadElapsed: Long) {
+        val message = Message.obtain(null, MSG_PREPARE_RESULT).apply {
+            data = Bundle().apply {
+                putLong(KEY_REQUEST_ID, requestId)
+                putLong(KEY_LOAD_ELAPSED, loadElapsed)
+                putString(KEY_STATUS, AiEngineStatus.SUCCESS.name)
             }
         }
         trySend(message)
@@ -308,8 +381,10 @@ class AiEngineService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val useLiveCapsule = isLiveCapsuleEnabled()
+        val channelId = if (useLiveCapsule) CHANNEL_ID_LIVE else CHANNEL_ID_ENGINE
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID_LIVE)
+            Notification.Builder(this, channelId)
         } else {
             Notification.Builder(this)
         }
@@ -326,14 +401,26 @@ class AiEngineService : Service() {
             .setShowWhen(true)
             .setStyle(Notification.BigTextStyle().setBigContentTitle(title).bigText(text))
             .addAction(0, "取消", cancelIntent)
-        if (Build.VERSION.SDK_INT >= 35) {
+        if (useLiveCapsule) {
+            builder.setShowWhen(false)
+        }
+        if (useLiveCapsule && Build.VERSION.SDK_INT >= 35) {
             val extras = Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }
             builder.addExtras(extras)
         }
-        if (Build.VERSION.SDK_INT >= 36) {
+        if (useLiveCapsule && Build.VERSION.SDK_INT >= 36) {
             builder.setShortCriticalText("模型加载中")
         }
         return builder.build()
+    }
+
+    private fun isLiveCapsuleEnabled(): Boolean {
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
+        val json = prefs.getString("settings_json", null)
+        if (!json.isNullOrBlank()) {
+            return runCatching { JSONObject(json).optBoolean("isLiveCapsuleEnabled", false) }.getOrDefault(false)
+        }
+        return prefs.getBoolean("live_capsule_enabled", false)
     }
 
     private fun resolveModelLoadingIcon(): Int {
@@ -344,13 +431,22 @@ class AiEngineService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID_LIVE) != null) return
-        val channel = NotificationChannel(CHANNEL_ID_LIVE, "实况胶囊", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "进行中任务的实况胶囊"
-            setSound(null, null)
-            setShowBadge(false)
+        if (manager.getNotificationChannel(CHANNEL_ID_LIVE) == null) {
+            val liveChannel = NotificationChannel(CHANNEL_ID_LIVE, "实况胶囊", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "进行中任务的实况胶囊"
+                setSound(null, null)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(liveChannel)
         }
-        manager.createNotificationChannel(channel)
+        if (manager.getNotificationChannel(CHANNEL_ID_ENGINE) == null) {
+            val engineChannel = NotificationChannel(CHANNEL_ID_ENGINE, "本地模型", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "本地模型加载和推理进度"
+                setSound(null, null)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(engineChannel)
+        }
     }
 
     private fun stopForegroundCompat(removeNotification: Boolean) {
@@ -411,6 +507,31 @@ class AiEngineService : Service() {
                     totalElapsedMillis = System.currentTimeMillis() - totalStart,
                     status = AiEngineStatus.SUCCESS
                 )
+            }
+        }
+
+        suspend fun prepare(
+            context: android.content.Context,
+            request: AiEngineRequest
+        ): Long {
+            if (!File(request.modelPath).exists()) {
+                throw AiEngineException(AiEngineStatus.MODEL_FILE_MISSING, "模型文件不存在：${request.modelPath}")
+            }
+            request.imagePath?.let {
+                if (!File(it).exists()) throw AiEngineException(AiEngineStatus.MODEL_FILE_MISSING, "图片文件不存在：$it")
+            }
+            return withContext(Dispatchers.IO) {
+                try {
+                    withTimeout(request.timeoutMillis) {
+                        ensureLoaded(context, request)
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    throw AiEngineException(AiEngineStatus.TIMEOUT_LOADING, "模型加载超时", e)
+                } catch (e: AiEngineException) {
+                    throw e
+                } catch (e: Exception) {
+                    throw AiEngineException(AiEngineStatus.MODEL_LOAD_FAILED, e.message ?: "模型加载失败", e)
+                }
             }
         }
 
@@ -510,7 +631,9 @@ class AiEngineService : Service() {
     companion object {
         private const val TAG = "AiEngineService"
         private const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
+        private const val CHANNEL_ID_ENGINE = "calendar_assistant_ai_engine_channel_v1"
         private const val FOREGROUND_NOTIFICATION_ID = 0x4CA11
+        private const val IDLE_STOP_DELAY_MS = 60_000L
         const val ACTION_BIND = "com.antgskds.calendarassistant.aiengine.BIND"
         const val ACTION_START_FOREGROUND = "com.antgskds.calendarassistant.aiengine.START_FOREGROUND"
         const val ACTION_CANCEL = "com.antgskds.calendarassistant.aiengine.CANCEL"
