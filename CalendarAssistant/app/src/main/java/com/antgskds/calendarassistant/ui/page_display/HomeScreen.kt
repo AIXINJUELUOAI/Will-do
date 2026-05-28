@@ -1,10 +1,7 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
 import com.antgskds.calendarassistant.calendar.models.stubs.RecurringEventUtils
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,15 +34,13 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomS
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.dialogs.*
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
-import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
-import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -61,7 +56,8 @@ private data class RecurringEditSession(
 private data class RecurringEditCommitSession(
     val parentId: Long,
     val occurrenceTs: Long,
-    val patch: com.antgskds.calendarassistant.data.model.EventPatch
+    val patch: com.antgskds.calendarassistant.data.model.EventPatch,
+    val attachments: List<EventAttachment> = emptyList()
 )
 
 /** 编辑上下文：记录当前编辑弹窗要操作的目标类型 */
@@ -76,6 +72,10 @@ fun HomeScreen(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
+    selectedPageKey: String = HomeEntryKey.TODAY,
+    onSelectedPageKeyChange: (String) -> Unit = {},
+    onOpenWeatherDetail: () -> Unit = {},
+    onOpenNoteEditor: (Long?) -> Unit = {},
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
@@ -155,15 +155,12 @@ fun HomeScreen(
 
     // 状态管理
     var isSidebarOpen by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Today, 1=Note/All(无便签), 2=All(有便签)
     var isScheduleExpanded by remember { mutableStateOf(false) } // 课表是否展开
     var scheduleProgress by remember { mutableFloatStateOf(0f) }
     var scheduleOffsetPx by remember { mutableFloatStateOf(0f) }
     var isActionExpanded by remember { mutableStateOf(false) }
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
-    var previousNoteEnabled by remember { mutableStateOf(settings.noteEnabled) }
-    var hasAppliedStartPage by remember { mutableStateOf(false) }
 
     val homeBottomItems = remember(settings.homeBottomItems, settings.noteEnabled) {
         sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
@@ -189,31 +186,8 @@ fun HomeScreen(
         }
     }
 
-    fun selectPage(pageKey: String) {
-        when (pageKey) {
-            HomeEntryKey.TODAY -> selectedTab = 0
-            HomeEntryKey.NOTE -> if (settings.noteEnabled) selectedTab = 1
-            HomeEntryKey.ALL -> selectedTab = if (settings.noteEnabled) 2 else 1
-        }
-    }
-
-    // 取件码场景保持最高优先级：强制切换到“全部”
-    LaunchedEffect(pickupTimestamp) {
-        if (pickupTimestamp > 0) {
-            selectPage(HomeEntryKey.ALL)
-        }
-    }
-
-    LaunchedEffect(settings.noteEnabled) {
-        if (settings.noteEnabled != previousNoteEnabled) {
-            if (settings.noteEnabled && selectedTab == 1) {
-                selectedTab = 2
-            } else if (!settings.noteEnabled && selectedTab == 2) {
-                selectedTab = 1
-            }
-            previousNoteEnabled = settings.noteEnabled
-        }
-    }
+    val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
+    val selectedTab = pageKeyToTab(effectiveSelectedPageKey)
 
     LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, settings.noteEnabled) {
         if (homeBottomItems != settings.homeBottomItems || homeStartPageKey != settings.homeStartPageKey) {
@@ -224,20 +198,9 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(homeBottomItems, homeStartPageKey, settings.noteEnabled) {
-        if (!hasAppliedStartPage) {
-            selectedTab = pageKeyToTab(homeStartPageKey)
-            hasAppliedStartPage = true
-            return@LaunchedEffect
-        }
-
-        val allowedTabs = homeBottomItems.map { pageKeyToTab(it) }.toSet()
-        if (allowedTabs.isEmpty()) {
-            selectedTab = pageKeyToTab(homeStartPageKey)
-            return@LaunchedEffect
-        }
-        if (selectedTab !in allowedTabs) {
-            selectedTab = pageKeyToTab(homeStartPageKey)
+    LaunchedEffect(homeBottomItems, homeStartPageKey, selectedPageKey) {
+        if (selectedPageKey !in homeBottomItems) {
+            onSelectedPageKeyChange(homeStartPageKey)
         }
     }
 
@@ -247,26 +210,24 @@ fun HomeScreen(
     var editContext by remember { mutableStateOf<EditContext?>(null) }
     var eventToEdit by remember { mutableStateOf<Event?>(null) }  // 仅用于 Note 编辑和旧 beginEdit 桥接
     var draftEventToAdd by remember { mutableStateOf<Event?>(null) }
-    var noteToEdit by remember { mutableStateOf<Event?>(null) }
-    var showNoteEditor by remember { mutableStateOf(false) }
-    var noteEditorInitialNote by remember { mutableStateOf<Event?>(null) }
-    var noteEditorSessionKey by remember { mutableIntStateOf(0) }
     var editingVirtualCourse by remember { mutableStateOf<Event?>(null) }
     var courseItemToEdit by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
+    var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
+    var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
     var addDialogRequestId by remember { mutableIntStateOf(0) }
     val dialogDelayMs = 240L
 
-    val noteEditorVisible = showNoteEditor || noteToEdit != null
-
     fun openNoteEditor(note: Event?) {
-        noteEditorInitialNote = note
-        noteToEdit = note
-        noteEditorSessionKey += 1
-        showNoteEditor = true
+        val noteId = note?.id
+        if (note != null && noteId == null) {
+            showToast("便签不存在")
+            return
+        }
+        onOpenNoteEditor(noteId)
     }
 
     LaunchedEffect(pendingAddDialog) {
@@ -281,8 +242,6 @@ fun HomeScreen(
     fun beginEdit(event: Event) {
         pendingAddDialog = false
         draftEventToAdd = null
-        noteToEdit = null
-        showNoteEditor = false
         if (event.tag == "__removed_course__") {
             editingVirtualCourse = event
             eventToEdit = null
@@ -358,8 +317,6 @@ fun HomeScreen(
     fun beginEditItem(item: ScheduleDisplayItem) {
         pendingAddDialog = false
         draftEventToAdd = null
-        noteToEdit = null
-        showNoteEditor = false
         recurringEditCommitSession = null
 
         when (val target = item.action) {
@@ -377,6 +334,14 @@ fun HomeScreen(
                 val draft = mainViewModel.prepareEditSingle(target.eventId)
                 if (draft != null) {
                     editDraft = draft
+                    dialogAttachments = emptyList()
+                    val sessionId = System.nanoTime()
+                    currentDialogSessionId = sessionId
+                    scope.launch {
+                        runCatching { mainViewModel.getEventAttachments(target.eventId) }
+                            .onSuccess { if (currentDialogSessionId == sessionId) dialogAttachments = it }
+                            .onFailure { showToast("附件加载失败: ${it.message}", ToastType.ERROR) }
+                    }
                     editContext = if (event.parentId != 0L) {
                         // 已存在的异常子实例 → 按单次事件更新
                         EditContext.SingleEvent(target.eventId)
@@ -394,6 +359,14 @@ fun HomeScreen(
                 val draft = mainViewModel.prepareEditRecurringOccurrence(target.parentId, target.occurrenceTs)
                 if (draft != null) {
                     editDraft = draft
+                    dialogAttachments = emptyList()
+                    val sessionId = System.nanoTime()
+                    currentDialogSessionId = sessionId
+                    scope.launch {
+                        runCatching { mainViewModel.getEventAttachments(target.parentId) }
+                            .onSuccess { if (currentDialogSessionId == sessionId) dialogAttachments = it }
+                            .onFailure { showToast("附件加载失败: ${it.message}", ToastType.ERROR) }
+                    }
                     editContext = EditContext.RecurringOccurrence(target.parentId, target.occurrenceTs)
                     showAddEventDialog = true
                 }
@@ -409,13 +382,13 @@ fun HomeScreen(
     fun openAddEventDialog() {
         isActionExpanded = false
         addDialogRequestId += 1
+        currentDialogSessionId = System.nanoTime()
         recurringEditSession = null
         recurringEditCommitSession = null
         draftEventToAdd = null
-        noteToEdit = null
-        showNoteEditor = false
         eventToEdit = null
         editDraft = null
+        dialogAttachments = emptyList()
         editContext = EditContext.NewEvent
         showAddEventDialog = false
         pendingAddDialog = true
@@ -451,6 +424,10 @@ fun HomeScreen(
             bottomInset
 
     Box(modifier = Modifier) {
+        BackHandler(enabled = isSidebarOpen) {
+            isSidebarOpen = false
+        }
+
         // 核心布局
         PushSlideLayout(
             isOpen = isSidebarOpen,
@@ -481,14 +458,15 @@ fun HomeScreen(
                         searchRequestId = searchRequestId,
                         imageRequestId = imageRequestId,
                         isSidebarOpen = isSidebarOpen,
-                        onTabChange = { selectedTab = it },
+                        onTabChange = { tab -> onSelectedPageKeyChange(tabToPageKey(tab)) },
                         onAddEventClick = { openPrimaryCreateDialog() },
                         onEditItem = { item -> beginEditItem(item) },
                         onRequestDeleteItem = { item -> requestDeleteItem(item) },
                         onEditNote = { note -> beginEdit(note) },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
-                        onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) }
+                        onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
+                        onOpenWeatherDetail = onOpenWeatherDetail
                     )
             }
         )
@@ -508,7 +486,7 @@ fun HomeScreen(
             onPageClick = { pageKey ->
                 isActionExpanded = false
                 isSidebarOpen = false
-                selectPage(pageKey)
+                onSelectedPageKeyChange(pageKey)
             },
             onSearchClick = {
                 isActionExpanded = false
@@ -539,29 +517,8 @@ fun HomeScreen(
 
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
-        AnimatedVisibility(
-            visible = deleteItem != null || editCommitSession != null,
-            modifier = Modifier
-                .matchParentSize()
-                .zIndex(2f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {
-                            scheduleItemToDelete = null
-                            recurringEditCommitSession = null
-                        }
-                    )
-            )
-        }
-
         val singleDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.Single }
-        FloatingActionCard(
+        PredictiveFloatingActionCard(
             visible = singleDeleteItem != null,
             title = "删除日程",
             content = "删除后无法恢复，确认删除这条日程吗？",
@@ -569,6 +526,7 @@ fun HomeScreen(
             dismissText = "取消",
             isDestructive = true,
             isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
                 val eventId = (singleDeleteItem?.action as? ScheduleDisplayItem.ActionTarget.Single)?.eventId
                 if (eventId != null) mainViewModel.deleteEvent(eventId)
@@ -576,14 +534,13 @@ fun HomeScreen(
             },
             onDismiss = { scheduleItemToDelete = null },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
-                .zIndex(5f)
         )
 
         val recurringDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.RecurringOccurrence }
-        RecurringDeleteActionCard(
+        PredictiveRecurringDeleteActionCard(
             visible = recurringDeleteItem != null,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
             onDeleteThis = {
                 recurringDeleteItem?.let { mainViewModel.deleteRecurringItem(it, RecurringMode.THIS) }
                 scheduleItemToDelete = null
@@ -593,37 +550,48 @@ fun HomeScreen(
                 scheduleItemToDelete = null
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
-                .zIndex(5f)
         )
 
-        RecurringEditActionCard(
+        PredictiveRecurringEditActionCard(
             visible = editCommitSession != null,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
             onEditThis = {
-                val session = editCommitSession ?: return@RecurringEditActionCard
+                val session = editCommitSession ?: return@PredictiveRecurringEditActionCard
                 recurringEditCommitSession = null
-                mainViewModel.editRecurringFromPatch(
-                    session.parentId,
-                    session.occurrenceTs,
-                    RecurringMode.THIS,
-                    session.patch
-                )
+                scope.launch {
+                    val editedId = mainViewModel.editRecurringFromPatchWithResult(
+                        session.parentId,
+                        session.occurrenceTs,
+                        RecurringMode.THIS,
+                        session.patch
+                    )
+                    editedId?.let { eventId ->
+                        session.attachments.filter { it.eventId == null && it.eventKey.isNotBlank() }.forEach { attachment ->
+                            mainViewModel.bindPendingAttachmentsToEvent(eventId, attachment.eventKey)
+                        }
+                    }
+                }
             },
             onEditAll = {
-                val session = editCommitSession ?: return@RecurringEditActionCard
+                val session = editCommitSession ?: return@PredictiveRecurringEditActionCard
                 recurringEditCommitSession = null
-                mainViewModel.editRecurringFromPatch(
-                    session.parentId,
-                    session.occurrenceTs,
-                    RecurringMode.ALL,
-                    session.patch
-                )
+                scope.launch {
+                    val editedId = mainViewModel.editRecurringFromPatchWithResult(
+                        session.parentId,
+                        session.occurrenceTs,
+                        RecurringMode.ALL,
+                        session.patch
+                    )
+                    editedId?.let { eventId ->
+                        session.attachments.filter { it.eventId == null && it.eventKey.isNotBlank() }.forEach { attachment ->
+                            mainViewModel.bindPendingAttachmentsToEvent(eventId, attachment.eventKey)
+                        }
+                    }
+                }
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
-                .zIndex(5f)
         )
 
         // SnackbarHost 放在屏幕底部
@@ -649,11 +617,45 @@ fun HomeScreen(
             editDraft = editDraft,
             currentEventsCount = uiState.rawEventCount,
             settings = settings,
+            attachments = dialogAttachments,
+            onAddAttachment = { uri ->
+                val eventId = editDraft?.eventId ?: return@AddEventDialog
+                scope.launch {
+                    runCatching { mainViewModel.addAttachmentToEvent(eventId, uri) }
+                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
+                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
+            onAddPendingAttachment = { uri, eventKey ->
+                scope.launch {
+                    runCatching { mainViewModel.addPendingAttachment(eventKey, uri) }
+                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
+                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
+            onOpenAttachment = { attachment ->
+                scope.launch {
+                    val opened = mainViewModel.openAttachment(attachment)
+                    if (!opened) showToast("无法打开附件", ToastType.ERROR)
+                }
+            },
+            onDeleteAttachment = { attachment ->
+                scope.launch {
+                    runCatching { mainViewModel.deleteAttachment(attachment) }
+                        .onSuccess { dialogAttachments = dialogAttachments.filterNot { it.id == attachment.id } }
+                        .onFailure { showToast("附件删除失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
             onShowMessage = { message -> showToast(message, ToastType.INFO) },
             onDismiss = {
                 pendingAddDialog = false
                 showAddEventDialog = false
                 editDraft = null
+                if (editContext is EditContext.NewEvent || editContext == null) {
+                    val pendingKey = dialogAttachments.firstOrNull { it.eventId == null }?.eventKey.orEmpty()
+                    if (pendingKey.isNotBlank()) scope.launch { mainViewModel.deletePendingAttachments(pendingKey) }
+                }
+                dialogAttachments = emptyList()
                 editContext = null
                 recurringEditCommitSession = null
                 draftEventToAdd = null
@@ -664,56 +666,36 @@ fun HomeScreen(
                 when (ctx) {
                     is EditContext.SingleEvent -> {
                         mainViewModel.updateSingleFromPatch(ctx.eventId, patch)
+                        scope.launch { mainViewModel.refreshAttachmentKey(ctx.eventId) }
+                        patch.pendingAttachmentUris.forEach { uri ->
+                            scope.launch {
+                                runCatching { mainViewModel.addAttachmentToEvent(ctx.eventId, uri) }
+                                    .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                            }
+                        }
                     }
                     is EditContext.RecurringOccurrence -> {
                         nextRecurringCommit = RecurringEditCommitSession(
                             parentId = ctx.parentId,
                             occurrenceTs = ctx.occurrenceTs,
-                            patch = patch
+                            patch = patch,
+                            attachments = dialogAttachments
                         )
                     }
                     is EditContext.NewEvent, null -> {
-                        mainViewModel.addEventFromPatch(patch)
+                        scope.launch {
+                            val eventId = mainViewModel.addEventFromPatchWithResult(patch)
+                            mainViewModel.bindPendingAttachmentsToEvent(eventId, patch.pendingAttachmentKey)
+                        }
                     }
                 }
                 pendingAddDialog = false
                 showAddEventDialog = false
                 editDraft = null
+                dialogAttachments = emptyList()
                 editContext = null
                 recurringEditCommitSession = nextRecurringCommit
                 draftEventToAdd = null
-            }
-        )
-    }
-
-    AnimatedVisibility(
-        visible = noteEditorVisible,
-        enter = navForwardEnterTransition(),
-        exit = navBackwardExitTransition()
-    ) {
-        NoteEditorScreen(
-            initialNote = noteEditorInitialNote,
-            editorSessionKey = noteEditorSessionKey,
-            currentEventsCount = uiState.rawEventCount,
-            settings = settings,
-            onDismiss = {
-                showNoteEditor = false
-                noteToEdit = null
-            },
-            onSave = { note ->
-                if (noteEditorInitialNote == null) {
-                    mainViewModel.addEvent(note)
-                } else {
-                    mainViewModel.updateEvent(note)
-                }
-            },
-            onDelete = { note ->
-                mainViewModel.deleteEvent(note)
-                showNoteEditor = false
-                noteToEdit = null
-            },
-            onShowMessage = { message, type ->
-                showToast(message, type)
             }
         )
     }
@@ -729,6 +711,7 @@ fun HomeScreen(
                 initialEndNode = meta.endNode,
                 initialDate = item.startDate,
                 maxNodes = maxNodes,
+                predictiveBackEnabled = settings.predictiveBackEnabled,
                 onDismiss = { courseItemToEdit = null },
                 onDelete = {
                     mainViewModel.deleteCourseOccurrence(item)
@@ -746,13 +729,14 @@ fun HomeScreen(
 }
 
 @Composable
-private fun RecurringDeleteActionCard(
+private fun PredictiveRecurringDeleteActionCard(
     visible: Boolean,
+    predictiveBackEnabled: Boolean,
     onDeleteThis: () -> Unit,
     onDeleteAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    FloatingActionCard(
+    PredictiveFloatingActionCard(
         visible = visible,
         title = "删除重复日程",
         content = "删除本次还是全部？",
@@ -761,6 +745,7 @@ private fun RecurringDeleteActionCard(
         dismissIsDestructive = true,
         isDestructive = true,
         isLoading = false,
+        predictiveBackEnabled = predictiveBackEnabled,
         onConfirm = onDeleteAll,
         onDismiss = onDeleteThis,
         modifier = modifier
@@ -768,13 +753,14 @@ private fun RecurringDeleteActionCard(
 }
 
 @Composable
-private fun RecurringEditActionCard(
+private fun PredictiveRecurringEditActionCard(
     visible: Boolean,
+    predictiveBackEnabled: Boolean,
     onEditThis: () -> Unit,
     onEditAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    FloatingActionCard(
+    PredictiveFloatingActionCard(
         visible = visible,
         title = "编辑重复日程",
         content = "保存到本次还是全部？",
@@ -782,6 +768,7 @@ private fun RecurringEditActionCard(
         dismissText = "仅本次",
         isDestructive = false,
         isLoading = false,
+        predictiveBackEnabled = predictiveBackEnabled,
         onConfirm = onEditAll,
         onDismiss = onEditThis,
         modifier = modifier

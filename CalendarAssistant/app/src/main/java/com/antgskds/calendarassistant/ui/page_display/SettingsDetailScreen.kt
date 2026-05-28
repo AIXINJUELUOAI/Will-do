@@ -1,12 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -33,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.NavHost
@@ -41,9 +34,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
@@ -61,15 +55,16 @@ import com.antgskds.calendarassistant.ui.page_display.settings.PreferenceSetting
 import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ThemeSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.TimeTableEditorScreen
+import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailPage
 import com.antgskds.calendarassistant.ui.page_display.settings.WeatherSettingsPage
+import com.antgskds.calendarassistant.ui.page_display.settings.WidgetSettingsPage
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-
-private const val SettingsHistoryLimit = 3
 
 private object SettingsRoutes {
     const val Ai = "settings_ai"
     const val Weather = "settings_weather"
+    const val WeatherDetail = "settings_weather_detail"
     const val Schedule = "settings_schedule"
     const val CourseManage = "settings_course_manage"
     const val TimeTableManage = "settings_timetable_manage"
@@ -82,6 +77,7 @@ private object SettingsRoutes {
     const val Donate = "settings_donate"
     const val Laboratory = "settings_laboratory"
     const val BottomBarEditor = "settings_bottom_bar_editor"
+    const val WidgetSettings = "settings_widget_settings"
 }
 
 private fun parseSettingsDestination(value: String): SettingsDestination {
@@ -108,6 +104,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.Donate -> SettingsRoutes.Donate
         SettingsDestination.Laboratory -> SettingsRoutes.Laboratory
         SettingsDestination.BottomBarEditor -> SettingsRoutes.BottomBarEditor
+        SettingsDestination.WidgetSettings -> SettingsRoutes.WidgetSettings
         SettingsDestination.Logout -> null
     }
 }
@@ -116,6 +113,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
     return when (route.substringBefore('?')) {
         SettingsRoutes.Ai -> SettingsDestination.AI
         SettingsRoutes.Weather -> SettingsDestination.Weather
+        SettingsRoutes.WeatherDetail -> SettingsDestination.Weather
         SettingsRoutes.Schedule -> SettingsDestination.Schedule
         SettingsRoutes.CourseManage -> SettingsDestination.CourseManage
         SettingsRoutes.TimeTableManage -> SettingsDestination.TimeTableManage
@@ -128,6 +126,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.Donate -> SettingsDestination.Donate
         SettingsRoutes.Laboratory -> SettingsDestination.Laboratory
         SettingsRoutes.BottomBarEditor -> SettingsDestination.BottomBarEditor
+        SettingsRoutes.WidgetSettings -> SettingsDestination.WidgetSettings
         else -> SettingsDestination.Preference
     }
 }
@@ -148,6 +147,7 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.Donate -> "捐赠开发者"
         SettingsDestination.Laboratory -> "实验室"
         SettingsDestination.BottomBarEditor -> "底栏编辑"
+        SettingsDestination.WidgetSettings -> "桌面小组件"
         SettingsDestination.Logout -> "退出应用"
     }
 }
@@ -175,9 +175,13 @@ private fun SettingsPageContent(
     settingsViewModel: SettingsViewModel,
     uiSize: Int,
     onBack: () -> Unit,
-    onNavigateTo: (SettingsDestination) -> Unit
+    onNavigateTo: (SettingsDestination) -> Unit,
+    onNavigateRoute: (String) -> Unit = {},
+    titleOverride: String? = null,
+    contentOverride: (@Composable () -> Unit)? = null
 ) {
     val uiState by mainViewModel.uiState.collectAsState()
+    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val courseCount = remember(destination, uiState.rawEvents, uiState.settings) {
         if (destination == SettingsDestination.CourseManage) {
@@ -199,9 +203,9 @@ private fun SettingsPageContent(
                 contentWindowInsets = WindowInsets(0),
                 topBar = {
                     CenterAlignedTopAppBar(
-                        title = { Text(settingsTitle(destination)) },
+                        title = { Text(titleOverride ?: settingsTitle(destination)) },
                         navigationIcon = {
-                            IconButton(onClick = onBack) {
+                            IconButton(onClick = { haptics.click(); onBack() }) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "返回",
@@ -234,13 +238,19 @@ private fun SettingsPageContent(
                         .padding(innerPadding)
                         .fillMaxSize()
                 ) {
-                    when (destination) {
+                    if (contentOverride != null) {
+                        contentOverride()
+                    } else when (destination) {
                         SettingsDestination.AI -> AiSettingsPage(
                             viewModel = settingsViewModel,
                             mainViewModel = mainViewModel,
                             uiSize = uiSize
                         )
-                        SettingsDestination.Weather -> WeatherSettingsPage(settingsViewModel, uiSize)
+                        SettingsDestination.Weather -> WeatherSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onOpenWeatherDetail = { onNavigateRoute(SettingsRoutes.WeatherDetail) }
+                        )
                         SettingsDestination.Schedule,
                         SettingsDestination.SemesterConfig -> ScheduleSettingsPage(
                             viewModel = settingsViewModel,
@@ -252,7 +262,8 @@ private fun SettingsPageContent(
                         SettingsDestination.Preference -> PreferenceSettingsPage(
                             viewModel = settingsViewModel,
                             uiSize = uiSize,
-                            onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) }
+                            onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) },
+                            onNavigateToWidgetSettings = { onNavigateTo(SettingsDestination.WidgetSettings) }
                         )
                         SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                         SettingsDestination.About -> AboutPage(
@@ -263,10 +274,16 @@ private fun SettingsPageContent(
                         SettingsDestination.Donate -> DonatePage(uiSize, settingsViewModel)
                         SettingsDestination.Laboratory -> LaboratoryPage(
                             uiSize = uiSize,
-                            settingsViewModel = settingsViewModel
+                            settingsViewModel = settingsViewModel,
+                            mainViewModel = mainViewModel
                         )
                         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
                             settingsViewModel = settingsViewModel,
+                            uiSize = uiSize
+                        )
+                        SettingsDestination.WidgetSettings -> WidgetSettingsPage(
+                            settingsViewModel = settingsViewModel,
+                            rawEvents = uiState.rawEvents,
                             uiSize = uiSize
                         )
                         SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
@@ -276,24 +293,7 @@ private fun SettingsPageContent(
                 }
             }
 
-            AnimatedVisibility(
-                visible = showClearCoursesConfirm,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { showClearCoursesConfirm = false }
-                        )
-                )
-            }
-
-            FloatingActionCard(
+            PredictiveFloatingActionCard(
                 visible = showClearCoursesConfirm,
                 title = "确认清空",
                 content = "此操作将删除当前 $courseCount 门课程。\n删除后将无法恢复。",
@@ -301,13 +301,13 @@ private fun SettingsPageContent(
                 dismissText = "取消",
                 isDestructive = true,
                 isLoading = false,
+                predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
                 onConfirm = {
                     showClearCoursesConfirm = false
                     mainViewModel.clearAllCourses()
                 },
                 onDismiss = { showClearCoursesConfirm = false },
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .padding(bottom = bottomInset)
             )
         }
@@ -331,11 +331,7 @@ fun SettingsDetailScreen(
     }
     val backStackEntry by settingsNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: initialRoute
-    val currentDestination = routeToSettingsDestination(currentRoute)
 
-    var navigationHistory by rememberSaveable(destinationStr) {
-        mutableStateOf(emptyList<String>())
-    }
     var isSidebarOpen by remember { mutableStateOf(false) }
 
     fun navigateToDestination(target: SettingsDestination) {
@@ -351,10 +347,14 @@ fun SettingsDetailScreen(
             return
         }
 
-        navigationHistory = (
-            navigationHistory.filterNot { it == targetRoute || it == currentRoute } + currentRoute
-        ).takeLast(SettingsHistoryLimit)
         isSidebarOpen = false
+        settingsNavController.navigate(targetRoute) {
+            launchSingleTop = true
+        }
+    }
+
+    fun navigateToRoute(targetRoute: String) {
+        if (targetRoute == currentRoute) return
         settingsNavController.navigate(targetRoute) {
             launchSingleTop = true
         }
@@ -363,16 +363,7 @@ fun SettingsDetailScreen(
     fun handleBackNavigation() {
         when {
             isSidebarOpen -> isSidebarOpen = false
-            navigationHistory.isNotEmpty() -> {
-                val previousRoute = navigationHistory.last()
-                navigationHistory = navigationHistory.dropLast(1)
-                val popped = settingsNavController.popBackStack(previousRoute, false)
-                if (!popped) {
-                    settingsNavController.navigate(previousRoute) {
-                        launchSingleTop = true
-                    }
-                }
-            }
+            settingsNavController.previousBackStackEntry != null -> settingsNavController.popBackStack()
             else -> onExitSettings()
         }
     }
@@ -407,7 +398,20 @@ fun SettingsDetailScreen(
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,
                             onBack = { handleBackNavigation() },
-                            onNavigateTo = { target -> navigateToDestination(target) }
+                            onNavigateTo = { target -> navigateToDestination(target) },
+                            onNavigateRoute = { route -> navigateToRoute(route) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.WeatherDetail) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.Weather,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) },
+                            titleOverride = "天气详情",
+                            contentOverride = { WeatherDetailPage(uiSize = uiSize) }
                         )
                     }
                     settingsPageComposable(SettingsRoutes.Weather) {
@@ -417,7 +421,8 @@ fun SettingsDetailScreen(
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,
                             onBack = { handleBackNavigation() },
-                            onNavigateTo = { target -> navigateToDestination(target) }
+                            onNavigateTo = { target -> navigateToDestination(target) },
+                            onNavigateRoute = { route -> navigateToRoute(route) }
                         )
                     }
                     settingsPageComposable(SettingsRoutes.Schedule) {
@@ -540,10 +545,23 @@ fun SettingsDetailScreen(
                             onNavigateTo = { target -> navigateToDestination(target) }
                         )
                     }
+                    settingsPageComposable(SettingsRoutes.WidgetSettings) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.WidgetSettings,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
                 }
 
-                BackHandler { handleBackNavigation() }
             }
         }
     )
+
+    BackHandler(enabled = isSidebarOpen || !settings.predictiveBackEnabled) {
+        handleBackNavigation()
+    }
 }

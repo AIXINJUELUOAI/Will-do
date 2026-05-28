@@ -26,6 +26,7 @@ fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
     noteEvents: List<Event>,
     weatherData: WeatherData?,
+    weatherForecastRange: Int = 0,
     noteEnabled: Boolean,
     expandSide: String,
     onClose: () -> Unit,
@@ -40,7 +41,8 @@ fun FloatingScheduleScreen(
     onUndoAction: () -> Unit,
     onDeleteNote: (Event, () -> Unit) -> Unit,
     onRestoreNote: (Event, () -> Unit) -> Unit,
-    onLoadingChange: (Boolean) -> Unit
+    onLoadingChange: (Boolean) -> Unit,
+    hapticEnabled: Boolean = true
 ) {
     Box(
         modifier = Modifier

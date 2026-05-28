@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,10 +41,14 @@ import com.antgskds.calendarassistant.core.localmodel.LocalModelRuntime
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.components.WheelPicker
+import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
+import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -54,7 +57,8 @@ import kotlin.math.roundToInt
 fun PreferenceSettingsPage(
     viewModel: SettingsViewModel,
     uiSize: Int = 2,
-    onNavigateToBottomBarEditor: () -> Unit = {}
+    onNavigateToBottomBarEditor: () -> Unit = {},
+    onNavigateToWidgetSettings: () -> Unit = {}
 ) {
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
@@ -233,6 +237,7 @@ fun PreferenceSettingsPage(
         calendarPermissionLauncher.launch(permissions)
     }
 
+    CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -291,6 +296,22 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    ActionSettingItem(
+                        title = "桌面小组件",
+                        subtitle = "预览小组件并调整主题、透明度等显示设置",
+                        value = "",
+                        icon = Icons.Default.ChevronRight,
+                        enabled = true,
+                        onClick = onNavigateToWidgetSettings,
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle,
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
@@ -533,6 +554,19 @@ fun PreferenceSettingsPage(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "触感反馈",
+                        subtitle = "点击、长按和滑动到阈值时提供轻微反馈",
+                        checked = settings.hapticFeedbackEnabled,
+                        onCheckedChange = { viewModel.updatePreference(hapticFeedbackEnabled = it) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     VolumeLongPressSettingItem(
                         title = "长按音量+",
                         subtitle = "自定义长按音量+动作",
@@ -980,24 +1014,7 @@ fun PreferenceSettingsPage(
             snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
         )
 
-        AnimatedVisibility(
-            visible = showPermissionDialog,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { showPermissionDialog = false }
-                    )
-            )
-        }
-
-        FloatingActionCard(
+        PredictiveFloatingActionCard(
             visible = showPermissionDialog,
             title = "需要日历权限",
             content = "为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。",
@@ -1005,9 +1022,9 @@ fun PreferenceSettingsPage(
             dismissText = "取消",
             isDestructive = false,
             isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = requestCalendarPermission,
-            onDismiss = { showPermissionDialog = false },
-            modifier = Modifier.align(Alignment.BottomCenter)
+            onDismiss = { showPermissionDialog = false }
         )
 
         if (showSourceCalendarSheet) {
@@ -1059,6 +1076,7 @@ fun PreferenceSettingsPage(
             )
         }
     }
+    }
 }
 
 // ... SwitchSettingItem 保持不变 ...
@@ -1071,6 +1089,7 @@ fun SwitchSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1080,7 +1099,13 @@ fun SwitchSettingItem(
             Text(title, style = cardTitleStyle)
             Text(subtitle, style = cardSubtitleStyle)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                haptics.selection()
+                onCheckedChange(it)
+            }
+        )
     }
 }
 
@@ -1093,6 +1118,7 @@ private fun SideChoiceSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1107,21 +1133,21 @@ private fun SideChoiceSettingItem(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val isLeft = selectedSide == "LEFT"
             if (isLeft) {
-                Button(onClick = { onSideSelected("LEFT") }) {
+                Button(onClick = { haptics.selection(); onSideSelected("LEFT") }) {
                     Text("左侧")
                 }
             } else {
-                OutlinedButton(onClick = { onSideSelected("LEFT") }) {
+                OutlinedButton(onClick = { haptics.selection(); onSideSelected("LEFT") }) {
                     Text("左侧")
                 }
             }
 
             if (isLeft) {
-                OutlinedButton(onClick = { onSideSelected("RIGHT") }) {
+                OutlinedButton(onClick = { haptics.selection(); onSideSelected("RIGHT") }) {
                     Text("右侧")
                 }
             } else {
-                Button(onClick = { onSideSelected("RIGHT") }) {
+                Button(onClick = { haptics.selection(); onSideSelected("RIGHT") }) {
                     Text("右侧")
                 }
             }
@@ -1136,15 +1162,20 @@ private fun ActionSettingItem(
     value: String,
     icon: ImageVector? = null,
     enabled: Boolean,
+    hapticOnClick: Boolean = true,
     onClick: () -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
     cardValueStyle: TextStyle
 ) {
+    val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled) {
+                if (hapticOnClick) haptics.selection()
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1172,6 +1203,7 @@ private fun SourceCalendarPickerSheet(
     var selectedIds by remember(initialSelection, calendars) {
         mutableStateOf(initialSelection.intersect(calendars.map { it.id }.toSet()))
     }
+    val haptics = rememberAppHaptics()
     val groupedCalendars = remember(calendars) {
         calendars.groupBy { calendar ->
             buildAccountGroupTitle(calendar)
@@ -1204,7 +1236,7 @@ private fun SourceCalendarPickerSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                TextButton(onClick = { selectedIds = calendars.map { it.id }.toSet() }) {
+                TextButton(onClick = { haptics.selection(); selectedIds = calendars.map { it.id }.toSet() }) {
                     Text("全选")
                 }
 
@@ -1222,6 +1254,7 @@ private fun SourceCalendarPickerSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    haptics.selection()
                                     selectedIds = if (checked) {
                                         selectedIds - calendar.id
                                     } else {
@@ -1234,6 +1267,7 @@ private fun SourceCalendarPickerSheet(
                             Checkbox(
                                 checked = checked,
                                 onCheckedChange = { isChecked ->
+                                    haptics.selection()
                                     selectedIds = if (isChecked) {
                                         selectedIds + calendar.id
                                     } else {
@@ -1256,7 +1290,7 @@ private fun SourceCalendarPickerSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
             Button(
-                onClick = { onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
+                onClick = { haptics.confirm(); onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
                 enabled = calendars.isNotEmpty() && selectedIds.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1326,6 +1360,7 @@ private fun LocalModelPickerSheet(
     var selectedId by remember(initialSelection, models) {
         mutableStateOf(initialSelection.takeIf { id -> models.any { it.id == id } }.orEmpty())
     }
+    val haptics = rememberAppHaptics()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1343,7 +1378,7 @@ private fun LocalModelPickerSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("本地模型", style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = onAddModel, enabled = importProgress == null) {
+                TextButton(onClick = { haptics.click(); onAddModel() }, enabled = importProgress == null) {
                     Text("加入模型")
                 }
             }
@@ -1382,13 +1417,13 @@ private fun LocalModelPickerSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { selectedId = model.id }
+                            .clickable { haptics.selection(); selectedId = model.id }
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
                             selected = selected,
-                            onClick = { selectedId = model.id }
+                            onClick = { haptics.selection(); selectedId = model.id }
                         )
                         Column(
                             modifier = Modifier
@@ -1402,7 +1437,7 @@ private fun LocalModelPickerSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        TextButton(onClick = { onDeleteModel(model.id) }) {
+                        TextButton(onClick = { haptics.warning(); onDeleteModel(model.id) }) {
                             Text("删除")
                         }
                     }
@@ -1411,7 +1446,7 @@ private fun LocalModelPickerSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
             Button(
-                onClick = { onConfirm(selectedId) },
+                onClick = { haptics.confirm(); onConfirm(selectedId) },
                 enabled = selectedId.isNotBlank() && importProgress == null,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1466,6 +1501,7 @@ fun SliderSettingItem(
     showValueAsNumber: Boolean = false, // 新增参数
     valueUnit: String = "ms"            // 新增参数
 ) {
+    HapticValueChangeEffect(valueKey = sliderHapticBucket(value, valueRange, steps))
     // 根据 showValueAsNumber 决定显示逻辑
     val displayValue = if (showValueAsNumber) {
         "${value.toInt()}$valueUnit"
@@ -1511,6 +1547,8 @@ fun VolumeLongPressSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    HapticValueChangeEffect(valueKey = action)
+    val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1521,7 +1559,13 @@ fun VolumeLongPressSettingItem(
                 Text(title, style = cardTitleStyle)
                 Text(subtitle, style = cardSubtitleStyle)
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = {
+                    haptics.selection()
+                    onCheckedChange(it)
+                }
+            )
         }
 
         AnimatedVisibility(
@@ -1567,6 +1611,8 @@ fun AdvanceReminderSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    HapticValueChangeEffect(valueKey = minutes)
+    val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         // 主行：开关 + 标题 + 副标题
         Row(
@@ -1578,7 +1624,13 @@ fun AdvanceReminderSettingItem(
                 Text(title, style = cardTitleStyle)
                 Text(subtitle, style = cardSubtitleStyle)
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = {
+                    haptics.selection()
+                    onCheckedChange(it)
+                }
+            )
         }
 
         // 展开区：三档滑块（30/45/60分钟）
@@ -1624,6 +1676,7 @@ private val EVENT_DURATION_OPTIONS = listOf(
     EventDurationOption(120, "2小时"),
     EventDurationOption(180, "3小时"),
     EventDurationOption(360, "6小时"),
+    EventDurationOption(1440, "24小时"),
     EventDurationOption(-1, "今天结束")
 )
 
@@ -1662,6 +1715,7 @@ private fun EventDurationPickerDialog(
     val defaultIndex = EVENT_DURATION_OPTIONS.indexOfFirst { it.minutes == selectedDuration }
         .takeIf { it >= 0 } ?: 0
     var selectedIndex by remember(selectedDuration) { mutableIntStateOf(defaultIndex) }
+    val haptics = rememberAppHaptics()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1674,12 +1728,12 @@ private fun EventDurationPickerDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(EVENT_DURATION_OPTIONS[selectedIndex].minutes) }) {
+            TextButton(onClick = { haptics.confirm(); onConfirm(EVENT_DURATION_OPTIONS[selectedIndex].minutes) }) {
                 Text("确定")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { haptics.click(); onDismiss() }) {
                 Text("取消")
             }
         },
@@ -1698,6 +1752,7 @@ fun FloatingEventRangeSlider(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    HapticValueChangeEffect(valueKey = eventRange)
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         // 标题行
         Row(

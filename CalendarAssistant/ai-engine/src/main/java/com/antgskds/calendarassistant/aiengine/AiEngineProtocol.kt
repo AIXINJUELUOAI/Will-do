@@ -5,6 +5,8 @@ object AiEngineProtocol {
     const val MSG_GENERATE_RESULT = 2
     const val MSG_GENERATE_ERROR = 3
     const val MSG_MODEL_LOADED = 4
+    const val MSG_PREPARE_MODEL = 5
+    const val MSG_PREPARE_RESULT = 6
 
     const val KEY_REQUEST_ID = "request_id"
     const val KEY_MODEL_PATH = "model_path"

@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -64,6 +68,9 @@ import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
+import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.motion.PredictiveBottomDialogHost
 import com.antgskds.calendarassistant.ui.theme.getRandomEventColor
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -76,9 +83,12 @@ fun CourseEditDialog(
     course: Course?,
     maxNodes: Int = 12,
     timeTableJson: String = "",
+    hapticEnabled: Boolean = true,
+    predictiveBackEnabled: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (Course) -> Unit
 ) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     val safeMaxNodes = maxNodes.coerceAtLeast(1)
     var name by remember { mutableStateOf(course?.name ?: "") }
     var location by remember { mutableStateOf(course?.location ?: "") }
@@ -114,18 +124,36 @@ fun CourseEditDialog(
         append("第${startWeek}-${endWeek}周 · $weekTypeLabel")
     }
     val sectionLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+    val isChildDialogVisible = showDayPicker || showNodeRangePicker || showWeekRangePicker || showWeekTypePicker
 
     LaunchedEffect(safeMaxNodes) {
         startNode = startNode.coerceIn(1, safeMaxNodes)
         endNode = endNode.coerceIn(startNode, safeMaxNodes)
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides hapticEnabled) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        DialogEdgeToEdgeEffect(isDarkTheme = false)
+        PredictiveBottomDialogHost(
+            visible = true,
+            onDismiss = onDismiss,
+            predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
+            backHandlerEnabled = !isChildDialogVisible,
+            contentAlignment = Alignment.Center,
+            contentPadding = WindowInsets.navigationBars.asPaddingValues()
         ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
@@ -192,10 +220,11 @@ fun CourseEditDialog(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
+                    TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") }
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = {
                         if (name.isNotBlank()) {
+                            haptics.confirm()
                             onConfirm(
                                 Course(
                                     id = course?.id ?: UUID.randomUUID().toString(),
@@ -216,6 +245,7 @@ fun CourseEditDialog(
                 }
             }
         }
+        }
     }
 
     if (showDayPicker) {
@@ -224,7 +254,7 @@ fun CourseEditDialog(
             onDismissRequest = { showDayPicker = false },
             title = { CenteredDialogTitle("选择星期") },
             text = { WheelPicker(items = days, initialIndex = dayOfWeek - 1, onSelectionChanged = { dayOfWeek = it + 1 }) },
-            confirmButton = { TextButton(onClick = { showDayPicker = false }) { Text("确定") } }
+            confirmButton = { TextButton(onClick = { haptics.confirm(); showDayPicker = false }) { Text("确定") } }
         )
     }
 
@@ -249,8 +279,9 @@ fun CourseEditDialog(
             onDismissRequest = { showWeekTypePicker = false },
             title = { CenteredDialogTitle("课程频率") },
             text = { WheelPicker(items = weekTypeOptions, initialIndex = weekType, onSelectionChanged = { weekType = it }) },
-            confirmButton = { TextButton(onClick = { showWeekTypePicker = false }) { Text("确定") } }
+            confirmButton = { TextButton(onClick = { haptics.confirm(); showWeekTypePicker = false }) { Text("确定") } }
         )
+    }
     }
 }
 
@@ -328,10 +359,12 @@ fun CourseSingleEditDialog(
     initialEndNode: Int,
     initialDate: LocalDate,
     maxNodes: Int = 12,
+    predictiveBackEnabled: Boolean = true,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
     onConfirm: (String, String, Int, Int, LocalDate) -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     val safeMaxNodes = maxNodes.coerceAtLeast(1)
     var name by remember(initialName) { mutableStateOf(initialName) }
     var location by remember(initialLocation) { mutableStateOf(initialLocation) }
@@ -340,6 +373,7 @@ fun CourseSingleEditDialog(
     var date by remember(initialDate) { mutableStateOf(initialDate) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showNodeRangePicker by remember { mutableStateOf(false) }
+    val isChildDialogVisible = showDatePicker || showNodeRangePicker
 
     if (showDatePicker) {
         WheelDatePickerDialog(date, { showDatePicker = false }, title = "调整日期") {
@@ -359,12 +393,28 @@ fun CourseSingleEditDialog(
         )
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        DialogEdgeToEdgeEffect(isDarkTheme = false)
+        PredictiveBottomDialogHost(
+            visible = true,
+            onDismiss = onDismiss,
+            predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
+            backHandlerEnabled = !isChildDialogVisible,
+            contentAlignment = Alignment.Center,
+            contentPadding = WindowInsets.navigationBars.asPaddingValues()
         ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text("编辑单次课程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -385,7 +435,7 @@ fun CourseSingleEditDialog(
                             enabled = false,
                             readOnly = true
                         )
-                        Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
+                        Box(modifier = Modifier.matchParentSize().clickable { haptics.click(); showDatePicker = true })
                     }
                     HorizontalDivider()
                     Row(
@@ -394,17 +444,18 @@ fun CourseSingleEditDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("节次调整")
-                        OutlinedButton(onClick = { showNodeRangePicker = true }) { Text("第 $startNode - $endNode 节") }
+                        OutlinedButton(onClick = { haptics.click(); showNodeRangePicker = true }) { Text("第 $startNode - $endNode 节") }
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDelete) { Text("本节停课/删除", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { haptics.warning(); onDelete() }) { Text("本节停课/删除", color = MaterialTheme.colorScheme.error) }
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onDismiss) { Text("取消") }
+                    TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onConfirm(name, location, startNode, endNode, date) }) { Text("确定") }
+                    Button(onClick = { haptics.confirm(); onConfirm(name, location, startNode, endNode, date) }) { Text("确定") }
                 }
             }
+        }
         }
     }
 }
@@ -419,6 +470,7 @@ fun WheelRangePickerDialog(
     onConfirm: (Int, Int) -> Unit,
     labelMapper: (Int) -> String = { it.toString() }
 ) {
+    val haptics = rememberAppHaptics()
     var start by remember { mutableIntStateOf(initialStart) }
     var end by remember { mutableIntStateOf(initialEnd) }
     val list = range.toList().map { labelMapper(it) }
@@ -438,11 +490,12 @@ fun WheelRangePickerDialog(
         },
         confirmButton = {
             TextButton(onClick = {
+                haptics.confirm()
                 onConfirm(minOf(start, end), maxOf(start, end))
                 onDismiss()
             }) { Text("确定") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } }
     )
 }
 
@@ -476,20 +529,40 @@ private fun SwipeableCourseItem(
     val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
     val offsetX = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberAppHaptics()
+    var thresholdHapticPlayed by remember { mutableStateOf(false) }
+    val revealedActionWidth = with(density) {
+        (-offsetX.value).coerceIn(0f, actionMenuWidthPx).toDp()
+    }
 
     LaunchedEffect(isRevealed) {
         if (isRevealed) offsetX.animateTo(-actionMenuWidthPx) else offsetX.animateTo(0f)
     }
 
+    LaunchedEffect(isRevealed) {
+        if (!isRevealed) thresholdHapticPlayed = false
+    }
+
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-        Row(
-            modifier = Modifier.width(actionMenuWidth).fillMaxHeight().padding(end = 16.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .width(revealedActionWidth)
+                .fillMaxHeight()
+                .clipToBounds(),
+            contentAlignment = Alignment.CenterEnd
         ) {
-            SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) { onCollapse(); onClick() }
-            Spacer(Modifier.width(12.dp))
-            SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) { onCollapse(); onDelete() }
+            Row(
+                modifier = Modifier
+                    .width(actionMenuWidth)
+                    .fillMaxHeight()
+                    .padding(end = 16.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) { onCollapse(); onClick() }
+                Spacer(Modifier.width(12.dp))
+                SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) { onCollapse(); onDelete() }
+            }
         }
 
         Surface(
@@ -501,6 +574,8 @@ private fun SwipeableCourseItem(
                         onDragEnd = {
                             scope.launch {
                                 if (offsetX.value < -actionMenuWidthPx / 2) {
+                                    if (!isRevealed) haptics.threshold()
+                                    thresholdHapticPlayed = true
                                     offsetX.animateTo(-actionMenuWidthPx); onExpand()
                                 } else {
                                     offsetX.animateTo(0f); onCollapse()
@@ -508,12 +583,21 @@ private fun SwipeableCourseItem(
                             }
                         },
                         onHorizontalDrag = { _, dragAmount ->
-                            scope.launch { offsetX.snapTo((offsetX.value + dragAmount).coerceIn(-actionMenuWidthPx, 0f)) }
+                            scope.launch {
+                                val newOffset = (offsetX.value + dragAmount).coerceIn(-actionMenuWidthPx, 0f)
+                                if (!thresholdHapticPlayed && newOffset < -actionMenuWidthPx / 2) {
+                                    haptics.threshold()
+                                    thresholdHapticPlayed = true
+                                } else if (newOffset >= -actionMenuWidthPx / 2) {
+                                    thresholdHapticPlayed = false
+                                }
+                                offsetX.snapTo(newOffset)
+                            }
                         }
                     )
                 }
-                .clickable { if (isRevealed) onCollapse() else onClick() },
-            color = MaterialTheme.colorScheme.surface,
+                .clickable { haptics.click(); if (isRevealed) onCollapse() else onClick() },
+            color = Color.Transparent,
             shadowElevation = 0.dp
         ) {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -533,8 +617,12 @@ private fun SwipeableCourseItem(
 
 @Composable
 private fun SwipeActionIcon(icon: ImageVector, tint: Color, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    val haptics = rememberAppHaptics()
     Box(
-        modifier = Modifier.size(size).padding(4.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.15f)).clickable { onClick() },
+        modifier = Modifier.size(size).padding(4.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.15f)).clickable {
+            haptics.selection()
+            onClick()
+        },
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, null, tint = tint)

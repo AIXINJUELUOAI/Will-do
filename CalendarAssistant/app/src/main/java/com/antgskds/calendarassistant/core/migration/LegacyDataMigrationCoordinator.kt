@@ -176,6 +176,10 @@ class LegacyDataMigrationCoordinator(
         )
     }
 
+    fun eventBackupKey(event: Event): String {
+        return candidatePrimaryKey(event, preferSignatureKey = true)
+    }
+
     fun importEventsData(jsonString: String): Result<ImportResult> = runCatching {
         val settings = settingsRepository.loadSettings()
         val rawCandidates = parseBackupContentCandidates(jsonString, settings)

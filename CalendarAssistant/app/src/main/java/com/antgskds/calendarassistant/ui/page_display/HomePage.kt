@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -33,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,7 +62,7 @@ import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -70,7 +70,9 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -103,11 +105,13 @@ fun HomePage(
     onEditNote: (Event) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
-    onScheduleOffsetChange: (Float) -> Unit = {}
+    onScheduleOffsetChange: (Float) -> Unit = {},
+    onOpenWeatherDetail: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
 
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
@@ -294,23 +298,6 @@ fun HomePage(
         }
     }
 
-    BackHandler(enabled = offsetY.value > 0f) {
-        scope.launch { offsetY.animateTo(0f) }
-    }
-
-    BackHandler(enabled = isSearchMode) {
-        isSearchMode = false
-        when (currentTab) {
-            noteTabIndex -> noteSearchQuery = ""
-            allTabIndex -> {
-                allSearchQuery = ""
-            }
-            else -> {
-                todaySearchQuery = ""
-            }
-        }
-    }
-
     LaunchedEffect(searchRequestId) {
         if (searchRequestId > 0) {
             isSearchMode = true
@@ -321,10 +308,6 @@ fun HomePage(
         if (imageRequestId > 0 && !isImageImporting) {
             imagePickerLauncher.launch("image/*")
         }
-    }
-
-    BackHandler(enabled = isActionExpanded) {
-        onActionExpandedChange(false)
     }
 
     var serviceEnabled by remember {
@@ -343,6 +326,7 @@ fun HomePage(
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
+    val floatingBarContentPadding = IntegratedFloatingBarVisualHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
 
     LifecycleResumeEffect(context) {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
@@ -472,9 +456,9 @@ fun HomePage(
                     val searchBarHeight = 64.dp
                     val searchBarOffset = searchBarHeight + 12.dp
                     val contentBottomPadding = if (showSearchBar) {
-                        floatingBarOffset + searchBarOffset
+                        floatingBarContentPadding + searchBarOffset
                     } else {
-                        floatingBarOffset
+                        floatingBarContentPadding
                     }
 
                     if (currentTab == 0) {
@@ -555,7 +539,9 @@ fun HomePage(
                                                 Row(
                                                     modifier = Modifier
                                                         .align(Alignment.CenterStart)
-                                                        .padding(horizontal = 22.dp),
+                                                        .clip(RoundedCornerShape(50))
+                                                        .clickable { haptics.click(); onOpenWeatherDetail() }
+                                                        .padding(horizontal = 22.dp, vertical = 8.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Icon(
@@ -594,11 +580,14 @@ fun HomePage(
                                             Text(
                                                 text = uiState.selectedDate.dayOfMonth.toString(),
                                                 fontSize = 140.sp, fontWeight = FontWeight.Black, lineHeight = 140.sp,
-                                                modifier = Modifier.clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
-                                                    indication = null
-                                                ) { viewModel.updateSelectedDate(LocalDate.now()) }
-                                            )
+                                                    modifier = Modifier.clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = null
+                                                    ) {
+                                                        haptics.selection()
+                                                        viewModel.updateSelectedDate(LocalDate.now())
+                                                    }
+                                                )
                                             Text("${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
                                         }
                                     }
@@ -625,7 +614,8 @@ fun HomePage(
                                         onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveItem(item.action) }
+                                        onArchive = { viewModel.archiveItem(item.action) },
+                                        hapticEnabled = uiState.settings.hapticFeedbackEnabled
                                     )
                                 }
                             }
@@ -643,7 +633,8 @@ fun HomePage(
                                         onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveItem(item.action) }
+                                        onArchive = { viewModel.archiveItem(item.action) },
+                                        hapticEnabled = uiState.settings.hapticFeedbackEnabled
                                     )
                                 }
                             }
@@ -654,7 +645,8 @@ fun HomePage(
                             searchQuery = noteSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
                             onEditNote = { onEditNote(it) },
-                            onPendingDeleteChange = { pendingDeleteNote = it }
+                            onPendingDeleteChange = { pendingDeleteNote = it },
+                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     } else {
                         AllEventsPage(
@@ -665,7 +657,8 @@ fun HomePage(
                             pickupTimestamp = pickupTimestamp,
                             searchQuery = allSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onRequestDeleteItem = onRequestDeleteItem
+                            onRequestDeleteItem = onRequestDeleteItem,
+                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     }
 
@@ -760,24 +753,7 @@ fun HomePage(
 
         }
 
-        AnimatedVisibility(
-            visible = isImageImporting,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {}
-                    )
-            )
-        }
-
-        FloatingActionCard(
+        PredictiveFloatingActionCard(
             visible = isImageImporting,
             title = "正在识别",
             content = "OCR + AI 分析中...",
@@ -786,31 +762,15 @@ fun HomePage(
             isDestructive = false,
             isLoading = true,
             allowDismissWhileLoading = true,
+            dismissOnClickOutside = false,
+            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
             onConfirm = {},
             onDismiss = cancelImageImport,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .padding(bottom = floatingBarOffset + 16.dp)
         )
 
-        AnimatedVisibility(
-            visible = pendingDeleteNote != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { pendingDeleteNote = null }
-                    )
-            )
-        }
-
-        FloatingActionCard(
+        PredictiveFloatingActionCard(
             visible = pendingDeleteNote != null,
             title = "删除便签",
             content = "删除后无法恢复，确认删除这条便签吗？",
@@ -818,13 +778,13 @@ fun HomePage(
             dismissText = "取消",
             isDestructive = true,
             isLoading = false,
+            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
             onConfirm = {
                 pendingDeleteNote?.let(viewModel::deleteEvent)
                 pendingDeleteNote = null
             },
             onDismiss = { pendingDeleteNote = null },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .padding(bottom = floatingBarOffset + 16.dp)
         )
     }

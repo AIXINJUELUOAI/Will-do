@@ -32,7 +32,8 @@ fun NotePage(
     searchQuery: String = "",
     extraBottomPadding: Dp = 0.dp,
     onEditNote: (Event) -> Unit = {},
-    onPendingDeleteChange: (Event?) -> Unit = {}
+    onPendingDeleteChange: (Event?) -> Unit = {},
+    hapticEnabled: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val bottomSafePadding = 112.dp + extraBottomPadding
@@ -111,7 +112,8 @@ fun NotePage(
                 NoteCard(
                     note = note,
                     onClick = { onEditNote(note) },
-                    onLongClick = { onPendingDeleteChange(note) }
+                    onLongClick = { onPendingDeleteChange(note) },
+                    hapticEnabled = hapticEnabled
                 )
             }
         }

@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -33,6 +34,7 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -52,7 +54,8 @@ fun SwipeableEventItem(
     isArchivePage: Boolean = false,
     onArchive: () -> Unit = {},
     onRestore: () -> Unit = {},
-    onImportant: () -> Unit = {}
+    onImportant: () -> Unit = {},
+    hapticEnabled: Boolean = true
 ) {
     val actionButtonSize = when (uiSize) {
         1 -> 48.dp; 2 -> 52.dp; else -> 56.dp
@@ -71,9 +74,14 @@ fun SwipeableEventItem(
     }
     val density = LocalDensity.current
     val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
+    val haptics = rememberAppHaptics(hapticEnabled)
 
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    var thresholdHapticPlayed by remember { mutableStateOf(false) }
+    val revealedActionWidth = with(density) {
+        (-offsetX.value).coerceIn(0f, actionMenuWidthPx).toDp()
+    }
 
     val isExpired = remember(item.endTS) {
         try {
@@ -87,41 +95,53 @@ fun SwipeableEventItem(
         else offsetX.animateTo(0f)
     }
 
+    LaunchedEffect(isRevealed) {
+        if (!isRevealed) thresholdHapticPlayed = false
+    }
+
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterEnd
     ) {
         // --- 背景层：操作菜单 ---
-        Row(
+        Box(
             modifier = Modifier
-                .width(actionMenuWidth)
+                .width(revealedActionWidth)
                 .fillMaxHeight()
-                .padding(end = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .clipToBounds(),
+            contentAlignment = Alignment.CenterEnd
         ) {
-            if (isArchivePage) {
-                SwipeActionIcon(Icons.Outlined.Restore, Color(0xFF4CAF50), actionButtonSize) {
-                    onCollapse(); onRestore()
-                }
-                SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
-                    onCollapse(); onDelete()
-                }
-            } else {
-                // ✅ 所有日程（含重复）统一显示：编辑 / 重要 / 归档(或删除)
-                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) {
-                    onCollapse(); onEdit()
-                }
-                SwipeActionIcon(Icons.Outlined.StarOutline, Color(0xFFFFC107), actionButtonSize) {
-                    onCollapse(); onImportant()
-                }
-                if (item.tag == "__removed_course__") {
-                    SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) {
+            Row(
+                modifier = Modifier
+                    .width(actionMenuWidth)
+                    .fillMaxHeight()
+                    .padding(end = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isArchivePage) {
+                    SwipeActionIcon(Icons.Outlined.Restore, Color(0xFF4CAF50), actionButtonSize, hapticEnabled) {
+                        onCollapse(); onRestore()
+                    }
+                    SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize, hapticEnabled) {
                         onCollapse(); onDelete()
                     }
                 } else {
-                    SwipeActionIcon(Icons.Outlined.Archive, Color(0xFF2196F3), actionButtonSize) {
-                        onCollapse(); onArchive()
+                    // ✅ 所有日程（含重复）统一显示：编辑 / 重要 / 归档(或删除)
+                    SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize, hapticEnabled) {
+                        onCollapse(); onEdit()
+                    }
+                    SwipeActionIcon(Icons.Outlined.StarOutline, Color(0xFFFFC107), actionButtonSize, hapticEnabled) {
+                        onCollapse(); onImportant()
+                    }
+                    if (item.tag == "__removed_course__") {
+                        SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize, hapticEnabled) {
+                            onCollapse(); onDelete()
+                        }
+                    } else {
+                        SwipeActionIcon(Icons.Outlined.Archive, Color(0xFF2196F3), actionButtonSize, hapticEnabled) {
+                            onCollapse(); onArchive()
+                        }
                     }
                 }
             }
@@ -137,6 +157,8 @@ fun SwipeableEventItem(
                         onDragEnd = {
                             scope.launch {
                                 if (offsetX.value < -actionMenuWidthPx / 2) {
+                                    if (!isRevealed) haptics.threshold()
+                                    thresholdHapticPlayed = true
                                     offsetX.animateTo(-actionMenuWidthPx); onExpand()
                                 } else {
                                     offsetX.animateTo(0f); onCollapse()
@@ -146,21 +168,31 @@ fun SwipeableEventItem(
                         onHorizontalDrag = { _, dragAmount ->
                             scope.launch {
                                 val newOffset = (offsetX.value + dragAmount).coerceIn(-actionMenuWidthPx, 0f)
+                                if (!thresholdHapticPlayed && newOffset < -actionMenuWidthPx / 2) {
+                                    haptics.threshold()
+                                    thresholdHapticPlayed = true
+                                } else if (newOffset >= -actionMenuWidthPx / 2) {
+                                    thresholdHapticPlayed = false
+                                }
                                 offsetX.snapTo(newOffset)
                             }
                         }
                     )
                 }
                 .combinedClickable(
-                    onClick = { if (isRevealed) onCollapse() else onEdit() },
+                    onClick = {
+                        haptics.click()
+                        if (isRevealed) onCollapse() else onEdit()
+                    },
                     onLongClick = onLongPress?.let { callback ->
                         {
+                            haptics.longPress()
                             onCollapse()
                             callback()
                         }
                     }
                 ),
-            color = MaterialTheme.colorScheme.surface,
+            color = Color.Transparent,
             shadowElevation = 0.dp
         ) {
             Column(
@@ -236,14 +268,24 @@ fun SwipeableEventItem(
 }
 
 @Composable
-fun SwipeActionIcon(icon: ImageVector, tint: Color, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+fun SwipeActionIcon(
+    icon: ImageVector,
+    tint: Color,
+    size: androidx.compose.ui.unit.Dp,
+    hapticEnabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     Box(
         modifier = Modifier
             .size(size)
             .padding(4.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(tint.copy(alpha = 0.15f))
-            .clickable { onClick() },
+            .clickable {
+                haptics.click()
+                onClick()
+            },
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, null, tint = tint)

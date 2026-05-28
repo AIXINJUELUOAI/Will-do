@@ -27,6 +27,8 @@ import java.time.LocalDate
 import java.time.YearMonth
 // 【关键修复】引用新位置的 NotificationScheduler
 import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 
 // --- 1. Expandable Group Component ---
 
@@ -82,6 +84,7 @@ fun ExpandableSettingsGroup(
 @Composable
 fun WheelPicker(items: List<String>, initialIndex: Int, modifier: Modifier = Modifier, onSelectionChanged: (Int) -> Unit) {
     val listState = rememberPagerState(initialPage = initialIndex) { items.size }
+    HapticValueChangeEffect(valueKey = listState.currentPage, feedback = { click() })
     LaunchedEffect(listState.currentPage) { onSelectionChanged(listState.currentPage) }
     Box(modifier.height(175.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth().padding(horizontal=4.dp).height(35.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f), RoundedCornerShape(12.dp)))
@@ -115,12 +118,13 @@ fun WheelDatePickerDialog(
     onConfirm: (LocalDate) -> Unit
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
+    val haptics = rememberAppHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = { WheelDatePicker(initialDate, { selectedDate = it }) },
-        confirmButton = { TextButton(onClick = { onConfirm(selectedDate) }) { Text("确定") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { haptics.confirm(); onConfirm(selectedDate) }) { Text("确定") } },
+        dismissButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } },
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
@@ -155,12 +159,13 @@ fun WheelTimePickerDialog(
     val m = parts.getOrElse(1) { "00" }.toIntOrNull() ?: 0
     var sH by remember { mutableIntStateOf(h) }
     var sM by remember { mutableIntStateOf(m) }
+    val haptics = rememberAppHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = { WheelTimePicker(h, m, { hh, mm -> sH = hh; sM = mm }) },
-        confirmButton = { TextButton(onClick = { onConfirm(String.format("%02d:%02d", sH, sM)) }) { Text("确定") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { haptics.confirm(); onConfirm(String.format("%02d:%02d", sH, sM)) }) { Text("确定") } },
+        dismissButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } },
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
@@ -192,6 +197,7 @@ fun WheelReminderPickerDialog(
         ?: options.indexOfFirst { it.first == 30 }.takeIf { it != -1 } ?: 0
 
     var selectedIndex by remember { mutableIntStateOf(defaultIndex) }
+    val haptics = rememberAppHaptics()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -211,6 +217,7 @@ fun WheelReminderPickerDialog(
             TextButton(
                 onClick = {
                     if (options.isNotEmpty()) {
+                        haptics.confirm()
                         onConfirm(options[selectedIndex].first)
                     }
                     onDismiss()
@@ -219,7 +226,7 @@ fun WheelReminderPickerDialog(
             ) { Text("确定") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") }
         },
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surface,

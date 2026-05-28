@@ -22,6 +22,7 @@ class BootReceiver : BroadcastReceiver() {
 
             // 1. 恢复数据相关的闹钟 (StoreRootNode 内部会调 NotificationScheduler)
             app.scheduleCenter.refreshAll()
+            app.widgetCenter.requestRefresh()
 
             // 2. 恢复运行时调度（早晚报/保活/反向同步/短信监听）
             app.runtimeCenter.restoreAfterBoot()
