@@ -4,6 +4,7 @@ import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import moe.shizuku.server.IShizukuService
+import moe.shizuku.server.IRemoteProcess
 import rikka.shizuku.Shizuku
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -135,6 +136,68 @@ object PrivilegeManager {
         }
     }
 
+    fun startPrivilegedProcess(command: Array<String>): ProcessHandle? {
+        if (!hasPrivilege) {
+            refreshPrivilege()
+        }
+        if (!hasPrivilege) return null
+        return try {
+            when (privilegeType) {
+                PrivilegeType.ROOT -> {
+                    val process = Runtime.getRuntime().exec("su")
+                    val os = DataOutputStream(process.outputStream)
+                    os.writeBytes(command.joinToString(" ") { shellQuote(it) })
+                    os.writeBytes("\n")
+                    os.flush()
+                    ProcessHandle.Local(process, os)
+                }
+                PrivilegeType.SHIZUKU -> {
+                    if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                        return null
+                    }
+                    val binder = Shizuku.getBinder() ?: return null
+                    val service = IShizukuService.Stub.asInterface(binder) ?: return null
+                    val remote = service.newProcess(command, null, null)
+                    ProcessHandle.Remote(remote)
+                }
+                PrivilegeType.NONE -> null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Start privileged process failed", e)
+            null
+        }
+    }
+
+    sealed class ProcessHandle {
+        abstract val inputStream: java.io.InputStream
+        abstract val errorStream: java.io.InputStream
+        abstract fun destroy()
+
+        class Local(
+            private val process: Process,
+            private val commandOutput: DataOutputStream
+        ) : ProcessHandle() {
+            override val inputStream: java.io.InputStream get() = process.inputStream
+            override val errorStream: java.io.InputStream get() = process.errorStream
+            override fun destroy() {
+                runCatching { commandOutput.writeBytes("exit\n") }
+                runCatching { commandOutput.flush() }
+                runCatching { commandOutput.close() }
+                runCatching { process.destroy() }
+            }
+        }
+
+        class Remote(private val process: IRemoteProcess) : ProcessHandle() {
+            override val inputStream: java.io.InputStream
+                get() = ParcelFileDescriptor.AutoCloseInputStream(process.inputStream)
+            override val errorStream: java.io.InputStream
+                get() = ParcelFileDescriptor.AutoCloseInputStream(process.errorStream)
+            override fun destroy() {
+                runCatching { process.destroy() }
+            }
+        }
+    }
+
     private fun executeWithSu(command: String): Pair<Boolean, String> {
         return try {
             val process = Runtime.getRuntime().exec("su")
@@ -177,6 +240,11 @@ object PrivilegeManager {
             Log.e(TAG, "Shizuku execution failed", e)
             Pair(false, e.message ?: "Shizuku Error")
         }
+    }
+
+    private fun shellQuote(value: String): String {
+        if (value.matches(Regex("[A-Za-z0-9_@%+=:,./-]+"))) return value
+        return "'" + value.replace("'", "'\\''") + "'"
     }
 
     private fun readStream(inputStream: java.io.InputStream): String {

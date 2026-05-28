@@ -10,6 +10,7 @@ object RecognitionRuleCatalog {
         val promptName: String,
         val header: String,
         val aliases: Set<String>,
+        val titleRule: String? = null,
         val descriptionFormat: String? = null,
         val effectiveExamples: List<String> = emptyList(),
         val useCurrentTimeWhenMissing: Boolean = false,
@@ -22,6 +23,7 @@ object RecognitionRuleCatalog {
             promptName = "普通日程",
             header = "日程",
             aliases = setOf("general", "日程", "普通日程"),
+            titleRule = "简洁描述事项，不加 emoji；例如：开会、看医生、还信用卡",
             descriptionFormat = "【日程】备注"
         ),
         Rule(
@@ -29,6 +31,7 @@ object RecognitionRuleCatalog {
             promptName = "列车",
             header = "列车",
             aliases = setOf("train", "列车", "火车", "高铁"),
+            titleRule = "🚄 车次 路线；例如：🚄 G1008 深圳-武汉",
             descriptionFormat = "【列车】车次|检票口|座位号",
             effectiveExamples = listOf("火车/高铁订单")
         ),
@@ -37,6 +40,7 @@ object RecognitionRuleCatalog {
             promptName = "航班",
             header = "航班",
             aliases = setOf("flight", "航班", "飞机"),
+            titleRule = "✈️ 航班号 航线；例如：✈️ CA1301 北京-上海",
             descriptionFormat = "【航班】航班号|登机口|座位号",
             effectiveExamples = listOf("航班订单")
         ),
@@ -45,6 +49,7 @@ object RecognitionRuleCatalog {
             promptName = "打车",
             header = "用车",
             aliases = setOf("taxi", "用车", "打车", "网约车", "滴滴", "高德", "出租车"),
+            titleRule = "🚖 颜色·车型 车牌；缺颜色时用 🚖 车型 车牌；缺车型时用 🚖 平台 车牌",
             descriptionFormat = "【用车】颜色|车型|车牌",
             effectiveExamples = listOf("滴滴/高德/网约车/出租车/快车/专车/预约单/行程中页面"),
             useCurrentTimeWhenMissing = true
@@ -54,6 +59,7 @@ object RecognitionRuleCatalog {
             promptName = "取件",
             header = "取件",
             aliases = setOf("pickup", "取件", "快递", "菜鸟", "驿站"),
+            titleRule = "📦 品牌 取件码；例如：📦 菜鸟 1234、📦 圆通快递 1-1-8478",
             descriptionFormat = "【取件】取件码|品牌|位置",
             effectiveExamples = listOf("快递/菜鸟驿站/取件码"),
             useCurrentTimeWhenMissing = true
@@ -63,6 +69,7 @@ object RecognitionRuleCatalog {
             promptName = "取餐",
             header = "取餐",
             aliases = setOf("food", "取餐", "外卖"),
+            titleRule = "🍔 品牌 取餐码；例如：🍔 麦当劳 A114、🍔 取餐 A05",
             descriptionFormat = "【取餐】取餐码|品牌|位置",
             effectiveExamples = listOf("外卖取餐码"),
             useCurrentTimeWhenMissing = true
@@ -72,6 +79,7 @@ object RecognitionRuleCatalog {
             promptName = "取票",
             header = "取票",
             aliases = setOf("ticket", "取票", "票券"),
+            titleRule = "🎫 取票 取票码或地点；例如：🎫 取票 1234 56",
             descriptionFormat = "【取票】取票码|品牌|位置",
             effectiveExamples = listOf("票券取票码"),
             useCurrentTimeWhenMissing = true
@@ -81,6 +89,7 @@ object RecognitionRuleCatalog {
             promptName = "寄件",
             header = "寄件",
             aliases = setOf("sender", "寄件"),
+            titleRule = "🚚 寄件 品牌或寄件码；例如：🚚 寄件 1234",
             descriptionFormat = "【寄件】寄件码|品牌|地点",
             effectiveExamples = listOf("寄件码"),
             useCurrentTimeWhenMissing = true
@@ -107,6 +116,7 @@ object RecognitionRuleCatalog {
     }.toMap()
 
     private val localPromptRules = rules.filter { it.includeInLocalPrompt }
+    private val instantCodeTags = setOf(EventTags.PICKUP, EventTags.FOOD, EventTags.TICKET, EventTags.SENDER)
 
     fun normalizeKnownTag(raw: String?): String? {
         val key = normalizeKey(raw.orEmpty())
@@ -136,10 +146,28 @@ object RecognitionRuleCatalog {
         return localPromptRules.flatMap { it.effectiveExamples }.joinToString("、")
     }
 
+    fun localPromptTitleRules(): String {
+        return localPromptTitleRulesFor(localPromptRules)
+    }
+
     fun localPromptDescriptionRules(): String {
-        return localPromptRules
-            .mapNotNull { rule -> rule.descriptionFormat?.let { format -> "${rule.promptName}用$format" } }
-            .joinToString("；")
+        return localPromptDescriptionRulesFor(localPromptRules)
+    }
+
+    fun localPromptScheduleTitleRules(): String {
+        return localPromptTitleRulesFor(localPromptRules.filter { it.tag !in instantCodeTags })
+    }
+
+    fun localPromptScheduleDescriptionRules(): String {
+        return localPromptDescriptionRulesFor(localPromptRules.filter { it.tag !in instantCodeTags })
+    }
+
+    fun localPromptInstantCodeTitleRules(): String {
+        return localPromptTitleRulesFor(localPromptRules.filter { it.tag in instantCodeTags })
+    }
+
+    fun localPromptInstantCodeDescriptionRules(): String {
+        return localPromptDescriptionRulesFor(localPromptRules.filter { it.tag in instantCodeTags })
     }
 
     fun localPromptCurrentTimeFallbackRules(): String {
@@ -154,5 +182,17 @@ object RecognitionRuleCatalog {
 
     private fun normalizeKey(value: String): String {
         return value.trim().lowercase()
+    }
+
+    private fun localPromptTitleRulesFor(items: List<Rule>): String {
+        return items
+            .mapNotNull { rule -> rule.titleRule?.let { titleRule -> "- ${rule.tag}: $titleRule" } }
+            .joinToString("\n")
+    }
+
+    private fun localPromptDescriptionRulesFor(items: List<Rule>): String {
+        return items
+            .mapNotNull { rule -> rule.descriptionFormat?.let { format -> "${rule.promptName}用$format" } }
+            .joinToString("；")
     }
 }

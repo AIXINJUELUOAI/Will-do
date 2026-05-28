@@ -22,6 +22,7 @@ data class MySettings(
     val isDailySummaryEnabled: Boolean = false,
     val isAdvanceReminderEnabled: Boolean = false, // 日程提前提醒总开关
     val advanceReminderMinutes: Int = 30, // 提前分钟数（30/45/60）
+    val hapticFeedbackEnabled: Boolean = true,
 
     // 识别设置
     val tempEventsUseRecognitionTime: Boolean = true, // 旧版默认为 true
@@ -40,6 +41,12 @@ data class MySettings(
 
     // 【实验室】便签功能
     val noteEnabled: Boolean = false,
+
+    // 【实验室】预测性返回手势
+    val predictiveBackEnabled: Boolean = true,
+
+    // 【实验室】剪贴板码类识别
+    val clipboardCodeRecognitionEnabled: Boolean = false,
 
     // 首页入口配置（第 2~4 位，第一位固定侧边栏）
     val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL),
@@ -69,6 +76,10 @@ data class MySettings(
     val uiSize: Int = 2,
     val uiStyle: String = UiStyle.MATERIAL3.name,
 
+    // 桌面小组件：0=跟随软件, 1=浅色, 2=深色
+    val widgetThemeMode: Int = WidgetThemeMode.FOLLOW_APP,
+    val widgetBackgroundAlpha: Float = 0.9f,
+
     // 【实验室】网速胶囊开关
     val isNetworkSpeedCapsuleEnabled: Boolean = false,
 
@@ -82,9 +93,21 @@ data class MySettings(
     val weatherApiUrl: String = "",
     val weatherApiKey: String = "",
     val weatherCity: String = "",
+    val weatherLocationMode: String = "auto_fallback_manual",
+    val weatherManualLocationId: String = "",
+    val weatherManualLocationName: String = "",
+    val weatherManualAdm1: String = "",
+    val weatherManualAdm2: String = "",
+    val weatherManualCountry: String = "",
+    val weatherManualLat: Double = 0.0,
+    val weatherManualLon: Double = 0.0,
+    val weatherWarningEnabled: Boolean = true,
+    val weatherRiskWarningEnabled: Boolean = true,
+    val weatherWarningLookaheadHours: Int = 24,
     val weatherProvider: String = "qweather",
-    val weatherRefreshInterval: Int = 3,
+    val weatherRefreshInterval: Int = 30,
     val showWeatherInFloating: Boolean = true,
+    val floatingWeatherForecastRange: Int = 0,
 
     // 长按音量+动作
     val volumeUpLongPressEnabled: Boolean = false,
@@ -99,5 +122,10 @@ data class MySettings(
     val edgeBarAlpha: Float = 0.4f,
 
     // 捐赠状态
-    val hasDonated: Boolean = false
+    val hasDonated: Boolean = false,
+
+    // 开发者选项
+    val developerOptionsUnlocked: Boolean = false,
+    val developerOptionsEnabled: Boolean = false,
+    val developerOptionsDisabledAtMillis: Long = 0L
 )

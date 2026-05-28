@@ -40,6 +40,42 @@ object CapsuleMessageComposer {
         )
     }
 
+    fun composeModelLoading(title: String, content: String): CapsuleDisplayModel {
+        val primary = title.trim().takeIf { it.isNotEmpty() } ?: "本地模型加载中"
+        val secondary = content.trim().takeIf { it.isNotEmpty() }
+        return CapsuleDisplayModel(
+            shortText = "模型加载中",
+            primaryText = primary,
+            secondaryText = secondary,
+            expandedText = secondary
+        )
+    }
+
+    fun composeWeatherAlert(title: String, locationName: String, content: String): CapsuleDisplayModel {
+        val secondary = listOf(locationName, content.lineSequence().firstOrNull().orEmpty())
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+        return CapsuleDisplayModel(
+            shortText = title,
+            primaryText = title,
+            secondaryText = secondary.ifBlank { null },
+            expandedText = content.ifBlank { secondary }
+        )
+    }
+
+    fun composeWeatherRisk(title: String, locationName: String, content: String): CapsuleDisplayModel {
+        val cleanTitle = title.removePrefix("天气风险提醒：").ifBlank { "天气风险提醒" }
+        val secondary = listOf(locationName, content.lineSequence().firstOrNull().orEmpty())
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+        return CapsuleDisplayModel(
+            shortText = cleanTitle,
+            primaryText = cleanTitle,
+            secondaryText = secondary.ifBlank { null },
+            expandedText = content.ifBlank { secondary }
+        )
+    }
+
     // --- 事件类胶囊 (委托 EventPresenter) ---
 
     fun composeSchedule(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {

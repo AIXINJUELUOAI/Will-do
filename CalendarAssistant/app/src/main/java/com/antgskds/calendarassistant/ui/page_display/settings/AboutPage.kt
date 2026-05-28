@@ -2,6 +2,8 @@ package com.antgskds.calendarassistant.ui.page_display.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +12,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
 @Composable
@@ -34,9 +40,13 @@ fun AboutPage(
 ) {
 
     val context = LocalContext.current
+    var appTitleTapCount by remember { mutableIntStateOf(0) }
 
     // 获取捐赠状态，如果 settingsViewModel 为 null 则默认为 false
-    val hasDonated = settingsViewModel?.settings?.collectAsState()?.value?.hasDonated ?: false
+    val settings = settingsViewModel?.settings?.collectAsState()?.value
+    val haptics = rememberAppHaptics(settings?.hapticFeedbackEnabled ?: true)
+    val hasDonated = settings?.hasDonated ?: false
+    val developerUnlocked = settings?.developerOptionsUnlocked == true
 
     // --- 链接配置 ---
     // 您的 GitHub 仓库
@@ -68,7 +78,23 @@ fun AboutPage(
             text = "Will do",
             style = cardTitleStyle,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.clickable {
+                haptics.click()
+                if (developerUnlocked) {
+                    Toast.makeText(context, "开发者选项已解锁", Toast.LENGTH_SHORT).show()
+                    return@clickable
+                }
+                appTitleTapCount += 1
+                val remaining = DEVELOPER_UNLOCK_TAP_COUNT - appTitleTapCount
+                if (remaining <= 0) {
+                    appTitleTapCount = 0
+                    settingsViewModel?.unlockDeveloperOptions()
+                    Toast.makeText(context, "开发者选项已解锁，请前往实验室查看", Toast.LENGTH_SHORT).show()
+                } else if (appTitleTapCount >= 2) {
+                    Toast.makeText(context, "再点击 $remaining 次解锁开发者选项", Toast.LENGTH_SHORT).show()
+                }
+            }
         )
         Text(
             text = "Version ${BuildConfig.VERSION_NAME}",
@@ -134,6 +160,7 @@ fun AboutPage(
             // 1. GitHub 按钮
             IconButton(
                 onClick = {
+                    haptics.click()
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
                     context.startActivity(intent)
                 },
@@ -150,6 +177,7 @@ fun AboutPage(
             // 2. 个人博客按钮
             IconButton(
                 onClick = {
+                    haptics.click()
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(blogUrl))
                     context.startActivity(intent)
                 },
@@ -165,7 +193,7 @@ fun AboutPage(
 
             // 3. 捐赠按钮
             IconButton(
-                onClick = onNavigateToDonate,
+                onClick = { haptics.click(); onNavigateToDonate() },
                 modifier = Modifier.size(56.dp)
             ) {
                 Icon(
@@ -240,3 +268,5 @@ fun ContributorLine(name: String, contribution: String) {
         lineHeight = 20.sp
     )
 }
+
+private const val DEVELOPER_UNLOCK_TAP_COUNT = 5

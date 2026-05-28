@@ -7,9 +7,12 @@ package com.antgskds.calendarassistant.service.notification
  * cleanup cannot accidentally remove an active capsule notification.
  */
 object NotificationIds {
+    const val CLIPBOARD_CODE_MONITOR = 0xC1A0D
+
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"
     private const val PICKUP_INITIAL_NAMESPACE = "pickup-initial"
+    private const val WEATHER_WARNING_NAMESPACE = "weather-warning"
 
     private const val LEGACY_PICKUP_INITIAL_OFFSET = 1_000_000
 
@@ -22,6 +25,8 @@ object NotificationIds {
     fun liveCapsule(instanceKey: String): Int = stableId(LIVE_CAPSULE_NAMESPACE, instanceKey)
 
     fun pickupInitial(eventId: Long): Int = stableId(PICKUP_INITIAL_NAMESPACE, eventId.toString())
+
+    fun weatherWarning(key: String): Int = stableId(WEATHER_WARNING_NAMESPACE, key)
 
     fun legacyEventIds(eventId: Long): Set<Int> {
         val base = eventId.hashCode()

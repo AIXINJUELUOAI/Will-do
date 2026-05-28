@@ -2,6 +2,8 @@ package com.antgskds.calendarassistant.core.center
 
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
+import com.antgskds.calendarassistant.data.model.WeatherAlertData
+import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 
@@ -33,5 +35,25 @@ class CapsuleCenter(
 
     fun clearOcrCapsule() {
         capsuleCommandApi.clearOcrCapsule()
+    }
+
+    fun showModelLoading(title: String, content: String) {
+        capsuleCommandApi.showModelLoading(title, content)
+    }
+
+    fun clearModelLoading() {
+        capsuleCommandApi.clearModelLoading()
+    }
+
+    fun showWeatherAlert(locationName: String, alert: WeatherAlertData) {
+        capsuleCommandApi.showWeatherAlert(locationName, alert)
+    }
+
+    fun showWeatherRisk(locationName: String, risk: WeatherRiskAlert) {
+        capsuleCommandApi.showWeatherRisk(locationName, risk)
+    }
+
+    fun clearWeatherCapsules() {
+        capsuleCommandApi.clearWeatherCapsules()
     }
 }

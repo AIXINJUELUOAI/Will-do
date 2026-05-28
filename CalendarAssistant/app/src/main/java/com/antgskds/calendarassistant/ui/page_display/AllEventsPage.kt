@@ -39,7 +39,8 @@ fun AllEventsPage(
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
     searchQuery: String = "",
-    extraBottomPadding: Dp = 0.dp
+    extraBottomPadding: Dp = 0.dp,
+    hapticEnabled: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val today = LocalDate.now()
@@ -180,7 +181,8 @@ fun AllEventsPage(
                                     onLongPress = { onRequestDeleteItem(item) },
                                     uiSize = uiSize,
                                     isArchivePage = false,
-                                    onArchive = { viewModel.archiveItem(item.action) }
+                                    onArchive = { viewModel.archiveItem(item.action) },
+                                    hapticEnabled = hapticEnabled
                                 )
                             }
                         }

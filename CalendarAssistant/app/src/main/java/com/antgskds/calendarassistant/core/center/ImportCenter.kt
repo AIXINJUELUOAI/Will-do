@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.core.center
 
 import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
+import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
@@ -13,7 +14,8 @@ import java.time.LocalDate
 
 class ImportCenter(
     private val scheduleCenter: ScheduleCenter,
-    private val settingsQueryApi: SettingsQueryApi
+    private val settingsQueryApi: SettingsQueryApi,
+    private val attachmentManager: EventAttachmentManager
 ) : IngestCommandApi {
 
     private val smsIngestMutex = Mutex()
@@ -24,7 +26,9 @@ class ImportCenter(
     private val forceInstantCodeTimeToNow: Boolean
         get() = settingsQueryApi.settings.value.forceInstantCodeTimeToNow
 
-    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? = smsIngestMutex.withLock {
+    override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? = ingestInstantCode(eventData, "sms")
+
+    override suspend fun ingestInstantCode(eventData: RecognitionDraft, sourceType: String): Event? = smsIngestMutex.withLock {
         val event = convertDraftToEvent(
             eventData,
             defaultDurationMinutes = defaultDurationMinutes,
@@ -82,9 +86,11 @@ class ImportCenter(
                 return@forEach
             }
 
-            scheduleCenter.addEvent(event)
-            knownEvents.add(event)
-            added.add(event)
+            val eventId = scheduleCenter.addEvent(event)
+            attachmentManager.addRecognitionImageAttachment(eventId, sourceImagePath.orEmpty())
+            val stored = event.copy(id = eventId)
+            knownEvents.add(stored)
+            added.add(stored)
         }
 
         return added

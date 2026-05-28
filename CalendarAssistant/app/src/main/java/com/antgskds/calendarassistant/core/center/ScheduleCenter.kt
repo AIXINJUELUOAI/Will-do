@@ -12,6 +12,7 @@ import com.antgskds.calendarassistant.calendar.models.isCourse
 import com.antgskds.calendarassistant.calendar.models.isTransit
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationResult
+import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,8 @@ class ScheduleCenter(
     private val calendarCenter: CalendarCenter,
     private val appScope: CoroutineScope
 ) {
+    var onScheduleChanged: (() -> Unit)? = null
+
     val undoManager = UndoManager(appScope)
 
     private val _events = MutableStateFlow<List<Event>>(emptyList())
@@ -65,6 +68,7 @@ class ScheduleCenter(
         appScope.launch(Dispatchers.IO) {
             _events.value = calendarCenter.getEvents().filter { it.archivedAt == null }
             scheduleNotificationRefresh()
+            onScheduleChanged?.invoke()
         }
     }
 
@@ -336,12 +340,13 @@ class ScheduleCenter(
             endDate = end.toLocalDate(),
             endTime = end.toLocalTime(),
             location = event.location,
-            description = event.description,
+            description = stripSourceImageMarkers(event.description),
             tag = event.tag,
             color = event.color,
             rrule = event.rrule,
             reminders = reminders,
             isRecurring = event.isRecurring,
+            eventId = event.id,
             editHint = hint
         )
     }
@@ -356,6 +361,10 @@ class ScheduleCenter(
         val id = calendarCenter.createEvent(event)
         refreshEvents()
         id
+    }
+
+    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long {
+        return addEventFromPatch(patch)
     }
 
     /**
@@ -669,7 +678,7 @@ class ScheduleCenter(
             startTS = patch.startTS,
             endTS = patch.endTS,
             location = patch.location,
-            description = patch.description,
+            description = stripSourceImageMarkers(patch.description),
             tag = patch.tag,
             color = patch.color,
             rrule = patch.rrule,

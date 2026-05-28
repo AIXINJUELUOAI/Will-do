@@ -20,6 +20,7 @@ import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -31,6 +32,7 @@ fun ScheduleSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val scrollState = rememberScrollState()
 
     var showDatePicker by remember { mutableStateOf(false) }
@@ -87,6 +89,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "第一周第一天",
                     value = semesterStartDate?.toString() ?: "未设置",
                     onClick = { showDatePicker = true },
+                    hapticEnabled = settings.hapticFeedbackEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -100,6 +103,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "当前周次",
                     value = "第 $currentWeek 周",
                     onClick = { showWeekPicker = true },
+                    hapticEnabled = settings.hapticFeedbackEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -113,6 +117,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "学期总周数",
                     value = "${settings.totalWeeks} 周",
                     onClick = { showTotalWeeksPicker = true },
+                    hapticEnabled = settings.hapticFeedbackEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -134,6 +139,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     value = "添加、修改或删除课程",
                     icon = Icons.Default.ChevronRight,
                     onClick = { onNavigateTo(SettingsDestination.CourseManage) },
+                    hapticEnabled = settings.hapticFeedbackEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -148,6 +154,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     value = "设置每日节次时间段",
                     icon = Icons.Default.ChevronRight,
                     onClick = { onNavigateTo(SettingsDestination.TimeTableManage) },
+                    hapticEnabled = settings.hapticFeedbackEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -164,6 +171,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             onDismiss = { showDatePicker = false },
             title = "学期开始日期",
             onConfirm = {
+                haptics.confirm()
                 viewModel.updateSemesterStartDate(it.toString())
                 showDatePicker = false
             }
@@ -181,6 +189,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     val today = LocalDate.now()
                     val daysToSubtract = (selectedWeek - 1) * 7L
                     val newStartDate = today.minusDays(daysToSubtract)
@@ -188,7 +197,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     showWeekPicker = false
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { showWeekPicker = false }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { haptics.click(); showWeekPicker = false }) { Text("取消") } }
         )
     }
 
@@ -203,11 +212,12 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     viewModel.updateTotalWeeks(selectedTotal)
                     showTotalWeeksPicker = false
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { showTotalWeeksPicker = false }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { haptics.click(); showTotalWeeksPicker = false }) { Text("取消") } }
         )
     }
 }
@@ -218,14 +228,16 @@ fun SettingItem(
     value: String,
     icon: ImageVector? = null,
     onClick: () -> Unit,
+    hapticEnabled: Boolean = true,
     cardTitleStyle: TextStyle,
     cardValueStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable { haptics.click(); onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

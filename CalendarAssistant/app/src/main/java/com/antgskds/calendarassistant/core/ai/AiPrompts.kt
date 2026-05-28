@@ -60,7 +60,7 @@ object AiPrompts {
            - 🚖 打车：【用车】颜色|车型|车牌
            - 📦 取件：【取件】取件码|品牌|位置
            - 🍔 取餐：【取餐】取餐码|品牌|位置
-           - 🎫 取票：【取票】取票号|品牌|位置
+           - 🎫 取票：【取票】取票码|品牌|位置
            - 🚚 寄件：【寄件】寄件码|品牌|地点
 
            所有识别出的事件都必须按默认持续时间计算 endTime，不要自行猜测其他时长。
@@ -489,6 +489,7 @@ object AiPrompts {
             120 -> "endTime = startTime + 2h"
             180 -> "endTime = startTime + 3h"
             360 -> "endTime = startTime + 6h"
+            1440 -> "endTime = startTime + 24h"
             else -> "endTime = startTime + ${minutes.coerceAtLeast(1)}min"
         }
     }

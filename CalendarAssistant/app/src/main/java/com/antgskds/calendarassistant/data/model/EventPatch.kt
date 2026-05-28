@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.data.model
 
+import android.net.Uri
+
 /**
  * 事件修改补丁 —— 用户在编辑弹窗中实际修改的字段。
  *
@@ -17,5 +19,7 @@ data class EventPatch(
     val rrule: String = "",
     val reminder1Minutes: Int = -1,
     val reminder2Minutes: Int = -1,
-    val reminder3Minutes: Int = -1
+    val reminder3Minutes: Int = -1,
+    val pendingAttachmentKey: String = "",
+    val pendingAttachmentUris: List<Uri> = emptyList()
 )

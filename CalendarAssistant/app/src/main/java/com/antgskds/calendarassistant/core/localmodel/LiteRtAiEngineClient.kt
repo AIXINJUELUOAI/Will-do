@@ -39,6 +39,8 @@ import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE_ERROR
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_GENERATE_RESULT
 import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_MODEL_LOADED
+import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_PREPARE_MODEL
+import com.antgskds.calendarassistant.aiengine.AiEngineProtocol.MSG_PREPARE_RESULT
 import com.antgskds.calendarassistant.aiengine.AiEngineRequest
 import com.antgskds.calendarassistant.aiengine.AiEngineResult
 import com.antgskds.calendarassistant.aiengine.AiEngineService
@@ -58,6 +60,7 @@ class LiteRtAiEngineClient(context: Context) {
     private val serviceRef = AtomicReference<Messenger?>()
     private val requestIds = AtomicLong(1L)
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<AiEngineResult>>()
+    private val pendingPrepare = ConcurrentHashMap<Long, CompletableDeferred<Long>>()
     private val modelLoadedCallbacks = ConcurrentHashMap<Long, () -> Unit>()
     private val incomingMessenger = Messenger(IncomingHandler())
     private val bindMutex = Mutex()
@@ -118,6 +121,53 @@ class LiteRtAiEngineClient(context: Context) {
         }
     }
 
+    suspend fun prepare(
+        model: LocalModelInfo,
+        enableVision: Boolean = false,
+        maxTokens: Int = DEFAULT_MAX_TOKENS
+    ): Long {
+        require(model.runtime == LocalModelRuntime.LITERT_LM) { "不是 LiteRT-LM 模型" }
+        val requestId = requestIds.getAndIncrement()
+        AiEngineLog.write(appContext, "INFO", TAG, "request#$requestId client prepare model=${model.fileName} vision=$enableVision")
+        val service = bindService()
+        val deferred = CompletableDeferred<Long>()
+        pendingPrepare[requestId] = deferred
+
+        val request = AiEngineRequest(
+            modelPath = model.path,
+            prompt = "",
+            maxTokens = maxTokens,
+            maxNumImages = if (enableVision) 1 else 0,
+            backend = if (model.fileName.endsWith(".litertlm", ignoreCase = true)) AiEngineBackend.GPU else AiEngineBackend.DEFAULT,
+            temperature = 0.2f,
+            topK = 40,
+            topP = 0.95f,
+            enableVision = enableVision,
+            timeoutMillis = DEFAULT_TIMEOUT_MILLIS
+        )
+        val message = Message.obtain(null, MSG_PREPARE_MODEL).apply {
+            replyTo = incomingMessenger
+            data = request.toBundle(requestId)
+        }
+
+        try {
+            service.send(message)
+        } catch (e: RemoteException) {
+            pendingPrepare.remove(requestId)
+            serviceRef.set(null)
+            val status = classifyLastEngineExit()
+            AiEngineLog.write(appContext, "ERROR", TAG, "request#$requestId prepare send failed status=$status error=${e.message}")
+            throw AiEngineException(status, "AI 引擎通信失败：${e.message}", e)
+        }
+
+        return try {
+            deferred.await()
+        } finally {
+            pendingPrepare.remove(requestId)
+            AiEngineLog.write(appContext, "INFO", TAG, "request#$requestId client prepare finished")
+        }
+    }
+
     private inner class IncomingHandler : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
             val data = msg.data
@@ -141,12 +191,24 @@ class LiteRtAiEngineClient(context: Context) {
                     deferred.complete(result)
                 }
                 MSG_GENERATE_ERROR -> {
-                    val deferred = pending.remove(requestId) ?: return
+                    val deferred = pending.remove(requestId)
+                    val prepareDeferred = pendingPrepare.remove(requestId)
                     modelLoadedCallbacks.remove(requestId)
                     val status = parseStatus(data.getString(KEY_STATUS), AiEngineStatus.UNKNOWN_ERROR)
                     val error = data.getString(KEY_ERROR).orEmpty().ifBlank { "AI 引擎推理失败" }
                     AiEngineLog.write(appContext, "ERROR", TAG, "request#$requestId error status=$status error=$error")
-                    deferred.completeExceptionally(AiEngineException(status, error))
+                    val exception = AiEngineException(status, error)
+                    deferred?.completeExceptionally(exception)
+                    prepareDeferred?.completeExceptionally(exception)
+                }
+                MSG_PREPARE_RESULT -> {
+                    val deferred = pendingPrepare.remove(requestId) ?: return
+                    val status = parseStatus(data.getString(KEY_STATUS), AiEngineStatus.SUCCESS)
+                    if (status == AiEngineStatus.SUCCESS) {
+                        deferred.complete(data.getLong(KEY_LOAD_ELAPSED))
+                    } else {
+                        deferred.completeExceptionally(AiEngineException(status, "模型加载失败"))
+                    }
                 }
                 else -> super.handleMessage(msg)
             }
@@ -247,6 +309,8 @@ class LiteRtAiEngineClient(context: Context) {
         val error = AiEngineException(status, "AI 引擎进程已断开")
         pending.values.forEach { it.completeExceptionally(error) }
         pending.clear()
+        pendingPrepare.values.forEach { it.completeExceptionally(error) }
+        pendingPrepare.clear()
         modelLoadedCallbacks.clear()
         AiEngineLog.write(appContext, "ERROR", TAG, "$source status=$status")
     }

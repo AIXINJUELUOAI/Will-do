@@ -172,4 +172,37 @@ class NotificationCenter(
 
         manager.notify(notificationId, builder.build())
     }
+
+    fun showPlainNotification(
+        notificationId: Int,
+        title: String,
+        content: String,
+        channelId: String = App.CHANNEL_ID_POPUP,
+        smallIcon: Int = R.drawable.ic_notification_small,
+        ongoing: Boolean = false,
+        autoCancel: Boolean = true
+    ) {
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tapIntent = Intent(appContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            appContext,
+            notificationId,
+            tapIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(appContext, channelId)
+            .setSmallIcon(smallIcon)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setOngoing(ongoing)
+            .setAutoCancel(autoCancel)
+
+        manager.notify(notificationId, builder.build())
+    }
 }

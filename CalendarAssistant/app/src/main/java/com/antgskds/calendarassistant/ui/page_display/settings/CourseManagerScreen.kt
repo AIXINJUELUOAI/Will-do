@@ -32,6 +32,7 @@ import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.dialogs.CourseEditDialog
 import com.antgskds.calendarassistant.ui.dialogs.CourseItem
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable
@@ -40,6 +41,7 @@ fun CourseManagerScreen(
     uiSize: Int = 2
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
     val courses = remember(uiState.rawEvents, uiState.settings) {
         CourseEventMapper.extractParentCourses(uiState.rawEvents, uiState.settings)
     }
@@ -74,7 +76,7 @@ fun CourseManagerScreen(
         }
 
         FloatingActionButton(
-            onClick = { courseToEdit = null; showEditDialog = true },
+            onClick = { haptics.click(); courseToEdit = null; showEditDialog = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 24.dp + bottomInset).size(72.dp),
             shape = CircleShape,
             containerColor = MaterialTheme.colorScheme.primary,
@@ -89,6 +91,8 @@ fun CourseManagerScreen(
             course = courseToEdit,
             maxNodes = maxNodes,
             timeTableJson = uiState.settings.timeTableJson,
+            hapticEnabled = uiState.settings.hapticFeedbackEnabled,
+            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
             onDismiss = { showEditDialog = false; courseToEdit = null },
             onConfirm = { course ->
                 if (courseToEdit == null) viewModel.addCourse(course) else viewModel.updateCourse(course)

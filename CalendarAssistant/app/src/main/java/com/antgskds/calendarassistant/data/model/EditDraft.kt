@@ -23,5 +23,6 @@ data class EditDraft(
     val rrule: String = "",
     val reminders: List<Int> = emptyList(),
     val isRecurring: Boolean = false,
+    val eventId: Long? = null,
     val editHint: String? = null  // 例如："本次修改将应用到当前实例，并脱离重复系列"
 )

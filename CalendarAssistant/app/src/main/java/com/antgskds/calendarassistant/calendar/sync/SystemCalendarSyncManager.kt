@@ -627,7 +627,17 @@ class SystemCalendarSyncManager(private val context: Context) {
     }
 
     private fun isSameForSync(old: Event, new: Event): Boolean {
-        return old.copy(id = null, lastUpdated = 0L) == new.copy(id = null, lastUpdated = 0L)
+        val oldForSync = old.copy(
+            id = null,
+            lastUpdated = 0L,
+            description = stripSourceImageMarkers(old.description)
+        )
+        val newForSync = new.copy(
+            id = null,
+            lastUpdated = 0L,
+            description = stripSourceImageMarkers(new.description)
+        )
+        return oldForSync == newForSync
     }
 
     private fun resolveInboundEventColor(rawColor: Int, base: Event?, fallbackColor: Int): Int {

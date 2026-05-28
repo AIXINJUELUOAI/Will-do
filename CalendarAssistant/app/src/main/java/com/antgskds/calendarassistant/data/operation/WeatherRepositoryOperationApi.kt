@@ -15,4 +15,8 @@ class WeatherRepositoryOperationApi(
     override suspend fun forceRefresh(settings: MySettings): Result<WeatherData> {
         return weatherRepository.forceRefresh(settings)
     }
+
+    override fun clearCache() {
+        weatherRepository.clearCache()
+    }
 }

@@ -55,6 +55,8 @@ import com.antgskds.calendarassistant.data.model.homeEntryLabel
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
+import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
 @Composable
@@ -77,6 +79,7 @@ fun BottomBarEditorPage(
 ) {
     val settings by settingsViewModel.settings.collectAsState()
     val scrollState = rememberScrollState()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
 
     val activeItems = sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
     val startPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, activeItems)
@@ -102,6 +105,7 @@ fun BottomBarEditorPage(
     val candidates = listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL)
     val standbyItems = candidates.filterNot { it in activeItems }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -236,6 +240,7 @@ fun BottomBarEditorPage(
                         ) {
                             IconButton(
                                 onClick = {
+                                    haptics.selection()
                                     val mutable = activeItems.toMutableList()
                                     mutable.removeAt(index)
                                     mutable.add(index - 1, key)
@@ -247,6 +252,7 @@ fun BottomBarEditorPage(
                             }
                             IconButton(
                                 onClick = {
+                                    haptics.selection()
                                     val mutable = activeItems.toMutableList()
                                     mutable.removeAt(index)
                                     mutable.add(index + 1, key)
@@ -259,6 +265,7 @@ fun BottomBarEditorPage(
                             IconButton(
                                 onClick = {
                                     if (activeItems.size <= 1) return@IconButton
+                                    haptics.warning()
                                     val mutable = activeItems.toMutableList().apply { remove(key) }
                                     saveConfig(mutable)
                                 },
@@ -312,6 +319,7 @@ fun BottomBarEditorPage(
                             ElevatedAssistChip(
                                 onClick = {
                                     if (!noteDisabled) {
+                                        haptics.click()
                                         val mutable = activeItems.toMutableList()
                                         if (mutable.size < 3) {
                                             mutable.add(key)
@@ -393,7 +401,7 @@ fun BottomBarEditorPage(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(bgColor)
-                                .clickable { saveConfig(activeItems, key) }
+                                .clickable { haptics.selection(); saveConfig(activeItems, key) }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -416,5 +424,6 @@ fun BottomBarEditorPage(
         }
 
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
     }
 }

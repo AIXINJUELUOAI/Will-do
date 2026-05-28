@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +57,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +66,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
 import java.io.File
@@ -81,7 +82,9 @@ fun DonatePage(
     uiSize: Int = 2,
     settingsViewModel: SettingsViewModel? = null
 ) {
-    val haptic = LocalHapticFeedback.current
+    val settings by settingsViewModel?.settings?.collectAsState()
+        ?: remember { mutableStateOf(com.antgskds.calendarassistant.data.model.MySettings()) }
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val context = LocalContext.current
 
     var confettiTrigger by remember { mutableIntStateOf(0) }
@@ -144,7 +147,7 @@ fun DonatePage(
 
             Button(
                 onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    haptics.confirm()
                     confettiTrigger += 1
                     // 保存捐赠状态
                     settingsViewModel?.updateHasDonated(true)
@@ -199,7 +202,7 @@ fun DonatePage(
                         detectTapGestures(
                             onTap = { enlargedImageRes = null },
                             onLongPress = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                haptics.longPress()
                                 saveImageToGallery(context, enlargedImageRes!!)
                             }
                         )
@@ -237,8 +240,9 @@ private fun DonateQrCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     Card(
-        modifier = modifier.clickable { onClick() },
+        modifier = modifier.clickable { haptics.click(); onClick() },
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

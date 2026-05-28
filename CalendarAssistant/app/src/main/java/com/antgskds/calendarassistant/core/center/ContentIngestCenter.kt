@@ -134,6 +134,21 @@ class ContentIngestCenter(
         return deferred.await()
     }
 
+    override suspend fun ingestInstantCode(eventData: RecognitionDraft, sourceType: String): Event? {
+        val deferred = CompletableDeferred<Event?>()
+        val traceId = EventIdentity.newTraceId(sourceType)
+        ingestChannel.send(
+            SmsIngestTask(
+                eventData = eventData,
+                traceId = traceId,
+                sourceType = sourceType,
+                sourceId = eventData.description.ifBlank { "instant_code_input" },
+                result = deferred
+            )
+        )
+        return deferred.await()
+    }
+
     override suspend fun ingestRecognizedEvents(
         events: List<RecognitionDraft>,
         sourceImagePath: String?

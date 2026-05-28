@@ -74,6 +74,7 @@ import com.antgskds.calendarassistant.core.ai.ApiModelProvider
 import com.antgskds.calendarassistant.core.ai.ModelListResult
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
@@ -117,6 +118,7 @@ fun AiSettingsPage(
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val focusManager = LocalFocusManager.current
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
@@ -172,6 +174,7 @@ fun AiSettingsPage(
 
     fun showToast(message: String, type: ToastType = ToastType.SUCCESS) {
         currentToastType = type
+        if (type == ToastType.ERROR) haptics.error() else haptics.confirm()
         scope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
@@ -402,6 +405,7 @@ fun AiSettingsPage(
         FloatingActionButton(
             onClick = {
                 if (!actionLoading) {
+                    haptics.click()
                     scope.launch { onSaveClick() }
                 }
             },
@@ -554,6 +558,7 @@ private fun ExpandableSelectionItem(
     emptyHint: String = "",
     toggleEnabled: Boolean = true
 ) {
+    val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth()) {
         val rowModifier = Modifier
             .fillMaxWidth()
@@ -563,7 +568,7 @@ private fun ExpandableSelectionItem(
                     Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { onToggle() }
+                    ) { haptics.click(); onToggle() }
                 } else {
                     Modifier
                 }
@@ -624,7 +629,7 @@ private fun ExpandableSelectionItem(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
-                                ) { onOptionSelected(option) }
+                                ) { haptics.selection(); onOptionSelected(option) }
                                 .heightIn(min = 48.dp)
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.End,

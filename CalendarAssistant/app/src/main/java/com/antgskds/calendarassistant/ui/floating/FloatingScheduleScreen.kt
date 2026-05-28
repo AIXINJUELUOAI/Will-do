@@ -53,6 +53,7 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -103,13 +104,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -131,6 +130,10 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.data.model.WeatherDailyForecast
+import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
+import com.antgskds.calendarassistant.data.model.displayLocationName
+import com.antgskds.calendarassistant.core.weather.WeatherForecastIconMapper
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.core.rule.ActionIconType
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
@@ -143,12 +146,14 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.components.MarkdownText
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -163,6 +168,7 @@ fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
     noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
+    weatherForecastRange: Int = 0,
     noteEnabled: Boolean = false,
     expandSide: String = "RIGHT",
     onClose: () -> Unit,
@@ -177,7 +183,8 @@ fun FloatingScheduleScreen(
     onUndoAction: () -> Unit = {},
     onDeleteNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onRestoreNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onLoadingChange: (Boolean) -> Unit = {}
+    onLoadingChange: (Boolean) -> Unit = {},
+    hapticEnabled: Boolean = true
 ) {
     var manualInputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -211,6 +218,7 @@ fun FloatingScheduleScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
+    val haptics = rememberAppHaptics(hapticEnabled)
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
     val context = LocalContext.current
@@ -228,7 +236,6 @@ fun FloatingScheduleScreen(
     }
     var deletedNote by remember { mutableStateOf<Event?>(null) }
     var showUndoDelete by remember { mutableStateOf(false) }
-
     LaunchedEffect(currentMode, noteEnabled) {
         if (noteEnabled) {
             prefs.edit().putString("last_mode", currentMode.name).apply()
@@ -296,6 +303,7 @@ fun FloatingScheduleScreen(
                 scheduleItems = scheduleItems,
                 noteEvents = noteEvents,
                 weatherData = weatherData,
+                weatherForecastRange = weatherForecastRange,
                 currentMode = currentMode,
                 expandFromLeft = expandFromLeft,
                 modifier = Modifier
@@ -308,6 +316,7 @@ fun FloatingScheduleScreen(
                 onStatusAction = onStatusAction,
                 pendingStatusKeys = pendingStatusKeys,
                 onDeleteNote = { note ->
+                    haptics.warning()
                     onDeleteNote(note) {
                         deletedNote = note
                         showUndoDelete = true
@@ -318,7 +327,8 @@ fun FloatingScheduleScreen(
                 },
                 onRequestTimePicker = { initialTime, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Time(initialTime, onConfirm)
-                }
+                },
+                hapticEnabled = hapticEnabled
             )
         }
 
@@ -341,6 +351,7 @@ fun FloatingScheduleScreen(
                     if (text.isNotBlank()) {
                         isLoading = true
                         onLoadingChange(true)
+                        haptics.confirm()
                         onManualInput(text, isNote) {
                             isLoading = false
                             onLoadingChange(false)
@@ -352,6 +363,7 @@ fun FloatingScheduleScreen(
                     if (isLoading) return@BottomInteractionArea
                     isLoading = true
                     onLoadingChange(true)
+                    haptics.click()
                     onPickImageRequest {
                         isLoading = false
                         onLoadingChange(false)
@@ -361,7 +373,8 @@ fun FloatingScheduleScreen(
                 isLoading = isLoading,
                 noteEnabled = noteEnabled,
                 currentMode = currentMode,
-                onModeChange = { currentMode = it }
+                onModeChange = { currentMode = it },
+                hapticEnabled = hapticEnabled
             )
         }
 
@@ -384,6 +397,7 @@ fun FloatingScheduleScreen(
                     Text("已删除便签", color = MaterialTheme.colorScheme.onSurface)
                     TextButton(onClick = {
                         val note = deletedNote ?: return@TextButton
+                        haptics.confirm()
                         onRestoreNote(note) {
                             showUndoDelete = false
                             deletedNote = null
@@ -412,7 +426,7 @@ fun FloatingScheduleScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(undoPendingLabel ?: "", color = MaterialTheme.colorScheme.onSurface)
-                    TextButton(onClick = { onUndoAction() }) {
+                    TextButton(onClick = { haptics.confirm(); onUndoAction() }) {
                         Text("撤销")
                     }
                 }
@@ -439,8 +453,10 @@ fun BottomInteractionArea(
     isLoading: Boolean = false,
     noteEnabled: Boolean = false,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
-    onModeChange: (FloatingInputMode) -> Unit = {}
+    onModeChange: (FloatingInputMode) -> Unit = {},
+    hapticEnabled: Boolean = true
 ) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     val isNote = currentMode == FloatingInputMode.NOTE
 
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -497,6 +513,7 @@ fun BottomInteractionArea(
                             .clip(CircleShape)
                             .background(activeColor.copy(alpha = 0.15f))
                             .clickable(enabled = noteEnabled && !isLoading) {
+                                haptics.selection()
                                 onModeChange(if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE)
                             },
                         contentAlignment = Alignment.Center
@@ -547,7 +564,7 @@ fun BottomInteractionArea(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
-                            onClick = onPickImage,
+                            onClick = { haptics.click(); onPickImage() },
                             enabled = !isLoading,
                             modifier = Modifier.size(40.dp)
                         ) {
@@ -581,7 +598,7 @@ fun BottomInteractionArea(
                             )
 
                             Surface(
-                                onClick = { if (isTextNotBlank) onManualSubmit(text, isNote) },
+                                onClick = { if (isTextNotBlank) { haptics.confirm(); onManualSubmit(text, isNote) } },
                                 shape = CircleShape,
                                 color = sendBtnContainerColor,
                                 modifier = Modifier.size(40.dp)
@@ -610,6 +627,7 @@ fun TimeWheelList(
     scheduleItems: List<ScheduleDisplayItem>,
     noteEvents: List<Event> = emptyList(),
     weatherData: WeatherData? = null,
+    weatherForecastRange: Int = 0,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
     expandFromLeft: Boolean = false,
     modifier: Modifier = Modifier,
@@ -621,9 +639,11 @@ fun TimeWheelList(
     pendingStatusKeys: Set<String> = emptySet(),
     onDeleteNote: (Event) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
-    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
+    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
+    hapticEnabled: Boolean = true
 ) {
     val now = LocalDateTime.now()
+    val haptics = rememberAppHaptics(hapticEnabled)
     val cardAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
     val cardModifier = if (expandFromLeft) {
         Modifier.padding(start = 20.dp).width(260.dp)
@@ -652,6 +672,7 @@ fun TimeWheelList(
                     ) {
                         FloatingWeatherCard(
                             weatherData = weatherData,
+                            forecastRange = weatherForecastRange,
                             modifier = cardModifier
                         )
                     }
@@ -669,13 +690,15 @@ fun TimeWheelList(
                             expandFromLeft = expandFromLeft,
                             onDelete = onDeleteNote,
                             onToggleTodo = { task ->
+                                haptics.selection()
                                 onUpdateEvent(
                                     note.withNoteMarkdown(
                                         markdown = toggleMarkdownTask(note.noteMarkdown(), task.lineIndex)
                                     )
                                 ) {}
                             },
-                            onSave = { updated -> onUpdateEvent(updated) {} }
+                            onSave = { updated -> haptics.confirm(); onUpdateEvent(updated) {} },
+                            hapticEnabled = hapticEnabled
                         )
                     }
                 }
@@ -692,12 +715,13 @@ fun TimeWheelList(
                         listState = listState,
                         modifier = cardModifier,
                         expandFromLeft = expandFromLeft,
-                        onUpdateScheduleItem = onUpdateScheduleItem,
-                        onArchiveScheduleItem = onArchiveScheduleItem,
-                        onStatusAction = onStatusAction,
-                        onRequestDatePicker = onRequestDatePicker,
-                        onRequestTimePicker = onRequestTimePicker
-                    )
+                            onUpdateScheduleItem = onUpdateScheduleItem,
+                            onArchiveScheduleItem = onArchiveScheduleItem,
+                            onStatusAction = onStatusAction,
+                            onRequestDatePicker = onRequestDatePicker,
+                            onRequestTimePicker = onRequestTimePicker,
+                            hapticEnabled = hapticEnabled
+                        )
                 }
             }
             }
@@ -708,14 +732,18 @@ fun TimeWheelList(
 @Composable
 private fun FloatingWeatherCard(
     weatherData: WeatherData,
+    forecastRange: Int,
     modifier: Modifier = Modifier
 ) {
     val now = remember { LocalDateTime.now() }
+    var isExpanded by remember { mutableStateOf(false) }
+    val haptics = rememberAppHaptics()
+    val forecastMode = remember(forecastRange) { FloatingWeatherForecastMode.fromValue(forecastRange) }
     val weekText = remember(now) {
         now.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.CHINESE)
     }
     Surface(
-        modifier = modifier,
+        modifier = modifier.clickable { haptics.click(); isExpanded = !isExpanded },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 4.dp
@@ -745,14 +773,182 @@ private fun FloatingWeatherCard(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary
                 )
+                val locationName = weatherData.displayLocationName(short = true)
+                if (locationName.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = locationName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
             }
             Text(
                 text = "${now.dayOfMonth}号 $weekText · ${weatherData.windDir.ifBlank { "--" }}${weatherData.windScale.ifBlank { "--" }}级 · 湿度 ${weatherData.humidity.ifBlank { "--" }}%",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                AnimatedContent(
+                    targetState = forecastMode,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "floating_weather_forecast_content"
+                ) { mode ->
+                    when (mode) {
+                        FloatingWeatherForecastMode.Hourly24 -> FloatingHourlyForecastRow(weatherData.hourlyForecast.take(24))
+                        FloatingWeatherForecastMode.Daily3 -> FloatingDailyForecastRow(weatherData.dailyForecast.take(3))
+                        FloatingWeatherForecastMode.Daily5 -> FloatingDailyForecastRow(weatherData.dailyForecast.take(5))
+                    }
+                }
+            }
         }
     }
+}
+
+private enum class FloatingWeatherForecastMode(
+    val value: Int,
+    val label: String
+) {
+    Hourly24(0, "24小时"),
+    Daily3(1, "未来3天"),
+    Daily5(2, "未来5天");
+
+    companion object {
+        fun fromValue(value: Int): FloatingWeatherForecastMode {
+            return entries.firstOrNull { it.value == value } ?: Hourly24
+        }
+    }
+}
+
+@Composable
+private fun FloatingHourlyForecastRow(hours: List<WeatherHourlyForecast>) {
+    if (hours.isEmpty()) {
+        FloatingWeatherEmptyText("暂无24小时预报")
+        return
+    }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(hours) { hour ->
+            FloatingHourlyWeather(hour)
+        }
+    }
+}
+
+@Composable
+private fun FloatingDailyForecastRow(days: List<WeatherDailyForecast>) {
+    if (days.isEmpty()) {
+        FloatingWeatherEmptyText("暂无未来天气预报")
+        return
+    }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(days) { day ->
+            FloatingDailyWeather(day)
+        }
+    }
+}
+
+@Composable
+private fun FloatingWeatherEmptyText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun FloatingHourlyWeather(hour: WeatherHourlyForecast) {
+    Column(
+        modifier = Modifier
+            .width(58.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .padding(vertical = 8.dp, horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = formatWeatherHour(hour.fxTime),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Icon(
+            painter = painterResource(WeatherForecastIconMapper.iconRes(hour.text, hour.icon)),
+            contentDescription = hour.text,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "${hour.temp.ifBlank { "--" }}°",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun FloatingDailyWeather(day: WeatherDailyForecast) {
+    Column(
+        modifier = Modifier
+            .width(74.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .padding(vertical = 8.dp, horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = formatWeatherDay(day.fxDate),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+        Icon(
+            painter = painterResource(WeatherForecastIconMapper.iconRes(day.textDay, day.iconDay)),
+            contentDescription = day.textDay,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = compactFloatingDayWeather(day),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${day.tempMin.ifBlank { "--" }}°/${day.tempMax.ifBlank { "--" }}°",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1
+        )
+    }
+}
+
+private fun formatWeatherHour(value: String): String {
+    return runCatching { OffsetDateTime.parse(value).format(DateTimeFormatter.ofPattern("HH")) }.getOrDefault("--")
+}
+
+private fun formatWeatherDay(value: String): String {
+    return runCatching {
+        val date = LocalDate.parse(value)
+        date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.CHINESE)
+    }.getOrDefault("--")
+}
+
+private fun compactFloatingDayWeather(day: WeatherDailyForecast): String {
+    val dayText = day.textDay.ifBlank { "--" }
+    val nightText = day.textNight.ifBlank { "" }
+    return if (nightText.isBlank() || dayText == nightText) dayText else "${dayText}转$nightText"
 }
 
 @Composable
@@ -762,7 +958,8 @@ private fun FloatingNoteCard(
     expandFromLeft: Boolean = false,
     onToggleTodo: (com.antgskds.calendarassistant.core.note.MarkdownTaskItem) -> Unit,
     onDelete: (Event) -> Unit,
-    onSave: (Event) -> Unit
+    onSave: (Event) -> Unit,
+    hapticEnabled: Boolean = true
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
@@ -771,6 +968,7 @@ private fun FloatingNoteCard(
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val haptics = rememberAppHaptics(hapticEnabled)
     val actionButtonSize = 46.dp
     val actionAreaSidePadding = 14.dp
     val cardToButtonGap = 12.dp
@@ -836,6 +1034,7 @@ private fun FloatingNoteCard(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     onClick = {
+                        haptics.click()
                         draftTitle = note.title
                         draftMarkdown = note.noteMarkdown()
                         isExpanded = true
@@ -865,6 +1064,7 @@ private fun FloatingNoteCard(
                                     scope.launch {
                                         when {
                                             fullSwipeDelete -> {
+                                                haptics.warning()
                                                 offsetX.animateTo(deleteDirection * screenWidthPx, tween(200))
                                                 onDelete(note)
                                             }
@@ -904,6 +1104,7 @@ private fun FloatingNoteCard(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {
+                    haptics.click()
                     scope.launch {
                         if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                         else if (!isEditing) isExpanded = !isExpanded
@@ -990,6 +1191,7 @@ private fun FloatingNoteCard(
                                         }) { Text("取消", fontSize = 13.sp) }
                                         Spacer(Modifier.width(8.dp))
                                         Button(onClick = {
+                                            haptics.confirm()
                                             val updated = note.withNoteMarkdown(
                                                 title = draftTitle.trim().ifBlank { "无标题" },
                                                 markdown = draftMarkdown
@@ -1290,7 +1492,8 @@ fun ScheduleCard(
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
     onStatusAction: (ScheduleDisplayItem) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
-    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> }
+    onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
+    hapticEnabled: Boolean = true
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -1326,7 +1529,7 @@ fun ScheduleCard(
 
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
+    val haptics = rememberAppHaptics(hapticEnabled)
 
     val titleBringIntoViewRequester = remember { BringIntoViewRequester() }
     val locationBringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -1413,7 +1616,7 @@ fun ScheduleCard(
 
     LaunchedEffect(isPastFullSwipe, hasAction) {
         if (hasAction && isPastFullSwipe && !hasVibrated) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptics.threshold()
             hasVibrated = true
         } else if (!isPastFullSwipe) {
             hasVibrated = false
@@ -1423,7 +1626,7 @@ fun ScheduleCard(
     // 【核心新增】归档阈值的震动控制
     LaunchedEffect(isPastArchiveSwipe) {
         if (isPastArchiveSwipe && !hasVibratedArchive) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptics.threshold()
             hasVibratedArchive = true
         } else if (!isPastArchiveSwipe) {
             hasVibratedArchive = false
@@ -1446,7 +1649,7 @@ fun ScheduleCard(
             Surface(
                 modifier = Modifier.size(actionButtonSize), shape = CircleShape,
                 color = if (isPastFullSwipe) actionColor else actionColor.copy(alpha = 0.92f),
-                onClick = { scope.launch { onStatusAction(item); offsetX.animateTo(0f, swipeSpringSpec) } }
+                onClick = { scope.launch { haptics.confirm(); onStatusAction(item); offsetX.animateTo(0f, swipeSpringSpec) } }
             ) {
                 Box(contentAlignment = Alignment.Center) { Icon(effectiveActionIcon, null, Modifier.size(22.dp), tint = Color.White) }
             }
@@ -1460,6 +1663,7 @@ fun ScheduleCard(
             color = MaterialTheme.colorScheme.primary,
             onClick = {
                 scope.launch {
+                    haptics.click()
                     if (!canEdit) android.widget.Toast.makeText(context, "暂不支持在悬浮窗编辑", android.widget.Toast.LENGTH_SHORT).show()
                     else {
                         draftTitle = item.title
@@ -1521,9 +1725,11 @@ fun ScheduleCard(
 
                                     scope.launch {
                                         if (fullSwipeAction) {
+                                            haptics.confirm()
                                             onStatusAction(item)
                                             offsetX.animateTo(0f, swipeSpringSpec)
                                         } else if (fullSwipeArchive) {
+                                            haptics.warning()
                                             // 【核心】触发归档飞出动画，然后调用更新（配合 animateItemPlacement 实现缝隙弥合）
                                             offsetX.animateTo(
                                                 targetValue = archiveDirection * screenWidthPx,
@@ -1568,6 +1774,7 @@ fun ScheduleCard(
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = elevation,
             onClick = {
+                haptics.click()
                 scope.launch {
                     if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                     else if (!isEditing && !isSaving) isExpanded = !isExpanded
@@ -1676,6 +1883,7 @@ fun ScheduleCard(
                                             Surface(
                                                 onClick = {
                                                     if (isSaving) return@Surface
+                                                    haptics.click()
                                                     focusManager.clearFocus(force = true)
                                                     onRequestDatePicker(draftStartDate) { draftStartDate = it }
                                                 },
@@ -1696,6 +1904,7 @@ fun ScheduleCard(
                                             Surface(
                                                 onClick = {
                                                     if (isSaving) return@Surface
+                                                    haptics.click()
                                                     focusManager.clearFocus(force = true)
                                                     onRequestTimePicker(draftStartTime) { draftStartTime = it }
                                                 },
@@ -1721,6 +1930,7 @@ fun ScheduleCard(
                                             Surface(
                                                 onClick = {
                                                     if (isSaving) return@Surface
+                                                    haptics.click()
                                                     focusManager.clearFocus(force = true)
                                                     onRequestDatePicker(draftEndDate) { draftEndDate = it }
                                                 },
@@ -1741,6 +1951,7 @@ fun ScheduleCard(
                                             Surface(
                                                 onClick = {
                                                     if (isSaving) return@Surface
+                                                    haptics.click()
                                                     focusManager.clearFocus(force = true)
                                                     onRequestTimePicker(draftEndTime) { draftEndTime = it }
                                                 },
@@ -1835,6 +2046,7 @@ fun ScheduleCard(
                                                     if (isSaving) return@Button
                                                     val title = draftTitle.trim()
                                                     if (title.isBlank()) {
+                                                        haptics.error()
                                                         android.widget.Toast.makeText(context, "标题不能为空", android.widget.Toast.LENGTH_SHORT).show()
                                                         return@Button
                                                     }
@@ -1842,15 +2054,18 @@ fun ScheduleCard(
                                                     val endDt = try { LocalDateTime.of(draftEndDate, LocalTime.parse(draftEndTime)) } catch (e: Exception) { null }
 
                                                     if (startDt == null || endDt == null) {
+                                                        haptics.error()
                                                         android.widget.Toast.makeText(context, "时间格式错误", android.widget.Toast.LENGTH_SHORT).show()
                                                         return@Button
                                                     }
                                                     if (endDt.isBefore(startDt)) {
+                                                        haptics.error()
                                                         android.widget.Toast.makeText(context, "结束时间不能早于开始时间", android.widget.Toast.LENGTH_SHORT).show()
                                                         return@Button
                                                     }
 
                                                     focusManager.clearFocus(force = true)
+                                                    haptics.confirm()
                                                     isSaving = true
                                                     onUpdateScheduleItem(
                                                         item,

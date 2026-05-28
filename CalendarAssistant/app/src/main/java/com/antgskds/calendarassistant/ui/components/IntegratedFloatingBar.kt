@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
@@ -80,6 +81,7 @@ fun IntegratedFloatingBar(
     onEditClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberAppHaptics()
     val rotation by animateFloatAsState(
         targetValue = if (isExpanded) 45f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -263,7 +265,7 @@ fun IntegratedFloatingBar(
                             .fillMaxHeight(),
                         contentAlignment = Alignment.Center
                     ) {
-                        IconButton(onClick = { onExpandedChange(!isExpanded) }) {
+                        IconButton(onClick = { haptics.click(); onExpandedChange(!isExpanded) }) {
                             Icon(
                                 Icons.Default.Add,
                                 contentDescription = "Toggle",
@@ -289,6 +291,7 @@ private fun HydrogenNavIcon(
     onClick: () -> Unit,
     width: Dp
 ) {
+    val haptics = rememberAppHaptics()
     Box(
         modifier = Modifier
             .fillMaxHeight()
@@ -301,7 +304,7 @@ private fun HydrogenNavIcon(
                 .fillMaxWidth()
                 .padding(vertical = 4.dp, horizontal = 4.dp)
                 .clip(CircleShape)
-                .clickable(onClick = onClick),
+                .clickable { haptics.click(); onClick() },
             contentAlignment = Alignment.Center
         ) {
             if (isSelected) {
@@ -329,8 +332,9 @@ private fun ActionIconButton(
     tint: Color,
     onClick: () -> Unit
 ) {
+    val haptics = rememberAppHaptics()
     IconButton(
-        onClick = onClick,
+        onClick = { haptics.click(); onClick() },
         modifier = Modifier.size(44.dp)
     ) {
         Icon(

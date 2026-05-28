@@ -76,6 +76,7 @@ class TextAccessibilityService : AccessibilityService() {
     private val localModelReadyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != LocalSemanticProvider.ACTION_LOCAL_MODEL_READY) return
+            capsuleCenter.clearModelLoading()
             showProgressNotification("正在分析", "正在分析屏幕内容...")
         }
     }
@@ -514,6 +515,8 @@ class TextAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         if (!settingsQueryApi.settings.value.isLocalSemanticEnabled) {
             showProgressNotification("正在分析", "正在分析屏幕内容...")
+        } else {
+            capsuleCenter.clearModelLoading()
         }
 
         // ✅ 主线程调用 takeScreenshot（系统要求）
@@ -675,6 +678,7 @@ class TextAccessibilityService : AccessibilityService() {
     private fun cancelProgressNotification() {
         if (shouldUseOcrCapsule()) {
             capsuleCenter.clearOcrCapsule()
+            capsuleCenter.clearModelLoading()
             return
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -684,6 +688,7 @@ class TextAccessibilityService : AccessibilityService() {
     private fun cancelResultNotification() {
         if (shouldUseOcrCapsule()) {
             capsuleCenter.clearOcrCapsule()
+            capsuleCenter.clearModelLoading()
             return
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

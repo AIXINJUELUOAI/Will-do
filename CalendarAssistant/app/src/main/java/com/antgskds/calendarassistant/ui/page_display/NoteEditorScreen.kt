@@ -1,6 +1,5 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +50,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.BlockNoteEditor
 import com.antgskds.calendarassistant.ui.components.BlockNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -70,6 +71,7 @@ fun NoteEditorScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val savedTitle = initialNote?.title?.takeUnless { it.isBlank() } ?: ""
     val savedMarkdown = initialNote?.noteMarkdown().orEmpty()
@@ -78,6 +80,8 @@ fun NoteEditorScreen(
     var titleText by rememberSaveable(editorSessionKey) { mutableStateOf(savedTitle) }
     var bodyText by rememberSaveable(editorSessionKey) { mutableStateOf(savedMarkdown) }
     var isAnalyzing by remember(editorSessionKey) { mutableStateOf(false) }
+    var hasSavedOnExit by remember(editorSessionKey) { mutableStateOf(false) }
+    var skipSaveOnExit by remember(editorSessionKey) { mutableStateOf(false) }
 
     fun buildSavedNote(markdownOverride: String? = null): Event {
         val markdown = (markdownOverride ?: bodyText).trimEnd()
@@ -94,7 +98,10 @@ fun NoteEditorScreen(
         }
     }
 
-    fun saveAndDismiss() {
+    fun saveIfNeeded() {
+        if (hasSavedOnExit) return
+        hasSavedOnExit = true
+        if (skipSaveOnExit) return
         val committedMarkdown = editorController.commit() ?: bodyText
         bodyText = committedMarkdown
         val currentMarkdown = committedMarkdown.trimEnd()
@@ -102,10 +109,16 @@ fun NoteEditorScreen(
         if (isDirty && !(initialNote == null && titleText.isBlank() && currentMarkdown.isBlank())) {
             onSave(buildSavedNote(committedMarkdown))
         }
+    }
+
+    fun saveAndDismiss() {
+        saveIfNeeded()
         onDismiss()
     }
 
-    BackHandler(onBack = ::saveAndDismiss)
+    DisposableEffect(editorSessionKey) {
+        onDispose { saveIfNeeded() }
+    }
 
     Box(
         modifier = modifier
@@ -128,7 +141,12 @@ fun NoteEditorScreen(
                     },
                     actions = {
                         if (initialNote != null) {
-                            IconButton(onClick = { onDelete(initialNote) }) {
+                            IconButton(onClick = {
+                                haptics.warning()
+                                skipSaveOnExit = true
+                                hasSavedOnExit = true
+                                onDelete(initialNote)
+                            }) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
                                     contentDescription = "删除",
@@ -167,6 +185,7 @@ fun NoteEditorScreen(
                 val committedMarkdown = editorController.commit() ?: bodyText
                 bodyText = committedMarkdown
                 if (!settings.isRecognitionConfigReady()) {
+                    haptics.error()
                     onShowMessage(settings.recognitionConfigMissingMessage(), ToastType.ERROR)
                     return@FloatingActionButton
                 }
@@ -176,10 +195,12 @@ fun NoteEditorScreen(
                     if (markdown.isNotBlank()) append(markdown)
                 }.trim()
                 if (text.isBlank()) {
+                    haptics.error()
                     onShowMessage("便签内容为空", ToastType.INFO)
                     return@FloatingActionButton
                 }
                 scope.launch {
+                    haptics.confirm()
                     isAnalyzing = true
                     try {
                         when (val result = withContext(Dispatchers.IO) {

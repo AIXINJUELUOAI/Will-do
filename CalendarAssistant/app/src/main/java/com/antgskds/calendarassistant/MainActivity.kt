@@ -10,18 +10,15 @@ import android.content.res.Resources
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,23 +34,32 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.data.model.HomeEntryKey
+import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
+import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.data.model.UiStyle
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.components.SettingsDestination
+import com.antgskds.calendarassistant.ui.navigation.AppRoutes
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
+import com.antgskds.calendarassistant.ui.page_display.NoteEditorScreen
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
+import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
@@ -121,12 +127,14 @@ class MainActivity : ComponentActivity() {
                         homeQueryApi = app.homeQueryApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
                         weatherQueryApi = app.weatherQueryApi,
-                        weatherOperationApi = app.weatherOperationApi
+                        weatherOperationApi = app.weatherOperationApi,
+                        attachmentManager = app.eventAttachmentManager
                     ) as T
                     modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(
                         scheduleCenter = app.scheduleCenter,
                         backupCenter = app.backupCenter,
                         syncCenter = app.syncCenter,
+                        diagnosticLogCenter = app.diagnosticLogCenter,
                         settingsOperationApi = app.settingsOperationApi,
                         settingsQueryApi = app.settingsQueryApi,
                         settingsTransformApi = app.settingsTransformApi,
@@ -145,6 +153,7 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
             val settings by settingsViewModel.settings.collectAsState()
             val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
+            val clipboardPrompt by app.clipboardCodeCenter.pendingPrompt.collectAsState()
             val uiStyle = UiStyle.fromName(settings.uiStyle)
 
             LaunchedEffect(settings.uiSize) {
@@ -198,16 +207,46 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val navController = rememberNavController()
+                val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                val predictiveBackEnabled = settings.predictiveBackEnabled
+                val homeBottomItems = remember(settings.homeBottomItems, settings.noteEnabled) {
+                    sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
+                }
+                val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
+                    sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
+                }
+                var selectedHomePageKey by rememberSaveable { mutableStateOf(homeStartPageKey) }
+                var lastPickupEventTimestamp by rememberSaveable { mutableLongStateOf(0L) }
+                val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val floatingActionCardBottomPadding = if (currentBackStackEntry?.destination?.route == AppRoutes.Home) {
+                    IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
+                } else {
+                    bottomInset + 16.dp
+                }
+
+                LaunchedEffect(homeBottomItems, homeStartPageKey, selectedHomePageKey) {
+                    if (selectedHomePageKey !in homeBottomItems) {
+                        selectedHomePageKey = homeStartPageKey
+                    }
+                }
+
+                LaunchedEffect(pickupEventTimestamp.value) {
+                    val timestamp = pickupEventTimestamp.value
+                    if (timestamp > 0L && timestamp != lastPickupEventTimestamp) {
+                        selectedHomePageKey = HomeEntryKey.ALL
+                        lastPickupEventTimestamp = timestamp
+                    }
+                }
 
                 // 最外层容器（包裹 NavHost 和所有弹窗）
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     NavHost(
                         modifier = Modifier.background(MaterialTheme.colorScheme.background),
                         navController = navController,
-                        startDestination = "home"
+                        startDestination = AppRoutes.Home
                     ) {
                         composable(
-                            route = "home",
+                            route = AppRoutes.Home,
                             enterTransition = { navBackwardEnterTransition() },
                             exitTransition = { navForwardExitTransition() },
                             popEnterTransition = { navBackwardEnterTransition() },
@@ -222,7 +261,7 @@ class MainActivity : ComponentActivity() {
                                         if (destination.name == SettingsDestination.Logout.name) {
                                             finish()
                                         } else {
-                                            navController.navigate("settings/${destination.name}")
+                                            navController.navigate(AppRoutes.settings(destination.name))
                                         }
                                     }
                                 )
@@ -230,11 +269,21 @@ class MainActivity : ComponentActivity() {
                                     mainViewModel = mainViewModel,
                                     settingsViewModel = settingsViewModel,
                                     pickupTimestamp = pickupEventTimestamp.value,
+                                    selectedPageKey = selectedHomePageKey,
+                                    onSelectedPageKeyChange = { pageKey ->
+                                        selectedHomePageKey = if (pageKey in homeBottomItems) pageKey else homeStartPageKey
+                                    },
+                                    onOpenWeatherDetail = {
+                                        navController.navigate(AppRoutes.WeatherDetail)
+                                    },
+                                    onOpenNoteEditor = { noteId ->
+                                        navController.navigate(AppRoutes.noteEditor(noteId))
+                                    },
                                     onNavigateToSettings = { destination ->
                                         if (destination == SettingsDestination.Logout) {
                                             finish()
                                         } else {
-                                            navController.navigate("settings/${destination.name}")
+                                            navController.navigate(AppRoutes.settings(destination.name))
                                         }
                                     }
                                 )
@@ -242,14 +291,71 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable(
-                            route = "settings/{type}",
-                            arguments = listOf(navArgument("type") { type = NavType.StringType }),
+                            route = AppRoutes.NoteEditorPattern,
+                            arguments = listOf(navArgument(AppRoutes.NoteEditorArg) { type = NavType.LongType }),
                             enterTransition = { navForwardEnterTransition() },
                             exitTransition = { null },
                             popEnterTransition = { null },
                             popExitTransition = { navBackwardExitTransition() }
                         ) { backStackEntry ->
-                            val typeName = backStackEntry.arguments?.getString("type") ?: ""
+                            BackHandler(enabled = !predictiveBackEnabled) {
+                                navController.popBackStack()
+                            }
+                            val noteId = backStackEntry.arguments?.getLong(AppRoutes.NoteEditorArg) ?: AppRoutes.NoteEditorNewArg
+                            val uiState by mainViewModel.uiState.collectAsState()
+                            val initialNote = if (noteId == AppRoutes.NoteEditorNewArg) null else mainViewModel.getEventById(noteId)
+                            NoteEditorScreen(
+                                initialNote = initialNote,
+                                editorSessionKey = noteId.hashCode(),
+                                currentEventsCount = uiState.rawEventCount,
+                                settings = settings,
+                                onDismiss = { navController.popBackStack() },
+                                onSave = { note ->
+                                    if (noteId == AppRoutes.NoteEditorNewArg) {
+                                        mainViewModel.addEvent(note)
+                                    } else {
+                                        mainViewModel.updateEvent(note)
+                                    }
+                                },
+                                onDelete = { note ->
+                                    mainViewModel.deleteEvent(note)
+                                    navController.popBackStack()
+                                },
+                                onShowMessage = { message, type ->
+                                    // Keep note editor self-contained; global toast integration can be added later.
+                                    android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = AppRoutes.WeatherDetail,
+                            enterTransition = { navForwardEnterTransition() },
+                            exitTransition = { null },
+                            popEnterTransition = { null },
+                            popExitTransition = { navBackwardExitTransition() }
+                        ) {
+                            BackHandler(enabled = !predictiveBackEnabled) {
+                                navController.popBackStack()
+                            }
+                            WeatherDetailScreen(
+                                uiSize = settings.uiSize,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable(
+                            route = AppRoutes.SettingsPattern,
+                            arguments = listOf(navArgument(AppRoutes.SettingsTypeArg) { type = NavType.StringType }),
+                            enterTransition = { navForwardEnterTransition() },
+                            exitTransition = { null },
+                            popEnterTransition = { null },
+                            popExitTransition = { navBackwardExitTransition() }
+                        ) { backStackEntry ->
+                            BackHandler(enabled = !predictiveBackEnabled) {
+                                navController.popBackStack()
+                            }
+                            val typeName = backStackEntry.arguments?.getString(AppRoutes.SettingsTypeArg) ?: ""
                             when (uiStyle) {
                                 UiStyle.MIUI -> com.antgskds.calendarassistant.miui.page_display.SettingsDetailScreen(
                                     destinationStr = typeName,
@@ -280,7 +386,8 @@ class MainActivity : ComponentActivity() {
 
                 val showCrashDialog = crashDialogShown
                 val showCleanupDialog = cleanupDialogShown && cleanupInfo.isNotEmpty()
-                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog
+                val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog
+                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showClipboardPrompt
 
                 val handleCrashDismiss = {
                     crashDialogShown = false
@@ -291,34 +398,10 @@ class MainActivity : ComponentActivity() {
                     CrashHandler.clearCrashState(this@MainActivity)
                 }
 
-                val scrimOnClick: (() -> Unit)? = when {
-                    showCrashDialog -> handleCrashDismiss
-                    showCleanupDialog -> ({ cleanupDialogShown = false })
-                    showPromptDialog -> ({ mainViewModel.dismissPromptUpdate() })
-                    else -> null
-                }
-
-                AnimatedVisibility(
-                    visible = scrimOnClick != null,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.4f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { scrimOnClick?.invoke() }
-                            )
-                    )
-                }
-
                 // 1. Prompt 更新弹窗（优先级最低）
                 if (showPromptDialog) {
                     val dialogState = promptUpdateDialogState!!
-                    FloatingActionCard(
+                    PredictiveFloatingActionCard(
                         visible = showPromptDialog,
                         title = "Prompt 更新",
                         content = "本地版本：v${dialogState.localVersion}\n云端版本：v${dialogState.remoteVersion}",
@@ -326,9 +409,26 @@ class MainActivity : ComponentActivity() {
                         dismissText = "取消",
                         isDestructive = false,
                         isLoading = false,
+                        predictiveBackEnabled = predictiveBackEnabled,
                         onConfirm = { mainViewModel.confirmPromptUpdate() },
-                        onDismiss = { mainViewModel.dismissPromptUpdate() },
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        onDismiss = { mainViewModel.dismissPromptUpdate() }
+                    )
+                }
+
+                if (showClipboardPrompt) {
+                    val prompt = clipboardPrompt!!
+                    PredictiveFloatingActionCard(
+                        visible = showClipboardPrompt,
+                        title = "识别到剪贴板中的${prompt.candidate.type.displayLabel}",
+                        content = "${prompt.candidate.type.displayLabel}：${prompt.candidate.code}",
+                        confirmText = "入库",
+                        dismissText = "忽略",
+                        isDestructive = false,
+                        isLoading = false,
+                        predictiveBackEnabled = predictiveBackEnabled,
+                        onConfirm = { app.clipboardCodeCenter.confirmPendingPrompt() },
+                        onDismiss = { app.clipboardCodeCenter.dismissPendingPrompt() },
+                        modifier = Modifier.padding(bottom = floatingActionCardBottomPadding)
                     )
                 }
 
@@ -340,23 +440,23 @@ class MainActivity : ComponentActivity() {
 
                 // 2. 崩溃提示弹窗
                 if (showCrashDialog) {
-                    FloatingActionCard(
+                    PredictiveFloatingActionCard(
                         visible = showCrashDialog,
                         title = "APP发生异常",
-                        content = "APP刚刚发生了崩溃，崩溃日志已记录到:\n\n/Download/CrashLogs/exception.log\n\n您可以通过文件管理器查看并分享给开发者。",
+                        content = "APP刚刚发生了崩溃，崩溃日志已记录到:\n\n/Download/WillDo/crash/exception.log\n\n您可以通过文件管理器查看并分享给开发者。",
                         confirmText = "确定",
                         dismissText = "关闭",
                         isDestructive = false,
                         isLoading = false,
+                        predictiveBackEnabled = predictiveBackEnabled,
                         onConfirm = handleCrashDismiss,
-                        onDismiss = handleCrashDismiss,
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        onDismiss = handleCrashDismiss
                     )
                 }
 
                 // 3. 异常数据清理弹窗
                 if (showCleanupDialog) {
-                    FloatingActionCard(
+                    PredictiveFloatingActionCard(
                         visible = showCleanupDialog,
                         title = "异常数据已清除",
                         content = "检测到异常$cleanupInfo，当前已清除。",
@@ -364,9 +464,9 @@ class MainActivity : ComponentActivity() {
                         dismissText = "关闭",
                         isDestructive = false,
                         isLoading = false,
+                        predictiveBackEnabled = predictiveBackEnabled,
                         onConfirm = { cleanupDialogShown = false },
-                        onDismiss = { cleanupDialogShown = false },
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        onDismiss = { cleanupDialogShown = false }
                     )
                 }
             }
@@ -379,6 +479,7 @@ class MainActivity : ComponentActivity() {
         if (::mainViewModel.isInitialized) {
             mainViewModel.refreshData()
         }
+        (application as App).clipboardCodeCenter.checkClipboardForPrompt("app_resume")
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
     }
 

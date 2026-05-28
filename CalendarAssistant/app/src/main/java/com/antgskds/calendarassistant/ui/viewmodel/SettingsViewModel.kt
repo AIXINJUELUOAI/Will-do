@@ -8,6 +8,7 @@ import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
 import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
@@ -20,6 +21,8 @@ import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.data.model.AppBackupImportResult
+import com.antgskds.calendarassistant.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
@@ -35,6 +38,7 @@ class SettingsViewModel(
     private val scheduleCenter: ScheduleCenter,
     private val backupCenter: BackupCenter,
     private val syncCenter: SyncCenter,
+    private val diagnosticLogCenter: DiagnosticLogCenter,
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
@@ -136,6 +140,7 @@ class SettingsViewModel(
         dailySummary: Boolean? = null,
         liveCapsule: Boolean? = null,
         pickupAggregation: Boolean? = null,
+        hapticFeedbackEnabled: Boolean? = null,
         edgeBarEnabled: Boolean? = null,
         networkSpeedCapsule: Boolean? = null,
         floatingWindow: Boolean? = null,
@@ -154,6 +159,13 @@ class SettingsViewModel(
         smsMonitoring: Boolean? = null,
         forceInstantCodeTimeToNow: Boolean? = null,
         noteEnabled: Boolean? = null,
+        predictiveBackEnabled: Boolean? = null,
+        clipboardCodeRecognitionEnabled: Boolean? = null,
+        widgetThemeMode: Int? = null,
+        widgetBackgroundAlpha: Float? = null,
+        developerOptionsUnlocked: Boolean? = null,
+        developerOptionsEnabled: Boolean? = null,
+        developerOptionsDisabledAtMillis: Long? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null
     ) {
@@ -165,6 +177,7 @@ class SettingsViewModel(
                 dailySummary = dailySummary,
                 liveCapsule = liveCapsule,
                 pickupAggregation = pickupAggregation,
+                hapticFeedbackEnabled = hapticFeedbackEnabled,
                 edgeBarEnabled = edgeBarEnabled,
                 networkSpeedCapsule = networkSpeedCapsule,
                 floatingWindow = floatingWindow,
@@ -183,11 +196,40 @@ class SettingsViewModel(
                 smsMonitoring = smsMonitoring,
                 forceInstantCodeTimeToNow = forceInstantCodeTimeToNow,
                 noteEnabled = noteEnabled,
+                predictiveBackEnabled = predictiveBackEnabled,
+                clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled,
+                widgetThemeMode = widgetThemeMode,
+                widgetBackgroundAlpha = widgetBackgroundAlpha,
+                developerOptionsUnlocked = developerOptionsUnlocked,
+                developerOptionsEnabled = developerOptionsEnabled,
+                developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis,
                 homeBottomItems = homeBottomItems,
                 homeStartPageKey = homeStartPageKey
             )
             settingsOperationApi.updateSettings(updated)
         }
+    }
+
+    fun unlockDeveloperOptions() {
+        updatePreference(
+            developerOptionsUnlocked = true,
+            developerOptionsDisabledAtMillis = System.currentTimeMillis()
+        )
+    }
+
+    fun setDeveloperOptionsEnabled(enabled: Boolean) {
+        updatePreference(
+            developerOptionsEnabled = enabled,
+            developerOptionsDisabledAtMillis = if (enabled) 0L else System.currentTimeMillis()
+        )
+    }
+
+    fun expireDeveloperOptionsUnlock() {
+        updatePreference(
+            developerOptionsUnlocked = false,
+            developerOptionsEnabled = false,
+            developerOptionsDisabledAtMillis = 0L
+        )
     }
 
     fun updateWeatherSettings(
@@ -196,7 +238,19 @@ class SettingsViewModel(
         apiUrl: String,
         apiKey: String,
         refreshInterval: Int,
-        showInFloating: Boolean
+        showInFloating: Boolean,
+        locationMode: String,
+        manualLocationId: String,
+        manualLocationName: String,
+        manualAdm1: String,
+        manualAdm2: String,
+        manualCountry: String,
+        manualLat: Double,
+        manualLon: Double,
+        warningEnabled: Boolean,
+        riskWarningEnabled: Boolean,
+        warningLookaheadHours: Int,
+        floatingWeatherForecastRange: Int
     ) {
         settingsOperationApi.updateSettings(
             settings.value.copy(
@@ -204,9 +258,21 @@ class SettingsViewModel(
                 weatherProvider = provider,
                 weatherApiUrl = apiUrl,
                 weatherApiKey = apiKey,
-                weatherCity = "",
+                weatherCity = manualLocationName,
+                weatherLocationMode = locationMode,
+                weatherManualLocationId = manualLocationId,
+                weatherManualLocationName = manualLocationName,
+                weatherManualAdm1 = manualAdm1,
+                weatherManualAdm2 = manualAdm2,
+                weatherManualCountry = manualCountry,
+                weatherManualLat = manualLat,
+                weatherManualLon = manualLon,
+                weatherWarningEnabled = warningEnabled,
+                weatherRiskWarningEnabled = riskWarningEnabled,
+                weatherWarningLookaheadHours = warningLookaheadHours,
                 weatherRefreshInterval = refreshInterval,
-                showWeatherInFloating = showInFloating
+                showWeatherInFloating = showInFloating,
+                floatingWeatherForecastRange = floatingWeatherForecastRange
             )
         )
     }
@@ -310,12 +376,34 @@ class SettingsViewModel(
         return backupCenter.exportEventsData()
     }
 
+    suspend fun exportBackupData(options: AppBackupOptions): String {
+        return backupCenter.exportBackupData(options)
+    }
+
+    suspend fun exportBackupZip(uri: Uri, options: AppBackupOptions) {
+        backupCenter.exportBackupZip(uri, options)
+    }
+
     suspend fun importEventsData(jsonString: String): Result<ImportResult> {
         return backupCenter.importEventsData(jsonString)
     }
 
+    suspend fun importBackupJson(jsonString: String, options: AppBackupOptions): Result<AppBackupImportResult> {
+        val result = backupCenter.importBackupJson(jsonString, options)
+        if (result.isSuccess) scheduleCenter.refreshAll()
+        return result
+    }
+
+    suspend fun importBackupZip(uri: Uri, options: AppBackupOptions): Result<AppBackupImportResult> {
+        val result = backupCenter.importBackupZip(uri, options)
+        if (result.isSuccess) scheduleCenter.refreshAll()
+        return result
+    }
+
     fun getEventsCount(): Int = scheduleCenter.getEventsCount()
     fun getTotalEventsCount(): Int = scheduleCenter.getTotalEventsCount()
+    fun getAttachmentCount(): Int = backupCenter.getAttachmentCount()
+    fun estimateAttachmentBytes(): Long = backupCenter.estimateAttachmentBytes()
     fun getCoursesCount(): Int = CourseEventMapper.extractParentCourses(
         scheduleCenter.events.value,
         settingsQueryApi.settings.value
@@ -530,6 +618,19 @@ class SettingsViewModel(
             settingsOperationApi.updateSettings(
                 settings.value.copy(hasDonated = hasDonated)
             )
+        }
+    }
+
+    fun migrateLegacyLogs(onResult: (List<String>, String) -> Unit) {
+        viewModelScope.launch {
+            val result = diagnosticLogCenter.migrateLegacyLogs()
+            onResult(result, diagnosticLogCenter.logDirectoryHint())
+        }
+    }
+
+    fun exportDiagnosticLogs(minutes: Int?, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            onResult(diagnosticLogCenter.exportLogBundle(minutes))
         }
     }
 }

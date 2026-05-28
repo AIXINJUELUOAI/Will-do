@@ -76,7 +76,7 @@ object RulePatchProvider {
                 isEnabled = true,
                 appliesToSchedule = true,
                 aiTag = RuleMatchingEngine.RULE_TICKET,
-                aiPrompt = "取票码|取票地点|取票时间",
+                aiPrompt = "取票码|品牌|位置",
                 aiTitlePrompt = "取票 地点"
             ),
             EventRuleEntity(

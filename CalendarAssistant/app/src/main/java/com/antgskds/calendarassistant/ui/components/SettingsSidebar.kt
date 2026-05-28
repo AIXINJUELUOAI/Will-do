@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -65,7 +66,8 @@ enum class SettingsDestination {
 
     // 实验室
     Laboratory,        // 实验室功能
-    BottomBarEditor    // 底栏编辑（从偏好设置入口进入）
+    BottomBarEditor,   // 底栏编辑（从偏好设置入口进入）
+    WidgetSettings     // 桌面小组件（从偏好设置入口进入）
 }
 
 @Composable
@@ -249,11 +251,15 @@ private fun SidebarActionItem(
     onClick: () -> Unit,
     showChevron: Boolean = true
 ) {
+    val haptics = rememberAppHaptics()
     val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick, interactionSource = interactionSource, indication = null)
+            .clickable(interactionSource = interactionSource, indication = null) {
+                haptics.click()
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

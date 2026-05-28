@@ -24,6 +24,7 @@ import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
 import com.antgskds.calendarassistant.core.note.noteMarkdown
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -48,8 +49,10 @@ fun NoteCard(
     note: Event,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    hapticEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     val markdown = remember(note.description, note.lastModifiedMillis) { note.noteMarkdown() }
     val tasks = remember(markdown) { extractMarkdownTasks(markdown) }
     val previewText = remember(markdown) { buildNotePreview(markdown) }
@@ -68,9 +71,21 @@ fun NoteCard(
             .fillMaxWidth()
             .let {
                 if (onLongClick != null) {
-                    it.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                    it.combinedClickable(
+                        onClick = {
+                            haptics.click()
+                            onClick()
+                        },
+                        onLongClick = {
+                            haptics.longPress()
+                            onLongClick()
+                        }
+                    )
                 } else {
-                    it.clickable(onClick = onClick)
+                    it.clickable {
+                        haptics.click()
+                        onClick()
+                    }
                 }
             }
     ) {

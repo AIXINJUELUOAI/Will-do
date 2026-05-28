@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.rule.PresetIcons
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
 import com.antgskds.calendarassistant.core.rule.RuleRegistry
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 
 /**
  * 通知图标选择器弹窗。
@@ -52,6 +53,7 @@ fun RuleIconPickerDialog(
     onSelect: (String?) -> Unit
 ) {
     val context = LocalContext.current
+    val haptics = rememberAppHaptics()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -83,7 +85,7 @@ fun RuleIconPickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onSelect(preset.resName) }
+                                .clickable { haptics.selection(); onSelect(preset.resName) }
                                 .padding(6.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -114,9 +116,9 @@ fun RuleIconPickerDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } },
         dismissButton = {
-            TextButton(onClick = { onSelect(null) }) {
+            TextButton(onClick = { haptics.confirm(); onSelect(null) }) {
                 Icon(
                     Icons.Rounded.Restore,
                     contentDescription = null,

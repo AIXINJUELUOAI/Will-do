@@ -18,10 +18,13 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.data.model.WeatherAlertData
+import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.CapsuleMessageComposer
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.core.weather.WeatherWarningText
 import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
@@ -68,15 +71,25 @@ class CapsuleStateManager(
         const val TYPE_NETWORK_SPEED = 4
         const val TYPE_OCR_PROGRESS = 5
         const val TYPE_OCR_RESULT = 6
+        const val TYPE_MODEL_LOADING = 7
+        const val TYPE_WEATHER_ALERT = 8
 
         private const val OCR_PROGRESS_ID = "OCR_PROGRESS"
         private const val OCR_RESULT_ID = "OCR_RESULT"
+        private const val MODEL_LOADING_ID = "MODEL_LOADING"
+        private const val WEATHER_CAPSULE_ID_PREFIX = "WEATHER_"
         private const val OCR_NOTIF_ID = 88886
+        private const val MODEL_LOADING_NOTIF_ID = 88885
         private const val OCR_PROGRESS_TIMEOUT_MS = 2 * 60 * 1000L
+        private const val MODEL_LOADING_TIMEOUT_MS = 10 * 60 * 1000L
+        private const val WEATHER_CAPSULE_TIMEOUT_MS = 3 * 60 * 1000L
         private const val OCR_RESULT_TIMEOUT_MS = 8000L
         private const val OCR_UPDATE_THROTTLE_MS = 600L
         private const val EVENT_TYPE_OCR_PROGRESS = "ocr_progress"
         private const val EVENT_TYPE_OCR_RESULT = "ocr_result"
+        private const val EVENT_TYPE_MODEL_LOADING = "model_loading"
+        private const val EVENT_TYPE_WEATHER_ALERT = "weather_alert"
+        private const val EVENT_TYPE_WEATHER_RISK = "weather_risk"
         private val DEFAULT_PICKUP_CAPSULE_COLOR = android.graphics.Color.rgb(180, 195, 161)
 
         // ✅ 核心修复 1：改用 MutableStateFlow(0)
@@ -103,7 +116,11 @@ class CapsuleStateManager(
     )
 
     private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private val modelLoadingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private val weatherCapsuleState = MutableStateFlow<List<OcrCapsuleState>>(emptyList())
     private var ocrAutoClearJob: Job? = null
+    private var modelLoadingAutoClearJob: Job? = null
+    private val weatherAutoClearJobs = ConcurrentHashMap<String, Job>()
     private var lastOcrUpdateAt = 0L
 
     // 通知管理
@@ -178,6 +195,86 @@ class CapsuleStateManager(
         ocrCapsuleState.value = null
     }
 
+    fun showModelLoading(title: String, content: String) {
+        val now = System.currentTimeMillis()
+        val display = CapsuleMessageComposer.composeModelLoading(title, content)
+        modelLoadingCapsuleState.value = OcrCapsuleState(
+            id = MODEL_LOADING_ID,
+            notifId = MODEL_LOADING_NOTIF_ID,
+            type = TYPE_MODEL_LOADING,
+            eventType = EVENT_TYPE_MODEL_LOADING,
+            title = display.shortText,
+            content = display.secondaryText ?: content,
+            description = "",
+            color = android.graphics.Color.parseColor("#2979FF"),
+            startMillis = now,
+            endMillis = now + MODEL_LOADING_TIMEOUT_MS,
+            display = display,
+            expiresAt = now + MODEL_LOADING_TIMEOUT_MS
+        )
+        scheduleModelLoadingAutoClear(MODEL_LOADING_TIMEOUT_MS)
+    }
+
+    fun clearModelLoading() {
+        modelLoadingAutoClearJob?.cancel()
+        modelLoadingAutoClearJob = null
+        modelLoadingCapsuleState.value = null
+    }
+
+    fun showWeatherAlert(locationName: String, alert: WeatherAlertData) {
+        val now = System.currentTimeMillis()
+        val title = WeatherWarningText.officialTitle(alert)
+        val content = alert.description.ifBlank { alert.instruction.ifBlank { alert.headline.ifBlank { alert.eventName } } }
+        val display = CapsuleMessageComposer.composeWeatherAlert(title, locationName, content)
+        val id = "$WEATHER_CAPSULE_ID_PREFIX${EVENT_TYPE_WEATHER_ALERT}_${alert.id.ifBlank { title }}"
+        updateWeatherCapsule(
+            OcrCapsuleState(
+                id = id,
+                notifId = NotificationIds.weatherWarning(id),
+                type = TYPE_WEATHER_ALERT,
+                eventType = EVENT_TYPE_WEATHER_ALERT,
+                title = title,
+                content = content,
+                description = content,
+                color = resolveWeatherAlertColor(alert),
+                startMillis = now,
+                endMillis = now + WEATHER_CAPSULE_TIMEOUT_MS,
+                display = display,
+                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS
+            )
+        )
+    }
+
+    fun showWeatherRisk(locationName: String, risk: WeatherRiskAlert) {
+        val now = System.currentTimeMillis()
+        val title = risk.title.ifBlank { "天气风险提醒" }
+        val content = risk.message.ifBlank { risk.weatherText }
+        val display = CapsuleMessageComposer.composeWeatherRisk(title, locationName, content)
+        val id = "$WEATHER_CAPSULE_ID_PREFIX${EVENT_TYPE_WEATHER_RISK}_${risk.id.ifBlank { title }}"
+        updateWeatherCapsule(
+            OcrCapsuleState(
+                id = id,
+                notifId = NotificationIds.weatherWarning(id),
+                type = TYPE_WEATHER_ALERT,
+                eventType = EVENT_TYPE_WEATHER_RISK,
+                title = display.primaryText,
+                content = content,
+                description = content,
+                color = resolveWeatherRiskColor(risk),
+                startMillis = now,
+                endMillis = now + WEATHER_CAPSULE_TIMEOUT_MS,
+                display = display,
+                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS
+            )
+        )
+    }
+
+    fun clearWeatherCapsules() {
+        weatherAutoClearJobs.values.forEach { it.cancel() }
+        weatherAutoClearJobs.clear()
+        weatherCapsuleState.value = emptyList()
+    }
+
     private fun updateOcrCapsule(state: OcrCapsuleState, autoClearMs: Long?) {
         val now = System.currentTimeMillis()
         val current = ocrCapsuleState.value
@@ -198,6 +295,28 @@ class CapsuleStateManager(
         ocrAutoClearJob = appScope.launch {
             kotlinx.coroutines.delay(delayMs)
             clearOcrCapsule()
+        }
+    }
+
+    private fun updateWeatherCapsule(state: OcrCapsuleState) {
+        weatherCapsuleState.value = (weatherCapsuleState.value.filterNot { it.id == state.id } + state)
+        scheduleWeatherAutoClear(state.id, WEATHER_CAPSULE_TIMEOUT_MS)
+    }
+
+    private fun scheduleModelLoadingAutoClear(delayMs: Long) {
+        modelLoadingAutoClearJob?.cancel()
+        modelLoadingAutoClearJob = appScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            clearModelLoading()
+        }
+    }
+
+    private fun scheduleWeatherAutoClear(id: String, delayMs: Long) {
+        weatherAutoClearJobs.remove(id)?.cancel()
+        weatherAutoClearJobs[id] = appScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            weatherCapsuleState.value = weatherCapsuleState.value.filterNot { it.id == id }
+            weatherAutoClearJobs.remove(id)
         }
     }
 
@@ -345,9 +464,14 @@ class CapsuleStateManager(
             Pair(events, settings)
         }
 
-        return combine(baseCombine, networkSpeedState, ocrCapsuleState) { (events, settings), networkSpeed, ocrCapsule ->
+        val capsuleTransientCombine = combine(ocrCapsuleState, modelLoadingCapsuleState, weatherCapsuleState) { ocrCapsule, modelLoadingCapsule, weatherCapsules ->
+            Triple(ocrCapsule, modelLoadingCapsule, weatherCapsules)
+        }
+
+        return combine(baseCombine, networkSpeedState, capsuleTransientCombine) { (events, settings), networkSpeed, transient ->
+            val (ocrCapsule, modelLoadingCapsule, weatherCapsules) = transient
             Log.d(TAG, "=== computeCapsuleState 被调用 ===")
-            computeCapsuleState(events, settings, networkSpeed, ocrCapsule)
+            computeCapsuleState(events, settings, networkSpeed, ocrCapsule, modelLoadingCapsule, weatherCapsules)
         }.flowOn(Dispatchers.Default)  // ✅ 将胶囊计算移到后台线程，避免主线程 ANR
         .stateIn(
             scope = appScope,
@@ -360,7 +484,9 @@ class CapsuleStateManager(
         events: List<Event>,
         settings: MySettings,
         networkSpeed: NetworkSpeedMonitor.NetworkSpeed?,
-        ocrCapsule: OcrCapsuleState?
+        ocrCapsule: OcrCapsuleState?,
+        modelLoadingCapsule: OcrCapsuleState?,
+        weatherCapsules: List<OcrCapsuleState>
     ): CapsuleUiState {
         Log.d(TAG, ">>> computeCapsuleState 开始执行")
 
@@ -374,25 +500,40 @@ class CapsuleStateManager(
             }
         }
 
-        if (activeOcrCapsule != null && settings.isLiveCapsuleEnabled) {
-            val ocrItem = createCapsuleItem(
-                id = activeOcrCapsule.id,
-                notifId = activeOcrCapsule.notifId,
-                type = activeOcrCapsule.type,
-                eventType = activeOcrCapsule.eventType,
-                description = activeOcrCapsule.description,
-                color = activeOcrCapsule.color,
-                startMillis = activeOcrCapsule.startMillis,
-                endMillis = activeOcrCapsule.endMillis,
-                display = activeOcrCapsule.display
-            )
-            // OCR 胶囊不阻断后续日程计算，与日程胶囊共存
+        val activeModelLoadingCapsule = modelLoadingCapsule?.let { state ->
+            if (state.expiresAt != null && nowMillis >= state.expiresAt) {
+                clearModelLoading()
+                null
+            } else {
+                state
+            }
+        }
+
+        val activeWeatherCapsules = weatherCapsules.filter { state ->
+            state.expiresAt == null || nowMillis < state.expiresAt
+        }
+        if (activeWeatherCapsules.size != weatherCapsules.size) {
+            weatherCapsuleState.value = activeWeatherCapsules
+        }
+
+        if ((activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty()) && settings.isLiveCapsuleEnabled) {
+            val transientItems = buildList {
+                activeOcrCapsule?.let { state ->
+                    add(createTransientCapsuleItem(state))
+                }
+                activeModelLoadingCapsule?.let { state ->
+                    add(createTransientCapsuleItem(state))
+                }
+                activeWeatherCapsules.forEach { state ->
+                    add(createTransientCapsuleItem(state))
+                }
+            }
             val scheduleCapsules = computeScheduleCapsules(events, settings)
-            return CapsuleUiState.Active(listOf(ocrItem) + scheduleCapsules)
+            return CapsuleUiState.Active(transientItems + scheduleCapsules)
         }
 
         // 【实验室】网速胶囊：若未触发 OCR 胶囊则覆盖其他胶囊
-        if (settings.isNetworkSpeedCapsuleEnabled && networkSpeed != null) {
+        if (settings.isLiveCapsuleEnabled && settings.isNetworkSpeedCapsuleEnabled && networkSpeed != null) {
             Log.d(TAG, "网速胶囊模式: ${networkSpeed.formattedSpeed}")
             val display = CapsuleMessageComposer.composeNetworkSpeed(networkSpeed)
             val capsules = listOf(
@@ -520,6 +661,38 @@ class CapsuleStateManager(
 
         Log.d(TAG, "最终胶囊数量: ${capsules.size}")
         return capsules
+    }
+
+    private fun createTransientCapsuleItem(state: OcrCapsuleState): CapsuleUiState.Active.CapsuleItem {
+        return createCapsuleItem(
+            id = state.id,
+            notifId = state.notifId,
+            type = state.type,
+            eventType = state.eventType,
+            description = state.description,
+            color = state.color,
+            startMillis = state.startMillis,
+            endMillis = state.endMillis,
+            display = state.display
+        )
+    }
+
+    private fun resolveWeatherAlertColor(alert: WeatherAlertData): Int {
+        return when (alert.colorCode.ifBlank { alert.severity }.lowercase()) {
+            "red" -> android.graphics.Color.rgb(214, 48, 49)
+            "orange" -> android.graphics.Color.rgb(230, 126, 34)
+            "yellow" -> android.graphics.Color.rgb(241, 196, 15)
+            "blue" -> android.graphics.Color.rgb(52, 152, 219)
+            else -> android.graphics.Color.rgb(230, 126, 34)
+        }
+    }
+
+    private fun resolveWeatherRiskColor(risk: WeatherRiskAlert): Int {
+        return when (risk.level) {
+            "high" -> android.graphics.Color.rgb(214, 48, 49)
+            "medium" -> android.graphics.Color.rgb(230, 126, 34)
+            else -> android.graphics.Color.rgb(241, 196, 15)
+        }
     }
 
     private fun buildCapsuleScheduleEntries(events: List<Event>, settings: MySettings): List<CapsuleScheduleEntry> {

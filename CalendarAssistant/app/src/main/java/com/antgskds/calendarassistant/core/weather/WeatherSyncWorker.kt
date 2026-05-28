@@ -45,8 +45,8 @@ class WeatherSyncWorker(
             }
 
             val request = PeriodicWorkRequestBuilder<WeatherSyncWorker>(
-                settings.weatherRefreshInterval.coerceAtLeast(1).toLong(),
-                TimeUnit.HOURS
+                WeatherRepository.normalizeRefreshIntervalMinutes(settings.weatherRefreshInterval).toLong(),
+                TimeUnit.MINUTES
             )
                 .setConstraints(
                     Constraints.Builder()

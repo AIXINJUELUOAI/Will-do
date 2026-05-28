@@ -1,11 +1,5 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,11 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.ui.components.FloatingActionCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
+import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.endDate
@@ -34,6 +28,8 @@ fun ArchivesPage(
     onBack: () -> Unit
 ) {
     val archivedEvents by viewModel.archivedEvents.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var showClearConfirmDialog by remember { mutableStateOf(false) }
@@ -60,7 +56,7 @@ fun ArchivesPage(
                 CenterAlignedTopAppBar(
                     title = { Text("归档") },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = { haptics.click(); onBack() }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 "返回",
@@ -70,7 +66,7 @@ fun ArchivesPage(
                     },
                     actions = {
                         if (groupedEvents.isNotEmpty()) {
-                            IconButton(onClick = { showClearConfirmDialog = true }) {
+                            IconButton(onClick = { haptics.click(); showClearConfirmDialog = true }) {
                                 Icon(
                                     Icons.Default.DeleteSweep,
                                     "清空归档",
@@ -131,7 +127,8 @@ fun ArchivesPage(
                                     onDelete = { event.id?.let { id -> viewModel.deleteArchivedEvent(id) } },
                                     onEdit = {},
                                     isArchivePage = true,
-                                    onRestore = { event.id?.let { id -> viewModel.restoreEvent(id) } }
+                                    onRestore = { event.id?.let { id -> viewModel.restoreEvent(id) } },
+                                    hapticEnabled = uiState.settings.hapticFeedbackEnabled
                                 )
                             }
                         }
@@ -141,26 +138,7 @@ fun ArchivesPage(
             // --- Scaffold Content 结束 ---
         } // ✅ 关键修复：这里补上了之前遗漏的 Scaffold 的闭合括号
 
-        // 半透明遮罩层 (放在 Scaffold 外部，遮住全局)
-        AnimatedVisibility(
-            visible = showClearConfirmDialog,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null, // 去除点击波纹
-                        onClick = { showClearConfirmDialog = false }
-                    )
-            )
-        }
-
-        // 悬浮操作卡片
-        FloatingActionCard(
+        PredictiveFloatingActionCard(
             visible = showClearConfirmDialog,
             title = "确认清空",
             content = "此操作将永久删除 ${groupedEvents.values.sumOf { it.size }} 条归档事件。\n删除后将无法恢复。",
@@ -168,12 +146,12 @@ fun ArchivesPage(
             dismissText = "取消",
             isDestructive = true,
             isLoading = false,
+            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
             onConfirm = {
                 showClearConfirmDialog = false
                 viewModel.clearAllArchives()
             },
-            onDismiss = { showClearConfirmDialog = false },
-            modifier = Modifier.align(Alignment.BottomCenter) // ✅ 直接把 Modifier 传给组件，省略外层 Box
+            onDismiss = { showClearConfirmDialog = false }
         )
     }
 }

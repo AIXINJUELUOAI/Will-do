@@ -334,6 +334,7 @@ object MiuiIslandManager {
     private fun buildSummaryStatus(item: CapsuleUiState.Active.CapsuleItem): String {
         return when (item.type) {
             CapsuleStateManager.TYPE_OCR_RESULT -> "已完成"
+            CapsuleStateManager.TYPE_WEATHER_ALERT -> "天气提醒"
             CapsuleStateManager.TYPE_OCR_PROGRESS,
             CapsuleStateManager.TYPE_NETWORK_SPEED -> "进行中"
             else -> {
