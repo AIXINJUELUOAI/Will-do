@@ -11,8 +11,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -383,37 +385,42 @@ fun AddEventDialog(
                     } else {
                         baseTagLabel
                     }
-                    Row(
-                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        EventTypeChip(
-                            label = tagLabel,
-                            onClick = {
-                                haptics.click()
-                                isTypePickerExpanded = !isTypePickerExpanded
-                            }
-                        )
-                        AnimatedVisibility(
-                            visible = isTypePickerExpanded,
-                            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+                        if (isTypePickerExpanded) {
+                            val itemWidth = ((maxWidth - 24.dp) / 4).coerceAtLeast(56.dp)
+                            val orderedSpecs = listOfNotNull(eventTypeSpecFor(eventTag)) +
+                                    DIALOG_EVENT_TYPE_SPECS.filter { it.tag != eventTag }
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(end = 2.dp)
                             ) {
-                                DIALOG_EVENT_TYPE_SPECS.filter { it.tag != eventTag }.forEach { spec ->
+                                items(orderedSpecs, key = { it.tag }) { spec ->
                                     EventTypeChip(
-                                        label = spec.label,
+                                        label = if (spec.tag == eventTag) tagLabel else spec.label,
+                                        selected = spec.tag == eventTag,
+                                        modifier = Modifier.width(itemWidth),
+                                        fillLabel = true,
                                         onClick = {
                                             haptics.click()
-                                            selectEventType(spec)
+                                            if (spec.tag == eventTag) {
+                                                isTypePickerExpanded = false
+                                            } else {
+                                                selectEventType(spec)
+                                            }
                                         }
                                     )
                                 }
                             }
+                        } else {
+                            EventTypeChip(
+                                label = tagLabel,
+                                selected = true,
+                                onClick = {
+                                    haptics.click()
+                                    isTypePickerExpanded = true
+                                }
+                            )
                         }
                     }
                 }
@@ -627,14 +634,26 @@ fun AddEventDialog(
 @Composable
 private fun EventTypeChip(
     label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    fillLabel: Boolean = false,
     onClick: () -> Unit
 ) {
     AssistChip(
         onClick = onClick,
-        label = { Text(label) },
+        modifier = modifier,
+        label = {
+            Text(
+                text = label,
+                modifier = if (fillLabel) Modifier.fillMaxWidth() else Modifier,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            labelColor = MaterialTheme.colorScheme.onPrimary
+            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            labelColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         ),
         border = null
     )
