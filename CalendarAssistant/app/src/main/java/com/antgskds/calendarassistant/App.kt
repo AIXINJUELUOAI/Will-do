@@ -66,6 +66,9 @@ import com.antgskds.calendarassistant.core.center.ClipboardCodeCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
+import com.antgskds.calendarassistant.core.localmodel.LocalModelManager
+import com.antgskds.calendarassistant.core.localmodel.LocalModelLogScheduler
+import com.antgskds.calendarassistant.core.localmodel.LiteRtAiEngineClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -201,6 +204,14 @@ class App : Application() {
         )
     }
 
+    val localModelManager: LocalModelManager by lazy {
+        LocalModelManager(applicationContext)
+    }
+
+    val liteRtAiEngineClient: LiteRtAiEngineClient by lazy {
+        LiteRtAiEngineClient(applicationContext)
+    }
+
     val diagnosticLogCenter: DiagnosticLogCenter by lazy {
         DiagnosticLogCenter(applicationContext)
     }
@@ -307,6 +318,11 @@ class App : Application() {
         super.onCreate()
         instance = this
 
+        if (currentProcessName().endsWith(":ai_engine")) {
+            Log.d(TAG, "AI engine process started; skipping main app initialization")
+            return
+        }
+
         AppLogger.init(this)
         AppLogger.i(TAG, "main app process started")
         CrashHandler.init(this)
@@ -350,6 +366,9 @@ class App : Application() {
         }
 
         initSmsObserver()
+        if (settingsQueryApi.settings.value.isLocalSemanticEnabled) {
+            LocalModelLogScheduler.scheduleNext(this)
+        }
         runtimeCenter.startAppRoutines()
         reminderCenter.startEventSubscriptions()
         widgetCenter.startSubscriptions()

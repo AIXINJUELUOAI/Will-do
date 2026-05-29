@@ -138,7 +138,8 @@ class MainActivity : ComponentActivity() {
                         settingsOperationApi = app.settingsOperationApi,
                         settingsQueryApi = app.settingsQueryApi,
                         settingsTransformApi = app.settingsTransformApi,
-                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi
+                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
+                        localModelManager = app.localModelManager
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }

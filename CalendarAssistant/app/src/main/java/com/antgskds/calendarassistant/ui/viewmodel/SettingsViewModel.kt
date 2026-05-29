@@ -13,6 +13,8 @@ import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
 import com.antgskds.calendarassistant.core.center.ImportMode
+import com.antgskds.calendarassistant.core.localmodel.LocalModelImportProgress
+import com.antgskds.calendarassistant.core.localmodel.LocalModelManager
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
@@ -40,7 +42,8 @@ class SettingsViewModel(
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
-    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi
+    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
+    private val localModelManager: LocalModelManager
 ) : ViewModel() {
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
@@ -59,6 +62,10 @@ class SettingsViewModel(
 
     private val _availableSyncCalendars = MutableStateFlow<List<CalendarManager.CalendarInfo>>(emptyList())
     val availableSyncCalendars: StateFlow<List<CalendarManager.CalendarInfo>> = _availableSyncCalendars.asStateFlow()
+
+    val localModels = localModelManager.models
+    private val _localModelImportProgress = MutableStateFlow<LocalModelImportProgress?>(null)
+    val localModelImportProgress: StateFlow<LocalModelImportProgress?> = _localModelImportProgress.asStateFlow()
 
     init {
         refreshSyncStatus()
@@ -163,6 +170,7 @@ class SettingsViewModel(
         homeStartPageKey: String? = null
     ) {
         viewModelScope.launch {
+            localSemanticEnabled?.let { localModelManager.setLocalModelLoggingEnabled(it) }
             val updated = settingsTransformApi.applyPreferenceUpdate(
                 current = settings.value,
                 showTomorrow = showTomorrow,
@@ -470,6 +478,44 @@ class SettingsViewModel(
         viewModelScope.launch {
             val result = backupCenter.importWakeUpFile(content, mode, importSettings)
             callback(result)
+        }
+    }
+
+    fun importLocalModel(uri: Uri, onComplete: (Result<String>) -> Unit = {}) {
+        viewModelScope.launch {
+            _localModelImportProgress.value = LocalModelImportProgress("", 0L, 0L)
+            try {
+                val result = localModelManager.importModel(uri) { progress ->
+                    _localModelImportProgress.value = progress
+                }
+                val current = settings.value
+                settingsOperationApi.updateSettings(
+                    current.copy(
+                        selectedLocalModelId = result.model.id,
+                        isLocalSemanticEnabled = true
+                    )
+                )
+                onComplete(Result.success(result.model.displayName))
+            } catch (e: Exception) {
+                onComplete(Result.failure(e))
+            } finally {
+                _localModelImportProgress.value = null
+            }
+        }
+    }
+
+    fun updateSelectedLocalModel(modelId: String) {
+        updatePreference(selectedLocalModelId = modelId)
+    }
+
+    fun deleteLocalModel(modelId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val deleted = localModelManager.deleteModel(modelId)
+            if (deleted && settings.value.selectedLocalModelId == modelId) {
+                val nextId = localModelManager.models.value.firstOrNull()?.id.orEmpty()
+                settingsOperationApi.updateSettings(settings.value.copy(selectedLocalModelId = nextId))
+            }
+            onComplete(deleted)
         }
     }
 

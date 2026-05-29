@@ -4,8 +4,10 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.media.AudioManager
 import android.os.Build
@@ -25,6 +27,7 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.provider.LocalSemanticProvider
 import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
@@ -68,6 +71,15 @@ class TextAccessibilityService : AccessibilityService() {
     private var ingestFailedSubscriptionJob: Job? = null
     private var keyFilterSettingsJob: Job? = null
     private var baseAccessibilityFlags: Int? = null
+    private var localModelReadyReceiverRegistered = false
+
+    private val localModelReadyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != LocalSemanticProvider.ACTION_LOCAL_MODEL_READY) return
+            capsuleCenter.clearModelLoading()
+            showProgressNotification("正在分析", "正在分析屏幕内容...")
+        }
+    }
 
     companion object {
         private const val TAG = "TextAccessibilityService"
@@ -107,6 +119,7 @@ class TextAccessibilityService : AccessibilityService() {
         subscribeKeyFilterSettings()
         subscribeRecognitionFailedEvents()
         subscribeIngestEvents()
+        registerLocalModelReadyReceiver()
         Log.d(TAG, "无障碍服务已连接")
     }
 
@@ -374,6 +387,7 @@ class TextAccessibilityService : AccessibilityService() {
         ingestFailedSubscriptionJob = null
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = null
+        unregisterLocalModelReadyReceiver()
         return super.onUnbind(intent)
     }
 
@@ -388,6 +402,7 @@ class TextAccessibilityService : AccessibilityService() {
         ingestFailedSubscriptionJob = null
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = null
+        unregisterLocalModelReadyReceiver()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -498,7 +513,11 @@ class TextAccessibilityService : AccessibilityService() {
      */
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        showProgressNotification("正在分析", "正在分析屏幕内容...")
+        if (!settingsQueryApi.settings.value.isLocalSemanticEnabled) {
+            showProgressNotification("正在分析", "正在分析屏幕内容...")
+        } else {
+            capsuleCenter.clearModelLoading()
+        }
 
         // ✅ 主线程调用 takeScreenshot（系统要求）
         takeScreenshot(
@@ -636,6 +655,24 @@ class TextAccessibilityService : AccessibilityService() {
         } else {
             showBaseNotification(NOTIFICATION_ID_PROGRESS, title, content, isProgress = true, autoLaunch = false)
         }
+    }
+
+    private fun registerLocalModelReadyReceiver() {
+        if (localModelReadyReceiverRegistered) return
+        val filter = IntentFilter(LocalSemanticProvider.ACTION_LOCAL_MODEL_READY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(localModelReadyReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(localModelReadyReceiver, filter)
+        }
+        localModelReadyReceiverRegistered = true
+    }
+
+    private fun unregisterLocalModelReadyReceiver() {
+        if (!localModelReadyReceiverRegistered) return
+        runCatching { unregisterReceiver(localModelReadyReceiver) }
+        localModelReadyReceiverRegistered = false
     }
 
     private fun cancelProgressNotification() {

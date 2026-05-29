@@ -240,6 +240,11 @@
                 android:resource="@xml/schedule_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".core.localmodel.LocalModelLogResetReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Shizuku Provider (静默提权核心组件) -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

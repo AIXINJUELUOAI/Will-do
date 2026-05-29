@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.localmodel.LocalModelInfo
+import com.antgskds.calendarassistant.core.localmodel.LocalModelRuntime
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
@@ -61,6 +63,8 @@ fun PreferenceSettingsPage(
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val availableSyncCalendars by viewModel.availableSyncCalendars.collectAsState()
+    val localModels by viewModel.localModels.collectAsState()
+    val localModelImportProgress by viewModel.localModelImportProgress.collectAsState()
     val context = LocalContext.current
     val app = context.applicationContext as? App
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -70,6 +74,7 @@ fun PreferenceSettingsPage(
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showSourceCalendarSheet by remember { mutableStateOf(false) }
+    var showLocalModelSheet by remember { mutableStateOf(false) }
     var showEventDurationPicker by remember { mutableStateOf(false) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
@@ -82,6 +87,13 @@ fun PreferenceSettingsPage(
             formatSelectedCalendarSummary(syncStatus.sourceCalendarIds, selectedSourceCalendars)
         }
     }
+    val selectedLocalModel by remember(settings.selectedLocalModelId, localModels) {
+        derivedStateOf { localModels.firstOrNull { it.id == settings.selectedLocalModelId } }
+    }
+    val selectedLocalModelSummary by remember(settings.selectedLocalModelId, localModels, selectedLocalModel) {
+        derivedStateOf { formatSelectedLocalModelSummary(settings.selectedLocalModelId, selectedLocalModel) }
+    }
+
     // Toast 辅助函数
     fun showToast(message: String, type: ToastType = ToastType.INFO) {
         currentToastType = type
@@ -199,6 +211,19 @@ fun PreferenceSettingsPage(
         } else if (!SmsNotificationListenerService.isEnabled(context)) {
             Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
             SmsNotificationListenerService.requestEnable(context)
+        }
+    }
+
+    val localModelPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.importLocalModel(uri) { result ->
+            if (result.isSuccess) {
+                showToast("模型已导入：${result.getOrNull().orEmpty()}", ToastType.SUCCESS)
+            } else {
+                showToast(result.exceptionOrNull()?.message ?: "模型导入失败", ToastType.ERROR)
+            }
         }
     }
 
@@ -776,6 +801,53 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    SwitchSettingItem(
+                        title = "本地推理",
+                        subtitle = "开启后使用端侧模型推理内容",
+                        checked = settings.isLocalSemanticEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(localSemanticEnabled = isChecked)
+                            if (isChecked && settings.selectedLocalModelId.isBlank()) {
+                                showToast("请在模型来源中加入并选择模型", ToastType.INFO)
+                            } else {
+                                showToast("本地推理开关已保存")
+                            }
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+
+                    AnimatedVisibility(
+                        visible = settings.isLocalSemanticEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+
+                            ActionSettingItem(
+                                title = "模型来源",
+                                subtitle = selectedLocalModelSummary,
+                                value = if (selectedLocalModel == null) "未选择" else "已选择",
+                                enabled = true,
+                                onClick = { showLocalModelSheet = true },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+                        }
+                    }
+
                 }
             }
 
@@ -969,6 +1041,26 @@ fun PreferenceSettingsPage(
                             showToast("更新同步来源失败", ToastType.ERROR)
                         }
                     }
+                }
+            )
+        }
+
+        if (showLocalModelSheet) {
+            LocalModelPickerSheet(
+                models = localModels,
+                initialSelection = settings.selectedLocalModelId,
+                importProgress = localModelImportProgress,
+                onAddModel = { localModelPickerLauncher.launch(arrayOf("*/*")) },
+                onDeleteModel = { modelId ->
+                    viewModel.deleteLocalModel(modelId) { deleted ->
+                        showToast(if (deleted) "模型已删除" else "模型删除失败", if (deleted) ToastType.SUCCESS else ToastType.ERROR)
+                    }
+                },
+                onDismiss = { showLocalModelSheet = false },
+                onConfirm = { selectedId ->
+                    viewModel.updateSelectedLocalModel(selectedId)
+                    showToast("本地模型已保存")
+                    showLocalModelSheet = false
                 }
             )
         }
@@ -1251,6 +1343,146 @@ private fun buildCalendarMetaLine(
         "ID: ${calendar.id}"
     } else {
         "ID: ${calendar.id}  ${tags.joinToString(" · ")}"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LocalModelPickerSheet(
+    models: List<LocalModelInfo>,
+    initialSelection: String,
+    importProgress: com.antgskds.calendarassistant.core.localmodel.LocalModelImportProgress?,
+    onAddModel: () -> Unit,
+    onDeleteModel: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var selectedId by remember(initialSelection, models) {
+        mutableStateOf(initialSelection.takeIf { id -> models.any { it.id == id } }.orEmpty())
+    }
+    val haptics = rememberAppHaptics()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("本地模型", style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = { haptics.click(); onAddModel() }, enabled = importProgress == null) {
+                    Text("加入模型")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "选择 .litertlm LiteRT-LM 模型，支持文本和多模态本地推理。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (importProgress != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (importProgress.fileName.isBlank()) "准备导入模型..." else "正在导入：${importProgress.fileName}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { importProgress.fraction },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (models.isEmpty()) {
+                Text(
+                    text = "还没有导入模型，请点击右上角“加入模型”。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                models.forEach { model ->
+                    val selected = selectedId == model.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { haptics.selection(); selectedId = model.id }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { haptics.selection(); selectedId = model.id }
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp)
+                        ) {
+                            Text(model.displayName, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = buildLocalModelMetaLine(model),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { haptics.warning(); onDeleteModel(model.id) }) {
+                            Text("删除")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { haptics.confirm(); onConfirm(selectedId) },
+                enabled = selectedId.isNotBlank() && importProgress == null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("保存")
+            }
+        }
+    }
+}
+
+private fun formatSelectedLocalModelSummary(
+    selectedModelId: String,
+    selectedModel: LocalModelInfo?
+): String {
+    if (selectedModelId.isBlank()) return "请选择用于本地推理的模型"
+    if (selectedModel == null) return "已选择的模型文件不存在，请重新选择"
+    return "${selectedModel.displayName} · LiteRT-LM"
+}
+
+private fun buildLocalModelMetaLine(model: LocalModelInfo): String {
+    val parts = mutableListOf<String>()
+    parts += "LiteRT-LM"
+    if (model.architecture.isNotBlank()) parts += model.architecture
+    if (model.quantization.isNotBlank()) parts += model.quantization
+    model.contextLength?.let { parts += "ctx $it" }
+    parts += formatFileSize(model.sizeBytes)
+    parts += if (model.supportsMultimodal) "图片+文本" else "仅文本"
+    return parts.joinToString(" · ")
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "未知大小"
+    val mib = bytes / 1024.0 / 1024.0
+    return if (mib >= 1024.0) {
+        String.format(java.util.Locale.US, "%.2f GB", mib / 1024.0)
+    } else {
+        String.format(java.util.Locale.US, "%.0f MB", mib)
     }
 }
 

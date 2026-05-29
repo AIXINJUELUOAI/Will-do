@@ -40,9 +40,17 @@ fun AiModelConfig.missingConfigMessage(): String {
 }
 
 fun MySettings.isRecognitionConfigReady(): Boolean {
-    return activeAiConfig().isConfigured()
+    return if (isLocalSemanticEnabled) {
+        selectedLocalModelId.isNotBlank()
+    } else {
+        activeAiConfig().isConfigured()
+    }
 }
 
 fun MySettings.recognitionConfigMissingMessage(): String {
-    return activeAiConfig().missingConfigMessage()
+    return if (isLocalSemanticEnabled) {
+        "请先选择本地模型"
+    } else {
+        activeAiConfig().missingConfigMessage()
+    }
 }
