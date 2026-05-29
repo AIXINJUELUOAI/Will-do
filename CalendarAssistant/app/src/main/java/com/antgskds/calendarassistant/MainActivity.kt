@@ -154,6 +154,7 @@ class MainActivity : ComponentActivity() {
             val settings by settingsViewModel.settings.collectAsState()
             val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
             val clipboardPrompt by app.clipboardCodeCenter.pendingPrompt.collectAsState()
+            val localModelResiduePrompt by app.localModelResidueCenter.pendingPrompt.collectAsState()
             val uiStyle = UiStyle.fromName(settings.uiStyle)
 
             LaunchedEffect(settings.uiSize) {
@@ -386,8 +387,9 @@ class MainActivity : ComponentActivity() {
 
                 val showCrashDialog = crashDialogShown
                 val showCleanupDialog = cleanupDialogShown && cleanupInfo.isNotEmpty()
-                val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog
-                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showClipboardPrompt
+                val showLocalModelResiduePrompt = localModelResiduePrompt != null && !showCrashDialog && !showCleanupDialog
+                val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt
+                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt && !showClipboardPrompt
 
                 val handleCrashDismiss = {
                     crashDialogShown = false
@@ -412,6 +414,23 @@ class MainActivity : ComponentActivity() {
                         predictiveBackEnabled = predictiveBackEnabled,
                         onConfirm = { mainViewModel.confirmPromptUpdate() },
                         onDismiss = { mainViewModel.dismissPromptUpdate() }
+                    )
+                }
+
+                if (showLocalModelResiduePrompt) {
+                    val prompt = localModelResiduePrompt!!
+                    PredictiveFloatingActionCard(
+                        visible = showLocalModelResiduePrompt,
+                        title = "检测到本地模型文件",
+                        content = "本地模型文件占用约 ${formatLocalModelResidueSize(prompt.sizeBytes)}，标准版不会使用它们，是否清理以释放空间？",
+                        confirmText = "清理",
+                        dismissText = "稍后",
+                        isDestructive = true,
+                        isLoading = false,
+                        predictiveBackEnabled = predictiveBackEnabled,
+                        onConfirm = { app.localModelResidueCenter.clearResidue() },
+                        onDismiss = { app.localModelResidueCenter.dismissPendingPrompt() },
+                        modifier = Modifier.padding(bottom = floatingActionCardBottomPadding)
                     )
                 }
 
@@ -480,6 +499,7 @@ class MainActivity : ComponentActivity() {
             mainViewModel.refreshData()
         }
         (application as App).clipboardCodeCenter.checkClipboardForPrompt("app_resume")
+        (application as App).localModelResidueCenter.checkForResidue()
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
     }
 
@@ -511,5 +531,15 @@ class MainActivity : ComponentActivity() {
         private var currentThemeMode: Int = -1
         private var currentThemeColorScheme: String = ""
         private var currentUiStyle: String = ""
+    }
+}
+
+private fun formatLocalModelResidueSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 MB"
+    val mib = bytes / 1024.0 / 1024.0
+    return if (mib >= 1024.0) {
+        String.format(java.util.Locale.US, "%.2f GB", mib / 1024.0)
+    } else {
+        String.format(java.util.Locale.US, "%.0f MB", mib)
     }
 }

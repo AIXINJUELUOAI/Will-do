@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -321,6 +322,16 @@ fun AiSettingsPage(
         activeProvider == PROVIDER_CUSTOM -> "点击保存按钮测试并拉取模型"
         else -> "请选择模型"
     }
+    val activeSignature = "${normalizeCustomApiUrl(activeModelUrl).trim()}|${activeModelKey.trim()}"
+    val customModelsFetched = activeProvider == PROVIDER_CUSTOM &&
+            activeFetchedSignature == activeSignature &&
+            activeCustomModels.isNotEmpty()
+    val saveHintText = when {
+        activeProvider != PROVIDER_CUSTOM -> "点击右下角按钮保存配置"
+        !customModelsFetched -> "点击右下角按钮测试连接并拉取模型列表"
+        effectiveModelName.isBlank() -> "请选择模型名称，然后再次点击右下角按钮保存配置"
+        else -> "再次点击右下角按钮保存配置"
+    }
 
     val onModelUrlChange: (String) -> Unit = { newValue ->
         setActiveUrl(newValue)
@@ -401,13 +412,13 @@ fun AiSettingsPage(
                 customMode = activeProvider == PROVIDER_CUSTOM
             )
 
+            Spacer(modifier = Modifier.height(120.dp))
             Text(
-                text = "选择模型后点击右下角按钮以保存配置",
+                text = saveHintText,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    .fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                 textAlign = TextAlign.Center
             )
         }

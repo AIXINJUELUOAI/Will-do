@@ -14,6 +14,7 @@ import com.antgskds.calendarassistant.core.center.ContentIngestCenter
 import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
 import com.antgskds.calendarassistant.core.center.FloatingCenter
 import com.antgskds.calendarassistant.core.center.ImportCenter
+import com.antgskds.calendarassistant.core.center.LocalModelResidueCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.core.center.PermissionCenter
 import com.antgskds.calendarassistant.core.center.RecognitionCenter
@@ -193,6 +194,15 @@ class App : Application() {
             appContext = applicationContext,
             settingsQueryApi = settingsQueryApi,
             ingestCommandApi = ingestCommandApi,
+            appScope = appScope
+        )
+    }
+
+    val localModelResidueCenter: LocalModelResidueCenter by lazy {
+        LocalModelResidueCenter(
+            appContext = applicationContext,
+            settingsQueryApi = settingsQueryApi,
+            settingsOperationApi = settingsOperationApi,
             appScope = appScope
         )
     }

@@ -389,8 +389,8 @@ fun AddEventDialog(
                         baseTagLabel
                     }
                     BoxWithConstraints(modifier = Modifier.weight(1f)) {
+                        val itemWidth = ((maxWidth - 24.dp) / 4).coerceAtLeast(52.dp)
                         if (isTypePickerExpanded) {
-                            val itemWidth = ((maxWidth - 24.dp) / 4).coerceAtLeast(52.dp)
                             HorizontalPager(
                                 state = eventTypePagerState,
                                 modifier = Modifier.fillMaxWidth(),
@@ -424,6 +424,8 @@ fun AddEventDialog(
                             EventTypeChip(
                                 label = tagLabel,
                                 selected = true,
+                                modifier = Modifier.width(itemWidth),
+                                fillLabel = true,
                                 onClick = {
                                     haptics.click()
                                     isTypePickerExpanded = true
