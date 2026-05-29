@@ -4,16 +4,12 @@ import android.net.Uri
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -97,6 +93,11 @@ private val DIALOG_EVENT_TYPE_SPECS = listOf(
     DialogEventTypeSpec(EventTags.FOOD, "取餐", listOf("取餐码", "品牌", "位置")),
     DialogEventTypeSpec(EventTags.TICKET, "取票", listOf("取票码", "品牌", "位置")),
     DialogEventTypeSpec(EventTags.SENDER, "寄件", listOf("寄件码", "品牌", "地点"))
+)
+
+private val DIALOG_EVENT_TYPE_PAGES = listOf(
+    listOf(EventTags.GENERAL, EventTags.TRAIN, EventTags.FLIGHT, EventTags.TAXI),
+    listOf(EventTags.PICKUP, EventTags.FOOD, EventTags.TICKET, EventTags.SENDER)
 )
 
 private fun eventTypeSpecFor(tag: String): DialogEventTypeSpec? {
@@ -288,6 +289,7 @@ fun AddEventDialog(
     val structuredFieldValues = remember(draftKey) { mutableStateListOf<String>() }
     var autoDurationMinutes by remember { mutableStateOf(initialAutoDurationMinutes) }
     var isEndTimeManuallySet by remember { mutableStateOf(false) }
+    val eventTypePagerState = rememberPagerState(pageCount = { DIALOG_EVENT_TYPE_PAGES.size })
     val activeStructuredSpec = structuredEditingTag?.let { eventTypeSpecFor(it) }
     val isChildDialogVisible = showStartDatePicker || showEndDatePicker ||
             showStartTimePicker || showEndTimePicker || showReminderPicker || showRepeatPicker
@@ -375,10 +377,11 @@ fun AddEventDialog(
                 ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.Start,
                     modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     Text("类型:", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(10.dp))
                     val baseTagLabel = eventTypeLabel(eventTag)
                     val tagLabel = if (repeatSpec != null || editDraft?.isRecurring == true) {
                         "重复 · $baseTagLabel"
@@ -387,29 +390,34 @@ fun AddEventDialog(
                     }
                     BoxWithConstraints(modifier = Modifier.weight(1f)) {
                         if (isTypePickerExpanded) {
-                            val itemWidth = ((maxWidth - 24.dp) / 4).coerceAtLeast(56.dp)
-                            val orderedSpecs = listOfNotNull(eventTypeSpecFor(eventTag)) +
-                                    DIALOG_EVENT_TYPE_SPECS.filter { it.tag != eventTag }
-                            LazyRow(
+                            val itemWidth = ((maxWidth - 24.dp) / 4).coerceAtLeast(52.dp)
+                            HorizontalPager(
+                                state = eventTypePagerState,
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(end = 2.dp)
-                            ) {
-                                items(orderedSpecs, key = { it.tag }) { spec ->
-                                    EventTypeChip(
-                                        label = if (spec.tag == eventTag) tagLabel else spec.label,
-                                        selected = spec.tag == eventTag,
-                                        modifier = Modifier.width(itemWidth),
-                                        fillLabel = true,
-                                        onClick = {
-                                            haptics.click()
-                                            if (spec.tag == eventTag) {
-                                                isTypePickerExpanded = false
-                                            } else {
-                                                selectEventType(spec)
+                                pageSpacing = 0.dp
+                            ) { pageIndex ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    DIALOG_EVENT_TYPE_PAGES[pageIndex].forEach { tag ->
+                                        val spec = eventTypeSpecFor(tag) ?: return@forEach
+                                        EventTypeChip(
+                                            label = if (tag == EventTags.GENERAL && (repeatSpec != null || editDraft?.isRecurring == true)) "重复" else spec.label,
+                                            selected = spec.tag == eventTag,
+                                            modifier = Modifier.width(itemWidth),
+                                            fillLabel = true,
+                                            onClick = {
+                                                haptics.click()
+                                                if (spec.tag == eventTag) {
+                                                    isTypePickerExpanded = false
+                                                } else {
+                                                    selectEventType(spec)
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -652,10 +660,10 @@ private fun EventTypeChip(
             )
         },
         colors = AssistChipDefaults.assistChipColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-            labelColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            containerColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+            labelColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
         ),
-        border = null
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     )
 }
 

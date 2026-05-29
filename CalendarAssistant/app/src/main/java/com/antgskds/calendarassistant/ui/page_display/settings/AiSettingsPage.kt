@@ -400,6 +400,16 @@ fun AiSettingsPage(
                 cardSubtitleStyle = cardSubtitleStyle,
                 customMode = activeProvider == PROVIDER_CUSTOM
             )
+
+            Text(
+                text = "选择模型后点击右下角按钮以保存配置",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center
+            )
         }
 
         FloatingActionButton(
