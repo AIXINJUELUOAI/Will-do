@@ -82,8 +82,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":ai-engine"))
-
     // === 基础库 (使用默认生成的引用) ===
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

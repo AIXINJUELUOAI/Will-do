@@ -25,4 +25,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "CalendarAssistant"
 include(":app")
-include(":ai-engine")

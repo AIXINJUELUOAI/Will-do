@@ -8,10 +8,6 @@ object RecognitionProviderFactory {
     }
 
     fun semanticProvider(settings: MySettings): SemanticProvider {
-        return if (settings.isLocalSemanticEnabled) {
-            LocalSemanticProvider
-        } else {
-            RemoteSemanticProvider
-        }
+        return RemoteSemanticProvider
     }
 }
