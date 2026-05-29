@@ -39,7 +39,7 @@ android {
         versionName = "2.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("boolean", "LOCAL_MODEL_EDITION", "false")
+        buildConfigField("boolean", "LOCAL_MODEL_EDITION", "true")
 
         ndk {
             abiFilters += listOf("arm64-v8a")
