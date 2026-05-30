@@ -282,7 +282,28 @@ class MainViewModel(
 
     // --- 普通事件操作 ---
     fun addEvent(event: Event) = viewModelScope.launch { scheduleCenter.addEvent(event) }
+    fun addEvent(event: Event, pendingAttachmentKeys: List<String>) = viewModelScope.launch {
+        val eventId = scheduleCenter.addEvent(event)
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            pendingAttachmentKeys.distinct().forEach { pendingKey ->
+                attachmentManager.bindPendingAttachments(eventId, pendingKey)
+            }
+        }
+    }
     fun updateEvent(event: Event) = viewModelScope.launch { scheduleCenter.updateEvent(event) }
+
+    suspend fun addEventWithResult(event: Event): Long {
+        return scheduleCenter.addEvent(event)
+    }
+
+    fun updateEventAndRefreshAttachments(event: Event) = viewModelScope.launch {
+        scheduleCenter.updateEvent(event)
+        event.id?.let { eventId ->
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                attachmentManager.updateEventKey(eventId)
+            }
+        }
+    }
 
     fun detachRecurringInstance(
         parentEventId: Long,
@@ -366,6 +387,12 @@ class MainViewModel(
     suspend fun getEventAttachments(eventId: Long): List<EventAttachment> {
         return kotlinx.coroutines.withContext(Dispatchers.IO) {
             attachmentManager.getAttachments(eventId)
+        }
+    }
+
+    suspend fun getAttachmentsByIds(ids: List<Long>): List<EventAttachment> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.getAttachmentsByIds(ids)
         }
     }
 

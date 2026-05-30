@@ -26,6 +26,9 @@ interface EventAttachmentsDao {
     @Query("SELECT * FROM event_attachments WHERE event_id IN (:eventIds) ORDER BY created_at ASC, id ASC")
     fun getAttachmentsForEvents(eventIds: List<Long>): List<EventAttachment>
 
+    @Query("SELECT * FROM event_attachments WHERE id IN (:ids) ORDER BY created_at ASC, id ASC")
+    fun getAttachmentsByIds(ids: List<Long>): List<EventAttachment>
+
     @Query("SELECT * FROM event_attachments ORDER BY created_at ASC, id ASC")
     fun getAllAttachments(): List<EventAttachment>
 

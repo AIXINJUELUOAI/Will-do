@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -14,16 +15,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,11 +50,19 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
+import com.antgskds.calendarassistant.calendar.models.EventAttachment
+import com.antgskds.calendarassistant.calendar.models.isImage
+import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 
 private val RegexHeading = Regex("^#{1,6}\\s+.*")
 private val RegexQuote = Regex("^\\s*>.*")
@@ -57,10 +73,32 @@ private val RegexHr = Regex("^\\s*([-*_]\\s*){3,}$")
 private val AbandonedMarkerRegex = Regex("^([-+*>]|\\d+\\.|#{1,6})\\s*$")
 private val TaskLineParseRegex = Regex("^\\s*[-+*]\\s+\\[( |x|X)](?:\\s+(.*))?$")
 
+private data class EditorDraft(
+    val value: TextFieldValue,
+    val preferredSelection: Int = value.selection.end
+)
+
 class BlockNoteEditorController {
     internal var commitActiveBlock: (() -> String)? = null
+    internal var applyMarkdownToolAction: ((NoteMarkdownTool) -> String)? = null
+    internal var insertMarkdownBlockAction: ((String) -> String)? = null
 
     fun commit(): String? = commitActiveBlock?.invoke()
+    fun applyMarkdownTool(tool: NoteMarkdownTool): String? = applyMarkdownToolAction?.invoke(tool)
+    fun insertMarkdownBlock(markdown: String): String? = insertMarkdownBlockAction?.invoke(markdown)
+}
+
+enum class NoteMarkdownTool {
+    H1,
+    H2,
+    TASK,
+    BULLET,
+    IMAGE,
+    FILE,
+    QUOTE,
+    DIVIDER,
+    CODE,
+    ORDERED
 }
 
 private sealed class NoteBlock(
@@ -88,14 +126,18 @@ fun BlockNoteEditor(
     controller: BlockNoteEditorController? = null,
     modifier: Modifier = Modifier,
     textColor: Color,
-    onActiveEditChanged: ((Boolean) -> Unit)? = null
+    onActiveEditChanged: ((Boolean) -> Unit)? = null,
+    attachments: List<EventAttachment> = emptyList(),
+    onOpenAttachment: ((EventAttachment) -> Unit)? = null
 ) {
     var workingMarkdown by remember { mutableStateOf(markdown) }
     var activeBlockId by remember { mutableStateOf<Int?>(null) }
     var activeDraft by remember { mutableStateOf("") }
+    var activeDraftSelection by remember { mutableStateOf<Int?>(null) }
     var isCreatingNewBlock by remember { mutableStateOf(false) }
 
     val blocks = remember(workingMarkdown) { parseNoteBlocks(workingMarkdown) }
+    val attachmentsById = remember(attachments) { attachments.mapNotNull { attachment -> attachment.id?.let { it to attachment } }.toMap() }
 
     LaunchedEffect(markdown) {
         if (activeBlockId == null && !isCreatingNewBlock && markdown != workingMarkdown) {
@@ -130,6 +172,7 @@ fun BlockNoteEditor(
             workingMarkdown = next
             onMarkdownChange(next)
             activeDraft = ""
+            activeDraftSelection = null
             activeBlockId = null
             isCreatingNewBlock = false
             return next
@@ -139,6 +182,7 @@ fun BlockNoteEditor(
         val currentBlocks = parseNoteBlocks(workingMarkdown)
         val block = currentBlocks.firstOrNull { it.id == id } ?: run {
             activeDraft = ""
+            activeDraftSelection = null
             activeBlockId = null
             return workingMarkdown
         }
@@ -153,12 +197,57 @@ fun BlockNoteEditor(
         workingMarkdown = normalized
         onMarkdownChange(normalized)
         activeDraft = ""
+        activeDraftSelection = null
         activeBlockId = null
         return normalized
     }
 
+    fun applyMarkdownTool(tool: NoteMarkdownTool): String {
+        val prefix = when (tool) {
+            NoteMarkdownTool.H1 -> "# "
+            NoteMarkdownTool.H2 -> "## "
+            NoteMarkdownTool.TASK -> "- [ ] "
+            NoteMarkdownTool.BULLET -> "- "
+            NoteMarkdownTool.ORDERED -> "1. "
+            NoteMarkdownTool.QUOTE -> "> "
+            NoteMarkdownTool.DIVIDER -> "---"
+            NoteMarkdownTool.CODE -> "```\n\n```"
+            NoteMarkdownTool.IMAGE,
+            NoteMarkdownTool.FILE -> ""
+        }
+        if (prefix.isBlank()) return activeDraft
+        if (activeBlockId == null && !isCreatingNewBlock) {
+            commitActive()
+            activeBlockId = null
+            activeDraft = ""
+            activeDraftSelection = null
+            isCreatingNewBlock = true
+        }
+        val formatted = applyMarkdownPrefix(activeDraft, prefix, tool)
+        activeDraft = formatted.value.text
+        activeDraftSelection = formatted.preferredSelection
+        return activeDraft
+    }
+
+    fun insertMarkdownBlock(markdownBlock: String): String {
+        val block = markdownBlock.trim()
+        if (block.isBlank()) return workingMarkdown
+        if (activeBlockId != null || isCreatingNewBlock) {
+            activeDraft = if (activeDraft.isBlank()) block else "${activeDraft.trimEnd()}\n\n$block"
+            activeDraftSelection = activeDraft.length
+            return commitActive()
+        }
+        val base = workingMarkdown.trimEnd()
+        val next = normalizeMarkdown(if (base.isBlank()) block else "$base\n\n$block")
+        workingMarkdown = next
+        onMarkdownChange(next)
+        return next
+    }
+
     SideEffect {
         controller?.commitActiveBlock = { commitActive() }
+        controller?.applyMarkdownToolAction = { tool -> applyMarkdownTool(tool) }
+        controller?.insertMarkdownBlockAction = { markdownBlock -> insertMarkdownBlock(markdownBlock) }
     }
 
     fun beginEdit(block: NoteBlock) {
@@ -172,6 +261,7 @@ fun BlockNoteEditor(
         if (located != null) {
             activeBlockId = located.id
             activeDraft = located.raw
+            activeDraftSelection = located.raw.length
             isCreatingNewBlock = false
         }
     }
@@ -180,6 +270,7 @@ fun BlockNoteEditor(
         commitActive()
         activeBlockId = null
         activeDraft = ""
+        activeDraftSelection = null
         isCreatingNewBlock = true
     }
 
@@ -245,19 +336,25 @@ fun BlockNoteEditor(
         items(blocks, key = { it.id }) { block ->
             val isEditing = !isCreatingNewBlock && activeBlockId == block.id
             if (isEditing) {
-                BlockEditorField(
-                    value = activeDraft,
-                    onValueChange = { activeDraft = it },
-                    textColor = textColor,
-                    onDone = { commitActive() }
-                )
+                        BlockEditorField(
+                            value = activeDraft,
+                            preferredSelection = activeDraftSelection,
+                            onValueChange = {
+                                activeDraft = it
+                                activeDraftSelection = null
+                            },
+                            textColor = textColor,
+                            onDone = { commitActive() }
+                        )
             } else {
                 RenderedBlock(
                     block = block,
+                    attachmentsById = attachmentsById,
                     textColor = textColor,
                     baseTextSize = baseTextSize,
                     lineSpacing = lineSpacing,
                     onClick = { beginEdit(block) },
+                    onOpenAttachment = onOpenAttachment,
                     onUpdateRaw = { newRaw ->
                         val updated = buildString {
                             append(workingMarkdown.substring(0, block.start))
@@ -276,7 +373,11 @@ fun BlockNoteEditor(
                 if (isCreatingNewBlock) {
                     BlockEditorField(
                         value = activeDraft,
-                        onValueChange = { activeDraft = it },
+                        preferredSelection = activeDraftSelection,
+                        onValueChange = {
+                            activeDraft = it
+                            activeDraftSelection = null
+                        },
                         textColor = textColor,
                         onDone = { commitActive() }
                     )
@@ -301,12 +402,15 @@ fun BlockNoteEditor(
 @Composable
 private fun RenderedBlock(
     block: NoteBlock,
+    attachmentsById: Map<Long, EventAttachment>,
     textColor: Color,
     baseTextSize: Float,
     lineSpacing: Float,
     onClick: () -> Unit,
+    onOpenAttachment: ((EventAttachment) -> Unit)?,
     onUpdateRaw: (String) -> Unit
 ) {
+    val attachmentToken = parseAttachmentToken(block.raw)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,7 +418,12 @@ private fun RenderedBlock(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = if (attachmentToken == null) onClick else {
+                    {
+                        attachmentsById[attachmentToken.id]?.let { attachment -> onOpenAttachment?.invoke(attachment) }
+                        Unit
+                    }
+                }
             )
             .padding(vertical = 2.dp)
     ) {
@@ -489,29 +598,127 @@ private fun RenderedBlock(
             }
 
             else -> {
-                MarkdownText(
-                    markdown = block.raw,
-                    modifier = Modifier.fillMaxWidth(),
-                    textColor = textColor,
-                    linkColor = MaterialTheme.colorScheme.primary,
-                    enableLinkClicks = true,
-                    textSizeSp = baseTextSize,
-                    lineSpacingExtraPx = lineSpacing
-                )
+                if (attachmentToken != null) {
+                    AttachmentMarkdownBlock(
+                        token = attachmentToken,
+                        attachment = attachmentsById[attachmentToken.id],
+                        onClick = {
+                            attachmentsById[attachmentToken.id]?.let { attachment -> onOpenAttachment?.invoke(attachment) }
+                        }
+                    )
+                } else {
+                    MarkdownText(
+                        markdown = block.raw,
+                        modifier = Modifier.fillMaxWidth(),
+                        textColor = textColor,
+                        linkColor = MaterialTheme.colorScheme.primary,
+                        enableLinkClicks = true,
+                        textSizeSp = baseTextSize,
+                        lineSpacingExtraPx = lineSpacing
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
+private fun AttachmentMarkdownBlock(
+    token: AttachmentMarkdownToken,
+    attachment: EventAttachment?,
+    onClick: () -> Unit
+) {
+    val isImage = attachment?.isImage == true || token.isImage
+    val bitmap = remember(attachment?.localPath) {
+        attachment?.localPath?.takeIf { isImage }?.let { path ->
+            runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
+        }
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = attachment != null, onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (isImage && bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = token.label,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (isImage) Icons.Default.BrokenImage else Icons.Default.AttachFile,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = attachment?.displayName?.ifBlank { token.label } ?: token.label.ifBlank { "附件 ${token.id}" },
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (attachment == null) "附件未找到" else EventAttachmentManager.formatSize(attachment.sizeBytes),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class AttachmentMarkdownToken(
+    val id: Long,
+    val label: String,
+    val isImage: Boolean
+)
+
+private val AttachmentMarkdownRegex = Regex("^(!?)\\[([^]]*)]\\(willdo-attachment://(\\d+)\\)\\s*$")
+
+private fun parseAttachmentToken(raw: String): AttachmentMarkdownToken? {
+    val match = AttachmentMarkdownRegex.matchEntire(raw.trim()) ?: return null
+    val id = match.groupValues[3].toLongOrNull() ?: return null
+    return AttachmentMarkdownToken(
+        id = id,
+        label = match.groupValues[2],
+        isImage = match.groupValues[1] == "!"
+    )
+}
+
+@Composable
 private fun BlockEditorField(
     value: String,
+    preferredSelection: Int?,
     onValueChange: (String) -> Unit,
     textColor: Color,
     onDone: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange((preferredSelection ?: value.length).coerceIn(0, value.length)))) }
+
+    LaunchedEffect(value, preferredSelection) {
+        if (value != fieldValue.text || preferredSelection != null) {
+            val selection = (preferredSelection ?: value.length).coerceIn(0, value.length)
+            fieldValue = TextFieldValue(value, TextRange(selection))
+        }
+    }
 
     LaunchedEffect(Unit) {
         withFrameNanos {}
@@ -520,8 +727,11 @@ private fun BlockEditorField(
     }
 
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = fieldValue,
+        onValueChange = { next ->
+            fieldValue = next
+            onValueChange(next.text)
+        },
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
@@ -540,7 +750,7 @@ private fun BlockEditorField(
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         decorationBox = { inner ->
             Box(modifier = Modifier.fillMaxWidth()) {
-                if (value.isBlank()) {
+                if (fieldValue.text.isBlank()) {
                     Text(
                         text = "开始输入...",
                         style = MaterialTheme.typography.bodyLarge.copy(
@@ -678,4 +888,51 @@ private fun looksLikeTableRow(line: String): Boolean {
 private fun looksLikeTableDivider(line: String): Boolean {
     val trimmed = line.trim()
     return trimmed.isNotBlank() && trimmed.all { it == '|' || it == ':' || it == '-' || it.isWhitespace() }
+}
+
+private fun applyMarkdownPrefix(current: String, prefix: String, tool: NoteMarkdownTool): EditorDraft {
+    val trimmed = current.trimStart()
+    fun draft(text: String, selection: Int = prefix.length.coerceAtMost(text.length)) =
+        EditorDraft(TextFieldValue(text, TextRange(selection.coerceIn(0, text.length))), selection.coerceIn(0, text.length))
+
+    return when (tool) {
+        NoteMarkdownTool.H1,
+        NoteMarkdownTool.H2 -> {
+            val content = trimmed.replace(Regex("^#{1,6}\\s*"), "")
+            draft("$prefix$content")
+        }
+        NoteMarkdownTool.TASK -> {
+            val content = trimmed
+                .replace(Regex("^[-+*]\\s+\\[(?: |x|X)]\\s*"), "")
+                .replace(Regex("^[-+*]\\s+"), "")
+                .replace(Regex("^\\d+\\.\\s+"), "")
+            draft("$prefix$content")
+        }
+        NoteMarkdownTool.BULLET -> {
+            val content = trimmed
+                .replace(Regex("^[-+*]\\s+\\[(?: |x|X)]\\s*"), "")
+                .replace(Regex("^[-+*]\\s+"), "")
+                .replace(Regex("^\\d+\\.\\s+"), "")
+            draft("$prefix$content")
+        }
+        NoteMarkdownTool.ORDERED -> {
+            val content = trimmed
+                .replace(Regex("^[-+*]\\s+\\[(?: |x|X)]\\s*"), "")
+                .replace(Regex("^[-+*]\\s+"), "")
+                .replace(Regex("^\\d+\\.\\s+"), "")
+            draft("$prefix$content")
+        }
+        NoteMarkdownTool.QUOTE -> {
+            val content = trimmed.replace(Regex("^>\\s*"), "")
+            draft("$prefix$content")
+        }
+        NoteMarkdownTool.DIVIDER,
+        NoteMarkdownTool.CODE -> {
+            val base = current.trimEnd()
+            val text = if (base.isBlank()) prefix else "$base\n\n$prefix"
+            draft(text, text.length)
+        }
+        NoteMarkdownTool.IMAGE,
+        NoteMarkdownTool.FILE -> draft(current, current.length)
+    }
 }

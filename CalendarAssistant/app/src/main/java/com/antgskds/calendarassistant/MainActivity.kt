@@ -310,13 +310,19 @@ class MainActivity : ComponentActivity() {
                                 currentEventsCount = uiState.rawEventCount,
                                 settings = settings,
                                 onDismiss = { navController.popBackStack() },
-                                onSave = { note ->
+                                onSave = { note, pendingAttachmentKeys ->
                                     if (noteId == AppRoutes.NoteEditorNewArg) {
-                                        mainViewModel.addEvent(note)
+                                        mainViewModel.addEvent(note, pendingAttachmentKeys)
                                     } else {
-                                        mainViewModel.updateEvent(note)
+                                        mainViewModel.updateEventAndRefreshAttachments(note)
                                     }
                                 },
+                                onAddAttachment = { eventId, uri -> mainViewModel.addAttachmentToEvent(eventId, uri) },
+                                onAddPendingAttachment = { eventKey, uri -> mainViewModel.addPendingAttachment(eventKey, uri) },
+                                onDeletePendingAttachments = { pendingKey -> mainViewModel.deletePendingAttachments(pendingKey) },
+                                onLoadAttachments = { eventId -> mainViewModel.getEventAttachments(eventId) },
+                                onLoadAttachmentsByIds = { ids -> mainViewModel.getAttachmentsByIds(ids) },
+                                onOpenAttachment = { attachment -> mainViewModel.openAttachment(attachment) },
                                 onDelete = { note ->
                                     mainViewModel.deleteEvent(note)
                                     navController.popBackStack()

@@ -17,6 +17,14 @@ data class MarkdownTaskItem(
 )
 
 private val markdownTaskRegex = Regex("^(\\s*[-*+]\\s+\\[)( |x|X)(](?:\\s+|$))(.*)$")
+private val noteAttachmentRegex = Regex("!?\\[[^]]*]\\(willdo-attachment://(\\d+)\\)")
+
+fun extractNoteAttachmentIds(markdown: String): List<Long> {
+    return noteAttachmentRegex.findAll(markdown)
+        .mapNotNull { it.groupValues.getOrNull(1)?.toLongOrNull() }
+        .distinct()
+        .toList()
+}
 
 fun extractMarkdownTasks(markdown: String): List<MarkdownTaskItem> {
     return markdown.lines().mapIndexedNotNull { index, line ->
