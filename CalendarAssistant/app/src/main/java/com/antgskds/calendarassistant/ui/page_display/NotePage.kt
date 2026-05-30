@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
@@ -86,11 +87,10 @@ fun NotePage(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
                 top = 10.dp,
                 bottom = bottomSafePadding + 24.dp
-            )
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "summary") {
                 Text(
@@ -102,19 +102,22 @@ fun NotePage(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 10.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        .padding(vertical = 16.dp, horizontal = 20.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
             items(notes, key = { it.id ?: 0L }) { note ->
-                NoteCard(
-                    note = note,
-                    onClick = { onEditNote(note) },
-                    onLongClick = { onPendingDeleteChange(note) },
-                    hapticEnabled = hapticEnabled
-                )
+                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    NoteCard(
+                        note = note,
+                        onClick = { onEditNote(note) },
+                        onLongClick = { onPendingDeleteChange(note) },
+                        hapticEnabled = hapticEnabled
+                    )
+                }
             }
         }
     }

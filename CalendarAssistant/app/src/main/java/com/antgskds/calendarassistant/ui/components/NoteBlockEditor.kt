@@ -291,8 +291,8 @@ fun BlockNoteEditor(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
         item(key = "title") {
             BasicTextField(
@@ -302,7 +302,7 @@ fun BlockNoteEditor(
                 textStyle = MaterialTheme.typography.headlineMedium.copy(
                     color = textColor,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp
+                    fontSize = 30.sp
                 ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
@@ -312,7 +312,7 @@ fun BlockNoteEditor(
                                 text = "无标题",
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 28.sp,
+                                    fontSize = 30.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
                                 )
                             )
@@ -323,14 +323,8 @@ fun BlockNoteEditor(
             )
         }
 
-        item(key = "divider") {
-            HorizontalDivider(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                thickness = 0.6.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
-            )
+        item(key = "title-space") {
+            Spacer(modifier = Modifier.height(2.dp))
         }
 
         items(blocks, key = { it.id }) { block ->
