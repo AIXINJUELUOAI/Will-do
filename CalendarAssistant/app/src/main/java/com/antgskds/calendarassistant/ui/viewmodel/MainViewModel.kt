@@ -10,6 +10,7 @@ import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
@@ -24,6 +25,9 @@ import com.antgskds.calendarassistant.data.model.RemotePrompts
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteTransferManager
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.CourseMeta
 import com.antgskds.calendarassistant.core.course.calculateSemesterWeek
@@ -47,7 +51,6 @@ data class MainUiState(
     val allEventsFutureDays: Int = 7,
     val allEventsFutureLimit: LocalDate = LocalDate.now().plusDays(7),
     val courseScheduleItems: List<ScheduleDisplayItem> = emptyList(),
-    val noteEvents: List<Event> = emptyList(),
     val settings: MySettings = MySettings(),
     val currentDateEvents: List<ScheduleDisplayItem> = emptyList(),
     val tomorrowEvents: List<ScheduleDisplayItem> = emptyList(),
@@ -68,6 +71,7 @@ data class PromptCheckFeedback(
 class MainViewModel(
     private val appContext: Context,
     private val scheduleCenter: ScheduleCenter,
+    private val noteCenter: NoteCenter,
     private val settingsQueryApi: SettingsQueryApi,
     private val homeQueryApi: HomeQueryApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
@@ -89,6 +93,7 @@ class MainViewModel(
     private val _promptCheckFeedback = MutableSharedFlow<PromptCheckFeedback>(extraBufferCapacity = 1)
     val promptCheckFeedback: SharedFlow<PromptCheckFeedback> = _promptCheckFeedback.asSharedFlow()
     private var pendingPromptUpdate: RemotePrompts? = null
+    private val noteTransferManager = NoteTransferManager(appContext)
 
     init {
         // 精确定时器：等待最近的未过期事件过期时才触发刷新
@@ -125,6 +130,7 @@ class MainViewModel(
 
     // 归档事件（公开访问）
     val archivedEvents = scheduleCenter.archivedEvents
+    val notes: StateFlow<List<NoteEntity>> = noteCenter.notes
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _revealedItemKey = MutableStateFlow<String?>(null)
@@ -155,9 +161,8 @@ class MainViewModel(
         // 为"全部日程"页展开所有历史日程到未来 7 天
         val today = LocalDate.now()
         val futureLimit = today.plusDays(allEventsFutureDays.toLong())
-        val scheduleEvents = activeEvents.filter { it.tag != EventTags.NOTE }
-        val allItemsStart = scheduleEvents.minOfOrNull { it.startDate } ?: today
-        val allItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, allItemsStart, futureLimit)
+        val allItemsStart = activeEvents.minOfOrNull { it.startDate } ?: today
+        val allItems = ScheduleDisplayHelper.buildDisplayItems(activeEvents, allItemsStart, futureLimit)
         val semesterStart = resolveSemesterAnchor(settings.semesterStartDate)
         val semesterEnd = semesterStart.plusWeeks(settings.totalWeeks.coerceAtLeast(1).toLong()).minusDays(1)
         val courseItems = ScheduleDisplayHelper.buildDisplayItems(
@@ -174,7 +179,6 @@ class MainViewModel(
             allEventsFutureDays = allEventsFutureDays,
             allEventsFutureLimit = futureLimit,
             courseScheduleItems = courseItems,
-            noteEvents = snapshot.noteEvents,
             settings = settings,
             currentDateEvents = snapshot.currentDateEvents,
             tomorrowEvents = snapshot.tomorrowEvents,
@@ -282,7 +286,71 @@ class MainViewModel(
 
     // --- 普通事件操作 ---
     fun addEvent(event: Event) = viewModelScope.launch { scheduleCenter.addEvent(event) }
+    fun addEvent(event: Event, pendingAttachmentKeys: List<String>) = viewModelScope.launch {
+        val eventId = scheduleCenter.addEvent(event)
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            pendingAttachmentKeys.distinct().forEach { pendingKey ->
+                attachmentManager.bindPendingAttachments(eventId, pendingKey)
+            }
+        }
+    }
     fun updateEvent(event: Event) = viewModelScope.launch { scheduleCenter.updateEvent(event) }
+
+    suspend fun getNoteById(noteId: Long): NoteEntity? = noteCenter.getNote(noteId)
+
+    fun saveNote(
+        id: Long?,
+        title: String,
+        document: NoteDocument,
+        createdAt: Long? = null,
+        onSaved: (Long) -> Unit = {}
+    ) = viewModelScope.launch {
+        val savedId = noteCenter.saveNote(id, title, document, createdAt)
+        onSaved(savedId)
+    }
+
+    fun deleteNote(noteId: Long, onDeleted: () -> Unit = {}) = viewModelScope.launch {
+        noteCenter.deleteNote(noteId)
+        onDeleted()
+    }
+
+    fun toggleNoteTodo(noteId: Long, paragraphId: String) = viewModelScope.launch {
+        noteCenter.toggleTodo(noteId, paragraphId)
+    }
+
+    fun exportNote(noteId: Long, uri: Uri, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        val result = runCatching {
+            val note = noteCenter.getNote(noteId) ?: error("便签不存在")
+            kotlinx.coroutines.withContext(Dispatchers.IO) { noteTransferManager.exportNote(note, uri) }
+        }
+        onResult(result)
+    }
+
+    fun importNote(uri: Uri, onResult: (Result<Long>) -> Unit) = viewModelScope.launch {
+        val result = runCatching {
+            val data = kotlinx.coroutines.withContext(Dispatchers.IO) { noteTransferManager.importNote(uri) }
+            noteCenter.saveNote(
+                id = null,
+                title = data.title,
+                document = data.document,
+                createdAt = data.createdAt.takeIf { it > 0L }
+            )
+        }
+        onResult(result)
+    }
+
+    suspend fun addEventWithResult(event: Event): Long {
+        return scheduleCenter.addEvent(event)
+    }
+
+    fun updateEventAndRefreshAttachments(event: Event) = viewModelScope.launch {
+        scheduleCenter.updateEvent(event)
+        event.id?.let { eventId ->
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                attachmentManager.updateEventKey(eventId)
+            }
+        }
+    }
 
     fun detachRecurringInstance(
         parentEventId: Long,
@@ -366,6 +434,12 @@ class MainViewModel(
     suspend fun getEventAttachments(eventId: Long): List<EventAttachment> {
         return kotlinx.coroutines.withContext(Dispatchers.IO) {
             attachmentManager.getAttachments(eventId)
+        }
+    }
+
+    suspend fun getAttachmentsByIds(ids: List<Long>): List<EventAttachment> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            attachmentManager.getAttachmentsByIds(ids)
         }
     }
 

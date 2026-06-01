@@ -9,6 +9,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.isCheckedIn
 import com.antgskds.calendarassistant.calendar.models.isCompleted
 import com.antgskds.calendarassistant.calendar.models.isCourse
+import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
 import com.antgskds.calendarassistant.calendar.models.isTransit
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationResult
@@ -66,7 +67,7 @@ class ScheduleCenter(
 
     fun refreshEvents() {
         appScope.launch(Dispatchers.IO) {
-            _events.value = calendarCenter.getEvents().filter { it.archivedAt == null }
+            _events.value = calendarCenter.getEvents().filter { it.archivedAt == null && !isRetiredNoteTag(it.tag) }
             scheduleNotificationRefresh()
             onScheduleChanged?.invoke()
         }
@@ -74,7 +75,7 @@ class ScheduleCenter(
 
     fun refreshArchivedEvents() {
         appScope.launch(Dispatchers.IO) {
-            _archivedEvents.value = calendarCenter.getArchivedEvents().filter { it.archivedAt != null }
+            _archivedEvents.value = calendarCenter.getArchivedEvents().filter { it.archivedAt != null && !isRetiredNoteTag(it.tag) }
         }
     }
 
@@ -85,7 +86,7 @@ class ScheduleCenter(
     }
 
     suspend fun getLatestActiveEvents(): List<Event> = withContext(Dispatchers.IO) {
-        calendarCenter.getEvents().filter { it.archivedAt == null }
+        calendarCenter.getEvents().filter { it.archivedAt == null && !isRetiredNoteTag(it.tag) }
     }
 
     // ── 通知调度 ─────────────────────────────────────────────────
@@ -506,10 +507,9 @@ class ScheduleCenter(
             undoStatusAction()
             return
         }
+        if (item.isCompleted || item.isCheckedIn) return
         when {
-            item.isTransit && (item.isCheckedIn || item.isCompleted) -> markPendingItemWithUndo(item)
             item.isTransit -> checkInItemWithUndo(item)
-            item.isCompleted -> markPendingItemWithUndo(item)
             else -> completeItemWithUndo(item)
         }
     }
@@ -689,6 +689,8 @@ class ScheduleCenter(
     }
 
     private fun applyPatchToEvent(existing: Event, patch: com.antgskds.calendarassistant.data.model.EventPatch): Event {
+        val shouldReactivate = (existing.state == STATE_COMPLETED || existing.state == STATE_CHECKED_IN) &&
+            patch.endTS >= System.currentTimeMillis() / 1000L
         return existing.copy(
             title = patch.title,
             startTS = patch.startTS,
@@ -700,7 +702,8 @@ class ScheduleCenter(
             rrule = patch.rrule,
             reminder1Minutes = patch.reminder1Minutes,
             reminder2Minutes = patch.reminder2Minutes,
-            reminder3Minutes = patch.reminder3Minutes
+            reminder3Minutes = patch.reminder3Minutes,
+            state = if (shouldReactivate) STATE_PENDING else existing.state
         )
     }
 

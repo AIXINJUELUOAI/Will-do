@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.ui.floating
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -75,14 +74,13 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -113,6 +111,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.painterResource
 import com.antgskds.calendarassistant.R
@@ -121,12 +120,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Context
-import com.antgskds.calendarassistant.core.note.noteMarkdown
-import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
-import com.antgskds.calendarassistant.core.note.markdownWithoutTasks
-import com.antgskds.calendarassistant.core.note.toggleMarkdownTask
-import com.antgskds.calendarassistant.core.note.withNoteMarkdown
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.WeatherData
@@ -143,7 +136,9 @@ import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.ui.components.MarkdownText
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteParagraph
+import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -158,18 +153,16 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-// --- 定义输入模式 ---
-enum class FloatingInputMode { SCHEDULE, NOTE }
-
 private const val FLOATING_EXPAND_LEFT = "LEFT"
+
+enum class FloatingInputMode { SCHEDULE, NOTE }
 
 @Composable
 fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
-    noteEvents: List<Event> = emptyList(),
+    notes: List<NoteEntity> = emptyList(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
-    noteEnabled: Boolean = false,
     expandSide: String = "RIGHT",
     onClose: () -> Unit,
     onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
@@ -181,8 +174,9 @@ fun FloatingScheduleScreen(
     pendingStatusKeys: Set<String> = emptySet(),
     undoPendingLabel: String? = null,
     onUndoAction: () -> Unit = {},
-    onDeleteNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onRestoreNote: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
+    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
     onLoadingChange: (Boolean) -> Unit = {},
     hapticEnabled: Boolean = true
 ) {
@@ -221,40 +215,7 @@ fun FloatingScheduleScreen(
     val haptics = rememberAppHaptics(hapticEnabled)
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
-    val context = LocalContext.current
-    val prefs = remember(context) { context.getSharedPreferences("floating_ui", Context.MODE_PRIVATE) }
-    var currentMode by remember(noteEnabled) {
-        mutableStateOf(
-            if (noteEnabled) {
-                FloatingInputMode.valueOf(
-                    prefs.getString("last_mode", FloatingInputMode.SCHEDULE.name) ?: FloatingInputMode.SCHEDULE.name
-                )
-            } else {
-                FloatingInputMode.SCHEDULE
-            }
-        )
-    }
-    var deletedNote by remember { mutableStateOf<Event?>(null) }
-    var showUndoDelete by remember { mutableStateOf(false) }
-    LaunchedEffect(currentMode, noteEnabled) {
-        if (noteEnabled) {
-            prefs.edit().putString("last_mode", currentMode.name).apply()
-        }
-    }
-
-    LaunchedEffect(noteEnabled) {
-        if (!noteEnabled && currentMode != FloatingInputMode.SCHEDULE) {
-            currentMode = FloatingInputMode.SCHEDULE
-        }
-    }
-
-    LaunchedEffect(showUndoDelete, deletedNote?.id) {
-        if (showUndoDelete) {
-            delay(5000)
-            showUndoDelete = false
-            deletedNote = null
-        }
-    }
+    var currentMode by remember { mutableStateOf(FloatingInputMode.SCHEDULE) }
 
     // 背景透明度动画
     val bgAlpha by animateFloatAsState(
@@ -301,7 +262,7 @@ fun FloatingScheduleScreen(
         ) {
             TimeWheelList(
                 scheduleItems = scheduleItems,
-                noteEvents = noteEvents,
+                notes = notes,
                 weatherData = weatherData,
                 weatherForecastRange = weatherForecastRange,
                 currentMode = currentMode,
@@ -310,18 +271,15 @@ fun FloatingScheduleScreen(
                     .fillMaxHeight()
                     .fillMaxWidth(),
                 listState = listState,
-                onUpdateEvent = onUpdateEvent,
                 onUpdateScheduleItem = onUpdateScheduleItem,
                 onArchiveScheduleItem = onArchiveScheduleItem,
                 onStatusAction = onStatusAction,
                 pendingStatusKeys = pendingStatusKeys,
-                onDeleteNote = { note ->
-                    haptics.warning()
-                    onDeleteNote(note) {
-                        deletedNote = note
-                        showUndoDelete = true
-                    }
+                onToggleNoteTodo = onToggleNoteTodo,
+                onDeleteNote = { note, onComplete ->
+                    onDeleteNote(note, onComplete)
                 },
+                onSaveNote = onSaveNote,
                 onRequestDatePicker = { initialDate, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
                 },
@@ -347,12 +305,12 @@ fun FloatingScheduleScreen(
                 modifier = Modifier,
                 text = manualInputText,
                 onTextChange = { manualInputText = it },
-                onManualSubmit = { text, isNote ->
+                onManualSubmit = { text ->
                     if (text.isNotBlank()) {
                         isLoading = true
                         onLoadingChange(true)
                         haptics.confirm()
-                        onManualInput(text, isNote) {
+                        onManualInput(text, currentMode == FloatingInputMode.NOTE) {
                             isLoading = false
                             onLoadingChange(false)
                         }
@@ -371,66 +329,10 @@ fun FloatingScheduleScreen(
                 },
                 onSwipeUpClose = { animateClose() },
                 isLoading = isLoading,
-                noteEnabled = noteEnabled,
                 currentMode = currentMode,
                 onModeChange = { currentMode = it },
                 hapticEnabled = hapticEnabled
             )
-        }
-
-        AnimatedVisibility(
-            visible = showUndoDelete && deletedNote != null,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 96.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("已删除便签", color = MaterialTheme.colorScheme.onSurface)
-                    TextButton(onClick = {
-                        val note = deletedNote ?: return@TextButton
-                        haptics.confirm()
-                        onRestoreNote(note) {
-                            showUndoDelete = false
-                            deletedNote = null
-                        }
-                    }) {
-                        Text("撤销")
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = undoPendingLabel != null,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 96.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(undoPendingLabel ?: "", color = MaterialTheme.colorScheme.onSurface)
-                    TextButton(onClick = { haptics.confirm(); onUndoAction() }) {
-                        Text("撤销")
-                    }
-                }
-            }
         }
 
         pickerRequest?.let { request ->
@@ -447,24 +349,20 @@ fun BottomInteractionArea(
     modifier: Modifier = Modifier,
     text: String,
     onTextChange: (String) -> Unit,
-    onManualSubmit: (String, Boolean) -> Unit, // Boolean true 表示便签
+    onManualSubmit: (String) -> Unit,
     onPickImage: () -> Unit,
     onSwipeUpClose: () -> Unit,
     isLoading: Boolean = false,
-    noteEnabled: Boolean = false,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
     onModeChange: (FloatingInputMode) -> Unit = {},
     hapticEnabled: Boolean = true
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
-    val isNote = currentMode == FloatingInputMode.NOTE
 
     val primaryColor = MaterialTheme.colorScheme.primary
-    val noteColor = Color(0xFFF57C00) // 橙色调代表便签
 
-    val activeColor by animateColorAsState(targetValue = if (isNote) noteColor else primaryColor, label = "modeColor")
-    val modeIconRes = if (isNote) R.drawable.ic_stat_note else R.drawable.ic_stat_event
-    val modeTitle = if (isNote) "便签" else "日程"
+    val isNote = currentMode == FloatingInputMode.NOTE
+    val activeColor = primaryColor
 
     Column(
         modifier = modifier
@@ -506,22 +404,29 @@ fun BottomInteractionArea(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. 左侧：模式切换开关 (保持原样，带透明度底色)
+                    // 1. 左侧：日程输入图标
                     Box(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(activeColor.copy(alpha = 0.15f))
-                            .clickable(enabled = noteEnabled && !isLoading) {
+                            .clickable(enabled = !isLoading) {
                                 haptics.selection()
                                 onModeChange(if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE)
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Crossfade(targetState = modeIconRes, label = "ModeSwitch") { iconRes ->
+                        if (isNote) {
                             Icon(
-                                painter = painterResource(id = iconRes),
-                                contentDescription = modeTitle,
+                                imageVector = Icons.Outlined.StickyNote2,
+                                contentDescription = "便签",
+                                tint = activeColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_stat_event),
+                                contentDescription = "日程",
                                 tint = activeColor,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -549,7 +454,7 @@ fun BottomInteractionArea(
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (text.isEmpty()) {
                                     Text(
-                                        text = "一句话安排$modeTitle...",
+                                        text = if (isNote) "记一条便签..." else "一句话安排日程...",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 15.sp
                                     )
@@ -598,7 +503,7 @@ fun BottomInteractionArea(
                             )
 
                             Surface(
-                                onClick = { if (isTextNotBlank) { haptics.confirm(); onManualSubmit(text, isNote) } },
+                                onClick = { if (isTextNotBlank) { haptics.confirm(); onManualSubmit(text) } },
                                 shape = CircleShape,
                                 color = sendBtnContainerColor,
                                 modifier = Modifier.size(40.dp)
@@ -625,19 +530,20 @@ fun BottomInteractionArea(
 @Composable
 fun TimeWheelList(
     scheduleItems: List<ScheduleDisplayItem>,
-    noteEvents: List<Event> = emptyList(),
+    notes: List<NoteEntity> = emptyList(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
     expandFromLeft: Boolean = false,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
-    onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
     onStatusAction: (ScheduleDisplayItem) -> Unit = {},
     pendingStatusKeys: Set<String> = emptySet(),
-    onDeleteNote: (Event) -> Unit = {},
+    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
+    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
     hapticEnabled: Boolean = true
@@ -678,8 +584,8 @@ fun TimeWheelList(
                     }
                 }
             }
-            if (currentMode == FloatingInputMode.NOTE && noteEvents.isNotEmpty()) {
-                items(noteEvents, key = { "note_${it.id}" }) { note ->
+            if (currentMode == FloatingInputMode.NOTE) {
+                items(notes, key = { "note_${it.id ?: it.hashCode()}" }) { note ->
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = cardAlignment
@@ -687,24 +593,16 @@ fun TimeWheelList(
                         FloatingNoteCard(
                             note = note,
                             modifier = cardModifier,
+                            onToggleTodo = { paragraphId -> onToggleNoteTodo(note, paragraphId) },
+                            onDelete = { onDeleteNote(note) {} },
+                            onSave = { title, body -> onSaveNote(note, title, body) {} },
                             expandFromLeft = expandFromLeft,
-                            onDelete = onDeleteNote,
-                            onToggleTodo = { task ->
-                                haptics.selection()
-                                onUpdateEvent(
-                                    note.withNoteMarkdown(
-                                        markdown = toggleMarkdownTask(note.noteMarkdown(), task.lineIndex)
-                                    )
-                                ) {}
-                            },
-                            onSave = { updated -> haptics.confirm(); onUpdateEvent(updated) {} },
                             hapticEnabled = hapticEnabled
                         )
                     }
                 }
-            }
-            if (currentMode == FloatingInputMode.SCHEDULE) {
-                items(sortedScheduleItems, key = { it.stableKey }) { item ->
+            } else {
+            items(sortedScheduleItems, key = { it.stableKey }) { item ->
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = cardAlignment
@@ -724,6 +622,279 @@ fun TimeWheelList(
                         )
                 }
             }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingNoteCard(
+    note: NoteEntity,
+    modifier: Modifier = Modifier,
+    onToggleTodo: (String) -> Unit,
+    onDelete: () -> Unit,
+    onSave: (String, String) -> Unit,
+    expandFromLeft: Boolean = false,
+    hapticEnabled: Boolean = true
+) {
+    val haptics = rememberAppHaptics(hapticEnabled)
+    val document = remember(note.documentJson, note.plainText) { note.document() }
+    var isExpanded by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(false) }
+    var draftTitle by remember(note.id, note.title) { mutableStateOf(note.title) }
+    var draftBody by remember(note.id, note.plainText) { mutableStateOf(note.plainText) }
+    val todos = remember(document) { document.paragraphs.filter { it.type == NoteParagraphType.TODO } }
+    val progressLabel = remember(todos) {
+        when {
+            todos.isEmpty() -> null
+            todos.all { it.checked } -> "已完成"
+            else -> "${todos.count { it.checked }}/${todos.size}"
+        }
+    }
+    val body = remember(document) {
+        document.paragraphs
+            .filter { it.type != NoteParagraphType.TODO && it.type != NoteParagraphType.IMAGE && it.type != NoteParagraphType.FILE }
+            .map { it.text.trim() }
+            .filter { it.isNotBlank() }
+            .take(3)
+    }
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val actionButtonSize = 46.dp
+    val actionAreaSidePadding = 14.dp
+    val cardToButtonGap = 12.dp
+    val actionDirection = if (expandFromLeft) 1f else -1f
+    val deleteDirection = -actionDirection
+    val actionAreaWidthPx = with(density) { (actionAreaSidePadding + actionButtonSize + cardToButtonGap).toPx() }
+    val revealOffsetPx = actionDirection * actionAreaWidthPx
+    val revealSnapThresholdPx = actionAreaWidthPx * 0.35f
+    val deleteTriggerPx = with(density) { 110.dp.toPx() }
+    val screenWidthPx = with(density) { 400.dp.toPx() }
+    val dragLimitPx = revealOffsetPx + actionDirection * with(density) { 40.dp.toPx() }
+    val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
+
+    Box(modifier = modifier) {
+        if (offsetX.value * actionDirection > 1f) {
+            val revealProgress = ((offsetX.value * actionDirection) / actionAreaWidthPx).coerceIn(0f, 1f)
+            Box(
+                modifier = if (expandFromLeft) Modifier.matchParentSize().padding(start = actionAreaSidePadding) else Modifier.matchParentSize().padding(end = actionAreaSidePadding),
+                contentAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Surface(
+                    modifier = Modifier.size(actionButtonSize).alpha(revealProgress),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        haptics.click()
+                        draftTitle = note.title
+                        draftBody = note.plainText
+                        isExpanded = true
+                        isEditing = true
+                        scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
+                    }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .then(if (!isEditing) Modifier.pointerInput(note.id) {
+                detectHorizontalDragGestures(
+                    onDragStart = { scope.launch { offsetX.stop() } },
+                    onDragEnd = {
+                        val shouldRevealAction = offsetX.value * actionDirection >= revealSnapThresholdPx
+                        val fullSwipeDelete = offsetX.value * deleteDirection >= deleteTriggerPx
+                        scope.launch {
+                            when {
+                                fullSwipeDelete -> {
+                                    haptics.warning()
+                                    offsetX.animateTo(deleteDirection * screenWidthPx, tween(200))
+                                    onDelete()
+                                }
+                                shouldRevealAction -> offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                                else -> offsetX.animateTo(0f, swipeSpringSpec)
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            if (offsetX.value * actionDirection >= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
+                            else offsetX.animateTo(0f, swipeSpringSpec)
+                        }
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        scope.launch {
+                            val current = offsetX.value
+                            val draggingAction = dragAmount * actionDirection > 0f
+                            val draggingDelete = dragAmount * deleteDirection > 0f
+                            val resistance = when {
+                                draggingAction && current * actionDirection >= actionAreaWidthPx -> 0.45f
+                                draggingDelete && current * deleteDirection >= deleteTriggerPx -> 0.95f
+                                else -> 0.85f
+                            }
+                            val next = current + dragAmount * resistance
+                            offsetX.snapTo(if (expandFromLeft) next.coerceAtMost(dragLimitPx) else next.coerceAtLeast(dragLimitPx))
+                        }
+                    }
+                )
+            } else Modifier)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    haptics.click()
+                    scope.launch {
+                        if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
+                        else if (!isEditing) isExpanded = !isExpanded
+                    }
+                },
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 2.dp
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = note.displayTitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (progressLabel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        FloatingNoteProgressLabel(
+                            progressLabel,
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.updatedAt)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
+                    exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
+                ) {
+                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+                        Spacer(Modifier.height(8.dp))
+                        AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editing ->
+                            if (editing) {
+                                Column {
+                                    CompactTextField(value = draftTitle, onValueChange = { draftTitle = it }, placeholder = "标题", singleLine = true, maxLines = 1)
+                                    Spacer(Modifier.height(8.dp))
+                                    CompactTextField(value = draftBody, onValueChange = { draftBody = it }, placeholder = "正文", singleLine = false, maxLines = 6)
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                        FloatingCompactTextButton(
+                                            text = "取消",
+                                            onClick = { draftTitle = note.title; draftBody = note.plainText; isEditing = false }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        FloatingCompactPrimaryButton(
+                                            text = "保存",
+                                            onClick = { haptics.confirm(); onSave(draftTitle.trim().ifBlank { "无标题" }, draftBody); isEditing = false }
+                                        )
+                                    }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    todos.take(5).forEach { todo ->
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { haptics.selection(); onToggleTodo(todo.id) }) {
+                                            FloatingTodoMark(checked = todo.checked, onClick = { haptics.selection(); onToggleTodo(todo.id) })
+                                            Spacer(Modifier.width(10.dp))
+                                            Text(
+                                                todo.text.ifBlank { "未命名待办" },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (todo.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f) else MaterialTheme.colorScheme.onSurface,
+                                                textDecoration = if (todo.checked) TextDecoration.LineThrough else null,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    if (todos.isEmpty()) {
+                                        body.forEach { line -> Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                                        if (body.isEmpty()) Text("空白便签", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!isExpanded) Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingNoteProgressLabel(text: String, textColor: Color, backgroundColor: Color) {
+    Box(
+        modifier = Modifier
+            .background(backgroundColor, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun FloatingTodoMark(checked: Boolean, onClick: () -> Unit) {
+    val accent = if (checked) Color.Gray else MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(4.dp)
+    Box(
+        modifier = Modifier
+            .width(24.dp)
+            .height(24.dp)
+            .clickable { onClick() },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .background(if (checked) accent.copy(alpha = 0.14f) else Color.Transparent, shape)
+                .border(1.dp, accent.copy(alpha = if (checked) 0.52f else 0.36f), shape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Text(
+                    text = "✓",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = accent
+                )
             }
         }
     }
@@ -952,306 +1123,35 @@ private fun compactFloatingDayWeather(day: WeatherDailyForecast): String {
 }
 
 @Composable
-private fun FloatingNoteCard(
-    note: Event,
-    modifier: Modifier = Modifier,
-    expandFromLeft: Boolean = false,
-    onToggleTodo: (com.antgskds.calendarassistant.core.note.MarkdownTaskItem) -> Unit,
-    onDelete: (Event) -> Unit,
-    onSave: (Event) -> Unit,
-    hapticEnabled: Boolean = true
-) {
-    var isExpanded by remember { mutableStateOf(false) }
-    var isEditing by remember { mutableStateOf(false) }
-    var draftTitle by remember { mutableStateOf(note.title) }
-    var draftMarkdown by remember { mutableStateOf(note.noteMarkdown()) }
-    val offsetX = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val haptics = rememberAppHaptics(hapticEnabled)
-    val actionButtonSize = 46.dp
-    val actionAreaSidePadding = 14.dp
-    val cardToButtonGap = 12.dp
-    val actionDirection = if (expandFromLeft) 1f else -1f
-    val deleteDirection = -actionDirection
-    val actionAreaWidthDp = actionAreaSidePadding + actionButtonSize + cardToButtonGap
-    val actionAreaWidthPx = with(density) { actionAreaWidthDp.toPx() }
-    val revealOffsetPx = actionDirection * actionAreaWidthPx
-    val revealSnapThresholdPx = actionAreaWidthPx * 0.35f
-    val deleteTriggerPx = with(density) { 110.dp.toPx() }
-    val screenWidthPx = with(density) { 400.dp.toPx() }
-    val dragLimitPx = revealOffsetPx + actionDirection * with(density) { 40.dp.toPx() }
-    val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
-    val tasks = remember(note.description, note.lastModifiedMillis) { extractMarkdownTasks(note.noteMarkdown()) }
-    val bodyMarkdown = remember(note.description, note.lastModifiedMillis) { markdownWithoutTasks(note.noteMarkdown()) }
-    val floatingBodyMarkdown = remember(bodyMarkdown) {
-        bodyMarkdown.lines().joinToString("\n") { line ->
-            line.replaceFirst(Regex("^#{1,6}\\s+"), "")
-        }
+private fun FloatingCompactTextButton(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = Color.Transparent
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
-    val maxExpandedLines = 6
-    val maxTaskLinesBeforeHideBody = 5
-    val progressLabel = when {
-        tasks.isEmpty() -> null
-        tasks.all { it.isDone } -> "已完成"
-        else -> "${tasks.count { it.isDone }}/${tasks.size}"
-    }
-    val previewTasks = when {
-        tasks.size > maxExpandedLines -> tasks.take(maxTaskLinesBeforeHideBody)
-        else -> tasks.take(maxExpandedLines.coerceAtMost(maxTaskLinesBeforeHideBody))
-    }
-    val remainingTaskCount = (tasks.size - previewTasks.size).coerceAtLeast(0)
-    val remainingBodyLines = if (remainingTaskCount > 0) {
-        0
-    } else if (previewTasks.size >= maxTaskLinesBeforeHideBody) {
-        0
-    } else {
-        (maxExpandedLines - previewTasks.size).coerceAtLeast(0)
-    }
+}
 
-    LaunchedEffect(note.id, note.lastModifiedMillis) {
-        if (!isEditing) {
-            draftTitle = note.title
-            draftMarkdown = note.noteMarkdown()
-        }
-    }
-
-    Box(modifier = modifier) {
-        if (offsetX.value * actionDirection > 1f) {
-            val revealProgress = ((offsetX.value * actionDirection) / actionAreaWidthPx).coerceIn(0f, 1f)
-            Box(
-                modifier = if (expandFromLeft) {
-                    Modifier.matchParentSize().padding(start = actionAreaSidePadding)
-                } else {
-                    Modifier.matchParentSize().padding(end = actionAreaSidePadding)
-                },
-                contentAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .size(actionButtonSize)
-                        .alpha(revealProgress),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    onClick = {
-                        haptics.click()
-                        draftTitle = note.title
-                        draftMarkdown = note.noteMarkdown()
-                        isExpanded = true
-                        isEditing = true
-                        scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
-                    }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .then(
-                    if (!isEditing) {
-                        Modifier.pointerInput(note.id) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { scope.launch { offsetX.stop() } },
-                                onDragEnd = {
-                                    val shouldRevealAction = offsetX.value * actionDirection >= revealSnapThresholdPx
-                                    val fullSwipeDelete = offsetX.value * deleteDirection >= deleteTriggerPx
-                                    scope.launch {
-                                        when {
-                                            fullSwipeDelete -> {
-                                                haptics.warning()
-                                                offsetX.animateTo(deleteDirection * screenWidthPx, tween(200))
-                                                onDelete(note)
-                                            }
-                                            shouldRevealAction -> offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
-                                            else -> offsetX.animateTo(0f, swipeSpringSpec)
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    scope.launch {
-                                        if (offsetX.value * actionDirection >= revealSnapThresholdPx) offsetX.animateTo(revealOffsetPx, swipeSpringSpec)
-                                        else offsetX.animateTo(0f, swipeSpringSpec)
-                                    }
-                                },
-                                onHorizontalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    scope.launch {
-                                        val current = offsetX.value
-                                        val draggingAction = dragAmount * actionDirection > 0f
-                                        val draggingDelete = dragAmount * deleteDirection > 0f
-                                        val resistance = when {
-                                            draggingAction && current * actionDirection >= actionAreaWidthPx -> 0.45f
-                                            draggingDelete && current * deleteDirection >= deleteTriggerPx -> 0.95f
-                                            else -> 0.85f
-                                        }
-                                        val next = current + dragAmount * resistance
-                                        offsetX.snapTo(if (expandFromLeft) next.coerceAtMost(dragLimitPx) else next.coerceAtLeast(dragLimitPx))
-                                    }
-                                }
-                            )
-                        }
-                    } else {
-                        Modifier
-                    }
-                )
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    haptics.click()
-                    scope.launch {
-                        if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
-                        else if (!isEditing) isExpanded = !isExpanded
-                    }
-                },
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 2.dp
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = note.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (progressLabel != null) {
-                        Spacer(Modifier.width(8.dp))
-                        StatusLabel(
-                            progressLabel,
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.padding(bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.lastModifiedMillis)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = isExpanded,
-                    enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
-                    exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
-                ) {
-                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
-                        Spacer(Modifier.height(8.dp))
-                        AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editingState ->
-                            if (editingState) {
-                                Column {
-                                    CompactTextField(
-                                        value = draftTitle,
-                                        onValueChange = { draftTitle = it },
-                                        placeholder = "标题",
-                                        singleLine = true,
-                                        maxLines = 1
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    CompactTextField(
-                                        value = draftMarkdown,
-                                        onValueChange = { draftMarkdown = it },
-                                        placeholder = "Markdown 内容",
-                                        singleLine = false,
-                                        maxLines = 6
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        TextButton(onClick = {
-                                            draftTitle = note.title
-                                            draftMarkdown = note.noteMarkdown()
-                                            isEditing = false
-                                        }) { Text("取消", fontSize = 13.sp) }
-                                        Spacer(Modifier.width(8.dp))
-                                        Button(onClick = {
-                                            haptics.confirm()
-                                            val updated = note.withNoteMarkdown(
-                                                title = draftTitle.trim().ifBlank { "无标题" },
-                                                markdown = draftMarkdown
-                                            )
-                                            onSave(updated)
-                                            isEditing = false
-                                        }) { Text("保存", fontSize = 13.sp) }
-                                    }
-                                }
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    previewTasks.forEach { task ->
-                                        Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-                                            Checkbox(
-                                                checked = task.isDone,
-                                                onCheckedChange = { onToggleTodo(task) },
-                                                modifier = Modifier.size(22.dp),
-                                                colors = CheckboxDefaults.colors(
-                                                    checkedColor = MaterialTheme.colorScheme.primary,
-                                                    uncheckedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                                )
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                text = task.text,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = if (task.isDone) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
-                                                textDecoration = if (task.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                        }
-                                    }
-                                    if (remainingBodyLines > 0 && bodyMarkdown.isNotBlank()) {
-                                        MarkdownText(
-                                            markdown = floatingBodyMarkdown,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            linkColor = MaterialTheme.colorScheme.primary,
-                                            enableLinkClicks = true,
-                                            maxLines = remainingBodyLines,
-                                            textSizeSp = MaterialTheme.typography.bodySmall.fontSize.value,
-                                            lineSpacingExtraPx = 4f
-                                        )
-                                    }
-                                    if (remainingTaskCount > 0) {
-                                        Text(
-                                            text = "+$remainingTaskCount 项",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+@Composable
+private fun FloatingCompactPrimaryButton(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.primary
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimary,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -1576,7 +1476,9 @@ fun ScheduleCard(
     }
 
     val hasAction = remember(item.tag, isExpired, item.isCompleted, item.isCheckedIn, hasPendingStatus) {
-        item.tag != EventTags.COURSE && (hasPendingStatus || !isExpired || item.isCompleted || item.isCheckedIn)
+        item.tag != EventTags.COURSE && (
+            hasPendingStatus || (!isExpired && !item.isCompleted && !item.isCheckedIn)
+        )
     }
 
     val displayTitle = if (isExpired) item.title else model.title
@@ -1641,7 +1543,7 @@ fun ScheduleCard(
         ActionIconType.COMPLETE -> Icons.Rounded.CheckCircle
     }
     val effectiveActionIcon = if (hasPendingStatus) Icons.Rounded.Undo else actionIcon
-    val actionColor = if (hasPendingStatus) MaterialTheme.colorScheme.primary else Color(model.actionIcon.color)
+    val actionColor = if (hasPendingStatus) Color(0xFFFFA726) else Color(model.actionIcon.color)
 
     @Composable
     fun StatusActionButton() {

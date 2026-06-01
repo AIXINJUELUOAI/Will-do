@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.core.content
 
 enum class ContentSourceType {
     SCHEDULE,
-    NOTE,
     WEATHER,
     VOICE_CAPTURE
 }

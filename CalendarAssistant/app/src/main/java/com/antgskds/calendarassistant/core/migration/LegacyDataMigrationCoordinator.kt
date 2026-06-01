@@ -18,7 +18,7 @@ import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.isNoteTag
+import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
 import com.antgskds.calendarassistant.calendar.sync.SystemCalendarSyncManager
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
@@ -165,8 +165,8 @@ class LegacyDataMigrationCoordinator(
     }
 
     fun exportEventsData(): String {
-        val activeEvents = db.eventsDao().getAllEventsOrTasks()
-        val archivedEvents = db.eventsDao().getArchivedEvents()
+        val activeEvents = db.eventsDao().getAllEventsOrTasks().filterNot { it.isRemovedNoteEvent() }
+        val archivedEvents = db.eventsDao().getArchivedEvents().filterNot { it.isRemovedNoteEvent() }
         return json.encodeToString(
             EventsBackupDataV3(
                 version = 3,
@@ -182,7 +182,7 @@ class LegacyDataMigrationCoordinator(
 
     fun importEventsData(jsonString: String): Result<ImportResult> = runCatching {
         val settings = settingsRepository.loadSettings()
-        val rawCandidates = parseBackupContentCandidates(jsonString, settings)
+        val rawCandidates = parseBackupContentCandidates(jsonString, settings).filterNot { it.isRemovedNoteEvent() }
         val hasCrossDeviceSystemBindings = rawCandidates.any(::hasSystemCalendarBinding)
         val candidates = deduplicateImportCandidatePool(
             rawCandidates.map(::normalizeManualImportCandidate),
@@ -255,6 +255,7 @@ class LegacyDataMigrationCoordinator(
                 if (masterInstances.isEmpty()) return@forEach
 
                 val tag = normalizeTag(resolveTag(master.ruleId))
+                if (isRemovedNoteTag(tag)) return@forEach
 
                 if (tag == EventTags.COURSE) {
                     buildCourseCandidateFromLegacyMaster(master, settings)?.let { candidates += it }
@@ -463,6 +464,7 @@ class LegacyDataMigrationCoordinator(
         if (title.isBlank()) return null
 
         val tag = normalizeTag(legacy.tag)
+        if (isRemovedNoteTag(tag)) return null
         if (tag == EventTags.COURSE) {
             if (!legacy.isRecurringParent) return null
             val meta = CourseEventMapper.parseMeta(legacy.description) ?: return null
@@ -848,8 +850,7 @@ class LegacyDataMigrationCoordinator(
     private fun shouldQueueForSystemPushAfterImport(event: Event): Boolean {
         return event.archivedAt == null &&
             event.importId.isBlank() &&
-            event.parentId == 0L &&
-            !isNoteTag(event.tag)
+            event.parentId == 0L
     }
 
     private fun shouldDetachExistingSystemBinding(existing: Event, candidate: ImportCandidate): Boolean {
@@ -917,10 +918,16 @@ class LegacyDataMigrationCoordinator(
             "ticket" -> EventTags.TICKET
             "sender" -> EventTags.SENDER
             "course", "__removed_course__" -> EventTags.COURSE
-            "note" -> EventTags.NOTE
+            "note", "便签" -> REMOVED_NOTE_TAG
             else -> normalized
         }
     }
+
+    private fun isRemovedNoteTag(tag: String?): Boolean {
+        return isRetiredNoteTag(tag)
+    }
+
+    private fun Event.isRemovedNoteEvent(): Boolean = isRemovedNoteTag(tag)
 
     private fun resolveLegacyState(stateId: String?, completedAtMillis: Long?): Int {
         if (completedAtMillis != null && completedAtMillis > 0L) return STATE_COMPLETED
@@ -977,6 +984,7 @@ class LegacyDataMigrationCoordinator(
         return when (tag?.trim()?.lowercase().orEmpty()) {
             "", "general" -> EventTags.GENERAL
             "__removed_course__", "course" -> EventTags.COURSE
+            "note", "便签" -> REMOVED_NOTE_TAG
             else -> tag?.trim()?.lowercase().orEmpty()
         }
     }
@@ -1533,6 +1541,7 @@ class LegacyDataMigrationCoordinator(
         private const val KEY_MIGRATION_SUMMARY = "legacy_to_events_migration_summary"
 
         private const val MIGRATION_VERSION = 1
+        private const val REMOVED_NOTE_TAG = "note"
         private const val LEGACY_DB_NAME = "calendar_assistant.db"
         private const val QUARANTINE_DIR_NAME = "legacy_quarantine"
         private const val QUARANTINE_RETENTION_MILLIS = 3L * 24L * 60L * 60L * 1000L

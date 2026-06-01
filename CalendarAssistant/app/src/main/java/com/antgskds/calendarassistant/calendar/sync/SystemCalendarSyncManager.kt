@@ -28,10 +28,9 @@ import com.antgskds.calendarassistant.calendar.helpers.TAG_GENERAL
 import com.antgskds.calendarassistant.calendar.models.CalDAVCalendar
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventType
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
-import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.calendar.receivers.CalDAVSyncReceiver
+import com.antgskds.calendarassistant.core.util.EventDuplicateSignature
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import java.time.Duration
 import java.time.Instant
@@ -147,10 +146,6 @@ class SystemCalendarSyncManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun insertCalDAVEvent(event: Event): Event {
-        if (isNoteTag(event.tag)) {
-            android.util.Log.i("CalDAVSync", "insertCalDAVEvent skipped note-tag localId=${event.id} title=${event.title}")
-            return event
-        }
         if (!hasCalendarPermission()) {
             android.util.Log.w("CalDAVSync", "insertCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
             return event
@@ -204,10 +199,6 @@ class SystemCalendarSyncManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun updateCalDAVEvent(event: Event): Event {
-        if (isNoteTag(event.tag)) {
-            android.util.Log.i("CalDAVSync", "updateCalDAVEvent skipped note-tag localId=${event.id} title=${event.title}")
-            return event
-        }
         if (!hasCalendarPermission()) {
             android.util.Log.w("CalDAVSync", "updateCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
             return event
@@ -332,6 +323,11 @@ class SystemCalendarSyncManager(private val context: Context) {
     private fun fetchCalDAVCalendarEvents(calendar: CalDAVCalendar, eventTypeId: Long) {
         val source = "$CALDAV-${calendar.id}"
         val existing = db.eventsDao().getEventsFromCalDAVCalendar(source).associateBy { it.importId }.toMutableMap()
+        val unboundLocalBySignature = db.eventsDao().getAllEventsOrTasks()
+            .asSequence()
+            .filter { it.parentId == 0L && !hasCalDAVBinding(it) }
+            .associateBy { EventDuplicateSignature.key(it) }
+            .toMutableMap()
         val fetchedImportIds = HashSet<String>()
 
         // 系统日历事件可能没有自定义颜色 (EVENT_COLOR=0)，优先保留已有本地颜色
@@ -459,10 +455,8 @@ class SystemCalendarSyncManager(private val context: Context) {
                                 ),
                                 type = base?.type ?: 0,
                                 state = base?.state ?: STATE_PENDING,
-                                tag = when {
-                                    isNoteTag(base?.tag) -> EventTags.NOTE
-                                    else -> inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL)
-                                }
+                                tag = inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL),
+                                archivedAt = base?.archivedAt
                             )
                             db.eventsDao().insertOrUpdate(exceptionEvent)
                         } else {
@@ -478,7 +472,7 @@ class SystemCalendarSyncManager(private val context: Context) {
                     continue
                 }
 
-                val event = Event(
+                var event = Event(
                     id = base?.id,
                     startTS = startTs,
                     endTS = endTs,
@@ -509,11 +503,33 @@ class SystemCalendarSyncManager(private val context: Context) {
                     ),
                     type = base?.type ?: 0,
                     state = base?.state ?: STATE_PENDING,
-                    tag = when {
-                        isNoteTag(base?.tag) -> EventTags.NOTE
-                        else -> inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL)
-                    }
+                    tag = inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL),
+                    archivedAt = base?.archivedAt
                 )
+
+                val matchedUnbound = if (base == null) {
+                    unboundLocalBySignature.remove(EventDuplicateSignature.key(event))
+                } else {
+                    null
+                }
+                if (matchedUnbound != null) {
+                    event = event.copy(
+                        id = matchedUnbound.id,
+                        type = matchedUnbound.type,
+                        state = matchedUnbound.state,
+                        archivedAt = matchedUnbound.archivedAt,
+                        eventType = if (matchedUnbound.eventType > 0) matchedUnbound.eventType else event.eventType,
+                        color = if (matchedUnbound.color != 0) matchedUnbound.color else event.color,
+                        location = matchedUnbound.location.ifBlank { event.location },
+                        description = if (matchedUnbound.description.length >= event.description.length) matchedUnbound.description else event.description,
+                        tag = inferEventTagFromDescription(event.description, matchedUnbound.tag),
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                    android.util.Log.i(
+                        "CalDAVSync",
+                        "fetchCalDAVCalendarEvents bound duplicate localId=${matchedUnbound.id} importId=$importId title=$title"
+                    )
+                }
 
                 if (base == null || !isSameForSync(base, event)) {
                     db.eventsDao().insertOrUpdate(event)
@@ -543,7 +559,13 @@ class SystemCalendarSyncManager(private val context: Context) {
         return event.source == expectedSource &&
             event.importId.startsWith("$expectedSource-") &&
             event.getCalDAVEventId() > 0L &&
-            event.parentId == 0L
+            event.parentId == 0L &&
+            event.archivedAt == null
+    }
+
+    private fun hasCalDAVBinding(event: Event): Boolean {
+        return event.source.startsWith(CALDAV, ignoreCase = true) ||
+            event.importId.startsWith(CALDAV, ignoreCase = true)
     }
 
     private fun parseDurationSeconds(durationRaw: String): Long {
@@ -630,12 +652,14 @@ class SystemCalendarSyncManager(private val context: Context) {
         val oldForSync = old.copy(
             id = null,
             lastUpdated = 0L,
-            description = stripSourceImageMarkers(old.description)
+            description = stripSourceImageMarkers(old.description),
+            archivedAt = null
         )
         val newForSync = new.copy(
             id = null,
             lastUpdated = 0L,
-            description = stripSourceImageMarkers(new.description)
+            description = stripSourceImageMarkers(new.description),
+            archivedAt = null
         )
         return oldForSync == newForSync
     }

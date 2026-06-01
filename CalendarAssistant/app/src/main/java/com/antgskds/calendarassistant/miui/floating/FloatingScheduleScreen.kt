@@ -24,13 +24,11 @@ import com.antgskds.calendarassistant.data.model.WeatherData
 @Composable
 fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
-    noteEvents: List<Event>,
     weatherData: WeatherData?,
     weatherForecastRange: Int = 0,
-    noteEnabled: Boolean,
     expandSide: String,
     onClose: () -> Unit,
-    onManualInput: (String, Boolean, () -> Unit) -> Unit,
+    onManualInput: (String, () -> Unit) -> Unit,
     onPickImageRequest: (() -> Unit) -> Unit,
     onUpdateEvent: (Event, () -> Unit) -> Unit,
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit,
@@ -39,8 +37,6 @@ fun FloatingScheduleScreen(
     pendingStatusKeys: Set<String>,
     undoPendingLabel: String?,
     onUndoAction: () -> Unit,
-    onDeleteNote: (Event, () -> Unit) -> Unit,
-    onRestoreNote: (Event, () -> Unit) -> Unit,
     onLoadingChange: (Boolean) -> Unit,
     hapticEnabled: Boolean = true
 ) {

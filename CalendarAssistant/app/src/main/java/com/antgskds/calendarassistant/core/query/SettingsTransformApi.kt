@@ -27,7 +27,6 @@ interface SettingsTransformApi {
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
         forceInstantCodeTimeToNow: Boolean? = null,
-        noteEnabled: Boolean? = null,
         predictiveBackEnabled: Boolean? = null,
         clipboardCodeRecognitionEnabled: Boolean? = null,
         widgetThemeMode: Int? = null,

@@ -60,6 +60,7 @@ import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
@@ -102,7 +103,9 @@ fun HomePage(
     onAddEventClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
-    onEditNote: (Event) -> Unit = {},
+    onEditNote: (NoteEntity) -> Unit = {},
+    onCreateNote: () -> Unit = {},
+    onRequestDeleteNote: (NoteEntity) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
@@ -115,12 +118,11 @@ fun HomePage(
 
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
-    var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
+    var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
 
-    val noteTabIndex = if (uiState.settings.noteEnabled) 1 else -1
-    val allTabIndex = if (uiState.settings.noteEnabled) 2 else 1
+    val allTabIndex = 1
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -322,8 +324,6 @@ fun HomePage(
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         mutableStateOf(notificationManager.areNotificationsEnabled())
     }
-    var pendingDeleteNote by remember { mutableStateOf<Event?>(null) }
-
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val floatingBarOffset = IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
     val floatingBarContentPadding = IntegratedFloatingBarVisualHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
@@ -413,8 +413,8 @@ fun HomePage(
                             isSearchMode -> {
                                 isSearchMode = false
                                 when (currentTab) {
-                                    noteTabIndex -> noteSearchQuery = ""
                                     allTabIndex -> allSearchQuery = ""
+                                    2 -> noteSearchQuery = ""
                                     else -> todaySearchQuery = ""
                                 }
                             }
@@ -438,7 +438,7 @@ fun HomePage(
                         title = {
                             val title = when (currentTab) {
                                 0 -> "今日日程"
-                                noteTabIndex -> "便签"
+                                2 -> "便签"
                                 else -> "全部日程"
                             }
                             Text(title)
@@ -452,7 +452,7 @@ fun HomePage(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == noteTabIndex || currentTab == allTabIndex)
+                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == allTabIndex || currentTab == 2)
                     val searchBarHeight = 64.dp
                     val searchBarOffset = searchBarHeight + 12.dp
                     val contentBottomPadding = if (showSearchBar) {
@@ -639,16 +639,7 @@ fun HomePage(
                                 }
                             }
                         }
-                    } else if (currentTab == noteTabIndex) {
-                        NotePage(
-                            viewModel = viewModel,
-                            searchQuery = noteSearchQuery,
-                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onEditNote = { onEditNote(it) },
-                            onPendingDeleteChange = { pendingDeleteNote = it },
-                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
-                        )
-                    } else {
+                    } else if (currentTab == allTabIndex) {
                         AllEventsPage(
                             viewModel = viewModel,
                             onEditItem = { onEditItem(it) },
@@ -658,6 +649,15 @@ fun HomePage(
                             searchQuery = allSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
                             onRequestDeleteItem = onRequestDeleteItem,
+                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                        )
+                    } else {
+                        NotePage(
+                            viewModel = viewModel,
+                            searchQuery = noteSearchQuery,
+                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
+                            onEditNote = onEditNote,
+                            onPendingDeleteChange = { note -> note?.let(onRequestDeleteNote) },
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     }
@@ -697,14 +697,14 @@ fun HomePage(
                         ) {
                             OutlinedTextField(
                                 value = when (currentTab) {
-                                    noteTabIndex -> noteSearchQuery
                                     allTabIndex -> allSearchQuery
+                                    2 -> noteSearchQuery
                                     else -> todaySearchQuery
                                 },
                                 onValueChange = {
                                     when (currentTab) {
-                                        noteTabIndex -> noteSearchQuery = it
                                         allTabIndex -> allSearchQuery = it
+                                        2 -> noteSearchQuery = it
                                         else -> todaySearchQuery = it
                                     }
                                 },
@@ -766,24 +766,6 @@ fun HomePage(
             predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
             onConfirm = {},
             onDismiss = cancelImageImport,
-            modifier = Modifier
-                .padding(bottom = floatingBarOffset + 16.dp)
-        )
-
-        PredictiveFloatingActionCard(
-            visible = pendingDeleteNote != null,
-            title = "删除便签",
-            content = "删除后无法恢复，确认删除这条便签吗？",
-            confirmText = "删除",
-            dismissText = "取消",
-            isDestructive = true,
-            isLoading = false,
-            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
-            onConfirm = {
-                pendingDeleteNote?.let(viewModel::deleteEvent)
-                pendingDeleteNote = null
-            },
-            onDismiss = { pendingDeleteNote = null },
             modifier = Modifier
                 .padding(bottom = floatingBarOffset + 16.dp)
         )

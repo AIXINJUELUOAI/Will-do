@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.core.util
 
 import android.util.Log
 import com.antgskds.calendarassistant.core.util.EventFingerprint
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 
@@ -90,16 +89,16 @@ object EventDeduplicator {
         existingArchivedEvents: List<Event>,
         preserveArchivedStatus: Boolean = true
     ): DeduplicationResult {
-        // 1. 过滤掉便签与课程（不参与去重）
-        val importRegularEvents = importEvents.filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
+        // 1. 过滤掉课程（不参与去重）
+        val importRegularEvents = importEvents.filter { it.tag != "__removed_course__" }
 
         // 2. 构建现有事件的指纹集合
         val existingActiveFingerprints = existingActiveEvents
-            .filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
+            .filter { it.tag != "__removed_course__" }
             .associateBy { generateFingerprint(it) }
 
         val existingArchivedFingerprints = existingArchivedEvents
-            .filter { it.tag != EventTags.NOTE && it.tag != "__removed_course__" }
+            .filter { it.tag != "__removed_course__" }
             .associateBy { generateFingerprint(it) }
 
         val toAdd = mutableListOf<Event>()

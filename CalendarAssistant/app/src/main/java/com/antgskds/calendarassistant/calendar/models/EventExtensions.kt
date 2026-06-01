@@ -23,12 +23,16 @@ object EventTags {
     const val TICKET  = "ticket"
     const val SENDER  = "sender"
     const val COURSE  = "course"
-    const val NOTE    = "note"
 }
 
 fun normalizeEventTag(tag: String?): String = tag?.trim()?.lowercase().orEmpty()
 
-fun isNoteTag(tag: String?): Boolean = normalizeEventTag(tag) == EventTags.NOTE
+fun isRetiredNoteTag(tag: String?): Boolean {
+    return when (normalizeEventTag(tag)) {
+        "note", "便签" -> true
+        else -> false
+    }
+}
 
 fun inferEventTagFromDescription(description: String?, fallbackTag: String = EventTags.GENERAL): String {
     val header = extractDescriptionHeader(description)
@@ -42,7 +46,6 @@ fun inferEventTagFromDescription(description: String?, fallbackTag: String = Eve
         "ticket", "取票" -> EventTags.TICKET
         "sender", "寄件" -> EventTags.SENDER
         "course", "课程" -> EventTags.COURSE
-        "note", "便签" -> EventTags.NOTE
         else -> null
     }
     return headerTag ?: normalizeEventTag(fallbackTag).ifBlank { EventTags.GENERAL }

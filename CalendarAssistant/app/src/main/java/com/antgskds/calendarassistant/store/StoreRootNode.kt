@@ -13,7 +13,6 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.EventType
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
-import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationErrorCode
@@ -228,7 +227,7 @@ class StoreRootNode(context: Context) {
         )
         localNode.upsertEvent(updated)
 
-        val stored = if (allowSystemPush(syncToSystem) && !isNoteTag(updated.tag)) {
+        val stored = if (allowSystemPush(syncToSystem)) {
             val synced = syncNode.updateToSystem(updated)
             syncNode.insertRepeatException(synced, occurrenceTs)
             localNode.upsertEvent(synced)
@@ -480,7 +479,7 @@ class StoreRootNode(context: Context) {
             val childId = localNode.upsertEvent(child)
 
             // 事务外的同步操作
-            if (allowSystemPush(syncToSystem) && !isNoteTag(updatedParent.tag)) {
+            if (allowSystemPush(syncToSystem)) {
                 val syncedParent = syncNode.updateToSystem(updatedParent)
                 localNode.upsertEvent(syncedParent)
                 val childWithId = child.copy(id = childId)
@@ -510,10 +509,8 @@ class StoreRootNode(context: Context) {
         )
         localNode.upsertEvent(updatedParent)
 
-        val storedParent = if (allowSystemPush(true) && !isNoteTag(updatedParent.tag)) {
-            if (!isNoteTag(event.tag)) {
-                syncNode.deleteFromSystem(event)
-            }
+        val storedParent = if (allowSystemPush(true)) {
+            syncNode.deleteFromSystem(event)
             val synced = syncNode.updateToSystem(updatedParent)
             localNode.upsertEvent(synced)
             synced
@@ -578,7 +575,7 @@ class StoreRootNode(context: Context) {
             lastUpdated = nowSeconds()
         )
         localNode.upsertEvent(updated)
-        if (allowSystemPush(syncToSystem) && !isNoteTag(updated.tag)) {
+        if (allowSystemPush(syncToSystem)) {
             val synced = syncNode.updateToSystem(updated)
             localNode.upsertEvent(synced)
         }
@@ -598,7 +595,7 @@ class StoreRootNode(context: Context) {
             lastUpdated = nowSeconds()
         )
         localNode.upsertEvent(updatedParent)
-        if (allowSystemPush(syncToSystem) && !isNoteTag(updatedParent.tag)) {
+        if (allowSystemPush(syncToSystem)) {
             val synced = syncNode.updateToSystem(updatedParent)
             localNode.upsertEvent(synced)
         }
@@ -646,7 +643,6 @@ class StoreRootNode(context: Context) {
     )
 
     private fun evaluateSystemPush(syncRequested: Boolean, tag: String): SystemPushDecision {
-        if (isNoteTag(tag)) return SystemPushDecision(false, "tag-note")
         if (!syncRequested) return SystemPushDecision(false, "sync-requested-false")
         if (!configStore.isSyncEnabled()) return SystemPushDecision(false, "sync-disabled")
         if (SyncLoopGuard.isPullSyncInProgress()) return SystemPushDecision(false, "pull-sync-in-progress")

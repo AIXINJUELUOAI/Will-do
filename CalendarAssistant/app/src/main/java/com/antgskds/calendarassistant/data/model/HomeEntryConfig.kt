@@ -3,16 +3,12 @@ package com.antgskds.calendarassistant.data.model
 object HomeEntryKey {
     const val SIDEBAR = "menu"
     const val TODAY = "today"
-    const val NOTE = "note"
     const val ALL = "all"
+    const val NOTE = "note"
 }
 
-fun sanitizeHomeBottomItems(raw: List<String>, noteEnabled: Boolean): List<String> {
-    val allowed = if (noteEnabled) {
-        setOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL)
-    } else {
-        setOf(HomeEntryKey.TODAY, HomeEntryKey.ALL)
-    }
+fun sanitizeHomeBottomItems(raw: List<String>): List<String> {
+    val allowed = setOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE)
 
     val cleaned = raw
         .map { it.trim().lowercase() }
@@ -22,11 +18,7 @@ fun sanitizeHomeBottomItems(raw: List<String>, noteEnabled: Boolean): List<Strin
 
     if (cleaned.isNotEmpty()) return cleaned
 
-    return if (noteEnabled) {
-        listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL)
-    } else {
-        listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL)
-    }
+    return listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE)
 }
 
 fun sanitizeHomeStartPageKey(raw: String, bottomItems: List<String>): String {
@@ -38,8 +30,8 @@ fun homeEntryLabel(key: String): String {
     return when (key) {
         HomeEntryKey.SIDEBAR -> "侧边栏"
         HomeEntryKey.TODAY -> "今日日程"
-        HomeEntryKey.NOTE -> "便签"
         HomeEntryKey.ALL -> "全部日程"
+        HomeEntryKey.NOTE -> "便签"
         else -> key
     }
 }

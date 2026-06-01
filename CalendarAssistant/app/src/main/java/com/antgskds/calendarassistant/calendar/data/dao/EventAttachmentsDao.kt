@@ -20,11 +20,17 @@ interface EventAttachmentsDao {
     @Query("UPDATE event_attachments SET event_id = :eventId, event_key = :eventKey WHERE id IN (:ids)")
     fun bindAttachments(ids: List<Long>, eventId: Long, eventKey: String)
 
+    @Query("UPDATE event_attachments SET event_id = :targetEventId WHERE event_id = :fromEventId")
+    fun moveAttachmentsToEvent(fromEventId: Long, targetEventId: Long)
+
     @Query("UPDATE event_attachments SET event_key = :eventKey WHERE event_id = :eventId")
     fun updateEventKeyForEvent(eventId: Long, eventKey: String)
 
     @Query("SELECT * FROM event_attachments WHERE event_id IN (:eventIds) ORDER BY created_at ASC, id ASC")
     fun getAttachmentsForEvents(eventIds: List<Long>): List<EventAttachment>
+
+    @Query("SELECT * FROM event_attachments WHERE id IN (:ids) ORDER BY created_at ASC, id ASC")
+    fun getAttachmentsByIds(ids: List<Long>): List<EventAttachment>
 
     @Query("SELECT * FROM event_attachments ORDER BY created_at ASC, id ASC")
     fun getAllAttachments(): List<EventAttachment>

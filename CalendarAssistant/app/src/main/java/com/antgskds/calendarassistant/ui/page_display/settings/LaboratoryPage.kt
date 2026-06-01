@@ -96,15 +96,6 @@ fun LaboratoryPage(
 
         if (settings != null) {
             LaboratorySwitchCard(
-                title = "便签功能",
-                subtitle = "启用后增加便签并在悬浮窗中显示便签",
-                checked = settings!!.noteEnabled,
-                onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(noteEnabled = enabled)
-                }
-            )
-
-            LaboratorySwitchCard(
                 title = "码类事件使用当前时间",
                 subtitle = "开启后取件码、取餐码、取票码、寄件码会忽略 AI 返回时间，入库时改为当前时间",
                 checked = settings!!.forceInstantCodeTimeToNow,
@@ -193,6 +184,30 @@ fun LaboratoryPage(
                                 Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                             }
                         },
+                        onMigrateLegacyNotes = {
+                            settingsViewModel?.migrateLegacyNotes { result ->
+                                Toast.makeText(
+                                    context,
+                                    "旧便签扫描 ${result.scanned} 条，迁移 ${result.migrated} 条，跳过 ${result.skipped} 条",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        onCleanLegacyNotes = {
+                            settingsViewModel?.cleanLegacyNotes { result ->
+                                Toast.makeText(context, "已清理 ${result.cleaned} 条旧版便签 Event 数据", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        onCleanDuplicateEvents = {
+                            settingsViewModel?.cleanDuplicateEvents { result ->
+                                val message = if (result.deleted > 0 || result.mergedBindings > 0) {
+                                    "已扫描 ${result.scanned} 条，清理 ${result.deleted} 条重复日程，合并 ${result.mergedBindings} 个系统日历绑定"
+                                } else {
+                                    "已扫描 ${result.scanned} 条，没有发现完全重复日程"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        },
                         onExportLogs = { minutes ->
                             settingsViewModel?.exportDiagnosticLogs(minutes) { result ->
                                 val message = result.fold(
@@ -261,6 +276,9 @@ private fun DeveloperOptionsCard(
     onClearAll: () -> Unit,
     onRemoveDonationThanks: () -> Unit,
     onMigrateLegacyLogs: () -> Unit,
+    onMigrateLegacyNotes: () -> Unit,
+    onCleanLegacyNotes: () -> Unit,
+    onCleanDuplicateEvents: () -> Unit,
     onExportLogs: (Int?) -> Unit
 ) {
     val haptics = rememberAppHaptics()
@@ -307,6 +325,24 @@ private fun DeveloperOptionsCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("整理旧日志到 WillDo")
+            }
+            OutlinedButton(
+                onClick = { haptics.confirm(); onMigrateLegacyNotes() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("手动迁移旧版便签")
+            }
+            OutlinedButton(
+                onClick = { haptics.warning(); onCleanLegacyNotes() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("清理旧版便签 Event 数据")
+            }
+            OutlinedButton(
+                onClick = { haptics.warning(); onCleanDuplicateEvents() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("清理重复日程")
             }
             Text(
                 text = "日志导出",

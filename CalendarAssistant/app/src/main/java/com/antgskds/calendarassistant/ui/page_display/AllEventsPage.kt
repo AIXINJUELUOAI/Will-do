@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.util.DateCalculator
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import java.time.LocalDate
@@ -62,7 +61,6 @@ fun AllEventsPage(
     val filteredItems by remember(uiState.allScheduleItems, searchQuery, today) {
         derivedStateOf {
             uiState.allScheduleItems
-                .filter { it.tag != EventTags.NOTE }
                 .distinctBy { it.stableKey }
                 .filter { item ->
                 val searchMatch = if (searchQuery.isBlank()) true else {

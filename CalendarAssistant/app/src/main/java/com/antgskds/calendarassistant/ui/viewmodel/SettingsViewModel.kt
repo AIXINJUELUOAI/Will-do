@@ -9,12 +9,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.center.BackupCenter
 import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
+import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupCenter
+import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupResult
 import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
 import com.antgskds.calendarassistant.core.center.ImportMode
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
+import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationResult
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
@@ -40,7 +44,9 @@ class SettingsViewModel(
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
-    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi
+    private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
+    private val legacyNoteMigrationCenter: LegacyNoteMigrationCenter,
+    private val duplicateEventCleanupCenter: DuplicateEventCleanupCenter
 ) : ViewModel() {
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
@@ -151,7 +157,6 @@ class SettingsViewModel(
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
         forceInstantCodeTimeToNow: Boolean? = null,
-        noteEnabled: Boolean? = null,
         predictiveBackEnabled: Boolean? = null,
         clipboardCodeRecognitionEnabled: Boolean? = null,
         widgetThemeMode: Int? = null,
@@ -187,7 +192,6 @@ class SettingsViewModel(
                 volumeUpLongPressAction = volumeUpLongPressAction,
                 smsMonitoring = smsMonitoring,
                 forceInstantCodeTimeToNow = forceInstantCodeTimeToNow,
-                noteEnabled = noteEnabled,
                 predictiveBackEnabled = predictiveBackEnabled,
                 clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled,
                 widgetThemeMode = widgetThemeMode,
@@ -585,6 +589,26 @@ class SettingsViewModel(
     fun exportDiagnosticLogs(minutes: Int?, onResult: (Result<String>) -> Unit) {
         viewModelScope.launch {
             onResult(diagnosticLogCenter.exportLogBundle(minutes))
+        }
+    }
+
+    fun migrateLegacyNotes(onResult: (LegacyNoteMigrationResult) -> Unit) {
+        viewModelScope.launch {
+            onResult(legacyNoteMigrationCenter.migrateLegacyNotes(force = true))
+        }
+    }
+
+    fun cleanLegacyNotes(onResult: (LegacyNoteMigrationResult) -> Unit) {
+        viewModelScope.launch {
+            onResult(legacyNoteMigrationCenter.cleanLegacyNoteEvents())
+        }
+    }
+
+    fun cleanDuplicateEvents(onResult: (DuplicateEventCleanupResult) -> Unit) {
+        viewModelScope.launch {
+            val result = duplicateEventCleanupCenter.cleanupExactDuplicates()
+            scheduleCenter.refreshAll()
+            onResult(result)
         }
     }
 }

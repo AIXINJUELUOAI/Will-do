@@ -39,9 +39,6 @@ data class MySettings(
     // 【实验室】码类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
     val forceInstantCodeTimeToNow: Boolean = false,
 
-    // 【实验室】便签功能
-    val noteEnabled: Boolean = false,
-
     // 【实验室】预测性返回手势
     val predictiveBackEnabled: Boolean = true,
 
@@ -49,7 +46,7 @@ data class MySettings(
     val clipboardCodeRecognitionEnabled: Boolean = false,
 
     // 首页入口配置（第 2~4 位，第一位固定侧边栏）
-    val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL),
+    val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE),
     val homeStartPageKey: String = HomeEntryKey.TODAY,
 
     // 【新增】归档配置
