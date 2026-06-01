@@ -1,7 +1,5 @@
 package com.antgskds.calendarassistant
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -33,11 +31,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavType
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
@@ -123,6 +121,7 @@ class MainActivity : ComponentActivity() {
                     modelClass.isAssignableFrom(MainViewModel::class.java) -> MainViewModel(
                         appContext = app.applicationContext,
                         scheduleCenter = app.scheduleCenter,
+                        noteCenter = app.noteCenter,
                         settingsQueryApi = app.settingsQueryApi,
                         homeQueryApi = app.homeQueryApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
@@ -138,7 +137,9 @@ class MainActivity : ComponentActivity() {
                         settingsOperationApi = app.settingsOperationApi,
                         settingsQueryApi = app.settingsQueryApi,
                         settingsTransformApi = app.settingsTransformApi,
-                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi
+                        scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
+                        legacyNoteMigrationCenter = app.legacyNoteMigrationCenter,
+                        duplicateEventCleanupCenter = app.duplicateEventCleanupCenter
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
@@ -209,8 +210,8 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val predictiveBackEnabled = settings.predictiveBackEnabled
-                val homeBottomItems = remember(settings.homeBottomItems, settings.noteEnabled) {
-                    sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
+                val homeBottomItems = remember(settings.homeBottomItems) {
+                    sanitizeHomeBottomItems(settings.homeBottomItems)
                 }
                 val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
                     sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -303,29 +304,42 @@ class MainActivity : ComponentActivity() {
                             }
                             val noteId = backStackEntry.arguments?.getLong(AppRoutes.NoteEditorArg) ?: AppRoutes.NoteEditorNewArg
                             val uiState by mainViewModel.uiState.collectAsState()
-                            val initialNote = if (noteId == AppRoutes.NoteEditorNewArg) null else mainViewModel.getEventById(noteId)
-                            NoteEditorScreen(
-                                initialNote = initialNote,
-                                editorSessionKey = noteId.hashCode(),
-                                currentEventsCount = uiState.rawEventCount,
-                                settings = settings,
-                                onDismiss = { navController.popBackStack() },
-                                onSave = { note ->
-                                    if (noteId == AppRoutes.NoteEditorNewArg) {
-                                        mainViewModel.addEvent(note)
-                                    } else {
-                                        mainViewModel.updateEvent(note)
+                            var initialNote by remember(noteId) { mutableStateOf<com.antgskds.calendarassistant.core.note.NoteEntity?>(null) }
+                            var noteLoaded by remember(noteId) { mutableStateOf(noteId == AppRoutes.NoteEditorNewArg) }
+                            LaunchedEffect(noteId) {
+                                initialNote = if (noteId == AppRoutes.NoteEditorNewArg) null else mainViewModel.getNoteById(noteId)
+                                noteLoaded = true
+                            }
+                            if (noteLoaded) {
+                                NoteEditorScreen(
+                                    initialNote = initialNote,
+                                    editorSessionKey = noteId.hashCode(),
+                                    settings = uiState.settings,
+                                    onDismiss = { navController.popBackStack() },
+                                    onSave = { id, title, document, createdAt, onSaved ->
+                                        mainViewModel.saveNote(id, title, document, createdAt, onSaved)
+                                    },
+                                    onDelete = { id, onDeleted ->
+                                        mainViewModel.deleteNote(id, onDeleted)
+                                    },
+                                    onExportNote = { id, uri, onResult ->
+                                        mainViewModel.exportNote(id, uri, onResult)
+                                    },
+                                    onImportNote = { uri, onResult ->
+                                        mainViewModel.importNote(uri, onResult)
+                                    },
+                                    onOpenImportedNote = { importedId ->
+                                        navController.navigate(AppRoutes.noteEditor(importedId))
+                                    },
+                                    onShowMessage = { message, _ ->
+                                        android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                onDelete = { note ->
-                                    mainViewModel.deleteEvent(note)
-                                    navController.popBackStack()
-                                },
-                                onShowMessage = { message, type ->
-                                    // Keep note editor self-contained; global toast integration can be added later.
-                                    android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
+                                )
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator()
                                 }
-                            )
+                            }
                         }
 
                         composable(

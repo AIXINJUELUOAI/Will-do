@@ -12,9 +12,11 @@ import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.center.CapsuleCenter
 import com.antgskds.calendarassistant.core.center.ContentIngestCenter
 import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
+import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupCenter
 import com.antgskds.calendarassistant.core.center.FloatingCenter
 import com.antgskds.calendarassistant.core.center.ImportCenter
 import com.antgskds.calendarassistant.core.center.LocalModelResidueCenter
+import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.core.center.PermissionCenter
 import com.antgskds.calendarassistant.core.center.RecognitionCenter
@@ -29,6 +31,8 @@ import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
+import com.antgskds.calendarassistant.core.note.NoteRepository
+import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
@@ -105,6 +109,18 @@ class App : Application() {
 
     val eventAttachmentManager: EventAttachmentManager by lazy {
         EventAttachmentManager(applicationContext)
+    }
+
+    private val noteRepository: NoteRepository by lazy {
+        NoteRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).notesDao())
+    }
+
+    val noteCenter: NoteCenter by lazy {
+        NoteCenter(noteRepository, appScope)
+    }
+
+    val legacyNoteMigrationCenter: LegacyNoteMigrationCenter by lazy {
+        LegacyNoteMigrationCenter(applicationContext, noteRepository)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -213,6 +229,10 @@ class App : Application() {
 
     val diagnosticLogCenter: DiagnosticLogCenter by lazy {
         DiagnosticLogCenter(applicationContext)
+    }
+
+    val duplicateEventCleanupCenter: DuplicateEventCleanupCenter by lazy {
+        DuplicateEventCleanupCenter(applicationContext)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -327,11 +347,17 @@ class App : Application() {
         runBlocking(Dispatchers.IO) {
             AppLogger.i(TAG, "legacy data migration check started")
             legacyDataMigrationCoordinator.runAutoMigrationIfNeeded()
+            legacyNoteMigrationCenter.runAutoMigrationIfNeeded()
+            val duplicateCleanup = duplicateEventCleanupCenter.runAutoCleanupIfNeeded()
+            if (duplicateCleanup.deleted > 0 || duplicateCleanup.mergedBindings > 0) {
+                AppLogger.i(TAG, "duplicate event cleanup result=$duplicateCleanup")
+            }
             AppLogger.i(TAG, "legacy data migration check finished")
         }
 
         // 初始化日程数据
         scheduleCenter.refreshEvents()
+        noteCenter.start()
         AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
         scheduleCenter.onScheduleChanged = { widgetCenter.requestRefresh() }
 
@@ -346,7 +372,6 @@ class App : Application() {
 
         // 注册内容源
         ContentRegistry.register(ContentDefinition(ContentSourceType.SCHEDULE, "日程", true, true))
-        ContentRegistry.register(ContentDefinition(ContentSourceType.NOTE, "便签", true, false))
         ContentRegistry.register(ContentDefinition(ContentSourceType.WEATHER, "天气", true, true))
         ContentRegistry.register(ContentDefinition(ContentSourceType.VOICE_CAPTURE, "语音输入", true, false))
 

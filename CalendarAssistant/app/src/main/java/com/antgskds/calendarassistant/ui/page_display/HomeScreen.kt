@@ -21,6 +21,7 @@ import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.core.note.NoteEntity
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
@@ -75,7 +76,7 @@ fun HomeScreen(
     selectedPageKey: String = HomeEntryKey.TODAY,
     onSelectedPageKeyChange: (String) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
-    onOpenNoteEditor: (Long?) -> Unit = {},
+    onOpenNoteEditor: (Long) -> Unit = {},
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
@@ -104,10 +105,7 @@ fun HomeScreen(
                 val isHomeSource =
                     payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
                         payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
-                val isNoteSource =
-                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
-                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
-                if (!isHomeSource && !isNoteSource) return@collect
+                if (!isHomeSource) return@collect
 
                 val message = RecognitionFailureMessageMapper.userMessage(payload)
                 showToast(message, ToastType.ERROR)
@@ -122,10 +120,7 @@ fun HomeScreen(
                 val isHomeSource =
                     payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
                         payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
-                val isNoteSource =
-                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
-                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
-                if (!isHomeSource && !isNoteSource) return@collect
+                if (!isHomeSource) return@collect
 
                 val message = when {
                     payload.createdCount <= 0 -> "已处理，无新增"
@@ -144,10 +139,7 @@ fun HomeScreen(
                 val isHomeSource =
                     payload.sourceType == RecognitionFeedbackSource.HOME_SOURCE_TYPE &&
                         payload.sourceId == RecognitionFeedbackSource.HOME_SOURCE_ID
-                val isNoteSource =
-                    payload.sourceType == RecognitionFeedbackSource.NOTE_SOURCE_TYPE &&
-                        payload.sourceId == RecognitionFeedbackSource.NOTE_SOURCE_ID
-                if (!isHomeSource && !isNoteSource) return@collect
+                if (!isHomeSource) return@collect
 
                 showToast(payload.message.ifBlank { "保存失败" }, ToastType.ERROR)
             }
@@ -162,8 +154,8 @@ fun HomeScreen(
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
 
-    val homeBottomItems = remember(settings.homeBottomItems, settings.noteEnabled) {
-        sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
+    val homeBottomItems = remember(settings.homeBottomItems) {
+        sanitizeHomeBottomItems(settings.homeBottomItems)
     }
     val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
         sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -172,8 +164,8 @@ fun HomeScreen(
     fun pageKeyToTab(pageKey: String): Int {
         return when (pageKey) {
             HomeEntryKey.TODAY -> 0
-            HomeEntryKey.NOTE -> if (settings.noteEnabled) 1 else 0
-            HomeEntryKey.ALL -> if (settings.noteEnabled) 2 else 1
+            HomeEntryKey.ALL -> 1
+            HomeEntryKey.NOTE -> 2
             else -> 0
         }
     }
@@ -181,15 +173,15 @@ fun HomeScreen(
     fun tabToPageKey(tab: Int): String {
         return when {
             tab == 0 -> HomeEntryKey.TODAY
-            settings.noteEnabled && tab == 1 -> HomeEntryKey.NOTE
-            else -> HomeEntryKey.ALL
+            tab == 1 -> HomeEntryKey.ALL
+            else -> HomeEntryKey.NOTE
         }
     }
 
     val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
     val selectedTab = pageKeyToTab(effectiveSelectedPageKey)
 
-    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, settings.noteEnabled) {
+    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey) {
         if (homeBottomItems != settings.homeBottomItems || homeStartPageKey != settings.homeStartPageKey) {
             settingsViewModel.updatePreference(
                 homeBottomItems = homeBottomItems,
@@ -208,27 +200,19 @@ fun HomeScreen(
     var showAddEventDialog by remember { mutableStateOf(false) }
     var editDraft by remember { mutableStateOf<com.antgskds.calendarassistant.data.model.EditDraft?>(null) }
     var editContext by remember { mutableStateOf<EditContext?>(null) }
-    var eventToEdit by remember { mutableStateOf<Event?>(null) }  // 仅用于 Note 编辑和旧 beginEdit 桥接
+    var eventToEdit by remember { mutableStateOf<Event?>(null) }
     var draftEventToAdd by remember { mutableStateOf<Event?>(null) }
     var editingVirtualCourse by remember { mutableStateOf<Event?>(null) }
     var courseItemToEdit by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
+    var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
     var addDialogRequestId by remember { mutableIntStateOf(0) }
     val dialogDelayMs = 240L
-
-    fun openNoteEditor(note: Event?) {
-        val noteId = note?.id
-        if (note != null && noteId == null) {
-            showToast("便签不存在")
-            return
-        }
-        onOpenNoteEditor(noteId)
-    }
 
     LaunchedEffect(pendingAddDialog) {
         if (!pendingAddDialog) return@LaunchedEffect
@@ -245,11 +229,6 @@ fun HomeScreen(
         if (event.tag == "__removed_course__") {
             editingVirtualCourse = event
             eventToEdit = null
-            recurringEditSession = null
-        } else if (event.tag == EventTags.NOTE) {
-            openNoteEditor(event)
-            eventToEdit = null
-            editingVirtualCourse = null
             recurringEditSession = null
         } else if (event.isRecurring) {
             val nextInstance = mainViewModel.findNextRecurringInstance(event)
@@ -326,10 +305,6 @@ fun HomeScreen(
                     courseItemToEdit = item
                     return
                 }
-                if (event.tag == EventTags.NOTE) {
-                    openNoteEditor(event)
-                    return
-                }
                 // 单次事件或已有子实例
                 val draft = mainViewModel.prepareEditSingle(target.eventId)
                 if (draft != null) {
@@ -396,18 +371,7 @@ fun HomeScreen(
 
     fun openPrimaryCreateDialog() {
         isActionExpanded = false
-        if (settings.noteEnabled && selectedTab == 1) {
-            recurringEditSession = null
-            recurringEditCommitSession = null
-            draftEventToAdd = null
-            eventToEdit = null
-            editingVirtualCourse = null
-            openNoteEditor(null)
-            showAddEventDialog = false
-            pendingAddDialog = false
-        } else {
-            openAddEventDialog()
-        }
+        openAddEventDialog()
     }
 
     
@@ -462,7 +426,9 @@ fun HomeScreen(
                         onAddEventClick = { openPrimaryCreateDialog() },
                         onEditItem = { item -> beginEditItem(item) },
                         onRequestDeleteItem = { item -> requestDeleteItem(item) },
-                        onEditNote = { note -> beginEdit(note) },
+                        onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
+                        onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
+                        onRequestDeleteNote = { note -> noteToDelete = note },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
@@ -471,14 +437,14 @@ fun HomeScreen(
             }
         )
 
-        val selectedPageKey = tabToPageKey(selectedTab)
+        val currentPageKey = tabToPageKey(selectedTab)
 
         IntegratedFloatingBar(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
             isSidebarOpen = isSidebarOpen,
             navItems = homeBottomItems,
-            selectedPageKey = selectedPageKey,
+            selectedPageKey = effectiveSelectedPageKey,
             onMenuClick = {
                 isActionExpanded = false
                 isSidebarOpen = !isSidebarOpen
@@ -501,7 +467,11 @@ fun HomeScreen(
             onEditClick = {
                 isActionExpanded = false
                 isSidebarOpen = false
-                openPrimaryCreateDialog()
+                if (currentPageKey == HomeEntryKey.NOTE) {
+                    onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg)
+                } else {
+                    openPrimaryCreateDialog()
+                }
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -517,6 +487,24 @@ fun HomeScreen(
 
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
+        PredictiveFloatingActionCard(
+            visible = noteToDelete != null,
+            title = "删除便签",
+            content = "删除后无法恢复，确认删除这条便签吗？",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = {
+                noteToDelete?.id?.let { mainViewModel.deleteNote(it) }
+                noteToDelete = null
+            },
+            onDismiss = { noteToDelete = null },
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
         val singleDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.Single }
         PredictiveFloatingActionCard(
             visible = singleDeleteItem != null,

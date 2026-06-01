@@ -3,7 +3,6 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.core.query.DailySummaryPayload
 import com.antgskds.calendarassistant.core.query.DailySummaryQueryApi
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -20,7 +19,7 @@ class LocalDailySummaryQueryApi : DailySummaryQueryApi {
         if (!settings.isDailySummaryEnabled) return null
 
         val targetDate = if (isMorning) LocalDate.now() else LocalDate.now().plusDays(1)
-        val summaryEvents = events.filter { it.startDate == targetDate && it.tag != EventTags.NOTE }
+        val summaryEvents = events.filter { it.startDate == targetDate }
         if (summaryEvents.isEmpty()) return null
 
         val titleBase = if (isMorning) "今日日程提醒" else "明日日程预告"

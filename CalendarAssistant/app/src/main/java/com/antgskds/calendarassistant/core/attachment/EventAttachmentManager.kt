@@ -55,6 +55,12 @@ class EventAttachmentManager(context: Context) {
         return db.eventAttachmentsDao().getAttachmentsForEvents(ids)
     }
 
+    fun getAttachmentsByIds(ids: List<Long>): List<EventAttachment> {
+        val normalizedIds = ids.filter { it > 0L }.distinct()
+        if (normalizedIds.isEmpty()) return emptyList()
+        return db.eventAttachmentsDao().getAttachmentsByIds(normalizedIds)
+    }
+
     fun getAllAttachments(): List<EventAttachment> = db.eventAttachmentsDao().getAllAttachments()
 
     fun getAttachmentCount(): Int = db.eventAttachmentsDao().getAttachmentCount()

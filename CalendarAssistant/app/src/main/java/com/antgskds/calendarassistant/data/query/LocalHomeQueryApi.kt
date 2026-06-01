@@ -4,7 +4,6 @@ import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.HomeSnapshot
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -20,8 +19,7 @@ class LocalHomeQueryApi : HomeQueryApi {
         settings: MySettings
     ): HomeSnapshot {
         val activeEvents = events.filter { it.archivedAt == null }
-        val noteEvents = activeEvents.filter { it.tag == EventTags.NOTE }
-        val scheduleEvents = activeEvents.filter { it.tag != EventTags.NOTE }
+        val scheduleEvents = activeEvents
 
         val expandTo = if (settings.showTomorrowEvents) selectedDate.plusDays(1) else selectedDate
         val displayItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, selectedDate, expandTo)
@@ -43,7 +41,6 @@ class LocalHomeQueryApi : HomeQueryApi {
         }
 
         return HomeSnapshot(
-            noteEvents = noteEvents,
             currentDateEvents = todayMerged,
             tomorrowEvents = tomorrowMerged
         )
@@ -51,7 +48,7 @@ class LocalHomeQueryApi : HomeQueryApi {
 
     override fun calculateDelayToNextExpiration(events: List<Event>, now: LocalDateTime): Long {
         val today = now.toLocalDate()
-        val scheduleEvents = events.filter { it.archivedAt == null && it.tag != EventTags.NOTE }
+        val scheduleEvents = events.filter { it.archivedAt == null }
         val displayItems = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, today, today)
 
         var nearestEndMillis = Long.MAX_VALUE

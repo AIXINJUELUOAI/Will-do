@@ -100,13 +100,6 @@ object RecognitionRuleCatalog {
             header = "课程",
             aliases = setOf("course", "课程"),
             includeInLocalPrompt = false
-        ),
-        Rule(
-            tag = EventTags.NOTE,
-            promptName = "便签",
-            header = "便签",
-            aliases = setOf("note", "便签"),
-            includeInLocalPrompt = false
         )
     )
 

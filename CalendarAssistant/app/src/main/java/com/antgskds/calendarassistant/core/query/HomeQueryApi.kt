@@ -7,7 +7,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 data class HomeSnapshot(
-    val noteEvents: List<Event>,                          // 便签保持 Event
     val currentDateEvents: List<ScheduleDisplayItem>,     // 日程改用展示模型
     val tomorrowEvents: List<ScheduleDisplayItem>
 )
