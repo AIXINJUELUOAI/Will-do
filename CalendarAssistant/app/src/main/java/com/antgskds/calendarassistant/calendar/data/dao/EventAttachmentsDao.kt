@@ -20,6 +20,9 @@ interface EventAttachmentsDao {
     @Query("UPDATE event_attachments SET event_id = :eventId, event_key = :eventKey WHERE id IN (:ids)")
     fun bindAttachments(ids: List<Long>, eventId: Long, eventKey: String)
 
+    @Query("UPDATE event_attachments SET event_id = :targetEventId WHERE event_id = :fromEventId")
+    fun moveAttachmentsToEvent(fromEventId: Long, targetEventId: Long)
+
     @Query("UPDATE event_attachments SET event_key = :eventKey WHERE event_id = :eventId")
     fun updateEventKeyForEvent(eventId: Long, eventKey: String)
 

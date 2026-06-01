@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
@@ -64,9 +65,27 @@ fun getHomeEntryIcon(key: String): Painter {
     return when (key) {
         HomeEntryKey.SIDEBAR -> painterResource(R.drawable.floatingbar_menu)
         HomeEntryKey.TODAY -> painterResource(R.drawable.floatingbar_today)
-        HomeEntryKey.NOTE -> painterResource(R.drawable.ic_stat_note)
         HomeEntryKey.ALL -> painterResource(R.drawable.floatingbar_all)
         else -> painterResource(R.drawable.floatingbar_today)
+    }
+}
+
+@Composable
+private fun HomeEntryIcon(key: String, modifier: Modifier, tint: androidx.compose.ui.graphics.Color) {
+    if (key == HomeEntryKey.NOTE) {
+        Icon(
+            imageVector = Icons.Outlined.StickyNote2,
+            contentDescription = null,
+            tint = tint,
+            modifier = modifier
+        )
+    } else {
+        Icon(
+            painter = getHomeEntryIcon(key),
+            contentDescription = null,
+            tint = tint,
+            modifier = modifier
+        )
     }
 }
 
@@ -81,10 +100,10 @@ fun BottomBarEditorPage(
     val scrollState = rememberScrollState()
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
 
-    val activeItems = sanitizeHomeBottomItems(settings.homeBottomItems, settings.noteEnabled)
+    val activeItems = sanitizeHomeBottomItems(settings.homeBottomItems)
     val startPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, activeItems)
 
-    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, settings.noteEnabled) {
+    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey) {
         if (activeItems != settings.homeBottomItems || startPage != settings.homeStartPageKey) {
             settingsViewModel.updatePreference(
                 homeBottomItems = activeItems,
@@ -94,7 +113,7 @@ fun BottomBarEditorPage(
     }
 
     fun saveConfig(newItems: List<String>, newStartPage: String? = null) {
-        val sanitizedItems = sanitizeHomeBottomItems(newItems, settings.noteEnabled)
+        val sanitizedItems = sanitizeHomeBottomItems(newItems)
         val sanitizedStart = sanitizeHomeStartPageKey(newStartPage ?: startPage, sanitizedItems)
         settingsViewModel.updatePreference(
             homeBottomItems = sanitizedItems,
@@ -102,7 +121,7 @@ fun BottomBarEditorPage(
         )
     }
 
-    val candidates = listOf(HomeEntryKey.TODAY, HomeEntryKey.NOTE, HomeEntryKey.ALL)
+    val candidates = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE)
     val standbyItems = candidates.filterNot { it in activeItems }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
@@ -186,9 +205,8 @@ fun BottomBarEditorPage(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        painter = getHomeEntryIcon(HomeEntryKey.SIDEBAR),
-                        contentDescription = null,
+                    HomeEntryIcon(
+                        key = HomeEntryKey.SIDEBAR,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(26.dp)
                     )
@@ -221,9 +239,8 @@ fun BottomBarEditorPage(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            painter = getHomeEntryIcon(key),
-                            contentDescription = null,
+                        HomeEntryIcon(
+                            key = key,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(26.dp)
                         )
@@ -314,17 +331,13 @@ fun BottomBarEditorPage(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         standbyItems.forEach { key ->
-                            val noteDisabled = key == HomeEntryKey.NOTE && !settings.noteEnabled
-
                             ElevatedAssistChip(
                                 onClick = {
-                                    if (!noteDisabled) {
-                                        haptics.click()
-                                        val mutable = activeItems.toMutableList()
-                                        if (mutable.size < 3) {
-                                            mutable.add(key)
-                                            saveConfig(mutable)
-                                        }
+                                    haptics.click()
+                                    val mutable = activeItems.toMutableList()
+                                    if (mutable.size < 3) {
+                                        mutable.add(key)
+                                        saveConfig(mutable)
                                     }
                                 },
                                 label = {
@@ -340,18 +353,10 @@ fun BottomBarEditorPage(
                                         modifier = Modifier.size(20.dp)
                                     )
                                 },
-                                enabled = !noteDisabled,
                                 modifier = Modifier.height(44.dp),
                                 shape = RoundedCornerShape(12.dp)
                             )
                         }
-                    }
-                    if (standbyItems.contains(HomeEntryKey.NOTE) && !settings.noteEnabled) {
-                        Text(
-                            text = "添加“便签”需在实验室中先开启便签功能",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                        )
                     }
                 }
             }

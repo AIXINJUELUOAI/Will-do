@@ -6,7 +6,6 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.CourseMeta
-import com.antgskds.calendarassistant.core.note.createNoteEvent
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.theme.EventColors
@@ -24,8 +23,7 @@ object DeveloperTestDataFactory {
         TRAIN("列车"),
         FLIGHT("航班"),
         TAXI("打车"),
-        COURSE("课程"),
-        NOTE("便签")
+        COURSE("课程")
     }
 
     data class TestEventBundle(
@@ -47,7 +45,6 @@ object DeveloperTestDataFactory {
             TestEventType.FLIGHT -> TestEventBundle(patches = listOf(flightPatch(sequence)))
             TestEventType.TAXI -> TestEventBundle(patches = listOf(taxiPatch(sequence)))
             TestEventType.COURSE -> TestEventBundle(events = listOf(courseEvent(sequence)))
-            TestEventType.NOTE -> TestEventBundle(events = listOf(note(sequence)))
         }
     }
 
@@ -214,23 +211,6 @@ object DeveloperTestDataFactory {
             rrule = "FREQ=WEEKLY;INTERVAL=1;COUNT=4",
             timeZone = zone.id,
             tag = EventTags.COURSE
-        )
-    }
-
-    private fun note(sequence: Int): Event {
-        val start = eventAnchor()
-        val zone = ZoneId.systemDefault()
-        return createNoteEvent(
-            title = "[DEV] 测试便签 $sequence",
-            markdown = """
-                - [ ] 检查测试事件显示
-                - [ ] 验证胶囊状态
-                - [ ] 清理测试数据 #$sequence
-            """.trimIndent(),
-            color = Color(color(sequence + 10))
-        ).copy(
-            startTS = start.atZone(zone).toEpochSecond(),
-            endTS = start.plusHours(1).atZone(zone).toEpochSecond()
         )
     }
 

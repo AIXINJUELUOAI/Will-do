@@ -41,16 +41,14 @@ import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.core.note.createNoteEvent
-
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.WeatherQueryApi
+import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.EventPatch
@@ -59,7 +57,6 @@ import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
-import com.antgskds.calendarassistant.ui.theme.EventColors
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +104,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private val app by lazy { applicationContext as App }
     private val scheduleCenter: ScheduleCenter by lazy { app.scheduleCenter }
+    private val noteCenter by lazy { app.noteCenter }
     private val scheduleQueryApi: ScheduleQueryApi by lazy { app.scheduleQueryApi }
     private val settingsQueryApi: SettingsQueryApi by lazy { app.settingsQueryApi }
     private val weatherQueryApi: WeatherQueryApi by lazy { app.weatherQueryApi }
@@ -291,19 +289,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings by settingsQueryApi.settings.collectAsState()
                 val context = LocalContext.current
                 val weatherData by weatherQueryApi.weatherData.collectAsState()
+                val notes by noteCenter.notes.collectAsState()
                 val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
                 val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
 
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
-                val noteEvents = if (settings.noteEnabled) {
-                    events.filter { it.tag == EventTags.NOTE && it.archivedAtMillis == null }
-                        .sortedWith(compareBy<Event> { it.isCompleted }.thenByDescending { it.lastModifiedMillis })
-                } else {
-                    emptyList()
-                }
-                val scheduleEvents = events.filter { it.tag != EventTags.NOTE && it.archivedAt == null }
+                val scheduleEvents = events.filter { it.archivedAt == null }
                 val (displayFrom, displayTo) = when (settings.floatingEventRange) {
                     1 -> today to today
                     2 -> today to tomorrow
@@ -332,15 +325,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         when (UiStyle.fromName(settings.uiStyle)) {
                             UiStyle.MIUI -> com.antgskds.calendarassistant.miui.floating.FloatingScheduleScreen(
                                 scheduleItems = scheduleItems,
-                                noteEvents = noteEvents,
                                 weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                                 weatherForecastRange = settings.floatingWeatherForecastRange,
-                                noteEnabled = settings.noteEnabled,
                                 expandSide = settings.floatingExpandSide,
                                 hapticEnabled = settings.hapticFeedbackEnabled,
                                 onClose = { requestClose() },
-                                onManualInput = { text, isNote, onComplete ->
-                                    handleManualInput(text = text, isNote = isNote,  onComplete = onComplete)
+                                onManualInput = { text, onComplete ->
+                                    handleManualInput(text = text, onComplete = onComplete)
                                 },
                                 onPickImageRequest = { onComplete ->
                                     startScreenshotAnalysisFlow(onComplete)
@@ -380,38 +371,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                 onUndoAction = {
                                     scheduleCenter.undoStatusAction()
                                 },
-                                onDeleteNote = { note, onComplete ->
-                                    serviceScope.launch {
-                                        try {
-                                            val nid = note.id ?: return@launch
-                                            scheduleCenter.deleteEvent(nid)
-                                        } finally {
-                                            onComplete()
-                                        }
-                                    }
-                                },
-                                onRestoreNote = { note, onComplete ->
-                                    serviceScope.launch {
-                                        try {
-                                            scheduleCenter.addEvent(note)
-                                        } finally {
-                                            onComplete()
-                                        }
-                                    }
-                                },
                                 onLoadingChange = { _ -> }
                             )
                             UiStyle.MATERIAL3 -> FloatingScheduleScreen(
                         scheduleItems = scheduleItems,
-                        noteEvents = noteEvents,
+                        notes = notes,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         weatherForecastRange = settings.floatingWeatherForecastRange,
-                        noteEnabled = settings.noteEnabled,
                         expandSide = settings.floatingExpandSide,
                         hapticEnabled = settings.hapticFeedbackEnabled,
                         onClose = { requestClose() },
                         onManualInput = { text, isNote, onComplete ->
-                            handleManualInput(text = text, isNote = isNote,  onComplete = onComplete)
+                            handleManualInput(text = text, isNote = isNote, onComplete = onComplete)
                         },
                         onPickImageRequest = { onComplete ->
                             startScreenshotAnalysisFlow(onComplete)
@@ -451,27 +422,35 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUndoAction = {
                             scheduleCenter.undoStatusAction()
                         },
+                        onToggleNoteTodo = { note, paragraphId ->
+                            serviceScope.launch { note.id?.let { noteCenter.toggleTodo(it, paragraphId) } }
+                        },
                         onDeleteNote = { note, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    val nid = note.id ?: return@launch
-                                    scheduleCenter.deleteEvent(nid)
+                                    note.id?.let { noteCenter.deleteNote(it) }
+                                    Toast.makeText(applicationContext, "已删除", Toast.LENGTH_SHORT).show()
                                 } finally {
                                     onComplete()
                                 }
                             }
                         },
-                        onRestoreNote = { note, onComplete ->
+                        onSaveNote = { note, title, body, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    scheduleCenter.addEvent(note)
+                                    noteCenter.saveNote(
+                                        id = note.id,
+                                        title = title,
+                                        document = com.antgskds.calendarassistant.core.note.NoteDocument.fromPlainText(body),
+                                        createdAt = note.createdAt
+                                    )
                                 } finally {
                                     onComplete()
                                 }
                             }
                         },
-                                onLoadingChange = { _ -> }
-                            )
+                        onLoadingChange = { _ -> }
+                    )
                         }
                     }
                     floatingContent()
@@ -646,8 +625,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             try {
                 val settings = settingsQueryApi.settings.value
                 if (isNote) {
-                    val note = convertToNote(text)
-                    scheduleCenter.addEvent(note)
+                    val clean = text.trim()
+                    val title = clean.lines().firstOrNull { it.isNotBlank() }?.take(80).orEmpty().ifBlank { "便签" }
+                    withContext(Dispatchers.IO) {
+                        noteCenter.saveNote(null, title, NoteDocument.fromPlainText(clean))
+                    }
                     Toast.makeText(applicationContext, "便签已添加", Toast.LENGTH_SHORT).show()
                 } else {
                     val traceId = EventIdentity.newTraceId("floating")
@@ -664,9 +646,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         )
                     }
                     when (result) {
-                        is AnalysisResult.Success -> {
-                            Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
-                        }
+                        is AnalysisResult.Success -> Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
                         is AnalysisResult.Empty -> Unit
                         is AnalysisResult.Failure -> Unit
                     }
@@ -752,18 +732,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             sourceImagePath,
             defaultDurationMinutes = settings.defaultEventDurationMinutes,
             forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow
-        )
-    }
-
-    private fun convertToNote(text: String): Event {
-        val clean = text.trim()
-        val lines = clean.lines().map { it.trim() }.filter { it.isNotBlank() }
-        val titleSeed = lines.firstOrNull().orEmpty().ifBlank { clean }
-        val title = titleSeed.take(24).ifBlank { "便签" }
-        return createNoteEvent(
-            title = title,
-            markdown = clean,
-            color = EventColors[scheduleCenter.events.value.size % EventColors.size],
         )
     }
 

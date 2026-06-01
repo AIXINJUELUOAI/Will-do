@@ -14,15 +14,18 @@ import com.antgskds.calendarassistant.calendar.helpers.REGULAR_EVENT_TYPE_ID
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventAttachment
 import com.antgskds.calendarassistant.calendar.models.EventType
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NotesDao
 import java.util.concurrent.Executors
 
-@Database(entities = [Event::class, EventType::class, EventAttachment::class], version = 5, exportSchema = false)
+@Database(entities = [Event::class, EventType::class, EventAttachment::class, NoteEntity::class], version = 6, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class EventsDatabase : RoomDatabase() {
 
     abstract fun eventsDao(): EventsDao
     abstract fun eventTypesDao(): EventTypesDao
     abstract fun eventAttachmentsDao(): EventAttachmentsDao
+    abstract fun notesDao(): NotesDao
 
     companion object {
         @Volatile
@@ -34,7 +37,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -121,6 +124,24 @@ abstract class EventsDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_event_attachments_event_id ON event_attachments(event_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_event_attachments_event_key ON event_attachments(event_key)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_event_attachments_local_path ON event_attachments(local_path)")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL DEFAULT '',
+                        plain_text TEXT NOT NULL DEFAULT '',
+                        document_json TEXT NOT NULL DEFAULT '',
+                        created_at INTEGER NOT NULL DEFAULT 0,
+                        updated_at INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_updated_at ON notes(updated_at)")
             }
         }
     }

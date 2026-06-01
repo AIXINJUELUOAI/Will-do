@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -104,7 +105,7 @@ fun IntegratedFloatingBar(
     val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val navItemWidth = 72.dp
     val normalizedNavItems = navItems.distinct().filter {
-        it == HomeEntryKey.TODAY || it == HomeEntryKey.NOTE || it == HomeEntryKey.ALL
+        it == HomeEntryKey.TODAY || it == HomeEntryKey.ALL || it == HomeEntryKey.NOTE
     }
     val navItemSpacing = if (normalizedNavItems.size >= 3) 0.dp else 4.dp
     val navPaddingHorizontal = 6.dp
@@ -130,15 +131,17 @@ fun IntegratedFloatingBar(
     val isTabHighlightEnabled = !isSidebarOpen
     val menuIcon = painterResource(R.drawable.floatingbar_menu)
     val todayIcon = painterResource(R.drawable.floatingbar_today)
-    val noteIcon = painterResource(R.drawable.ic_stat_note)
     val allIcon = painterResource(R.drawable.floatingbar_all)
 
-    fun iconForPageKey(key: String): Painter {
-        return when (key) {
-            HomeEntryKey.TODAY -> todayIcon
-            HomeEntryKey.NOTE -> noteIcon
-            else -> allIcon
-        }
+    fun painterIconForPageKey(key: String): Painter? = when (key) {
+        HomeEntryKey.TODAY -> todayIcon
+        HomeEntryKey.ALL -> allIcon
+        else -> null
+    }
+
+    fun vectorIconForPageKey(key: String): ImageVector? = when (key) {
+        HomeEntryKey.NOTE -> Icons.Outlined.StickyNote2
+        else -> null
     }
 
     val effectiveSelectedKey = if (selectedPageKey in normalizedNavItems) {
@@ -146,7 +149,6 @@ fun IntegratedFloatingBar(
     } else {
         normalizedNavItems.firstOrNull() ?: HomeEntryKey.TODAY
     }
-    val currentTabIcon = iconForPageKey(effectiveSelectedKey)
     val currentTabClick = { onPageClick(effectiveSelectedKey) }
 
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
@@ -178,7 +180,8 @@ fun IntegratedFloatingBar(
                         contentAlignment = Alignment.Center
                     ) {
                         HydrogenNavIcon(
-                            icon = if (isSidebarOpen) menuIcon else currentTabIcon,
+                            icon = if (isSidebarOpen) menuIcon else painterIconForPageKey(effectiveSelectedKey),
+                            vectorIcon = if (isSidebarOpen) null else vectorIconForPageKey(effectiveSelectedKey),
                             isSelected = true,
                             indicatorColor = navIndicator,
                             contentColor = navContent,
@@ -210,7 +213,8 @@ fun IntegratedFloatingBar(
 
                         normalizedNavItems.forEach { key ->
                             HydrogenNavIcon(
-                                icon = iconForPageKey(key),
+                                icon = painterIconForPageKey(key),
+                                vectorIcon = vectorIconForPageKey(key),
                                 isSelected = isTabHighlightEnabled && effectiveSelectedKey == key,
                                 indicatorColor = navIndicator,
                                 contentColor = navContent,
@@ -284,7 +288,8 @@ fun IntegratedFloatingBar(
 
 @Composable
 private fun HydrogenNavIcon(
-    icon: Painter,
+    icon: Painter?,
+    vectorIcon: ImageVector? = null,
     isSelected: Boolean,
     indicatorColor: Color,
     contentColor: Color,
@@ -315,12 +320,21 @@ private fun HydrogenNavIcon(
                         .background(indicatorColor, CircleShape)
                 )
             }
-            Icon(
-                painter = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(28.dp)
-            )
+            if (icon != null) {
+                Icon(
+                    painter = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(28.dp)
+                )
+            } else if (vectorIcon != null) {
+                Icon(
+                    imageVector = vectorIcon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     }
 }

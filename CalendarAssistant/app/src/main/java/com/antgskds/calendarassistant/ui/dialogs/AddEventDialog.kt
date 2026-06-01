@@ -106,7 +106,6 @@ private fun eventTypeSpecFor(tag: String): DialogEventTypeSpec? {
 
 private fun eventTypeLabel(tag: String): String {
     return when (tag) {
-        EventTags.NOTE -> "备注"
         EventTags.COURSE -> "课程"
         else -> eventTypeSpecFor(tag)?.label ?: "日程"
     }

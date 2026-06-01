@@ -18,6 +18,12 @@ interface EventsDao {
     @Query("SELECT * FROM events WHERE id = :id")
     fun getEventOrTaskWithId(id: Long): Event?
 
+    @Query("SELECT * FROM events WHERE LOWER(TRIM(tag)) IN ('note', '便签')")
+    fun getRetiredNoteEvents(): List<Event>
+
+    @Query("DELETE FROM events WHERE LOWER(TRIM(tag)) IN ('note', '便签')")
+    fun deleteRetiredNoteEvents(): Int
+
     @Query("SELECT * FROM events WHERE import_id = :importId")
     fun getEventOrTaskWithImportId(importId: String): Event?
 

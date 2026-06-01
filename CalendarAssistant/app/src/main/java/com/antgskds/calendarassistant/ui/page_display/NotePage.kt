@@ -20,10 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.note.extractMarkdownTasks
-import com.antgskds.calendarassistant.core.note.noteMarkdown
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.ui.components.NoteCard
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
@@ -32,33 +29,27 @@ fun NotePage(
     viewModel: MainViewModel,
     searchQuery: String = "",
     extraBottomPadding: Dp = 0.dp,
-    onEditNote: (Event) -> Unit = {},
-    onPendingDeleteChange: (Event?) -> Unit = {},
+    onEditNote: (NoteEntity) -> Unit = {},
+    onPendingDeleteChange: (NoteEntity?) -> Unit = {},
     hapticEnabled: Boolean = true
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val notes by viewModel.notes.collectAsState()
     val bottomSafePadding = 112.dp + extraBottomPadding
-    val notes = remember(uiState.noteEvents, searchQuery) {
-        uiState.noteEvents.filter { note ->
-            val markdown = note.noteMarkdown()
-            val tasks = extractMarkdownTasks(markdown)
+    val filteredNotes = remember(notes, searchQuery) {
+        notes.filter { note ->
             if (searchQuery.isBlank()) {
                 true
             } else {
                 note.title.contains(searchQuery, ignoreCase = true) ||
-                    markdown.contains(searchQuery, ignoreCase = true) ||
-                    tasks.any { it.text.contains(searchQuery, ignoreCase = true) }
+                    note.plainText.contains(searchQuery, ignoreCase = true)
             }
-        }.sortedWith(compareBy<Event> { it.isCompleted }.thenByDescending { it.lastModifiedMillis })
-    }
-    val completedNotes = remember(notes) { notes.count { it.isCompleted } }
-    val pendingTaskCount = remember(notes) {
-        notes.sumOf { note ->
-            extractMarkdownTasks(note.noteMarkdown()).count { !it.isDone }
         }
     }
+    val pendingTaskCount = remember(filteredNotes) {
+        filteredNotes.sumOf { it.document().pendingTodoCount() }
+    }
 
-    if (notes.isEmpty()) {
+    if (filteredNotes.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
                 modifier = Modifier.padding(horizontal = 28.dp),
@@ -95,8 +86,7 @@ fun NotePage(
             item(key = "summary") {
                 Text(
                     text = buildNoteSummaryText(
-                        noteCount = notes.size,
-                        completedCount = completedNotes,
+                        noteCount = filteredNotes.size,
                         pendingTaskCount = pendingTaskCount,
                         searchQuery = searchQuery
                     ),
@@ -109,12 +99,15 @@ fun NotePage(
                 )
             }
 
-            items(notes, key = { it.id ?: 0L }) { note ->
+            items(filteredNotes, key = { it.id ?: 0L }) { note ->
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     NoteCard(
                         note = note,
                         onClick = { onEditNote(note) },
                         onLongClick = { onPendingDeleteChange(note) },
+                        onToggleTodo = { paragraphId ->
+                            note.id?.let { viewModel.toggleNoteTodo(it, paragraphId) }
+                        },
                         hapticEnabled = hapticEnabled
                     )
                 }
@@ -125,7 +118,6 @@ fun NotePage(
 
 private fun buildNoteSummaryText(
     noteCount: Int,
-    completedCount: Int,
     pendingTaskCount: Int,
     searchQuery: String
 ): String {
@@ -137,9 +129,6 @@ private fun buildNoteSummaryText(
         append("共 $noteCount 条便签")
         if (pendingTaskCount > 0) {
             append(" · $pendingTaskCount 项待办")
-        }
-        if (completedCount > 0) {
-            append(" · $completedCount 条已完成")
         }
     }
 }

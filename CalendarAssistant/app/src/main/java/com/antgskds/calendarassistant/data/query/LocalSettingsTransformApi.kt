@@ -1,7 +1,6 @@
 package com.antgskds.calendarassistant.data.query
 
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
-import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
@@ -31,7 +30,6 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         volumeUpLongPressAction: Int?,
         smsMonitoring: Boolean?,
         forceInstantCodeTimeToNow: Boolean?,
-        noteEnabled: Boolean?,
         predictiveBackEnabled: Boolean?,
         clipboardCodeRecognitionEnabled: Boolean?,
         widgetThemeMode: Int?,
@@ -43,7 +41,6 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         homeStartPageKey: String?
     ): MySettings {
         var updated = current
-        val noteEnabledBefore = current.noteEnabled
         if (showTomorrow != null) updated = updated.copy(showTomorrowEvents = showTomorrow)
         if (dailySummary != null) updated = updated.copy(isDailySummaryEnabled = dailySummary)
         if (liveCapsule != null) updated = updated.copy(isLiveCapsuleEnabled = liveCapsule)
@@ -66,7 +63,6 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction)
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
         if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
-        if (noteEnabled != null) updated = updated.copy(noteEnabled = noteEnabled)
         if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
         if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
         if (widgetThemeMode != null) updated = updated.copy(widgetThemeMode = widgetThemeMode.coerceIn(0, 2))
@@ -77,18 +73,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
         if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)
 
-        if (!noteEnabledBefore && updated.noteEnabled && HomeEntryKey.NOTE !in updated.homeBottomItems) {
-            val allIndex = updated.homeBottomItems.indexOf(HomeEntryKey.ALL)
-            val mergedItems = updated.homeBottomItems.toMutableList()
-            if (allIndex >= 0) {
-                mergedItems.add(allIndex, HomeEntryKey.NOTE)
-            } else {
-                mergedItems.add(HomeEntryKey.NOTE)
-            }
-            updated = updated.copy(homeBottomItems = mergedItems)
-        }
-
-        val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems, updated.noteEnabled)
+        val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems)
         val sanitizedStartPage = sanitizeHomeStartPageKey(updated.homeStartPageKey, sanitizedBottomItems)
         return updated.copy(homeBottomItems = sanitizedBottomItems, homeStartPageKey = sanitizedStartPage)
     }

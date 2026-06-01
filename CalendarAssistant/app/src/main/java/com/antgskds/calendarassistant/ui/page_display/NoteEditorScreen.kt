@@ -1,6 +1,5 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -21,17 +20,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,8 +39,20 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -58,7 +70,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,53 +79,47 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.calendar.models.EventAttachment
+import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
-import com.antgskds.calendarassistant.core.note.createNoteEvent
-import com.antgskds.calendarassistant.core.note.extractNoteAttachmentIds
-import com.antgskds.calendarassistant.core.note.noteMarkdown
-import com.antgskds.calendarassistant.core.note.withNoteMarkdown
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
+import com.antgskds.calendarassistant.core.note.NoteParagraphType
+import com.antgskds.calendarassistant.core.note.NoteTextStyle
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.components.BlockNoteEditor
-import com.antgskds.calendarassistant.ui.components.BlockNoteEditorController
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
-import com.antgskds.calendarassistant.ui.components.NoteMarkdownTool
+import com.antgskds.calendarassistant.ui.components.PlainNoteEditor
+import com.antgskds.calendarassistant.ui.components.PlainNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.theme.EventColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
-    initialNote: Event?,
+    initialNote: NoteEntity?,
     editorSessionKey: Int = 0,
-    currentEventsCount: Int,
     settings: MySettings,
     onDismiss: () -> Unit,
-    onSave: (Event, List<String>) -> Unit,
-    onAddAttachment: suspend (Long, Uri) -> EventAttachment,
-    onAddPendingAttachment: suspend (String, Uri) -> EventAttachment,
-    onDeletePendingAttachments: suspend (String) -> Unit,
-    onLoadAttachments: suspend (Long) -> List<EventAttachment>,
-    onLoadAttachmentsByIds: suspend (List<Long>) -> List<EventAttachment>,
-    onOpenAttachment: suspend (EventAttachment) -> Boolean,
-    onDelete: (Event) -> Unit,
+    onSave: (Long?, String, NoteDocument, Long?, (Long) -> Unit) -> Unit,
+    onDelete: (Long, () -> Unit) -> Unit,
+    onExportNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
+    onImportNote: (android.net.Uri, (Result<Long>) -> Unit) -> Unit,
+    onOpenImportedNote: (Long) -> Unit,
     onShowMessage: (String, ToastType) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -122,98 +127,105 @@ fun NoteEditorScreen(
     val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val savedTitle = initialNote?.title?.takeUnless { it.isBlank() } ?: ""
-    val savedMarkdown = initialNote?.noteMarkdown().orEmpty()
-    val fallbackColor = MaterialTheme.colorScheme.primary
-    val editorController = remember(editorSessionKey) { BlockNoteEditorController() }
+    val savedTitle = initialNote?.title.orEmpty()
+    val savedDocument = initialNote?.document() ?: NoteDocument()
+    val editorController = remember(editorSessionKey) { PlainNoteEditorController() }
+    var noteId by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.id) }
     var titleText by rememberSaveable(editorSessionKey) { mutableStateOf(savedTitle) }
-    var bodyText by rememberSaveable(editorSessionKey) { mutableStateOf(savedMarkdown) }
+    var document by remember(editorSessionKey) { mutableStateOf(savedDocument) }
+    var createdAtMillis by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.createdAt) }
     var isAnalyzing by remember(editorSessionKey) { mutableStateOf(false) }
-    var hasSavedOnExit by remember(editorSessionKey) { mutableStateOf(false) }
-    var skipSaveOnExit by remember(editorSessionKey) { mutableStateOf(false) }
     var isMoreExpanded by remember(editorSessionKey) { mutableStateOf(false) }
-    var pendingAttachmentKey by rememberSaveable(editorSessionKey) { mutableStateOf("") }
-    var pendingAttachmentKeys by remember(editorSessionKey) { mutableStateOf(setOf<String>()) }
-    val noteAttachments = remember(editorSessionKey) { mutableStateListOf<EventAttachment>() }
-    val pendingAttachmentKeyPrefix = remember(editorSessionKey) {
-        "note_pending_${System.currentTimeMillis()}_${editorSessionKey}"
+    var hasDeleted by remember(editorSessionKey) { mutableStateOf(false) }
+    var pendingDelete by remember(editorSessionKey) { mutableStateOf(false) }
+    var saveJob by remember(editorSessionKey) { mutableStateOf<Job?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        editorController.insertAttachment(uri)?.let { document = it }
     }
-
-    fun ensurePendingAttachmentKey(): String {
-        if (pendingAttachmentKey.isBlank()) {
-            pendingAttachmentKey = "${pendingAttachmentKeyPrefix}_${pendingAttachmentKeys.size + 1}"
-        }
-        return pendingAttachmentKey
+    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        editorController.insertAttachment(uri)?.let { document = it }
     }
-
-    fun refreshAttachments(markdown: String = bodyText) {
-        scope.launch {
-            val eventId = initialNote?.id
-            val loaded = if (eventId != null && eventId > 0L) {
-                onLoadAttachments(eventId)
-            } else {
-                onLoadAttachmentsByIds(extractNoteAttachmentIds(markdown))
-            }
-            noteAttachments.clear()
-            noteAttachments.addAll(loaded)
-        }
-    }
-
-    LaunchedEffect(initialNote?.id, editorSessionKey) {
-        refreshAttachments(savedMarkdown)
-    }
-
-    fun buildSavedNote(markdownOverride: String? = null): Event {
-        val markdown = (markdownOverride ?: bodyText).trimEnd()
-        val finalTitle = titleText.ifBlank { "无标题" }
-        return if (initialNote == null) {
-            val color = if (EventColors.isNotEmpty()) {
-                EventColors[currentEventsCount % EventColors.size]
-            } else {
-                fallbackColor
-            }
-            createNoteEvent(title = finalTitle, markdown = markdown, color = color)
-        } else {
-            initialNote.withNoteMarkdown(title = finalTitle, markdown = markdown)
-        }
-    }
-
-    fun exportMarkdown(uri: Uri) {
-        val committedMarkdown = editorController.commit() ?: bodyText
-        bodyText = committedMarkdown
-        val exportText = buildString {
-            val title = titleText.trim().ifBlank { "无标题" }
-            append("# ").appendLine(title)
-            if (committedMarkdown.isNotBlank()) {
-                appendLine()
-                append(committedMarkdown.trimEnd())
+    val noteExportJsonLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val id = noteId
+        if (uri != null && id != null) {
+            onExportNote(id, uri) { result ->
+                onShowMessage(if (result.isSuccess) "便签导出成功" else "导出失败：${result.exceptionOrNull()?.message ?: "未知错误"}", if (result.isSuccess) ToastType.SUCCESS else ToastType.ERROR)
             }
         }
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    output.write(exportText.toByteArray(Charsets.UTF_8))
-                } ?: error("无法写入文件")
-            }.onSuccess {
-                withContext(Dispatchers.Main) { onShowMessage("已导出 Markdown", ToastType.SUCCESS) }
-            }.onFailure {
-                withContext(Dispatchers.Main) { onShowMessage("导出失败：${it.message ?: "未知错误"}", ToastType.ERROR) }
+    }
+    val noteExportZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val id = noteId
+        if (uri != null && id != null) {
+            onExportNote(id, uri) { result ->
+                onShowMessage(if (result.isSuccess) "便签导出成功" else "导出失败：${result.exceptionOrNull()?.message ?: "未知错误"}", if (result.isSuccess) ToastType.SUCCESS else ToastType.ERROR)
             }
         }
+    }
+    val noteImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        onImportNote(uri) { result ->
+            result.onSuccess { importedId ->
+                onShowMessage("便签导入成功", ToastType.SUCCESS)
+                onOpenImportedNote(importedId)
+            }.onFailure { error ->
+                onShowMessage("导入失败：${error.message ?: "未知错误"}", ToastType.ERROR)
+            }
+        }
+    }
+
+    fun isBlankNewNote(): Boolean {
+        return noteId == null && titleText.isBlank() && document.plainText().isBlank() && document.todoCount() == 0
+    }
+
+    fun saveNow(force: Boolean = false) {
+        if (hasDeleted) return
+        if (isBlankNewNote()) return
+        val idSnapshot = noteId
+        val titleSnapshot = titleText
+        val documentSnapshot = document
+        val createdAtSnapshot = createdAtMillis ?: System.currentTimeMillis().also { createdAtMillis = it }
+        onSave(idSnapshot, titleSnapshot, documentSnapshot, createdAtSnapshot) { savedId ->
+            noteId = savedId
+        }
+    }
+
+    fun scheduleSave() {
+        saveJob?.cancel()
+        saveJob = scope.launch {
+            delay(700L)
+            saveNow()
+        }
+    }
+
+    LaunchedEffect(titleText, document) {
+        scheduleSave()
+    }
+
+    DisposableEffect(editorSessionKey) {
+        onDispose {
+            saveJob?.cancel()
+            saveNow(force = true)
+        }
+    }
+
+    fun saveAndDismiss() {
+        saveJob?.cancel()
+        saveNow(force = true)
+        onDismiss()
     }
 
     fun runAiAnalyze() {
-        val committedMarkdown = editorController.commit() ?: bodyText
-        bodyText = committedMarkdown
         if (!settings.isRecognitionConfigReady()) {
             haptics.error()
             onShowMessage(settings.recognitionConfigMissingMessage(), ToastType.ERROR)
             return
         }
-        val markdown = committedMarkdown.trim()
         val text = buildString {
             if (titleText.isNotBlank()) appendLine(titleText.trim())
-            if (markdown.isNotBlank()) append(markdown)
+            val body = document.aiPlainText().trim()
+            if (body.isNotBlank()) append(body)
         }.trim()
         if (text.isBlank()) {
             haptics.error()
@@ -246,84 +258,18 @@ fun NoteEditorScreen(
         }
     }
 
-    val exportMarkdownLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/markdown")
-    ) { uri -> uri?.let { exportMarkdown(it) } }
-
-    fun insertAttachmentMarkdown(attachment: EventAttachment, forceImage: Boolean) {
-        val id = attachment.id ?: return
-        val label = attachment.displayName.ifBlank { "附件$id" }.replace("[", "(").replace("]", ")")
-        val markdown = if (forceImage || attachment.mimeType.startsWith("image/", ignoreCase = true)) {
-            "![$label](willdo-attachment://$id)"
-        } else {
-            "[$label](willdo-attachment://$id)"
-        }
-        val updated = editorController.insertMarkdownBlock(markdown) ?: bodyText
-        bodyText = updated
-        if (noteAttachments.none { it.id == attachment.id }) noteAttachments.add(attachment)
-        refreshAttachments(updated)
-    }
-
-    fun addAttachmentFromUri(uri: Uri, forceImage: Boolean) {
-        scope.launch {
-            runCatching {
-                val existingId = initialNote?.id
-                if (existingId != null && existingId > 0L) {
-                    onAddAttachment(existingId, uri)
-                } else {
-                    val key = ensurePendingAttachmentKey()
-                    val attachment = onAddPendingAttachment(key, uri)
-                    pendingAttachmentKeys = pendingAttachmentKeys + key
-                    attachment
-                }
-            }.onSuccess { attachment ->
-                insertAttachmentMarkdown(attachment, forceImage)
-                onShowMessage("已插入附件", ToastType.SUCCESS)
-            }.onFailure {
-                haptics.error()
-                onShowMessage("插入附件失败：${it.message ?: "未知错误"}", ToastType.ERROR)
-            }
-        }
-    }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { addAttachmentFromUri(it, forceImage = true) } }
-
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { addAttachmentFromUri(it, forceImage = false) } }
-
-    fun saveIfNeeded() {
-        if (hasSavedOnExit) return
-        hasSavedOnExit = true
-        if (skipSaveOnExit) return
-        val committedMarkdown = editorController.commit() ?: bodyText
-        bodyText = committedMarkdown
-        val currentMarkdown = committedMarkdown.trimEnd()
-        val hasPendingAttachments = pendingAttachmentKeys.isNotEmpty()
-        val isDirty = titleText != savedTitle || currentMarkdown != savedMarkdown || hasPendingAttachments
-        if (isDirty && !(initialNote == null && titleText.isBlank() && currentMarkdown.isBlank() && !hasPendingAttachments)) {
-            onSave(buildSavedNote(committedMarkdown), pendingAttachmentKeys.toList())
-        } else if (initialNote == null && hasPendingAttachments) {
-            pendingAttachmentKeys.forEach { key -> scope.launch { onDeletePendingAttachments(key) } }
-        }
-    }
-
-    fun saveAndDismiss() {
-        saveIfNeeded()
-        onDismiss()
-    }
-
-    DisposableEffect(editorSessionKey) {
-        onDispose { saveIfNeeded() }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                .align(Alignment.TopCenter)
+                .background(MaterialTheme.colorScheme.background)
+        )
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -331,12 +277,12 @@ fun NoteEditorScreen(
             topBar = {
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent,
+                        containerColor = MaterialTheme.colorScheme.background,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
                         actionIconContentColor = MaterialTheme.colorScheme.onBackground
                     ),
-                    title = { Text(if (initialNote == null) "新建便签" else "编辑便签") },
+                    title = { Text(if (noteId == null) "新建便签" else "编辑便签") },
                     navigationIcon = {
                         IconButton(onClick = ::saveAndDismiss) {
                             Icon(
@@ -347,12 +293,10 @@ fun NoteEditorScreen(
                         }
                     },
                     actions = {
-                        if (initialNote != null) {
+                        if (noteId != null) {
                             IconButton(onClick = {
                                 haptics.warning()
-                                skipSaveOnExit = true
-                                hasSavedOnExit = true
-                                onDelete(initialNote)
+                                pendingDelete = true
                             }) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
@@ -374,22 +318,14 @@ fun NoteEditorScreen(
                     .imePadding()
             ) {
                 key(editorSessionKey) {
-                    BlockNoteEditor(
+                    PlainNoteEditor(
                         title = titleText,
                         onTitleChange = { titleText = it },
-                        markdown = bodyText,
-                        onMarkdownChange = { bodyText = it },
+                        document = document,
+                        onDocumentChange = { document = it },
                         controller = editorController,
                         modifier = Modifier.fillMaxSize(),
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                        attachments = noteAttachments,
-                        onOpenAttachment = { attachment ->
-                            scope.launch {
-                                if (!onOpenAttachment(attachment)) {
-                                    onShowMessage("无法打开附件", ToastType.ERROR)
-                                }
-                            }
-                        }
+                        textColor = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -400,24 +336,36 @@ fun NoteEditorScreen(
             expanded = isMoreExpanded,
             isAnalyzing = isAnalyzing,
             onExpandedChange = { isMoreExpanded = it },
-            onToolClick = { tool ->
-                when (tool) {
-                    NoteMarkdownTool.IMAGE -> imagePickerLauncher.launch(arrayOf("image/*"))
-                    NoteMarkdownTool.FILE -> filePickerLauncher.launch(arrayOf("*/*"))
-                    else -> {
-                        val updated = editorController.applyMarkdownTool(tool) ?: bodyText
-                        bodyText = updated
-                    }
-                }
+            onTodoClick = {
+                editorController.toggleCurrentTodo()?.let { document = it }
+            },
+            onImageClick = {
+                imagePicker.launch("image/*")
+            },
+            onParagraphStyleClick = { style ->
+                editorController.setParagraphStyle(style)?.let { document = it }
+            },
+            onTextStyleClick = { style ->
+                editorController.applyTextStyle(style)?.let { document = it }
             },
             onAnalyzeClick = {
                 isMoreExpanded = false
                 runAiAnalyze()
             },
+            onAttachmentClick = {
+                attachmentPicker.launch(arrayOf("*/*"))
+            },
             onExportClick = {
-                isMoreExpanded = false
-                val fileName = "${titleText.ifBlank { "note" }.sanitizeMarkdownFileName()}.md"
-                exportMarkdownLauncher.launch(fileName)
+                saveNow(force = true)
+                val timestamp = System.currentTimeMillis()
+                if (document.hasTransferAttachments()) {
+                    noteExportZipLauncher.launch("willdo_note_$timestamp.zip")
+                } else {
+                    noteExportJsonLauncher.launch("willdo_note_$timestamp.json")
+                }
+            },
+            onImportClick = {
+                noteImportLauncher.launch(arrayOf("application/json", "application/zip", "*/*"))
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -425,6 +373,31 @@ fun NoteEditorScreen(
                 .imePadding()
         )
     }
+
+    com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard(
+        visible = pendingDelete,
+        title = "删除便签",
+        content = "删除后无法恢复，确认删除这条便签吗？",
+        confirmText = "删除",
+        dismissText = "取消",
+        isDestructive = true,
+        isLoading = false,
+        predictiveBackEnabled = settings.predictiveBackEnabled,
+        onConfirm = {
+            val id = noteId ?: return@PredictiveFloatingActionCard
+            hasDeleted = true
+            saveJob?.cancel()
+            onDelete(id) { onDismiss() }
+        },
+        onDismiss = { pendingDelete = false },
+        modifier = Modifier.padding(bottom = 24.dp + bottomInset)
+    )
+}
+
+private enum class NoteToolbarMode {
+    CATEGORIES,
+    CATEGORY_TOOLS,
+    MORE_ACTIONS
 }
 
 private enum class NoteToolbarCategory(
@@ -433,14 +406,7 @@ private enum class NoteToolbarCategory(
 ) {
     HEADING("H", "标题"),
     TEXT("T", "文本"),
-    LIST("L", "列表"),
     INSERT("I", "插入")
-}
-
-private enum class NoteToolbarMode {
-    CATEGORIES,
-    CATEGORY_TOOLS,
-    MORE_ACTIONS
 }
 
 private data class NoteToolbarContentState(
@@ -450,27 +416,47 @@ private data class NoteToolbarContentState(
 
 private data class NoteToolbarItem(
     val label: String,
-    val tool: NoteMarkdownTool
+    val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    val textStyle: NoteTextStyle? = null,
+    val paragraphStyle: NoteParagraphStyle? = null,
+    val isTodo: Boolean = false,
+    val isImage: Boolean = false,
+    val isAttachment: Boolean = false
 )
+
+private fun NoteDocument.aiPlainText(): String {
+    return paragraphs
+        .filterNot { it.type == NoteParagraphType.IMAGE || it.type == NoteParagraphType.FILE }
+        .joinToString("\n") { it.text }
+}
+
+private fun NoteDocument.hasTransferAttachments(): Boolean {
+    return paragraphs.any { it.attachmentPath.isNotBlank() }
+}
 
 private fun toolsForCategory(category: NoteToolbarCategory): List<NoteToolbarItem> = when (category) {
     NoteToolbarCategory.HEADING -> listOf(
-        NoteToolbarItem("H1", NoteMarkdownTool.H1),
-        NoteToolbarItem("H2", NoteMarkdownTool.H2)
+        NoteToolbarItem(label = "正文", paragraphStyle = NoteParagraphStyle.BODY),
+        NoteToolbarItem(label = "H1", paragraphStyle = NoteParagraphStyle.H1),
+        NoteToolbarItem(label = "H2", paragraphStyle = NoteParagraphStyle.H2),
+        NoteToolbarItem(label = "H3", paragraphStyle = NoteParagraphStyle.H3),
+        NoteToolbarItem(label = "H4", paragraphStyle = NoteParagraphStyle.H4),
+        NoteToolbarItem(label = "H5", paragraphStyle = NoteParagraphStyle.H5)
     )
     NoteToolbarCategory.TEXT -> listOf(
-        NoteToolbarItem("引用", NoteMarkdownTool.QUOTE),
-        NoteToolbarItem("分割线", NoteMarkdownTool.DIVIDER),
-        NoteToolbarItem("代码", NoteMarkdownTool.CODE)
-    )
-    NoteToolbarCategory.LIST -> listOf(
-        NoteToolbarItem("待办", NoteMarkdownTool.TASK),
-        NoteToolbarItem("无序", NoteMarkdownTool.BULLET),
-        NoteToolbarItem("有序", NoteMarkdownTool.ORDERED)
+        NoteToolbarItem(label = "B", icon = Icons.Default.FormatBold, textStyle = NoteTextStyle.BOLD),
+        NoteToolbarItem(label = "I", icon = Icons.Default.FormatItalic, textStyle = NoteTextStyle.ITALIC),
+        NoteToolbarItem(label = "U", icon = Icons.Default.FormatUnderlined, textStyle = NoteTextStyle.UNDERLINE),
+        NoteToolbarItem(label = "S", icon = Icons.Default.FormatStrikethrough, textStyle = NoteTextStyle.STRIKE),
+        NoteToolbarItem(label = "引用", icon = Icons.Default.FormatQuote, paragraphStyle = NoteParagraphStyle.QUOTE),
+        NoteToolbarItem(label = "代码", icon = Icons.Default.Code, paragraphStyle = NoteParagraphStyle.CODE),
+        NoteToolbarItem(label = "无序", icon = Icons.Default.FormatListBulleted, paragraphStyle = NoteParagraphStyle.BULLET),
+        NoteToolbarItem(label = "有序", icon = Icons.Default.FormatListNumbered, paragraphStyle = NoteParagraphStyle.ORDERED)
     )
     NoteToolbarCategory.INSERT -> listOf(
-        NoteToolbarItem("图片", NoteMarkdownTool.IMAGE),
-        NoteToolbarItem("文件", NoteMarkdownTool.FILE)
+        NoteToolbarItem(label = "待办", icon = Icons.Default.CheckBox, isTodo = true),
+        NoteToolbarItem(label = "图片", icon = Icons.Default.Image, isImage = true),
+        NoteToolbarItem(label = "附件", icon = Icons.Default.Description, isAttachment = true)
     )
 }
 
@@ -480,9 +466,14 @@ private fun NoteEditorFloatingToolbar(
     expanded: Boolean,
     isAnalyzing: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onToolClick: (NoteMarkdownTool) -> Unit,
+    onTodoClick: () -> Unit,
+    onImageClick: () -> Unit,
+    onParagraphStyleClick: (NoteParagraphStyle) -> Unit,
+    onTextStyleClick: (NoteTextStyle) -> Unit,
     onAnalyzeClick: () -> Unit,
+    onAttachmentClick: () -> Unit,
     onExportClick: () -> Unit,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var activeCategory by remember { mutableStateOf<NoteToolbarCategory?>(null) }
@@ -530,7 +521,9 @@ private fun NoteEditorFloatingToolbar(
                     onCategoryClick = {},
                     onToolClick = {},
                     onAnalyzeClick = {},
+                    onAttachmentClick = {},
                     onExportClick = {},
+                    onImportClick = {},
                     modifier = Modifier.onSizeChanged { size ->
                         val width = with(density) { size.width.toDp() }
                         if (width != measuredContentWidth) measuredContentWidth = width
@@ -543,99 +536,119 @@ private fun NoteEditorFloatingToolbar(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Card(
+                        shape = CircleShape,
+                        colors = CardDefaults.cardColors(containerColor = barColor),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        modifier = Modifier
+                            .height(toolbarHeight)
+                            .width(toolbarWidth)
                     ) {
-                        Card(
-                            shape = CircleShape,
-                            colors = CardDefaults.cardColors(containerColor = barColor),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        Row(
                             modifier = Modifier
                                 .height(toolbarHeight)
                                 .width(toolbarWidth)
+                                .padding(horizontal = outerHorizontalPadding, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .height(toolbarHeight)
-                                    .width(toolbarWidth)
-                                    .padding(horizontal = outerHorizontalPadding, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (toolbarMode != NoteToolbarMode.MORE_ACTIONS) {
-                                    NoteToolbarLeadingButton(
-                                        mode = toolbarMode,
-                                        accentColor = accentColor,
-                                        size = iconSize,
-                                        onClick = {
-                                            when (toolbarMode) {
-                                                NoteToolbarMode.CATEGORIES -> {
-                                                    activeCategory = NoteToolbarCategory.HEADING
-                                                    toolbarMode = NoteToolbarMode.CATEGORY_TOOLS
-                                                }
-                                                NoteToolbarMode.CATEGORY_TOOLS -> {
-                                                    activeCategory = null
-                                                    toolbarMode = NoteToolbarMode.CATEGORIES
-                                                }
-                                                NoteToolbarMode.MORE_ACTIONS -> Unit
-                                            }
-                                        }
-                                    )
-                                }
-
-                                AnimatedToolbarContent(
-                                    state = NoteToolbarContentState(toolbarMode, activeCategory),
+                            if (toolbarMode != NoteToolbarMode.MORE_ACTIONS) {
+                                NoteToolbarLeadingButton(
+                                    mode = toolbarMode,
                                     accentColor = accentColor,
-                                    itemHeight = iconSize,
-                                    modifier = Modifier.width(contentViewportWidth),
-                                    isAnalyzing = isAnalyzing,
-                                    onCategoryClick = { category ->
-                                        activeCategory = category
-                                        toolbarMode = NoteToolbarMode.CATEGORY_TOOLS
-                                    },
-                                    onToolClick = { tool ->
-                                        onToolClick(tool)
-                                        activeCategory = null
-                                        toolbarMode = NoteToolbarMode.CATEGORIES
-                                    },
-                                    onAnalyzeClick = {
-                                        toolbarMode = NoteToolbarMode.CATEGORIES
-                                        onExpandedChange(false)
-                                        onAnalyzeClick()
-                                    },
-                                    onExportClick = {
-                                        toolbarMode = NoteToolbarMode.CATEGORIES
-                                        onExpandedChange(false)
-                                        onExportClick()
+                                    size = iconSize,
+                                    onClick = {
+                                        when (toolbarMode) {
+                                            NoteToolbarMode.CATEGORIES -> {
+                                                activeCategory = NoteToolbarCategory.HEADING
+                                                toolbarMode = NoteToolbarMode.CATEGORY_TOOLS
+                                            }
+                                            NoteToolbarMode.CATEGORY_TOOLS -> {
+                                                activeCategory = null
+                                                toolbarMode = NoteToolbarMode.CATEGORIES
+                                            }
+                                            NoteToolbarMode.MORE_ACTIONS -> Unit
+                                        }
                                     }
                                 )
+                            }
 
-                                if (toolbarMode == NoteToolbarMode.MORE_ACTIONS) {
-                                    NoteToolbarTrailingBackButton(
-                                        accentColor = accentColor,
-                                        size = iconSize,
-                                        onClick = {
-                                            activeCategory = null
-                                            toolbarMode = NoteToolbarMode.CATEGORIES
-                                            onExpandedChange(false)
-                                        }
-                                    )
-                                } else {
-                                    NoteToolbarPlusButton(
-                                        accentColor = accentColor,
-                                        size = iconSize,
-                                        onClick = {
-                                            activeCategory = null
-                                            toolbarMode = NoteToolbarMode.MORE_ACTIONS
-                                            onExpandedChange(true)
-                                        }
-                                    )
+                            AnimatedToolbarContent(
+                                state = NoteToolbarContentState(toolbarMode, activeCategory),
+                                accentColor = accentColor,
+                                itemHeight = iconSize,
+                                modifier = Modifier.width(contentViewportWidth),
+                                isAnalyzing = isAnalyzing,
+                                onCategoryClick = { category ->
+                                    activeCategory = category
+                                    toolbarMode = NoteToolbarMode.CATEGORY_TOOLS
+                                },
+                                onToolClick = { item ->
+                                    when {
+                                        item.isTodo -> onTodoClick()
+                                        item.isImage -> onImageClick()
+                                        item.isAttachment -> onAttachmentClick()
+                                        item.paragraphStyle != null -> onParagraphStyleClick(item.paragraphStyle)
+                                        item.textStyle != null -> onTextStyleClick(item.textStyle)
+                                    }
+                                    activeCategory = null
+                                    toolbarMode = NoteToolbarMode.CATEGORIES
+                                },
+                                onAnalyzeClick = {
+                                    activeCategory = null
+                                    toolbarMode = NoteToolbarMode.CATEGORIES
+                                    onExpandedChange(false)
+                                    onAnalyzeClick()
+                                },
+                                onAttachmentClick = {
+                                    activeCategory = null
+                                    toolbarMode = NoteToolbarMode.CATEGORIES
+                                    onExpandedChange(false)
+                                    onAttachmentClick()
+                                },
+                                onExportClick = {
+                                    activeCategory = null
+                                    toolbarMode = NoteToolbarMode.CATEGORIES
+                                    onExpandedChange(false)
+                                    onExportClick()
+                                },
+                                onImportClick = {
+                                    activeCategory = null
+                                    toolbarMode = NoteToolbarMode.CATEGORIES
+                                    onExpandedChange(false)
+                                    onImportClick()
                                 }
+                            )
+
+                            if (toolbarMode == NoteToolbarMode.MORE_ACTIONS) {
+                                NoteToolbarTrailingBackButton(
+                                    accentColor = accentColor,
+                                    size = iconSize,
+                                    onClick = {
+                                        activeCategory = null
+                                        toolbarMode = NoteToolbarMode.CATEGORIES
+                                        onExpandedChange(false)
+                                    }
+                                )
+                            } else {
+                                NoteToolbarPlusButton(
+                                    accentColor = accentColor,
+                                    size = iconSize,
+                                    onClick = {
+                                        activeCategory = null
+                                        toolbarMode = NoteToolbarMode.MORE_ACTIONS
+                                        onExpandedChange(true)
+                                    }
+                                )
                             }
                         }
                     }
+                }
             }
         }
     }
@@ -648,9 +661,11 @@ private fun ToolbarContentRow(
     itemHeight: Dp,
     isAnalyzing: Boolean,
     onCategoryClick: (NoteToolbarCategory) -> Unit,
-    onToolClick: (NoteMarkdownTool) -> Unit,
+    onToolClick: (NoteToolbarItem) -> Unit,
     onAnalyzeClick: () -> Unit,
+    onAttachmentClick: () -> Unit,
     onExportClick: () -> Unit,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -660,18 +675,19 @@ private fun ToolbarContentRow(
     ) {
         when (state.mode) {
             NoteToolbarMode.CATEGORIES -> {
-                listOf(NoteToolbarCategory.TEXT, NoteToolbarCategory.LIST, NoteToolbarCategory.INSERT).forEach { category ->
+                listOf(NoteToolbarCategory.TEXT, NoteToolbarCategory.INSERT).forEach { category ->
                     NoteToolbarCategoryChip(category, accentColor, itemHeight) { onCategoryClick(category) }
                 }
             }
             NoteToolbarMode.CATEGORY_TOOLS -> {
                 toolsForCategory(state.category ?: NoteToolbarCategory.HEADING).forEach { item ->
-                    NoteToolbarChip(item.label, accentColor, itemHeight) { onToolClick(item.tool) }
+                    NoteToolbarChip(item, accentColor, itemHeight) { onToolClick(item) }
                 }
             }
             NoteToolbarMode.MORE_ACTIONS -> {
-                NoteToolbarAction("AI 分析", isAnalyzing, accentColor, itemHeight, onAnalyzeClick)
-                NoteToolbarAction("导出", false, accentColor, itemHeight, onExportClick)
+                NoteToolbarAction("AI 分析", Icons.Default.AutoAwesome, isAnalyzing, accentColor, itemHeight, onAnalyzeClick)
+                NoteToolbarAction("导出", Icons.Default.Download, false, accentColor, itemHeight, onExportClick)
+                NoteToolbarAction("导入", Icons.Default.Upload, false, accentColor, itemHeight, onImportClick)
             }
         }
     }
@@ -684,9 +700,11 @@ private fun AnimatedToolbarContent(
     itemHeight: Dp,
     isAnalyzing: Boolean,
     onCategoryClick: (NoteToolbarCategory) -> Unit,
-    onToolClick: (NoteMarkdownTool) -> Unit,
+    onToolClick: (NoteToolbarItem) -> Unit,
     onAnalyzeClick: () -> Unit,
+    onAttachmentClick: () -> Unit,
     onExportClick: () -> Unit,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     AnimatedContent(
@@ -707,7 +725,9 @@ private fun AnimatedToolbarContent(
             onCategoryClick = onCategoryClick,
             onToolClick = onToolClick,
             onAnalyzeClick = onAnalyzeClick,
-            onExportClick = onExportClick
+            onAttachmentClick = onAttachmentClick,
+            onExportClick = onExportClick,
+            onImportClick = onImportClick
         )
     }
 }
@@ -825,19 +845,23 @@ private fun NoteToolbarCategoryChip(
 }
 
 @Composable
-private fun NoteToolbarChip(label: String, accentColor: Color, height: Dp, onClick: () -> Unit) {
+private fun NoteToolbarChip(item: NoteToolbarItem, accentColor: Color, height: Dp, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
         modifier = Modifier.height(height)
     ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 15.dp).height(height),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.padding(horizontal = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item.icon?.let { icon ->
+                Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+            }
             Text(
-                text = label,
+                text = item.label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -849,6 +873,7 @@ private fun NoteToolbarChip(label: String, accentColor: Color, height: Dp, onCli
 @Composable
 private fun NoteToolbarAction(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     loading: Boolean,
     accentColor: Color,
     height: Dp,
@@ -870,7 +895,7 @@ private fun NoteToolbarAction(
                 CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp, color = accentColor)
             } else {
                 Icon(
-                    imageVector = if (label.contains("导出")) Icons.Default.FileDownload else Icons.Default.AutoAwesome,
+                    imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = accentColor
@@ -884,12 +909,4 @@ private fun NoteToolbarAction(
             )
         }
     }
-}
-
-private fun String.sanitizeMarkdownFileName(): String {
-    return trim()
-        .ifBlank { "note" }
-        .replace(Regex("[\\\\/:*?\"<>|\\r\\n]+"), "_")
-        .take(40)
-        .ifBlank { "note" }
 }

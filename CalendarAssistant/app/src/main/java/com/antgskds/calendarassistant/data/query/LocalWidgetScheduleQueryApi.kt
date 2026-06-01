@@ -1,7 +1,6 @@
 package com.antgskds.calendarassistant.data.query
 
 import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.isNoteTag
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.WidgetScheduleQueryApi
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
@@ -19,7 +18,7 @@ class LocalWidgetScheduleQueryApi : WidgetScheduleQueryApi {
     ): WidgetScheduleSnapshot {
         val windowEnd = today.plusDays(lookaheadDays.coerceAtLeast(1).toLong())
         val now = LocalDateTime.now()
-        val scheduleEvents = events.filter { it.archivedAt == null && !isNoteTag(it.tag) }
+        val scheduleEvents = events.filter { it.archivedAt == null }
         val items = ScheduleDisplayHelper.buildDisplayItems(scheduleEvents, today, windowEnd)
             .distinctBy { it.stableKey }
 

@@ -704,7 +704,7 @@ class CapsuleStateManager(
         }
         val from = today.minusDays(1)
         val to = today.plusDays(advanceDays.toLong() + 1)
-        val activeEvents = events.filter { it.archivedAt == null && it.tag != EventTags.NOTE }
+        val activeEvents = events.filter { it.archivedAt == null }
         val eventsById = activeEvents.mapNotNull { event -> event.id?.let { id -> id to event } }.toMap()
 
         return ScheduleDisplayHelper.buildDisplayItems(activeEvents, from, to).mapNotNull { item ->
@@ -759,8 +759,6 @@ class CapsuleStateManager(
 
     private fun isActiveCapsuleEntry(event: Event, settings: MySettings, now: LocalDateTime): Boolean {
         return try {
-            if (event.tag == EventTags.NOTE) return false
-
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
             val effectiveStartTime = if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
