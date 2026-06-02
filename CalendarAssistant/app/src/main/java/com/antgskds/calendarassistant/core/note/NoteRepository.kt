@@ -24,7 +24,8 @@ class NoteRepository(
             plainText = normalizedDocument.plainText(),
             documentJson = NoteDocumentCodec.encode(normalizedDocument),
             createdAt = createdAt ?: now,
-            updatedAt = now
+            updatedAt = now,
+            pinnedAt = id?.let { notesDao.getNote(it)?.pinnedAt }
         )
 
         return if (id == null) {
@@ -39,6 +40,10 @@ class NoteRepository(
         notesDao.deleteById(id)
     }
 
+    suspend fun setPinned(noteId: Long, pinned: Boolean) {
+        notesDao.updatePinnedAt(noteId, if (pinned) System.currentTimeMillis() else null)
+    }
+
     companion object {
         const val MAX_TITLE_LENGTH = 80
     }
@@ -47,7 +52,7 @@ class NoteRepository(
 fun NoteDocument.withNormalizedParagraphs(): NoteDocument {
     return copy(
         paragraphs = paragraphs.map { paragraph ->
-            val normalizedText = paragraph.text.replace("\r\n", "\n").replace('\r', '\n')
+            val normalizedText = if (paragraph.type == NoteParagraphType.DIVIDER) "" else paragraph.text.replace("\r\n", "\n").replace('\r', '\n')
             paragraph.copy(
                 text = normalizedText,
                 checked = if (paragraph.type == NoteParagraphType.TODO) paragraph.checked else false,
@@ -57,9 +62,9 @@ fun NoteDocument.withNormalizedParagraphs(): NoteDocument {
                         val end = span.end.coerceIn(0, normalizedText.length)
                         if (start >= end || span.isEmpty()) null else span.copy(start = start, end = end)
                     },
-                attachmentPath = paragraph.attachmentPath.trim(),
-                attachmentName = paragraph.attachmentName.trim(),
-                attachmentMime = paragraph.attachmentMime.trim()
+                attachmentPath = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentPath.trim() else "",
+                attachmentName = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentName.trim() else "",
+                attachmentMime = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentMime.trim() else ""
             )
         }
     )

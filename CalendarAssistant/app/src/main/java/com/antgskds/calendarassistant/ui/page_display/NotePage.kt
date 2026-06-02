@@ -40,8 +40,7 @@ fun NotePage(
             if (searchQuery.isBlank()) {
                 true
             } else {
-                note.title.contains(searchQuery, ignoreCase = true) ||
-                    note.plainText.contains(searchQuery, ignoreCase = true)
+                note.document().searchableText(note.title).contains(searchQuery, ignoreCase = true)
             }
         }
     }

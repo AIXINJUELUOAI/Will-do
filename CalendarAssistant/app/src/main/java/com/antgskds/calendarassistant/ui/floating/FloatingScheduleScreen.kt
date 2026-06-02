@@ -138,7 +138,6 @@ import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NoteParagraph
-import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -642,18 +641,10 @@ private fun FloatingNoteCard(
     var isExpanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var draftTitle by remember(note.id, note.title) { mutableStateOf(note.title) }
-    var draftBody by remember(note.id, note.plainText) { mutableStateOf(note.plainText) }
-    val todos = remember(document) { document.paragraphs.filter { it.type == NoteParagraphType.TODO } }
-    val progressLabel = remember(todos) {
-        when {
-            todos.isEmpty() -> null
-            todos.all { it.checked } -> "已完成"
-            else -> "${todos.count { it.checked }}/${todos.size}"
-        }
-    }
+    var draftBody by remember(note.id, note.documentJson) { mutableStateOf(document.floatingText()) }
     val body = remember(document) {
         document.paragraphs
-            .filter { it.type != NoteParagraphType.TODO && it.type != NoteParagraphType.IMAGE && it.type != NoteParagraphType.FILE }
+            .filter { document.isFloatingPlainTextLine(it) }
             .map { it.text.trim() }
             .filter { it.isNotBlank() }
             .take(3)
@@ -688,7 +679,7 @@ private fun FloatingNoteCard(
                     onClick = {
                         haptics.click()
                         draftTitle = note.title
-                        draftBody = note.plainText
+                        draftBody = note.document().floatingText()
                         isExpanded = true
                         isEditing = true
                         scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
@@ -774,14 +765,6 @@ private fun FloatingNoteCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    if (progressLabel != null) {
-                        Spacer(Modifier.width(8.dp))
-                        FloatingNoteProgressLabel(
-                            progressLabel,
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                        )
-                    }
                 }
                 Row(
                     modifier = Modifier.padding(bottom = 10.dp),
@@ -813,7 +796,7 @@ private fun FloatingNoteCard(
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                         FloatingCompactTextButton(
                                             text = "取消",
-                                            onClick = { draftTitle = note.title; draftBody = note.plainText; isEditing = false }
+                                            onClick = { draftTitle = note.title; draftBody = note.document().floatingText(); isEditing = false }
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         FloatingCompactPrimaryButton(
@@ -824,24 +807,8 @@ private fun FloatingNoteCard(
                                 }
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    todos.take(5).forEach { todo ->
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { haptics.selection(); onToggleTodo(todo.id) }) {
-                                            FloatingTodoMark(checked = todo.checked, onClick = { haptics.selection(); onToggleTodo(todo.id) })
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                todo.text.ifBlank { "未命名待办" },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = if (todo.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f) else MaterialTheme.colorScheme.onSurface,
-                                                textDecoration = if (todo.checked) TextDecoration.LineThrough else null,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-                                    if (todos.isEmpty()) {
-                                        body.forEach { line -> Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                                        if (body.isEmpty()) Text("空白便签", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+                                    body.forEach { line -> Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                                    if (body.isEmpty()) Text("空白便签", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }

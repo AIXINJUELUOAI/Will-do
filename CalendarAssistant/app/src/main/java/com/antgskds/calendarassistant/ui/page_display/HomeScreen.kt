@@ -207,7 +207,7 @@ fun HomeScreen(
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
-    var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
+    var selectedNoteAction by remember { mutableStateOf<NoteEntity?>(null) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -428,7 +428,7 @@ fun HomeScreen(
                         onRequestDeleteItem = { item -> requestDeleteItem(item) },
                         onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
                         onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
-                        onRequestDeleteNote = { note -> noteToDelete = note },
+                        onRequestDeleteNote = { note -> selectedNoteAction = note },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
@@ -488,7 +488,7 @@ fun HomeScreen(
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
         PredictiveFloatingActionCard(
-            visible = noteToDelete != null,
+            visible = selectedNoteAction != null,
             title = "删除便签",
             content = "删除后无法恢复，确认删除这条便签吗？",
             confirmText = "删除",
@@ -497,10 +497,10 @@ fun HomeScreen(
             isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
-                noteToDelete?.id?.let { mainViewModel.deleteNote(it) }
-                noteToDelete = null
+                selectedNoteAction?.id?.let { mainViewModel.deleteNote(it) }
+                selectedNoteAction = null
             },
-            onDismiss = { noteToDelete = null },
+            onDismiss = { selectedNoteAction = null },
             modifier = Modifier
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )
