@@ -12,6 +12,53 @@ data class NoteDocument(
 ) {
     fun plainText(): String = paragraphs.joinToString("\n") { it.text }
 
+    fun isFloatingPlainTextLine(paragraph: NoteParagraph): Boolean {
+        return paragraph.type == NoteParagraphType.TEXT && paragraph.style == NoteParagraphStyle.BODY && paragraph.spans.isEmpty()
+    }
+
+    fun floatingText(): String = paragraphs
+        .filter { isFloatingPlainTextLine(it) }
+        .joinToString("\n") { it.text }
+
+    fun searchableText(title: String = ""): String = buildString {
+        appendLine(title)
+        paragraphs.forEach { paragraph ->
+            appendLine(paragraph.text)
+            appendLine(paragraph.attachmentName)
+            appendLine(paragraph.attachmentMime)
+            appendLine(paragraph.attachmentPath.substringAfterLast('/'))
+        }
+    }
+
+    fun copyablePlainText(title: String = ""): String = buildString {
+        if (title.isNotBlank()) appendLine(title.trim())
+        paragraphs.forEach { paragraph ->
+            when (paragraph.type) {
+                NoteParagraphType.TODO -> appendLine("${if (paragraph.checked) "[x]" else "[ ]"} ${paragraph.text}")
+                NoteParagraphType.TEXT -> appendLine(paragraph.text)
+                NoteParagraphType.DIVIDER -> appendLine("---")
+                NoteParagraphType.IMAGE,
+                NoteParagraphType.FILE -> Unit
+            }
+        }
+    }.trimEnd()
+
+    fun withFloatingText(text: String): NoteDocument {
+        val newTextLines = text.replace("\r\n", "\n").replace('\r', '\n')
+            .split('\n')
+            .map { NoteParagraph(text = it) }
+            .ifEmpty { listOf(NoteParagraph()) }
+        val firstTextIndex = paragraphs.indexOfFirst { isFloatingPlainTextLine(it) }
+        val preserved = paragraphs.filter { !isFloatingPlainTextLine(it) }.toMutableList()
+        val insertAt = if (firstTextIndex >= 0) {
+            paragraphs.take(firstTextIndex).count { !isFloatingPlainTextLine(it) }
+        } else {
+            0
+        }
+        preserved.addAll(insertAt.coerceIn(0, preserved.size), newTextLines)
+        return copy(paragraphs = preserved)
+    }
+
     fun todoCount(): Int = paragraphs.count { it.type == NoteParagraphType.TODO }
 
     fun pendingTodoCount(): Int = paragraphs.count { it.type == NoteParagraphType.TODO && !it.checked }
@@ -25,7 +72,7 @@ data class NoteDocument(
         fun fromPlainText(text: String): NoteDocument {
             if (text.isEmpty()) return NoteDocument()
             return NoteDocument(
-                paragraphs = text.replace("\r\n", "\n").split('\n').map { line ->
+                paragraphs = text.replace("\r\n", "\n").replace('\r', '\n').split('\n').map { line ->
                     NoteParagraph(text = line)
                 }
             )
@@ -51,7 +98,8 @@ enum class NoteParagraphType {
     TEXT,
     TODO,
     IMAGE,
-    FILE
+    FILE,
+    DIVIDER
 }
 
 @Serializable

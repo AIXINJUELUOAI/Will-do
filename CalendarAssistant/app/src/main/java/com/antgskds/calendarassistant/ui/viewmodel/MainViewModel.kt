@@ -318,10 +318,22 @@ class MainViewModel(
         noteCenter.toggleTodo(noteId, paragraphId)
     }
 
+    fun setNotePinned(noteId: Long, pinned: Boolean) = viewModelScope.launch {
+        noteCenter.setPinned(noteId, pinned)
+    }
+
     fun exportNote(noteId: Long, uri: Uri, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
         val result = runCatching {
             val note = noteCenter.getNote(noteId) ?: error("便签不存在")
             kotlinx.coroutines.withContext(Dispatchers.IO) { noteTransferManager.exportNote(note, uri) }
+        }
+        onResult(result)
+    }
+
+    fun exportMarkdownNote(noteId: Long, uri: Uri, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        val result = runCatching {
+            val note = noteCenter.getNote(noteId) ?: error("便签不存在")
+            kotlinx.coroutines.withContext(Dispatchers.IO) { noteTransferManager.exportMarkdownNote(note, uri) }
         }
         onResult(result)
     }

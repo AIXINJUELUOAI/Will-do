@@ -57,4 +57,8 @@ class NoteCenter(
     suspend fun deleteNote(id: Long) = withContext(Dispatchers.IO) {
         repository.deleteNote(id)
     }
+
+    suspend fun setPinned(noteId: Long, pinned: Boolean) = withContext(Dispatchers.IO) {
+        repository.setPinned(noteId, pinned)
+    }
 }

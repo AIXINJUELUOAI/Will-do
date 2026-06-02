@@ -322,8 +322,14 @@ class MainActivity : ComponentActivity() {
                                     onDelete = { id, onDeleted ->
                                         mainViewModel.deleteNote(id, onDeleted)
                                     },
+                                    onSetPinned = { id, pinned ->
+                                        mainViewModel.setNotePinned(id, pinned)
+                                    },
                                     onExportNote = { id, uri, onResult ->
                                         mainViewModel.exportNote(id, uri, onResult)
+                                    },
+                                    onExportMarkdownNote = { id, uri, onResult ->
+                                        mainViewModel.exportMarkdownNote(id, uri, onResult)
                                     },
                                     onImportNote = { uri, onResult ->
                                         mainViewModel.importNote(uri, onResult)

@@ -441,7 +441,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                     noteCenter.saveNote(
                                         id = note.id,
                                         title = title,
-                                        document = com.antgskds.calendarassistant.core.note.NoteDocument.fromPlainText(body),
+                                        document = note.document().withFloatingText(body),
                                         createdAt = note.createdAt
                                     )
                                 } finally {

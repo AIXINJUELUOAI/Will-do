@@ -1,12 +1,15 @@
 package com.antgskds.calendarassistant.ui.components
 
 import android.content.Context
+import android.content.ClipboardManager
+import android.content.ClipDescription
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.SystemClock
 import android.text.InputType
 import android.text.Editable
 import android.text.Spannable
@@ -19,6 +22,9 @@ import android.text.style.UnderlineSpan
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
@@ -42,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.ViewCompat
 import androidx.core.widget.doAfterTextChanged
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
@@ -58,11 +65,15 @@ class PlainNoteEditorController {
     internal var applyTextStyleAction: ((NoteTextStyle) -> NoteDocument)? = null
     internal var setParagraphStyleAction: ((NoteParagraphStyle) -> NoteDocument)? = null
     internal var insertAttachmentAction: ((Uri) -> NoteDocument)? = null
+    internal var insertDividerAction: (() -> NoteDocument)? = null
+    internal var onImageShortcut: (() -> Unit)? = null
+    internal var onFileShortcut: (() -> Unit)? = null
 
     fun toggleCurrentTodo(): NoteDocument? = toggleCurrentTodoAction?.invoke()
     fun applyTextStyle(style: NoteTextStyle): NoteDocument? = applyTextStyleAction?.invoke(style)
     fun setParagraphStyle(style: NoteParagraphStyle): NoteDocument? = setParagraphStyleAction?.invoke(style)
     fun insertAttachment(uri: Uri): NoteDocument? = insertAttachmentAction?.invoke(uri)
+    fun insertDivider(): NoteDocument? = insertDividerAction?.invoke()
     fun clearFocus() = clearFocusAction?.invoke()
 }
 
@@ -73,6 +84,9 @@ fun PlainNoteEditor(
     document: NoteDocument,
     onDocumentChange: (NoteDocument) -> Unit,
     controller: PlainNoteEditorController,
+    onOpenAttachment: (NoteParagraph) -> Unit = {},
+    onImageShortcut: () -> Unit = {},
+    onFileShortcut: () -> Unit = {},
     modifier: Modifier = Modifier,
     textColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
@@ -92,7 +106,7 @@ fun PlainNoteEditor(
         factory = {
             NativeLineNoteEditor(context).apply {
                 setColors(colors)
-                bind(title, document, onTitleChange, onDocumentChange)
+                bind(title, document, onTitleChange, onDocumentChange, onOpenAttachment, onImageShortcut, onFileShortcut)
                 editor = this
             }
         },
@@ -108,6 +122,9 @@ fun PlainNoteEditor(
         controller.applyTextStyleAction = { style -> editor?.applyTextStyle(style) ?: document }
         controller.setParagraphStyleAction = { style -> editor?.setParagraphStyle(style) ?: document }
         controller.insertAttachmentAction = { uri -> editor?.insertAttachment(uri) ?: document }
+        controller.insertDividerAction = { editor?.insertDivider() ?: document }
+        controller.onImageShortcut = onImageShortcut
+        controller.onFileShortcut = onFileShortcut
         controller.clearFocusAction = { editor?.hideKeyboard() }
     }
 
@@ -148,6 +165,9 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private var paragraphs = mutableListOf<NoteParagraph>()
     private var onTitleChange: (String) -> Unit = {}
     private var onDocumentChange: (NoteDocument) -> Unit = {}
+    private var onOpenAttachment: (NoteParagraph) -> Unit = {}
+    private var onImageShortcut: () -> Unit = {}
+    private var onFileShortcut: () -> Unit = {}
     private var internalUpdate = false
     private var colors = NativeNoteEditorColors(0xff111111.toInt(), 0xff999999.toInt(), 0xff777777.toInt(), 0xff3f6db5.toInt(), 0xff999999.toInt(), 0xffeef2f8.toInt())
     private var focusedLineId: String? = null
@@ -166,9 +186,20 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         root.setOnClickListener { clearAttachmentSelection(); focusLastLine() }
     }
 
-    fun bind(title: String, document: NoteDocument, onTitleChange: (String) -> Unit, onDocumentChange: (NoteDocument) -> Unit) {
+    fun bind(
+        title: String,
+        document: NoteDocument,
+        onTitleChange: (String) -> Unit,
+        onDocumentChange: (NoteDocument) -> Unit,
+        onOpenAttachment: (NoteParagraph) -> Unit,
+        onImageShortcut: () -> Unit,
+        onFileShortcut: () -> Unit
+    ) {
         this.onTitleChange = onTitleChange
         this.onDocumentChange = onDocumentChange
+        this.onOpenAttachment = onOpenAttachment
+        this.onImageShortcut = onImageShortcut
+        this.onFileShortcut = onFileShortcut
         updateExternal(title, document, force = true)
     }
 
@@ -196,7 +227,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     fun toggleCurrentTodo(): NoteDocument {
         val index = focusedIndex()
         val paragraph = paragraphs.getOrNull(index) ?: return emit()
-        if (paragraph.isAttachmentLine()) return emit()
+        if (paragraph.isBlockLine()) return emit()
         paragraphs[index] = if (paragraph.type == NoteParagraphType.TODO) paragraph.copy(type = NoteParagraphType.TEXT, checked = false) else paragraph.copy(type = NoteParagraphType.TODO, checked = false)
         rebuildLines(paragraphs[index].id)
         return emit()
@@ -205,7 +236,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     fun setParagraphStyle(style: NoteParagraphStyle): NoteDocument {
         val index = focusedIndex()
         val paragraph = paragraphs.getOrNull(index) ?: return emit()
-        if (paragraph.isAttachmentLine()) return emit()
+        if (paragraph.isBlockLine()) return emit()
         paragraphs[index] = paragraph.copy(style = style)
         rebuildLines(paragraphs[index].id)
         return emit()
@@ -243,6 +274,19 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         return emit()
     }
 
+    fun insertDivider(): NoteDocument {
+        val insertAt = if (paragraphs.isEmpty()) 0 else focusedIndex() + 1
+        val divider = NoteParagraph(type = NoteParagraphType.DIVIDER)
+        val nextLine = NoteParagraph()
+        paragraphs.add(insertAt.coerceIn(0, paragraphs.size), divider)
+        paragraphs.add((insertAt + 1).coerceIn(0, paragraphs.size), nextLine)
+        focusedLineId = nextLine.id
+        selectedAttachmentId = null
+        rebuildLines(nextLine.id)
+        (lineViews.getOrNull(insertAt + 1) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+        return emit()
+    }
+
     fun hideKeyboard() {
         currentEditText()?.clearFocus()
         context.inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
@@ -254,27 +298,34 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     private fun rebuildLines(preserveFocusId: String?) {
-        lineViews.forEach { it.dispose() }
-        lineViews.clear()
-        while (root.childCount > 2) root.removeViewAt(2)
-        paragraphs.forEachIndexed { index, paragraph ->
-            val holder: LineViewHolder = if (paragraph.isAttachmentLine()) {
-                LineViewHolder.AttachmentLine(context, { selectAttachment(index) }, { deleteAttachmentLine(index) })
-            } else {
-                LineViewHolder.TextLine(
-                    context = context,
-                    orderedIndexProvider = { orderedIndexFor(index) },
-                    onTextChanged = { text, _, _ -> onLineTextChanged(index, text) },
-                    onFocus = { selectedAttachmentId = null; focusedLineId = paragraphs.getOrNull(index)?.id; refreshAttachmentSelection() },
-                    onEnter = { splitLine(index) },
-                    onBackspaceAtStart = { handleBackspaceAtStart(index) },
-                    onCheckedChanged = { checked -> toggleChecked(index, checked) }
-                )
+        root.suppressLayout(true)
+        try {
+            lineViews.forEach { it.dispose() }
+            lineViews.clear()
+            while (root.childCount > 2) root.removeViewAt(2)
+            paragraphs.forEachIndexed { index, paragraph ->
+                val holder: LineViewHolder = if (paragraph.isBlockLine()) {
+                    LineViewHolder.AttachmentLine(context, { selectAttachment(index) }, { deleteAttachmentLine(index) }, { onOpenAttachment(paragraphs[index]) })
+                } else {
+                    LineViewHolder.TextLine(
+                        context = context,
+                        orderedIndexProvider = { orderedIndexFor(index) },
+                        onTextChanged = { text, _, _ -> onLineTextChanged(index, text) },
+                        onFocus = { selectedAttachmentId = null; focusedLineId = paragraphs.getOrNull(index)?.id; refreshAttachmentSelection() },
+                        onEnter = { start, end -> splitLine(index, start, end) },
+                        onBackspaceAtStart = { handleBackspaceAtStart(index) },
+                        onMultilinePaste = { text, start, end -> insertMultilineText(index, text, start, end) },
+                        onCommittedMultiline = { start, end -> normalizeCommittedMultiline(index, start, end) },
+                        onCheckedChanged = { checked -> toggleChecked(index, checked) }
+                    )
+                }
+                holder.applyColors(colors)
+                holder.bind(paragraph)
+                lineViews += holder
+                root.addView(holder.container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }
-            holder.applyColors(colors)
-            holder.bind(paragraph)
-            lineViews += holder
-            root.addView(holder.container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        } finally {
+            root.suppressLayout(false)
         }
         updateMeta()
         val index = paragraphs.indexOfFirst { it.id == preserveFocusId }
@@ -292,13 +343,46 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         emit()
     }
 
-    private fun splitLine(index: Int): Boolean {
+    private fun splitLine(index: Int, selectionStart: Int? = null, selectionEnd: Int? = null): Boolean {
         val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
-        val start = minOf(holder.editText.selectionStart, holder.editText.selectionEnd).coerceIn(0, text.length)
+        when (text.trim()) {
+            "/t" -> {
+                val value = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                paragraphs[index] = paragraph.copy(text = value, spans = emptyList())
+                rebuildLines(paragraph.id)
+                (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(value.length)
+                emit()
+                return true
+            }
+            "/d" -> {
+                val value = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日"))
+                paragraphs[index] = paragraph.copy(text = value, spans = emptyList())
+                rebuildLines(paragraph.id)
+                (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(value.length)
+                emit()
+                return true
+            }
+            "/i" -> {
+                paragraphs[index] = paragraph.copy(text = "", spans = emptyList())
+                rebuildLines(paragraph.id)
+                emit()
+                onImageShortcut()
+                return true
+            }
+            "/f" -> {
+                paragraphs[index] = paragraph.copy(text = "", spans = emptyList())
+                rebuildLines(paragraph.id)
+                emit()
+                onFileShortcut()
+                return true
+            }
+        }
+        val start = minOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
         val before = text.substring(0, start)
-        val after = text.substring(start)
+        val after = text.substring(end)
         if (paragraph.type == NoteParagraphType.TODO && before.isBlank() && after.isBlank()) {
             paragraphs[index] = paragraph.copy(text = "", type = NoteParagraphType.TEXT, checked = false, spans = emptyList())
             rebuildLines(paragraph.id)
@@ -321,6 +405,61 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         return true
     }
 
+    private fun insertMultilineText(index: Int, rawText: String, selectionStart: Int, selectionEnd: Int): Boolean {
+        val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
+        val paragraph = paragraphs.getOrNull(index) ?: return false
+        val text = holder.editText.text.toString()
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val lines = normalizeLineBreaks(rawText).split('\n')
+        if (lines.size <= 1) return false
+
+        val before = text.substring(0, start)
+        val after = text.substring(end)
+        val replacement = mutableListOf<NoteParagraph>()
+        val lastLineText = lines.last() + after
+        replacement += paragraph.copy(text = before + lines.first(), spans = emptyList())
+        lines.drop(1).dropLast(1).forEach { line ->
+            replacement += NoteParagraph(text = line)
+        }
+        replacement += NoteParagraph(text = lastLineText)
+
+        paragraphs.removeAt(index)
+        paragraphs.addAll(index, replacement)
+        val focusId = replacement.last().id
+        focusedLineId = focusId
+        selectedAttachmentId = null
+        rebuildLines(focusId)
+        (lineViews.getOrNull(index + replacement.lastIndex) as? LineViewHolder.TextLine)?.requestFocusAt(lines.last().length)
+        emit()
+        return true
+    }
+
+    private fun normalizeCommittedMultiline(index: Int, selectionStart: Int, selectionEnd: Int): Boolean {
+        val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
+        val paragraph = paragraphs.getOrNull(index) ?: return false
+        val text = holder.editText.text.toString()
+        if (!text.contains('\n') && !text.contains('\r')) return false
+        val normalized = normalizeLineBreaks(text)
+        val lines = normalized.split('\n')
+        if (lines.size <= 1) return false
+        val beforeCursor = normalizeLineBreaks(text.substring(0, selectionStart.coerceIn(0, text.length)))
+        val focusOffset = beforeCursor.substringAfterLast('\n').length
+        val focusLineOffset = beforeCursor.count { it == '\n' }.coerceIn(0, lines.lastIndex)
+        val replacement = lines.mapIndexed { lineIndex, line ->
+            if (lineIndex == 0) paragraph.copy(text = line, spans = emptyList()) else NoteParagraph(text = line)
+        }
+        paragraphs.removeAt(index)
+        paragraphs.addAll(index, replacement)
+        val focusId = replacement[focusLineOffset].id
+        focusedLineId = focusId
+        selectedAttachmentId = null
+        rebuildLines(focusId)
+        (lineViews.getOrNull(index + focusLineOffset) as? LineViewHolder.TextLine)?.requestFocusAt(focusOffset)
+        emit()
+        return true
+    }
+
     private fun handleBackspaceAtStart(index: Int): Boolean {
         val paragraph = paragraphs.getOrNull(index) ?: return false
         if (paragraph.type == NoteParagraphType.TODO) {
@@ -330,13 +469,13 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
             emit()
             return true
         }
-        if (paragraph.isAttachmentLine()) {
+        if (paragraph.isBlockLine()) {
             if (selectedAttachmentId == paragraph.id) deleteAttachmentLine(index) else selectAttachment(index)
             return true
         }
         if (index <= 0) return false
         val previous = paragraphs[index - 1]
-        if (previous.isAttachmentLine()) {
+        if (previous.isBlockLine()) {
             selectAttachment(index - 1)
             return true
         }
@@ -358,7 +497,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
 
     private fun selectAttachment(index: Int) {
         val paragraph = paragraphs.getOrNull(index) ?: return
-        if (!paragraph.isAttachmentLine()) return
+        if (!paragraph.isBlockLine()) return
         currentEditText()?.clearFocus()
         selectedAttachmentId = paragraph.id
         focusedLineId = paragraph.id
@@ -370,13 +509,13 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         NoteAttachmentStore.delete(context, paragraph.attachmentPath)
         paragraphs.removeAt(index)
-        if (paragraphs.isEmpty() || paragraphs.none { !it.isAttachmentLine() }) paragraphs += NoteParagraph()
+        if (paragraphs.isEmpty() || paragraphs.none { !it.isBlockLine() }) paragraphs += NoteParagraph()
         val focusIndex = index.coerceAtMost(paragraphs.lastIndex)
         val focus = paragraphs.getOrNull(focusIndex)
         selectedAttachmentId = null
         focusedLineId = focus?.id
         rebuildLines(focus?.id)
-        if (focus?.isAttachmentLine() == false) (lineViews.getOrNull(focusIndex) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+        if (focus?.isBlockLine() == false) (lineViews.getOrNull(focusIndex) as? LineViewHolder.TextLine)?.requestFocusAt(0)
         emit()
     }
 
@@ -400,7 +539,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     private fun updateMeta() {
-        metaView.text = "${java.time.LocalDate.now()} | ${paragraphs.sumOf { if (it.isAttachmentLine()) 0 else it.text.length }} 字 | 默认笔记本"
+        metaView.text = "${java.time.LocalDate.now()} | ${paragraphs.sumOf { if (it.isBlockLine()) 0 else it.text.length }} 字 | 默认笔记本"
     }
 
     private fun orderedIndexFor(index: Int): Int {
@@ -430,6 +569,142 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 }
 
+private class NoteLineEditText(context: Context) : EditText(context) {
+    private var onEnter: (Int, Int) -> Boolean = { _, _ -> false }
+    private var onBackspaceAtStart: () -> Boolean = { false }
+    private var onMultilinePaste: (String, Int, Int) -> Boolean = { _, _, _ -> false }
+    private var onCommittedMultiline: (Int, Int) -> Boolean = { _, _ -> false }
+    private var enterPostScheduled = false
+    private var backspacePostScheduled = false
+    private var pasteConsumedAt = 0L
+
+    init {
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
+        ViewCompat.setOnReceiveContentListener(this, arrayOf("text/*")) { _, payload ->
+            val text = payload.clip.toPlainText(context)
+            if (text.containsLineBreak()) {
+                val start = selectionStart
+                val end = selectionEnd
+                pasteConsumedAt = SystemClock.uptimeMillis()
+                post { onMultilinePaste(text, start, end) }
+                null
+            } else {
+                payload
+            }
+        }
+    }
+
+    fun setEditorCallbacks(
+        onEnter: (Int, Int) -> Boolean,
+        onBackspaceAtStart: () -> Boolean,
+        onMultilinePaste: (String, Int, Int) -> Boolean,
+        onCommittedMultiline: (Int, Int) -> Boolean
+    ) {
+        this.onEnter = onEnter
+        this.onBackspaceAtStart = onBackspaceAtStart
+        this.onMultilinePaste = onMultilinePaste
+        this.onCommittedMultiline = onCommittedMultiline
+    }
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        val base = super.onCreateInputConnection(outAttrs) ?: return null
+        outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
+        return object : InputConnectionWrapper(base, true) {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                val value = text?.toString().orEmpty()
+                if (value == "\n") {
+                    postEnter(selectionStart, selectionEnd)
+                    return true
+                }
+                val result = super.commitText(text, newCursorPosition)
+                if (value.containsLineBreak()) {
+                    val start = selectionStart
+                    val end = selectionEnd
+                    post { onCommittedMultiline(start, end) }
+                }
+                return result
+            }
+
+            override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_ENTER -> {
+                            postEnter(selectionStart, selectionEnd)
+                            return true
+                        }
+                        KeyEvent.KEYCODE_DEL -> {
+                            if (isAtSelectionStart()) {
+                                postBackspaceAtStart()
+                                return true
+                            }
+                        }
+                    }
+                }
+                return super.sendKeyEvent(event)
+            }
+
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                if (beforeLength == 1 && afterLength == 0 && isAtSelectionStart()) {
+                    postBackspaceAtStart()
+                    return true
+                }
+                return super.deleteSurroundingText(beforeLength, afterLength)
+            }
+
+            override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
+                if (beforeLength == 1 && afterLength == 0 && isAtSelectionStart()) {
+                    postBackspaceAtStart()
+                    return true
+                }
+                return super.deleteSurroundingTextInCodePoints(beforeLength, afterLength)
+            }
+        }
+    }
+
+    override fun onTextContextMenuItem(id: Int): Boolean {
+        if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText) {
+            if (SystemClock.uptimeMillis() - pasteConsumedAt < PASTE_DEDUPE_WINDOW_MS) return true
+            val text = context.getSystemService(ClipboardManager::class.java)
+                ?.primaryClip
+                ?.toPlainText(context)
+                .orEmpty()
+            if (text.containsLineBreak()) {
+                val start = selectionStart
+                val end = selectionEnd
+                pasteConsumedAt = SystemClock.uptimeMillis()
+                post { onMultilinePaste(text, start, end) }
+                return true
+            }
+        }
+        return super.onTextContextMenuItem(id)
+    }
+
+    private fun postEnter(start: Int, end: Int) {
+        if (enterPostScheduled) return
+        enterPostScheduled = true
+        post {
+            enterPostScheduled = false
+            onEnter(start, end)
+        }
+    }
+
+    private fun postBackspaceAtStart() {
+        if (backspacePostScheduled) return
+        backspacePostScheduled = true
+        post {
+            backspacePostScheduled = false
+            onBackspaceAtStart()
+        }
+    }
+
+    private fun isAtSelectionStart(): Boolean = selectionStart == 0 && selectionEnd == 0
+
+    companion object {
+        private const val PASTE_DEDUPE_WINDOW_MS = 350L
+    }
+}
+
 private sealed class LineViewHolder {
     abstract val container: View
     abstract fun bind(paragraph: NoteParagraph)
@@ -441,8 +716,10 @@ private sealed class LineViewHolder {
         private val orderedIndexProvider: () -> Int,
         private val onTextChanged: (String, Int, Int) -> Unit,
         private val onFocus: () -> Unit,
-        private val onEnter: () -> Boolean,
+        private val onEnter: (Int, Int) -> Boolean,
         private val onBackspaceAtStart: () -> Boolean,
+        private val onMultilinePaste: (String, Int, Int) -> Boolean,
+        private val onCommittedMultiline: (Int, Int) -> Boolean,
         private val onCheckedChanged: (Boolean) -> Unit
     ) : LineViewHolder() {
         override val container = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = 29.dp }
@@ -452,7 +729,7 @@ private sealed class LineViewHolder {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             setPadding(0, 2.dp, 8.dp, 0)
         }
-        val editText = EditText(context).apply {
+        val editText = NoteLineEditText(context).apply {
             background = null
             includeFontPadding = false
             minHeight = 29.dp
@@ -460,10 +737,13 @@ private sealed class LineViewHolder {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             textSize = 17f
             setSingleLine(false)
+            maxLines = 3
+            imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
             movementMethod = ArrowKeyMovementMethod.getInstance()
         }
         private var internalUpdate = false
         private var watcher: TextWatcher? = null
+        private var colors = NativeNoteEditorColors(0xff111111.toInt(), 0xff999999.toInt(), 0xff777777.toInt(), 0xff3f6db5.toInt(), 0xff999999.toInt(), 0xffeef2f8.toInt())
 
         init {
             container.addView(checkBox, LinearLayout.LayoutParams(32.dp, 32.dp))
@@ -471,10 +751,16 @@ private sealed class LineViewHolder {
             container.addView(editText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             checkBox.setOnClickListener { onCheckedChanged(checkBox.isChecked) }
             editText.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) onFocus() }
+            editText.setEditorCallbacks(
+                onEnter = { start, end -> onEnter(start, end) },
+                onBackspaceAtStart = { onBackspaceAtStart() },
+                onMultilinePaste = { text, start, end -> onMultilinePaste(text, start, end) },
+                onCommittedMultiline = { start, end -> onCommittedMultiline(start, end) }
+            )
             editText.setOnKeyListener { _, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
                 when (keyCode) {
-                    KeyEvent.KEYCODE_ENTER -> onEnter()
+                    KeyEvent.KEYCODE_ENTER -> onEnter(editText.selectionStart, editText.selectionEnd)
                     KeyEvent.KEYCODE_DEL -> if ((editText.selectionStart == 0 && editText.selectionEnd == 0) || editText.text.isEmpty()) onBackspaceAtStart() else false
                     else -> false
                 }
@@ -485,14 +771,33 @@ private sealed class LineViewHolder {
         override fun bind(paragraph: NoteParagraph) {
             checkBox.visibility = if (paragraph.type == NoteParagraphType.TODO) View.VISIBLE else View.GONE
             checkBox.isChecked = paragraph.checked
-            prefixView.visibility = if (paragraph.style.isPrefixStyle()) View.VISIBLE else View.GONE
-            prefixView.text = when (paragraph.style) {
-                NoteParagraphStyle.BULLET -> "•"
-                NoteParagraphStyle.ORDERED -> "${orderedIndexProvider()}."
-                NoteParagraphStyle.QUOTE -> "┃"
-                else -> ""
-            }
+            bindPrefix(paragraph)
             setTextAndSpans(paragraph)
+        }
+
+        private fun bindPrefix(paragraph: NoteParagraph) {
+            prefixView.visibility = if (paragraph.style.isPrefixStyle()) View.VISIBLE else View.GONE
+            val params = prefixView.layoutParams as LinearLayout.LayoutParams
+            if (paragraph.style == NoteParagraphStyle.QUOTE) {
+                prefixView.text = ""
+                prefixView.background = roundedDrawable(colors.accentColor, 1.dp)
+                prefixView.setPadding(0, 0, 0, 0)
+                params.width = 3.dp
+                params.height = LinearLayout.LayoutParams.MATCH_PARENT
+                params.setMargins(14.dp, 0, 15.dp, 0)
+            } else {
+                prefixView.background = null
+                prefixView.setPadding(0, 2.dp, 8.dp, 0)
+                params.width = 32.dp
+                params.height = LinearLayout.LayoutParams.WRAP_CONTENT
+                params.setMargins(0, 0, 0, 0)
+                prefixView.text = when (paragraph.style) {
+                    NoteParagraphStyle.BULLET -> "•"
+                    NoteParagraphStyle.ORDERED -> "${orderedIndexProvider()}."
+                    else -> ""
+                }
+            }
+            prefixView.layoutParams = params
         }
 
         fun setTextAndSpans(paragraph: NoteParagraph) {
@@ -504,6 +809,7 @@ private sealed class LineViewHolder {
         }
 
         override fun applyColors(colors: NativeNoteEditorColors) {
+            this.colors = colors
             editText.setTextColor(colors.textColor)
             editText.setHintTextColor(colors.hintColor)
             prefixView.setTextColor(colors.accentColor)
@@ -529,9 +835,9 @@ private sealed class LineViewHolder {
             } else {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             }
+            editText.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
             editText.background = when (paragraph.style) {
                 NoteParagraphStyle.CODE -> roundedDrawable(0x11_000000, 8.dp)
-                NoteParagraphStyle.QUOTE -> roundedDrawable(0x08_000000, 8.dp)
                 else -> null
             }
             editText.setPadding(if (paragraph.style == NoteParagraphStyle.CODE || paragraph.style == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
@@ -558,7 +864,8 @@ private sealed class LineViewHolder {
     class AttachmentLine(
         private val context: Context,
         private val onSelected: () -> Unit,
-        private val onDelete: () -> Unit
+        private val onDelete: () -> Unit,
+        private val onOpen: () -> Unit
     ) : LineViewHolder() {
         override val container = FrameLayout(context).apply { setPadding(0, 8.dp, 0, 8.dp); isFocusable = true; isFocusableInTouchMode = true }
         private var selected = false
@@ -567,7 +874,8 @@ private sealed class LineViewHolder {
         private var overlayView: View? = null
 
         init {
-            container.setOnClickListener { onSelected() }
+            container.setOnClickListener { handleClick() }
+            container.setOnLongClickListener { handleLongClick() }
             container.setOnKeyListener { _, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DEL) { onDelete(); true } else false
             }
@@ -582,8 +890,23 @@ private sealed class LineViewHolder {
         private fun render() {
             val data = paragraph ?: return
             container.removeAllViews()
-            if (data.type == NoteParagraphType.IMAGE) renderImage(data) else renderFile(data)
+            when (data.type) {
+                NoteParagraphType.IMAGE -> renderImage(data)
+                NoteParagraphType.FILE -> renderFile(data)
+                NoteParagraphType.DIVIDER -> renderDivider()
+                else -> renderFile(data)
+            }
             renderSelection()
+        }
+
+        private fun renderDivider() {
+            val line = View(context).apply {
+                background = roundedDrawable(0x33666666, 1.dp)
+            }
+            val contentFrame = FrameLayout(context).apply { setPadding(0, 14.dp, 0, 14.dp) }
+            contentFrame.addView(line, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 1.dp, Gravity.CENTER))
+            addOverlay(contentFrame, 2.dp)
+            container.addView(contentFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 30.dp))
         }
 
         private fun renderImage(data: NoteParagraph) {
@@ -601,8 +924,12 @@ private sealed class LineViewHolder {
             val image = ImageView(context).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 adjustViewBounds = true
+                setOnClickListener { handleClick() }
+                setOnLongClickListener { handleLongClick() }
                 runCatching { setImageBitmap(BitmapFactory.decodeFile(imageFile.absolutePath)) }
             }
+            contentFrame.setOnClickListener { handleClick() }
+            contentFrame.setOnLongClickListener { handleLongClick() }
             contentFrame.addView(image, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             addOverlay(contentFrame, 0)
             container.addView(contentFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, displayHeight))
@@ -615,7 +942,11 @@ private sealed class LineViewHolder {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(16.dp, 12.dp, 16.dp, 12.dp)
                 background = roundedDrawable(colors.fileCardColor, 14.dp)
+                setOnClickListener { handleClick() }
+                setOnLongClickListener { handleLongClick() }
             }
+            contentFrame.setOnClickListener { handleClick() }
+            contentFrame.setOnLongClickListener { handleLongClick() }
             val icon = ImageView(context).apply {
                 setImageResource(R.drawable.ic_note_file_filled)
                 imageTintList = ColorStateList.valueOf(colors.accentColor)
@@ -638,6 +969,8 @@ private sealed class LineViewHolder {
             overlayView = View(context).apply {
                 background = roundedDrawable(0x333f6db5, radius)
                 visibility = if (selected) View.VISIBLE else View.GONE
+                setOnClickListener { handleClick() }
+                setOnLongClickListener { handleLongClick() }
             }
             contentFrame.addView(overlayView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
@@ -645,10 +978,36 @@ private sealed class LineViewHolder {
         private fun renderSelection() {
             overlayView?.visibility = if (selected) View.VISIBLE else View.GONE
         }
+
+        private fun handleClick() {
+            if (paragraph?.type == NoteParagraphType.DIVIDER) onSelected() else onOpen()
+        }
+
+        private fun handleLongClick(): Boolean {
+            onSelected()
+            return true
+        }
     }
 }
 
 private fun NoteParagraph.isAttachmentLine(): Boolean = type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE
+
+private fun NoteParagraph.isBlockLine(): Boolean = type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE || type == NoteParagraphType.DIVIDER
+
+private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
+
+private fun normalizeLineBreaks(value: String): String = value.replace("\r\n", "\n").replace('\r', '\n')
+
+private fun android.content.ClipData.toPlainText(context: Context): String {
+    val builder = StringBuilder()
+    for (index in 0 until itemCount) {
+        val text = getItemAt(index).coerceToText(context)?.toString().orEmpty()
+        if (text.isEmpty()) continue
+        if (builder.isNotEmpty()) builder.append('\n')
+        builder.append(text)
+    }
+    return builder.toString()
+}
 
 private fun roundedDrawable(color: Int, radius: Int): GradientDrawable = GradientDrawable().apply {
     setColor(color)
