@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -10,10 +11,15 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image as ComposeImage
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -31,8 +37,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -50,7 +60,9 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatStrikethrough
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.Card
@@ -81,6 +93,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -91,7 +105,9 @@ import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
 import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.core.note.NoteTextStyle
@@ -107,6 +123,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.graphics.BitmapFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,7 +134,9 @@ fun NoteEditorScreen(
     onDismiss: () -> Unit,
     onSave: (Long?, String, NoteDocument, Long?, (Long) -> Unit) -> Unit,
     onDelete: (Long, () -> Unit) -> Unit,
+    onSetPinned: (Long, Boolean) -> Unit,
     onExportNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
+    onExportMarkdownNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
     onImportNote: (android.net.Uri, (Result<Long>) -> Unit) -> Unit,
     onOpenImportedNote: (Long) -> Unit,
     onShowMessage: (String, ToastType) -> Unit,
@@ -138,6 +157,9 @@ fun NoteEditorScreen(
     var isMoreExpanded by remember(editorSessionKey) { mutableStateOf(false) }
     var hasDeleted by remember(editorSessionKey) { mutableStateOf(false) }
     var pendingDelete by remember(editorSessionKey) { mutableStateOf(false) }
+    var pendingExportChoice by remember(editorSessionKey) { mutableStateOf(false) }
+    var isPinned by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.pinnedAt != null) }
+    var previewImage by remember(editorSessionKey) { mutableStateOf<NoteParagraph?>(null) }
     var saveJob by remember(editorSessionKey) { mutableStateOf<Job?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -160,6 +182,22 @@ fun NoteEditorScreen(
         if (uri != null && id != null) {
             onExportNote(id, uri) { result ->
                 onShowMessage(if (result.isSuccess) "便签导出成功" else "导出失败：${result.exceptionOrNull()?.message ?: "未知错误"}", if (result.isSuccess) ToastType.SUCCESS else ToastType.ERROR)
+            }
+        }
+    }
+    val noteExportMarkdownLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+        val id = noteId
+        if (uri != null && id != null) {
+            onExportMarkdownNote(id, uri) { result ->
+                onShowMessage(if (result.isSuccess) "Markdown 导出成功" else "导出失败：${result.exceptionOrNull()?.message ?: "未知错误"}", if (result.isSuccess) ToastType.SUCCESS else ToastType.ERROR)
+            }
+        }
+    }
+    val noteExportMarkdownZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val id = noteId
+        if (uri != null && id != null) {
+            onExportMarkdownNote(id, uri) { result ->
+                onShowMessage(if (result.isSuccess) "Markdown 导出成功" else "导出失败：${result.exceptionOrNull()?.message ?: "未知错误"}", if (result.isSuccess) ToastType.SUCCESS else ToastType.ERROR)
             }
         }
     }
@@ -201,6 +239,14 @@ fun NoteEditorScreen(
 
     LaunchedEffect(titleText, document) {
         scheduleSave()
+    }
+
+    BackHandler(enabled = pendingExportChoice) {
+        pendingExportChoice = false
+    }
+
+    BackHandler(enabled = previewImage != null) {
+        previewImage = null
     }
 
     DisposableEffect(editorSessionKey) {
@@ -258,6 +304,40 @@ fun NoteEditorScreen(
         }
     }
 
+    fun openAttachment(paragraph: NoteParagraph) {
+        if (paragraph.type == NoteParagraphType.IMAGE) {
+            previewImage = paragraph
+            return
+        }
+        val intent = NoteAttachmentStore.openAttachmentIntent(context, paragraph)
+        if (intent == null) {
+            onShowMessage("附件不存在", ToastType.ERROR)
+            return
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure { onShowMessage("无法打开该附件", ToastType.ERROR) }
+    }
+
+    fun exportDefaultNote() {
+        saveNow(force = true)
+        val timestamp = System.currentTimeMillis()
+        if (document.hasTransferAttachments()) {
+            noteExportZipLauncher.launch("willdo_note_$timestamp.zip")
+        } else {
+            noteExportJsonLauncher.launch("willdo_note_$timestamp.json")
+        }
+    }
+
+    fun exportMarkdownNote() {
+        saveNow(force = true)
+        val timestamp = System.currentTimeMillis()
+        if (document.hasTransferAttachments()) {
+            noteExportMarkdownZipLauncher.launch("willdo_note_$timestamp.zip")
+        } else {
+            noteExportMarkdownLauncher.launch("willdo_note_$timestamp.md")
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -295,6 +375,20 @@ fun NoteEditorScreen(
                     actions = {
                         if (noteId != null) {
                             IconButton(onClick = {
+                                val id = noteId ?: return@IconButton
+                                haptics.click()
+                                isPinned = !isPinned
+                                onSetPinned(id, isPinned)
+                                onShowMessage(if (isPinned) "已置顶" else "已取消置顶", ToastType.INFO)
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.PushPin,
+                                    contentDescription = if (isPinned) "取消置顶" else "置顶",
+                                    tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            IconButton(onClick = {
                                 haptics.warning()
                                 pendingDelete = true
                             }) {
@@ -324,11 +418,25 @@ fun NoteEditorScreen(
                         document = document,
                         onDocumentChange = { document = it },
                         controller = editorController,
+                        onOpenAttachment = ::openAttachment,
+                        onImageShortcut = { imagePicker.launch("image/*") },
+                        onFileShortcut = { attachmentPicker.launch(arrayOf("*/*")) },
                         modifier = Modifier.fillMaxSize(),
                         textColor = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
+        }
+
+        if (pendingExportChoice) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { pendingExportChoice = false }
+            )
         }
 
         NoteEditorFloatingToolbar(
@@ -348,6 +456,9 @@ fun NoteEditorScreen(
             onTextStyleClick = { style ->
                 editorController.applyTextStyle(style)?.let { document = it }
             },
+            onDividerClick = {
+                editorController.insertDivider()?.let { document = it }
+            },
             onAnalyzeClick = {
                 isMoreExpanded = false
                 runAiAnalyze()
@@ -356,21 +467,42 @@ fun NoteEditorScreen(
                 attachmentPicker.launch(arrayOf("*/*"))
             },
             onExportClick = {
-                saveNow(force = true)
-                val timestamp = System.currentTimeMillis()
-                if (document.hasTransferAttachments()) {
-                    noteExportZipLauncher.launch("willdo_note_$timestamp.zip")
-                } else {
-                    noteExportJsonLauncher.launch("willdo_note_$timestamp.json")
-                }
+                pendingExportChoice = true
             },
             onImportClick = {
-                noteImportLauncher.launch(arrayOf("application/json", "application/zip", "*/*"))
+                pendingExportChoice = false
+                noteImportLauncher.launch(arrayOf("application/json", "application/zip", "text/markdown", "text/x-markdown", "text/plain", "*/*"))
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset)
                 .imePadding()
+        )
+
+        NoteExportChoiceCard(
+            visible = pendingExportChoice,
+            onDefaultClick = {
+                pendingExportChoice = false
+                exportDefaultNote()
+            },
+            onMarkdownClick = {
+                pendingExportChoice = false
+                exportMarkdownNote()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 24.dp + bottomInset + IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight + 10.dp
+                )
+                .imePadding()
+        )
+
+        NoteImagePreviewOverlay(
+            paragraph = previewImage,
+            onDismiss = { previewImage = null },
+            modifier = Modifier.align(Alignment.Center)
         )
     }
 
@@ -392,12 +524,69 @@ fun NoteEditorScreen(
         onDismiss = { pendingDelete = false },
         modifier = Modifier.padding(bottom = 24.dp + bottomInset)
     )
+
 }
 
 private enum class NoteToolbarMode {
     CATEGORIES,
     CATEGORY_TOOLS,
     MORE_ACTIONS
+}
+
+@Composable
+private fun NoteExportChoiceCard(
+    visible: Boolean,
+    onDefaultClick: () -> Unit,
+    onMarkdownClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(140)) + slideInVertically(animationSpec = tween(180)) { it / 4 },
+        exit = fadeOut(animationSpec = tween(120)) + slideOutVertically(animationSpec = tween(160)) { it / 4 },
+        modifier = modifier
+    ) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "导出便签",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "选择导出的文件格式",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(
+                    onClick = onMarkdownClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Text("Markdown")
+                }
+                Button(onClick = onDefaultClick) {
+                    Text("默认文件")
+                }
+            }
+        }
+    }
 }
 
 private enum class NoteToolbarCategory(
@@ -421,12 +610,13 @@ private data class NoteToolbarItem(
     val paragraphStyle: NoteParagraphStyle? = null,
     val isTodo: Boolean = false,
     val isImage: Boolean = false,
-    val isAttachment: Boolean = false
+    val isAttachment: Boolean = false,
+    val isDivider: Boolean = false
 )
 
 private fun NoteDocument.aiPlainText(): String {
     return paragraphs
-        .filterNot { it.type == NoteParagraphType.IMAGE || it.type == NoteParagraphType.FILE }
+        .filterNot { it.type == NoteParagraphType.IMAGE || it.type == NoteParagraphType.FILE || it.type == NoteParagraphType.DIVIDER }
         .joinToString("\n") { it.text }
 }
 
@@ -456,7 +646,8 @@ private fun toolsForCategory(category: NoteToolbarCategory): List<NoteToolbarIte
     NoteToolbarCategory.INSERT -> listOf(
         NoteToolbarItem(label = "待办", icon = Icons.Default.CheckBox, isTodo = true),
         NoteToolbarItem(label = "图片", icon = Icons.Default.Image, isImage = true),
-        NoteToolbarItem(label = "附件", icon = Icons.Default.Description, isAttachment = true)
+        NoteToolbarItem(label = "附件", icon = Icons.Default.Description, isAttachment = true),
+        NoteToolbarItem(label = "分割线", icon = Icons.Default.HorizontalRule, isDivider = true)
     )
 }
 
@@ -470,6 +661,7 @@ private fun NoteEditorFloatingToolbar(
     onImageClick: () -> Unit,
     onParagraphStyleClick: (NoteParagraphStyle) -> Unit,
     onTextStyleClick: (NoteTextStyle) -> Unit,
+    onDividerClick: () -> Unit,
     onAnalyzeClick: () -> Unit,
     onAttachmentClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -593,6 +785,7 @@ private fun NoteEditorFloatingToolbar(
                                         item.isTodo -> onTodoClick()
                                         item.isImage -> onImageClick()
                                         item.isAttachment -> onAttachmentClick()
+                                        item.isDivider -> onDividerClick()
                                         item.paragraphStyle != null -> onParagraphStyleClick(item.paragraphStyle)
                                         item.textStyle != null -> onTextStyleClick(item.textStyle)
                                     }
@@ -906,6 +1099,60 @@ private fun NoteToolbarAction(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = accentColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun NoteImagePreviewOverlay(
+    paragraph: NoteParagraph?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = paragraph != null,
+        enter = fadeIn(animationSpec = tween(160)),
+        exit = fadeOut(animationSpec = tween(140)),
+        modifier = modifier
+    ) {
+        if (paragraph != null) {
+            NoteImagePreviewContent(paragraph = paragraph, onDismiss = onDismiss)
+        }
+    }
+}
+
+@Composable
+private fun NoteImagePreviewContent(paragraph: NoteParagraph, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val bitmap = remember(paragraph.attachmentPath) {
+        BitmapFactory.decodeFile(NoteAttachmentStore.fileForRelativePath(context, paragraph.attachmentPath).absolutePath)
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            ComposeImage(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = paragraph.attachmentName.ifBlank { "图片预览" },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .systemBarsPadding()
+                    .padding(20.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Text(
+                text = "图片不存在",
+                color = Color.White,
+                modifier = Modifier.systemBarsPadding()
             )
         }
     }

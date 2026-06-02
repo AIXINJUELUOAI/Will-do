@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,18 +93,34 @@ fun NoteCard(
                 }
             }
     ) {
-        Text(
-            text = note.displayTitle,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp, bottom = 10.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textDecoration = if (isCompleted && tasks.isNotEmpty()) TextDecoration.LineThrough else null,
-            color = titleColor
-        )
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = note.displayTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (isCompleted && tasks.isNotEmpty()) TextDecoration.LineThrough else null,
+                color = titleColor,
+                modifier = Modifier.weight(1f)
+            )
+            if (note.pinnedAt != null) {
+                Icon(
+                    imageVector = Icons.Default.PushPin,
+                    contentDescription = "已置顶",
+                    modifier = Modifier
+                        .padding(top = 1.dp)
+                        .size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+                )
+            }
+        }
 
         if (previewTasks.isNotEmpty()) {
             Column(

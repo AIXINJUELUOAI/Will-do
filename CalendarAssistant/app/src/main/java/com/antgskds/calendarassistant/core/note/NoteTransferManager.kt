@@ -45,11 +45,31 @@ class NoteTransferManager(context: Context) {
         }
     }
 
+    fun exportMarkdownNote(note: NoteEntity, uri: Uri) {
+        val data = NoteTransferData(
+            title = note.title,
+            document = note.document(),
+            createdAt = note.createdAt,
+            updatedAt = note.updatedAt
+        )
+        if (data.document.hasAttachments()) {
+            exportMarkdownZip(data, uri)
+        } else {
+            appContext.contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(NoteMarkdownCodec.encode(data.title, data.document).toByteArray())
+            } ?: error("无法打开导出文件")
+        }
+    }
+
     fun importNote(uri: Uri): NoteTransferData {
         val type = appContext.contentResolver.getType(uri).orEmpty()
         val name = uri.lastPathSegment.orEmpty()
         return if (type.contains("zip", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)) {
             importZip(uri)
+        } else if (type.contains("markdown", ignoreCase = true) || type == "text/x-markdown" || name.endsWith(".md", ignoreCase = true) || name.endsWith(".markdown", ignoreCase = true)) {
+            val content = appContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: error("无法读取便签文件")
+            NoteMarkdownCodec.decode(content)
         } else {
             val content = appContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 ?: error("无法读取便签文件")
@@ -76,10 +96,30 @@ class NoteTransferManager(context: Context) {
         } ?: error("无法打开导出文件")
     }
 
+    private fun exportMarkdownZip(data: NoteTransferData, uri: Uri) {
+        appContext.contentResolver.openOutputStream(uri)?.use { output ->
+            ZipOutputStream(output.buffered()).use { zip ->
+                zip.putNextEntry(ZipEntry("note.md"))
+                zip.write(NoteMarkdownCodec.encode(data.title, data.document).toByteArray())
+                zip.closeEntry()
+
+                data.document.paragraphs.forEach { paragraph ->
+                    val path = paragraph.attachmentPath.takeIf { it.isNotBlank() } ?: return@forEach
+                    val file = NoteAttachmentStore.fileForRelativePath(appContext, path)
+                    if (!file.exists()) return@forEach
+                    zip.putNextEntry(ZipEntry("attachments/${File(path).name}"))
+                    file.inputStream().use { input -> input.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+        } ?: error("无法打开导出文件")
+    }
+
     private fun importZip(uri: Uri): NoteTransferData {
         val tempDir = File(appContext.cacheDir, "note_import_${System.currentTimeMillis()}").apply { mkdirs() }
         try {
             var noteJson = ""
+            var noteMarkdown = ""
             appContext.contentResolver.openInputStream(uri)?.use { input ->
                 ZipInputStream(input.buffered()).use { zip ->
                     var entry = zip.nextEntry
@@ -88,6 +128,8 @@ class NoteTransferManager(context: Context) {
                             val safeName = entry.name.replace('\\', '/')
                             if (safeName == "note.json") {
                                 noteJson = zip.readBytes().toString(Charsets.UTF_8)
+                            } else if (safeName == "note.md") {
+                                noteMarkdown = zip.readBytes().toString(Charsets.UTF_8)
                             } else if (safeName.startsWith("attachments/")) {
                                 val file = File(tempDir, File(safeName).name)
                                 file.outputStream().use { output -> zip.copyTo(output) }
@@ -98,8 +140,15 @@ class NoteTransferManager(context: Context) {
                     }
                 }
             } ?: error("无法读取便签文件")
-            if (noteJson.isBlank()) error("便签包缺少 note.json")
-            val data = json.decodeFromString<NoteTransferData>(noteJson)
+            if (noteJson.isBlank() && noteMarkdown.isBlank()) error("便签包缺少 note.json 或 note.md")
+            val data = if (noteJson.isNotBlank()) {
+                json.decodeFromString<NoteTransferData>(noteJson)
+            } else {
+                NoteMarkdownCodec.decode(noteMarkdown) { target ->
+                    val source = File(tempDir, File(target).name)
+                    if (!source.exists()) null else copyImportedAttachment(source)
+                }
+            }
             val document = data.document.copy(
                 paragraphs = data.document.paragraphs.map { paragraph ->
                     val path = paragraph.attachmentPath
@@ -120,6 +169,20 @@ class NoteTransferManager(context: Context) {
         } finally {
             runCatching { tempDir.deleteRecursively() }
         }
+    }
+
+    private fun copyImportedAttachment(source: File): StoredNoteAttachment {
+        val displayName = source.name.substringAfter('_', source.name)
+        val mimeType = NoteAttachmentStore.inferMimeType(displayName)
+        val relative = "notes/attachments/${UUID.randomUUID()}_${source.name}"
+        val target = File(appContext.filesDir, relative).apply { parentFile?.mkdirs() }
+        source.copyTo(target, overwrite = true)
+        return StoredNoteAttachment(
+            relativePath = relative,
+            displayName = displayName,
+            mimeType = mimeType,
+            isImage = NoteAttachmentStore.isImage(mimeType, displayName)
+        )
     }
 
     private fun NoteDocument.hasAttachments(): Boolean = paragraphs.any { it.attachmentPath.isNotBlank() }

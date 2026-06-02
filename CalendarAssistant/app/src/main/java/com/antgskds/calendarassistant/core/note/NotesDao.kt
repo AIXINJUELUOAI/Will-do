@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NotesDao {
-    @Query("SELECT * FROM notes ORDER BY updated_at DESC")
+    @Query("SELECT * FROM notes ORDER BY CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END, pinned_at DESC, updated_at DESC")
     fun observeNotes(): Flow<List<NoteEntity>>
 
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
@@ -30,4 +30,7 @@ interface NotesDao {
 
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("UPDATE notes SET pinned_at = :pinnedAt WHERE id = :id")
+    suspend fun updatePinnedAt(id: Long, pinnedAt: Long?)
 }
