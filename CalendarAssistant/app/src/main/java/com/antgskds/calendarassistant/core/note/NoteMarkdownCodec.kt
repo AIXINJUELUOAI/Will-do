@@ -29,6 +29,9 @@ object NoteMarkdownCodec {
         while (paragraphs.firstOrNull()?.text?.isBlank() == true && paragraphs.first().type == NoteParagraphType.TEXT) {
             paragraphs.removeAt(0)
         }
+        if (paragraphs.lastOrNull()?.style == NoteParagraphStyle.CODE) {
+            paragraphs += NoteParagraph()
+        }
         return NoteTransferData(title = title, document = NoteDocument(paragraphs = paragraphs))
     }
 
