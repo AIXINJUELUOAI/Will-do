@@ -21,6 +21,7 @@ import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -142,6 +143,11 @@ private data class NativeNoteEditorColors(
     val fileCardColor: Int
 )
 
+private enum class InlineShortcutToken {
+    TIME,
+    DATE
+}
+
 private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -171,8 +177,11 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private var internalUpdate = false
     private var colors = NativeNoteEditorColors(0xff111111.toInt(), 0xff999999.toInt(), 0xff777777.toInt(), 0xff3f6db5.toInt(), 0xff999999.toInt(), 0xffeef2f8.toInt())
     private var focusedLineId: String? = null
+    private var pendingSelectionOffset: Int? = null
     private var selectedAttachmentId: String? = null
-    private var lastDocumentHash = ""
+    private var lastBoundTitle = ""
+    private var lastBoundDocument: NoteDocument? = null
+    private var largeDocumentMode = false
 
     init {
         isFillViewport = true
@@ -204,15 +213,16 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     fun updateExternal(title: String, document: NoteDocument, force: Boolean = false) {
-        val hash = documentHash(title, document)
-        if (!force && hash == lastDocumentHash) { updateMeta(); return }
+        if (!force && title == lastBoundTitle && document === lastBoundDocument) { updateMeta(); return }
         if (!force && (currentEditText()?.hasFocus() == true || selectedAttachmentId != null)) { updateMeta(); return }
         internalUpdate = true
         if (titleEdit.text.toString() != title) titleEdit.setText(title)
         internalUpdate = false
         paragraphs = document.paragraphs.ifEmpty { listOf(NoteParagraph()) }.toMutableList()
+        largeDocumentMode = shouldUseLargeDocumentMode()
         rebuildLines(focusedLineId)
-        lastDocumentHash = hash
+        lastBoundTitle = title
+        lastBoundDocument = document
         updateMeta()
     }
 
@@ -224,12 +234,198 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         lineViews.forEach { it.applyColors(colors) }
     }
 
+    private fun currentIndexOfParagraph(paragraphId: String?): Int {
+        if (paragraphId == null) return -1
+        return paragraphs.indexOfFirst { it.id == paragraphId }
+    }
+
+    private fun buildHolder(index: Int, paragraph: NoteParagraph, forceEditable: Boolean? = null): LineViewHolder {
+        val paragraphId = paragraph.id
+        val editable = forceEditable ?: isEditableLine(index, paragraph, focusedLineId)
+        val holder: LineViewHolder = if (paragraph.isBlockLine()) {
+            LineViewHolder.AttachmentLine(
+                context = context,
+                onSelected = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) selectAttachment(currentIndex)
+                },
+                onDelete = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) deleteAttachmentLine(currentIndex)
+                },
+                onOpen = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) onOpenAttachment(paragraphs[currentIndex])
+                }
+            )
+        } else if (!editable) {
+            LineViewHolder.ReadOnlyTextLine(
+                context = context,
+                orderedIndexProvider = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    orderedIndexFor(currentIndex.takeIf { it >= 0 } ?: index)
+                },
+                onClick = { offset ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) activateLine(currentIndex, offset)
+                },
+                onCheckedChanged = { checked ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) toggleChecked(currentIndex, checked)
+                }
+            )
+        } else {
+            LineViewHolder.TextLine(
+                context = context,
+                orderedIndexProvider = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    orderedIndexFor(currentIndex.takeIf { it >= 0 } ?: index)
+                },
+                onTextChanged = { text, _, _ ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) onLineTextChanged(currentIndex, text)
+                },
+                onFocus = {
+                    val previousFocusedId = focusedLineId
+                    selectedAttachmentId = null
+                    focusedLineId = paragraphId
+                    refreshAttachmentSelection()
+                    refreshActiveWindow(previousFocusedId, focusedLineId)
+                },
+                onEnter = { start, end ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    currentIndex >= 0 && splitLine(currentIndex, start, end)
+                },
+                onBackspaceAtStart = {
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    currentIndex >= 0 && handleBackspaceAtStart(currentIndex)
+                },
+                onMultilinePaste = { text, start, end ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    currentIndex >= 0 && insertMultilineText(currentIndex, text, start, end)
+                },
+                onCommittedMultiline = { start, end ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    currentIndex >= 0 && normalizeCommittedMultiline(currentIndex, start, end)
+                },
+                onCheckedChanged = { checked ->
+                    val currentIndex = currentIndexOfParagraph(paragraphId)
+                    if (currentIndex >= 0) toggleChecked(currentIndex, checked)
+                }
+            )
+        }
+        holder.applyColors(colors)
+        holder.bind(paragraph)
+        return holder
+    }
+
+    private fun replaceLine(index: Int, forceEditable: Boolean? = null): LineViewHolder? {
+        val paragraph = paragraphs.getOrNull(index) ?: return null
+        val previous = lineViews.getOrNull(index) ?: return null
+        previous.dispose()
+        root.removeViewAt(index + 2)
+        val holder = buildHolder(index, paragraph, forceEditable)
+        lineViews[index] = holder
+        root.addView(
+            holder.container,
+            index + 2,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        )
+        return holder
+    }
+
+    private fun insertLine(index: Int, paragraph: NoteParagraph, active: Boolean): LineViewHolder {
+        val holder = buildHolder(index, paragraph, forceEditable = if (paragraph.isBlockLine()) false else active)
+        lineViews.add(index, holder)
+        root.addView(
+            holder.container,
+            index + 2,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        )
+        return holder
+    }
+
+    private fun removeLine(index: Int) {
+        val holder = lineViews.getOrNull(index) ?: return
+        holder.dispose()
+        lineViews.removeAt(index)
+        root.removeViewAt(index + 2)
+    }
+
+    private fun bindLine(index: Int) {
+        val paragraph = paragraphs.getOrNull(index) ?: return
+        val holder = lineViews.getOrNull(index) ?: return
+        holder.applyColors(colors)
+        holder.bind(paragraph)
+    }
+
+    private fun deactivateLine(index: Int) {
+        replaceLine(index, forceEditable = false)
+    }
+
+    private fun activateLine(index: Int, offset: Int = Int.MAX_VALUE) {
+        val paragraph = paragraphs.getOrNull(index) ?: return
+        if (paragraph.isBlockLine()) return
+        val previousFocusedId = focusedLineId
+        focusedLineId = paragraph.id
+        selectedAttachmentId = null
+        val holder = if (lineViews.getOrNull(index) is LineViewHolder.TextLine) {
+            lineViews[index]
+        } else {
+            replaceLine(index, forceEditable = true)
+        }
+        refreshActiveWindow(previousFocusedId, focusedLineId)
+        val targetOffset = if (offset == Int.MAX_VALUE) paragraph.text.length else offset
+        (holder as? LineViewHolder.TextLine ?: lineViews.getOrNull(index) as? LineViewHolder.TextLine)
+            ?.requestFocusAt(targetOffset.coerceIn(0, paragraph.text.length))
+    }
+
+    private fun refreshTailFrom(startIndex: Int) {
+        val start = startIndex.coerceAtLeast(0)
+        while (lineViews.size > paragraphs.size) removeLine(lineViews.lastIndex)
+        for (index in start until paragraphs.size) {
+            val paragraph = paragraphs[index]
+            val shouldEditable = if (paragraph.isBlockLine()) false else isEditableLine(index, paragraph, focusedLineId)
+            val holder = lineViews.getOrNull(index)
+            when {
+                holder == null -> insertLine(index, paragraph, shouldEditable)
+                shouldEditable && holder !is LineViewHolder.TextLine -> replaceLine(index, forceEditable = true)
+                !shouldEditable && holder is LineViewHolder.TextLine -> replaceLine(index, forceEditable = false)
+                else -> bindLine(index)
+            }
+        }
+        updateMeta()
+        refreshAttachmentSelection()
+    }
+
+    private fun refreshActiveWindow(previousFocusedId: String?, currentFocusedId: String?) {
+        val previousIndex = currentIndexOfParagraph(previousFocusedId).takeIf { it >= 0 }
+        val currentIndex = currentIndexOfParagraph(currentFocusedId).takeIf { it >= 0 }
+        val affected = linkedSetOf<Int>()
+        previousIndex?.let { affected.addAll(activeWindowRange(it).toList()) }
+        currentIndex?.let { affected.addAll(activeWindowRange(it).toList()) }
+        affected.forEach { index ->
+            val paragraph = paragraphs.getOrNull(index) ?: return@forEach
+            if (paragraph.isBlockLine()) return@forEach
+            val shouldEditable = isEditableLine(index, paragraph, currentFocusedId)
+            val holder = lineViews.getOrNull(index)
+            when {
+                shouldEditable && holder !is LineViewHolder.TextLine -> replaceLine(index, forceEditable = true)
+                !shouldEditable && holder is LineViewHolder.TextLine -> deactivateLine(index)
+                else -> bindLine(index)
+            }
+        }
+        updateMeta()
+    }
+
     fun toggleCurrentTodo(): NoteDocument {
         val index = focusedIndex()
         val paragraph = paragraphs.getOrNull(index) ?: return emit()
         if (paragraph.isBlockLine()) return emit()
         paragraphs[index] = if (paragraph.type == NoteParagraphType.TODO) paragraph.copy(type = NoteParagraphType.TEXT, checked = false) else paragraph.copy(type = NoteParagraphType.TODO, checked = false)
-        rebuildLines(paragraphs[index].id)
+        focusedLineId = paragraphs[index].id
+        bindLine(index)
+        refreshActiveWindow(null, focusedLineId)
         return emit()
     }
 
@@ -238,7 +434,9 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return emit()
         if (paragraph.isBlockLine()) return emit()
         paragraphs[index] = paragraph.copy(style = style)
-        rebuildLines(paragraphs[index].id)
+        if (style == NoteParagraphStyle.CODE) ensurePlainLineAfter(index)
+        focusedLineId = paragraphs[index].id
+        refreshTailFrom(index)
         return emit()
     }
 
@@ -269,8 +467,8 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         paragraphs.add((insertAt + 1).coerceIn(0, paragraphs.size), nextLine)
         selectedAttachmentId = null
         focusedLineId = nextLine.id
-        rebuildLines(nextLine.id)
-        (lineViews.getOrNull(insertAt + 1) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+        refreshTailFrom(insertAt)
+        activateLine(insertAt + 1, 0)
         return emit()
     }
 
@@ -282,8 +480,8 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         paragraphs.add((insertAt + 1).coerceIn(0, paragraphs.size), nextLine)
         focusedLineId = nextLine.id
         selectedAttachmentId = null
-        rebuildLines(nextLine.id)
-        (lineViews.getOrNull(insertAt + 1) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+        refreshTailFrom(insertAt)
+        activateLine(insertAt + 1, 0)
         return emit()
     }
 
@@ -298,29 +496,16 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     private fun rebuildLines(preserveFocusId: String?) {
+        largeDocumentMode = shouldUseLargeDocumentMode()
+        val focusOffset = pendingSelectionOffset
+        pendingSelectionOffset = null
         root.suppressLayout(true)
         try {
             lineViews.forEach { it.dispose() }
             lineViews.clear()
             while (root.childCount > 2) root.removeViewAt(2)
             paragraphs.forEachIndexed { index, paragraph ->
-                val holder: LineViewHolder = if (paragraph.isBlockLine()) {
-                    LineViewHolder.AttachmentLine(context, { selectAttachment(index) }, { deleteAttachmentLine(index) }, { onOpenAttachment(paragraphs[index]) })
-                } else {
-                    LineViewHolder.TextLine(
-                        context = context,
-                        orderedIndexProvider = { orderedIndexFor(index) },
-                        onTextChanged = { text, _, _ -> onLineTextChanged(index, text) },
-                        onFocus = { selectedAttachmentId = null; focusedLineId = paragraphs.getOrNull(index)?.id; refreshAttachmentSelection() },
-                        onEnter = { start, end -> splitLine(index, start, end) },
-                        onBackspaceAtStart = { handleBackspaceAtStart(index) },
-                        onMultilinePaste = { text, start, end -> insertMultilineText(index, text, start, end) },
-                        onCommittedMultiline = { start, end -> normalizeCommittedMultiline(index, start, end) },
-                        onCheckedChanged = { checked -> toggleChecked(index, checked) }
-                    )
-                }
-                holder.applyColors(colors)
-                holder.bind(paragraph)
+                val holder = buildHolder(index, paragraph, forceEditable = if (paragraph.isBlockLine()) false else isEditableLine(index, paragraph, preserveFocusId))
                 lineViews += holder
                 root.addView(holder.container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }
@@ -331,7 +516,12 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val index = paragraphs.indexOfFirst { it.id == preserveFocusId }
         if (index >= 0) {
             val holder = lineViews.getOrNull(index)
-            if (holder is LineViewHolder.TextLine) holder.requestFocusAtEnd() else selectAttachment(index)
+            if (holder is LineViewHolder.TextLine) {
+                val targetOffset = focusOffset?.coerceIn(0, holder.editText.text.length) ?: holder.editText.text.length
+                holder.requestFocusAt(targetOffset)
+            } else {
+                selectAttachment(index)
+            }
         }
     }
 
@@ -339,59 +529,82 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         paragraphs[index] = paragraph.copy(text = text, spans = shiftSpansForText(paragraph.spans, text.length))
         focusedLineId = paragraph.id
+        largeDocumentMode = shouldUseLargeDocumentMode()
         updateMeta()
         emit()
+    }
+
+    private fun isEditableLine(index: Int, paragraph: NoteParagraph, preserveFocusId: String?): Boolean {
+        if (paragraph.isBlockLine()) return false
+        val centerId = preserveFocusId ?: focusedLineId
+        val centerIndex = when {
+            centerId != null -> paragraphs.indexOfFirst { it.id == centerId }.takeIf { it >= 0 }
+            else -> null
+        } ?: paragraphs.indexOfFirst { !it.isBlockLine() }.takeIf { it >= 0 } ?: 0
+        return index in activeWindowRange(centerIndex)
+    }
+
+    private fun activateReadOnlyLine(index: Int, offset: Int = Int.MAX_VALUE) {
+        activateLine(index, offset)
+    }
+
+    private fun shouldUseLargeDocumentMode(): Boolean {
+        if (paragraphs.size > LARGE_DOCUMENT_PARAGRAPH_THRESHOLD) return true
+        var chars = 0
+        for (paragraph in paragraphs) {
+            chars += paragraph.text.length
+            if (chars > LARGE_DOCUMENT_CHAR_THRESHOLD) return true
+        }
+        return false
     }
 
     private fun splitLine(index: Int, selectionStart: Int? = null, selectionEnd: Int? = null): Boolean {
         val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
+        if (paragraph.style == NoteParagraphStyle.CODE) {
+            return insertCodeLineBreak(index, selectionStart, selectionEnd)
+        }
+        val start = minOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
+        if (start == end) {
+            when (findInlineShortcutToken(text, start)) {
+                InlineShortcutToken.TIME -> {
+                    return replaceInlineShortcut(index, paragraph, start, "/t", currentTimeShortcutValue())
+                }
+                InlineShortcutToken.DATE -> {
+                    return replaceInlineShortcut(index, paragraph, start, "/d", currentDateShortcutValue())
+                }
+                null -> Unit
+            }
+        }
         when (text.trim()) {
-            "/t" -> {
-                val value = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
-                paragraphs[index] = paragraph.copy(text = value, spans = emptyList())
-                rebuildLines(paragraph.id)
-                (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(value.length)
-                emit()
-                return true
-            }
-            "/d" -> {
-                val value = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日"))
-                paragraphs[index] = paragraph.copy(text = value, spans = emptyList())
-                rebuildLines(paragraph.id)
-                (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(value.length)
-                emit()
-                return true
-            }
             "/i" -> {
                 paragraphs[index] = paragraph.copy(text = "", spans = emptyList())
-                rebuildLines(paragraph.id)
+                bindLine(index)
                 emit()
                 onImageShortcut()
                 return true
             }
             "/f" -> {
                 paragraphs[index] = paragraph.copy(text = "", spans = emptyList())
-                rebuildLines(paragraph.id)
+                bindLine(index)
                 emit()
                 onFileShortcut()
                 return true
             }
         }
-        val start = minOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
-        val end = maxOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
         val before = text.substring(0, start)
         val after = text.substring(end)
         if (paragraph.type == NoteParagraphType.TODO && before.isBlank() && after.isBlank()) {
             paragraphs[index] = paragraph.copy(text = "", type = NoteParagraphType.TEXT, checked = false, spans = emptyList())
-            rebuildLines(paragraph.id)
+            bindLine(index)
             emit()
             return true
         }
         if (paragraph.style.isListStyle() && before.isBlank() && after.isBlank()) {
             paragraphs[index] = paragraph.copy(style = NoteParagraphStyle.BODY)
-            rebuildLines(paragraph.id)
+            bindLine(index)
             emit()
             return true
         }
@@ -399,8 +612,81 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val newLineStyle = if (paragraph.style.isListStyle() && before.isNotBlank()) paragraph.style else NoteParagraphStyle.BODY
         val newLine = NoteParagraph(text = after, style = newLineStyle)
         paragraphs.add(index + 1, newLine)
-        rebuildLines(newLine.id)
+        val previousFocusedId = focusedLineId
+        focusedLineId = newLine.id
+        bindLine(index)
+        insertLine(index + 1, newLine, active = true)
+        refreshTailFrom(index + 2)
+        refreshActiveWindow(previousFocusedId, focusedLineId)
         (lineViews.getOrNull(index + 1) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+        emit()
+        return true
+    }
+
+    private fun replaceInlineShortcut(
+        index: Int,
+        paragraph: NoteParagraph,
+        cursor: Int,
+        token: String,
+        replacement: String
+    ): Boolean {
+        val text = paragraph.text
+        val tokenStart = (cursor - token.length).coerceAtLeast(0)
+        if (text.substring(tokenStart, cursor) != token) return false
+        val beforeRaw = text.substring(0, tokenStart)
+        val afterRaw = text.substring(cursor)
+        val needsLeadingSpace = beforeRaw.isNotEmpty() && !beforeRaw.last().isWhitespace() && beforeRaw.last() != '/'
+        val needsTrailingSpace = afterRaw.isNotEmpty() && !afterRaw.first().isWhitespace()
+        val before = if (needsLeadingSpace) "$beforeRaw " else beforeRaw
+        val after = if (needsTrailingSpace) " $afterRaw" else afterRaw
+        val updated = before + replacement + after
+        val newCursor = before.length + replacement.length
+        paragraphs[index] = paragraph.copy(text = updated, spans = shiftSpansForText(paragraph.spans, updated.length))
+        bindLine(index)
+        (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(newCursor)
+        emit()
+        return true
+    }
+
+    private fun findInlineShortcutToken(text: String, cursor: Int): InlineShortcutToken? {
+        if (cursor < 2) return null
+        return when {
+            matchesInlineShortcutToken(text, cursor, "/t") -> InlineShortcutToken.TIME
+            matchesInlineShortcutToken(text, cursor, "/d") -> InlineShortcutToken.DATE
+            else -> null
+        }
+    }
+
+    private fun matchesInlineShortcutToken(text: String, cursor: Int, token: String): Boolean {
+        val tokenStart = cursor - token.length
+        if (tokenStart < 0) return false
+        if (text.substring(tokenStart, cursor) != token) return false
+        if (cursor < text.length && !text[cursor].isWhitespace()) return false
+        if (tokenStart == 0) return true
+        val previous = text[tokenStart - 1]
+        return previous.isWhitespace() || previous.isDigit() || previous == ':' || previous == ')' || previous == '）'
+    }
+
+    private fun currentTimeShortcutValue(): String {
+        return java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
+    private fun currentDateShortcutValue(): String {
+        return java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日"))
+    }
+
+    private fun insertCodeLineBreak(index: Int, selectionStart: Int?, selectionEnd: Int?): Boolean {
+        val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
+        val paragraph = paragraphs.getOrNull(index) ?: return false
+        val text = holder.editText.text.toString()
+        val start = minOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
+        val updated = text.substring(0, start) + "\n" + text.substring(end)
+        paragraphs[index] = paragraph.copy(text = updated, spans = emptyList())
+        ensurePlainLineAfter(index)
+        bindLine(index)
+        refreshTailFrom(index + 1)
+        (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(start + 1)
         emit()
         return true
     }
@@ -409,6 +695,9 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
+        if (paragraph.style == NoteParagraphStyle.CODE) {
+            return insertMultilineIntoCode(index, rawText, selectionStart, selectionEnd)
+        }
         val start = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
         val end = maxOf(selectionStart, selectionEnd).coerceIn(0, text.length)
         val lines = normalizeLineBreaks(rawText).split('\n')
@@ -427,10 +716,33 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         paragraphs.removeAt(index)
         paragraphs.addAll(index, replacement)
         val focusId = replacement.last().id
+        val previousFocusedId = focusedLineId
         focusedLineId = focusId
         selectedAttachmentId = null
-        rebuildLines(focusId)
+        removeLine(index)
+        replacement.forEachIndexed { offset, line ->
+            insertLine(index + offset, line, active = line.id == focusId)
+        }
+        refreshTailFrom(index + replacement.size)
+        refreshActiveWindow(previousFocusedId, focusedLineId)
         (lineViews.getOrNull(index + replacement.lastIndex) as? LineViewHolder.TextLine)?.requestFocusAt(lines.last().length)
+        emit()
+        return true
+    }
+
+    private fun insertMultilineIntoCode(index: Int, rawText: String, selectionStart: Int, selectionEnd: Int): Boolean {
+        val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
+        val paragraph = paragraphs.getOrNull(index) ?: return false
+        val text = holder.editText.text.toString()
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val insertText = normalizeLineBreaks(rawText)
+        val updated = text.substring(0, start) + insertText + text.substring(end)
+        paragraphs[index] = paragraph.copy(text = updated, spans = emptyList())
+        ensurePlainLineAfter(index)
+        bindLine(index)
+        refreshTailFrom(index + 1)
+        (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(start + insertText.length)
         emit()
         return true
     }
@@ -440,6 +752,17 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
         if (!text.contains('\n') && !text.contains('\r')) return false
+        if (paragraph.style == NoteParagraphStyle.CODE) {
+            val normalized = normalizeLineBreaks(text)
+            paragraphs[index] = paragraph.copy(text = normalized, spans = emptyList())
+            ensurePlainLineAfter(index)
+            val offset = selectionStart.coerceIn(0, normalized.length)
+            bindLine(index)
+            refreshTailFrom(index + 1)
+            (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(offset)
+            emit()
+            return true
+        }
         val normalized = normalizeLineBreaks(text)
         val lines = normalized.split('\n')
         if (lines.size <= 1) return false
@@ -452,19 +775,35 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         paragraphs.removeAt(index)
         paragraphs.addAll(index, replacement)
         val focusId = replacement[focusLineOffset].id
+        val previousFocusedId = focusedLineId
         focusedLineId = focusId
         selectedAttachmentId = null
-        rebuildLines(focusId)
+        removeLine(index)
+        replacement.forEachIndexed { offset, line ->
+            insertLine(index + offset, line, active = line.id == focusId)
+        }
+        refreshTailFrom(index + replacement.size)
+        refreshActiveWindow(previousFocusedId, focusedLineId)
         (lineViews.getOrNull(index + focusLineOffset) as? LineViewHolder.TextLine)?.requestFocusAt(focusOffset)
         emit()
         return true
+    }
+
+    private fun ensurePlainLineAfter(index: Int) {
+        val next = paragraphs.getOrNull(index + 1)
+        val hasExitLine = next != null &&
+            next.type == NoteParagraphType.TEXT &&
+            next.style == NoteParagraphStyle.BODY &&
+            next.text.isBlank() &&
+            next.spans.isEmpty()
+        if (!hasExitLine) paragraphs.add(index + 1, NoteParagraph())
     }
 
     private fun handleBackspaceAtStart(index: Int): Boolean {
         val paragraph = paragraphs.getOrNull(index) ?: return false
         if (paragraph.type == NoteParagraphType.TODO) {
             paragraphs[index] = paragraph.copy(type = NoteParagraphType.TEXT, checked = false)
-            rebuildLines(paragraph.id)
+            bindLine(index)
             (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(0)
             emit()
             return true
@@ -483,7 +822,11 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val previousLength = previous.text.length
         paragraphs[index - 1] = previous.copy(text = previous.text + current.text, style = previous.style)
         paragraphs.removeAt(index)
-        rebuildLines(previous.id)
+        focusedLineId = previous.id
+        bindLine(index - 1)
+        removeLine(index)
+        refreshTailFrom(index)
+        refreshActiveWindow(current.id, focusedLineId)
         (lineViews.getOrNull(index - 1) as? LineViewHolder.TextLine)?.requestFocusAt(previousLength)
         emit()
         return true
@@ -492,6 +835,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private fun toggleChecked(index: Int, checked: Boolean) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         paragraphs[index] = paragraph.copy(type = NoteParagraphType.TODO, checked = checked)
+        bindLine(index)
         emit()
     }
 
@@ -514,7 +858,9 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val focus = paragraphs.getOrNull(focusIndex)
         selectedAttachmentId = null
         focusedLineId = focus?.id
-        rebuildLines(focus?.id)
+        removeLine(index)
+        refreshTailFrom(index)
+        refreshActiveWindow(paragraph.id, focusedLineId)
         if (focus?.isBlockLine() == false) (lineViews.getOrNull(focusIndex) as? LineViewHolder.TextLine)?.requestFocusAt(0)
         emit()
     }
@@ -533,13 +879,18 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
 
     private fun emit(): NoteDocument {
         val document = NoteDocument(paragraphs.toList())
-        lastDocumentHash = documentHash(titleEdit.text.toString(), document)
+        lastBoundTitle = titleEdit.text.toString()
+        lastBoundDocument = document
         onDocumentChange(document)
         return document
     }
 
     private fun updateMeta() {
-        metaView.text = "${java.time.LocalDate.now()} | ${paragraphs.sumOf { if (it.isBlockLine()) 0 else it.text.length }} 字 | 默认笔记本"
+        metaView.text = if (largeDocumentMode) {
+            "${java.time.LocalDate.now()} | 大文档模式 | ${paragraphs.size} 段 | 默认笔记本"
+        } else {
+            "${java.time.LocalDate.now()} | ${paragraphs.sumOf { if (it.isBlockLine()) 0 else it.text.length }} 字 | 默认笔记本"
+        }
     }
 
     private fun orderedIndexFor(index: Int): Int {
@@ -565,7 +916,24 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
             paragraphs += NoteParagraph()
             rebuildLines(paragraphs.first().id)
         }
-        (lineViews.lastOrNull() as? LineViewHolder.TextLine)?.requestFocusAtEnd()
+        val lastIndex = paragraphs.lastIndex
+        if (largeDocumentMode && lineViews.getOrNull(lastIndex) !is LineViewHolder.TextLine) {
+            activateReadOnlyLine(lastIndex)
+        } else {
+            (lineViews.lastOrNull() as? LineViewHolder.TextLine)?.requestFocusAtEnd()
+        }
+    }
+
+    private fun activeWindowRange(centerIndex: Int): IntRange {
+        val start = (centerIndex - ACTIVE_WINDOW_RADIUS).coerceAtLeast(0)
+        val end = (centerIndex + ACTIVE_WINDOW_RADIUS).coerceAtMost(paragraphs.lastIndex)
+        return start..end
+    }
+
+    companion object {
+        private const val ACTIVE_WINDOW_RADIUS = 2
+        private const val LARGE_DOCUMENT_PARAGRAPH_THRESHOLD = 250
+        private const val LARGE_DOCUMENT_CHAR_THRESHOLD = 15_000
     }
 }
 
@@ -711,6 +1079,110 @@ private sealed class LineViewHolder {
     abstract fun applyColors(colors: NativeNoteEditorColors)
     abstract fun dispose()
 
+    class ReadOnlyTextLine(
+        context: Context,
+        private val orderedIndexProvider: () -> Int,
+        private val onClick: (Int) -> Unit,
+        private val onCheckedChanged: (Boolean) -> Unit
+    ) : LineViewHolder() {
+        override val container = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = 29.dp
+            isClickable = true
+            setOnClickListener { onClick(textView.text.length) }
+        }
+        private val checkBox = CheckBox(context).apply { minWidth = 0; minHeight = 0; minimumWidth = 0; minimumHeight = 0; setPadding(0, 0, 8.dp, 0) }
+        private val prefixView = TextView(context).apply {
+            textSize = 17f
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            setPadding(0, 2.dp, 8.dp, 0)
+        }
+        private val textView = TextView(context).apply {
+            includeFontPadding = false
+            minHeight = 29.dp
+            setPadding(0, 2.dp, 0, 2.dp)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            textSize = 17f
+            setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    onClick(getOffsetForPosition(event.x, event.y))
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        private var colors = NativeNoteEditorColors(0xff111111.toInt(), 0xff999999.toInt(), 0xff777777.toInt(), 0xff3f6db5.toInt(), 0xff999999.toInt(), 0xffeef2f8.toInt())
+        private var paragraph: NoteParagraph? = null
+
+        init {
+            container.addView(checkBox, LinearLayout.LayoutParams(32.dp, 32.dp))
+            container.addView(prefixView, LinearLayout.LayoutParams(32.dp, LinearLayout.LayoutParams.WRAP_CONTENT))
+            container.addView(textView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            checkBox.setOnClickListener { onCheckedChanged(checkBox.isChecked) }
+        }
+
+        override fun bind(paragraph: NoteParagraph) {
+            this.paragraph = paragraph
+            checkBox.visibility = if (paragraph.type == NoteParagraphType.TODO) View.VISIBLE else View.GONE
+            checkBox.isChecked = paragraph.checked
+            bindPrefix(paragraph)
+            textView.text = buildReadOnlyText(paragraph)
+            applyTextAppearance(paragraph)
+        }
+
+        private fun bindPrefix(paragraph: NoteParagraph) {
+            prefixView.visibility = if (paragraph.style.isPrefixStyle()) View.VISIBLE else View.GONE
+            val params = prefixView.layoutParams as LinearLayout.LayoutParams
+            if (paragraph.style == NoteParagraphStyle.QUOTE) {
+                prefixView.text = ""
+                prefixView.background = roundedDrawable(colors.accentColor, 1.dp)
+                prefixView.setPadding(0, 0, 0, 0)
+                params.width = 3.dp
+                params.height = LinearLayout.LayoutParams.MATCH_PARENT
+                params.setMargins(14.dp, 0, 15.dp, 0)
+            } else {
+                prefixView.background = null
+                prefixView.setPadding(0, 2.dp, 8.dp, 0)
+                params.width = 32.dp
+                params.height = LinearLayout.LayoutParams.WRAP_CONTENT
+                params.setMargins(0, 0, 0, 0)
+                prefixView.text = when (paragraph.style) {
+                    NoteParagraphStyle.BULLET -> "•"
+                    NoteParagraphStyle.ORDERED -> "${orderedIndexProvider()}."
+                    else -> ""
+                }
+            }
+            prefixView.layoutParams = params
+        }
+
+        override fun applyColors(colors: NativeNoteEditorColors) {
+            this.colors = colors
+            textView.setTextColor(colors.textColor)
+            prefixView.setTextColor(colors.accentColor)
+            checkBox.buttonTintList = ColorStateList.valueOf(colors.checkboxTint)
+        }
+
+        override fun dispose() = Unit
+
+        private fun applyTextAppearance(paragraph: NoteParagraph) {
+            val textSize = paragraph.style.textSizeSp()
+            textView.textSize = textSize
+            textView.typeface = when {
+                paragraph.style == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
+                paragraph.style.isHeadingStyle() -> Typeface.DEFAULT_BOLD
+                else -> Typeface.DEFAULT
+            }
+            textView.background = when (paragraph.style) {
+                NoteParagraphStyle.CODE -> roundedDrawable(0x11_000000, 8.dp)
+                else -> null
+            }
+            textView.setPadding(if (paragraph.style == NoteParagraphStyle.CODE || paragraph.style == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
+            textView.minHeight = (textSize + 12).toInt().dp
+        }
+    }
+
     class TextLine(
         context: Context,
         private val orderedIndexProvider: () -> Int,
@@ -737,7 +1209,6 @@ private sealed class LineViewHolder {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             textSize = 17f
             setSingleLine(false)
-            maxLines = 3
             imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
             movementMethod = ArrowKeyMovementMethod.getInstance()
         }
@@ -829,7 +1300,11 @@ private sealed class LineViewHolder {
         private fun applyTextAppearance(paragraph: NoteParagraph) {
             val textSize = paragraph.style.textSizeSp()
             editText.textSize = textSize
-            editText.typeface = if (paragraph.style.isHeadingStyle()) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            editText.typeface = when {
+                paragraph.style == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
+                paragraph.style.isHeadingStyle() -> Typeface.DEFAULT_BOLD
+                else -> Typeface.DEFAULT
+            }
             editText.inputType = if (paragraph.style == NoteParagraphStyle.CODE) {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             } else {
@@ -1020,6 +1495,22 @@ private fun roundedStrokeDrawable(strokeColor: Int, radius: Int): GradientDrawab
     setStroke(2.dp, strokeColor)
 }
 
+private fun buildReadOnlyText(paragraph: NoteParagraph): CharSequence {
+    val builder = SpannableStringBuilder(paragraph.text.ifEmpty { " " })
+    paragraph.spans.forEach { span ->
+        val start = span.start.coerceIn(0, paragraph.text.length)
+        val end = span.end.coerceIn(0, paragraph.text.length)
+        if (start < end) {
+            if (span.bold && span.italic) builder.setSpan(StyleSpan(Typeface.BOLD_ITALIC), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            else if (span.bold) builder.setSpan(StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            else if (span.italic) builder.setSpan(StyleSpan(Typeface.ITALIC), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (span.underline) builder.setSpan(UnderlineSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (span.strike) builder.setSpan(StrikethroughSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+    return builder
+}
+
 private fun toggleSpanStyle(paragraph: NoteParagraph, start: Int, end: Int, style: NoteTextStyle): List<NoteTextSpan> {
     val selectedStart = start.coerceIn(0, paragraph.text.length)
     val selectedEnd = end.coerceIn(0, paragraph.text.length)
@@ -1047,8 +1538,6 @@ private fun shiftSpansForText(spans: List<NoteTextSpan>, textLength: Int): List<
     val end = span.end.coerceIn(0, textLength)
     if (start >= end || span.isEmpty()) null else span.copy(start = start, end = end)
 }
-
-private fun documentHash(title: String, document: NoteDocument): String = title + "|" + document.hashCode()
 
 private val Context.inputMethodManager: InputMethodManager
     get() = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
