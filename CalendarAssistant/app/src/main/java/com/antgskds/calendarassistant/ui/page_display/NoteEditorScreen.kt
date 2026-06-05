@@ -45,6 +45,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -55,7 +56,6 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatStrikethrough
 import androidx.compose.material.icons.filled.FormatUnderlined
@@ -107,10 +107,12 @@ import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
 import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteListStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.core.note.NoteTextStyle
+import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
@@ -453,11 +455,17 @@ fun NoteEditorScreen(
             onParagraphStyleClick = { style ->
                 editorController.setParagraphStyle(style)?.let { document = it }
             },
+            onListStyleClick = { style ->
+                editorController.setListStyle(style)?.let { document = it }
+            },
             onTextStyleClick = { style ->
                 editorController.applyTextStyle(style)?.let { document = it }
             },
             onDividerClick = {
                 editorController.insertDivider()?.let { document = it }
+            },
+            onTableClick = {
+                editorController.insertTable()?.let { document = it }
             },
             onAnalyzeClick = {
                 isMoreExpanded = false
@@ -608,16 +616,18 @@ private data class NoteToolbarItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     val textStyle: NoteTextStyle? = null,
     val paragraphStyle: NoteParagraphStyle? = null,
+    val listStyle: NoteListStyle? = null,
     val isTodo: Boolean = false,
     val isImage: Boolean = false,
     val isAttachment: Boolean = false,
-    val isDivider: Boolean = false
+    val isDivider: Boolean = false,
+    val isTable: Boolean = false
 )
 
 private fun NoteDocument.aiPlainText(): String {
     return paragraphs
         .filterNot { it.type == NoteParagraphType.IMAGE || it.type == NoteParagraphType.FILE || it.type == NoteParagraphType.DIVIDER }
-        .joinToString("\n") { it.text }
+        .joinToString("\n") { it.plainTextContent() }
 }
 
 private fun NoteDocument.hasTransferAttachments(): Boolean {
@@ -640,14 +650,15 @@ private fun toolsForCategory(category: NoteToolbarCategory): List<NoteToolbarIte
         NoteToolbarItem(label = "S", icon = Icons.Default.FormatStrikethrough, textStyle = NoteTextStyle.STRIKE),
         NoteToolbarItem(label = "引用", icon = Icons.Default.FormatQuote, paragraphStyle = NoteParagraphStyle.QUOTE),
         NoteToolbarItem(label = "代码", icon = Icons.Default.Code, paragraphStyle = NoteParagraphStyle.CODE),
-        NoteToolbarItem(label = "无序", icon = Icons.Default.FormatListBulleted, paragraphStyle = NoteParagraphStyle.BULLET),
-        NoteToolbarItem(label = "有序", icon = Icons.Default.FormatListNumbered, paragraphStyle = NoteParagraphStyle.ORDERED)
+        NoteToolbarItem(label = "无序", icon = Icons.AutoMirrored.Filled.FormatListBulleted, listStyle = NoteListStyle.BULLET),
+        NoteToolbarItem(label = "有序", icon = Icons.Default.FormatListNumbered, listStyle = NoteListStyle.ORDERED)
     )
     NoteToolbarCategory.INSERT -> listOf(
         NoteToolbarItem(label = "待办", icon = Icons.Default.CheckBox, isTodo = true),
         NoteToolbarItem(label = "图片", icon = Icons.Default.Image, isImage = true),
         NoteToolbarItem(label = "附件", icon = Icons.Default.Description, isAttachment = true),
-        NoteToolbarItem(label = "分割线", icon = Icons.Default.HorizontalRule, isDivider = true)
+        NoteToolbarItem(label = "分割线", icon = Icons.Default.HorizontalRule, isDivider = true),
+        NoteToolbarItem(label = "表格", isTable = true)
     )
 }
 
@@ -660,8 +671,10 @@ private fun NoteEditorFloatingToolbar(
     onTodoClick: () -> Unit,
     onImageClick: () -> Unit,
     onParagraphStyleClick: (NoteParagraphStyle) -> Unit,
+    onListStyleClick: (NoteListStyle) -> Unit,
     onTextStyleClick: (NoteTextStyle) -> Unit,
     onDividerClick: () -> Unit,
+    onTableClick: () -> Unit,
     onAnalyzeClick: () -> Unit,
     onAttachmentClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -786,7 +799,9 @@ private fun NoteEditorFloatingToolbar(
                                         item.isImage -> onImageClick()
                                         item.isAttachment -> onAttachmentClick()
                                         item.isDivider -> onDividerClick()
+                                        item.isTable -> onTableClick()
                                         item.paragraphStyle != null -> onParagraphStyleClick(item.paragraphStyle)
+                                        item.listStyle != null -> onListStyleClick(item.listStyle)
                                         item.textStyle != null -> onTextStyleClick(item.textStyle)
                                     }
                                     activeCategory = null
@@ -935,7 +950,7 @@ private fun NoteToolbarLeadingButton(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = accentColor.copy(alpha = 0.15f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.size(size)
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -944,13 +959,13 @@ private fun NoteToolbarLeadingButton(
                     text = NoteToolbarCategory.HEADING.label,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
-                    color = accentColor
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     contentDescription = "返回工具分类",
-                    tint = accentColor,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -990,14 +1005,14 @@ private fun NoteToolbarTrailingBackButton(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = accentColor.copy(alpha = 0.15f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.size(size)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "返回工具分类",
-                tint = accentColor,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -1014,7 +1029,7 @@ private fun NoteToolbarCategoryChip(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = accentColor.copy(alpha = 0.12f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.height(height)
     ) {
         Row(
@@ -1026,12 +1041,12 @@ private fun NoteToolbarCategoryChip(
                 text = category.label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Black,
-                color = accentColor
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = category.contentDescription,
                 style = MaterialTheme.typography.labelSmall,
-                color = accentColor.copy(alpha = 0.82f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -1042,7 +1057,7 @@ private fun NoteToolbarChip(item: NoteToolbarItem, accentColor: Color, height: D
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.height(height)
     ) {
         Row(
@@ -1076,7 +1091,7 @@ private fun NoteToolbarAction(
         onClick = onClick,
         enabled = !loading,
         shape = CircleShape,
-        color = accentColor.copy(alpha = 0.12f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.height(height)
     ) {
         Row(
