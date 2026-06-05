@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
+import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.Instant
 import java.time.LocalDateTime
@@ -255,7 +256,7 @@ private fun buildNotePreview(paragraphs: List<NoteParagraph>): String? {
     val summary = paragraphs
         .asSequence()
         .filterNot { it.type == NoteParagraphType.TODO }
-        .map { it.text.trim() }
+        .map { it.plainTextContent().trim() }
         .filter { it.isNotBlank() }
         .joinToString(" ")
         .replace(Regex("\\s+"), " ")

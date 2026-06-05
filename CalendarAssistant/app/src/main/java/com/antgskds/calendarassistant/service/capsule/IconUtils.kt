@@ -4,6 +4,7 @@ import android.content.Context
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 
@@ -25,7 +26,14 @@ object IconUtils {
             CapsuleStateManager.TYPE_OCR_PROGRESS -> return R.drawable.ic_stat_scan
             CapsuleStateManager.TYPE_OCR_RESULT -> return R.drawable.ic_stat_success
             CapsuleStateManager.TYPE_MODEL_LOADING -> return R.drawable.ic_model_loading
-            CapsuleStateManager.TYPE_WEATHER_ALERT -> return R.drawable.ic_weather_rain_heavy
+            CapsuleStateManager.TYPE_WEATHER_ALERT -> return WeatherAlertIconMapper.iconRes(
+                capsule.title,
+                capsule.content,
+                capsule.description,
+                capsule.display.primaryText,
+                capsule.display.secondaryText.orEmpty(),
+                capsule.display.expandedText.orEmpty()
+            )
         }
 
         // 优先从 RuleRegistry 获取用户自定义图标
@@ -41,7 +49,7 @@ object IconUtils {
         // 硬编码回退
         return when (ruleId) {
             RuleMatchingEngine.RULE_PICKUP -> {
-                if (capsule.description?.startsWith("【取餐】") == true) R.drawable.ic_stat_food
+                if (capsule.description.startsWith("【取餐】")) R.drawable.ic_stat_food
                 else R.drawable.ic_stat_package
             }
             RuleMatchingEngine.RULE_FOOD -> R.drawable.ic_stat_food

@@ -50,10 +50,15 @@ class NoteRepository(
 }
 
 fun NoteDocument.withNormalizedParagraphs(): NoteDocument {
-    return copy(
-        paragraphs = paragraphs.map { paragraph ->
-            val normalizedText = if (paragraph.type == NoteParagraphType.DIVIDER) "" else paragraph.text.replace("\r\n", "\n").replace('\r', '\n')
+    val migrated = withMigratedParagraphStyles()
+    return migrated.copy(
+        paragraphs = migrated.paragraphs.map { paragraph ->
+            val normalizedText = if (paragraph.type == NoteParagraphType.DIVIDER || paragraph.type == NoteParagraphType.TABLE) "" else paragraph.text.replace("\r\n", "\n").replace('\r', '\n')
+            val normalizedTable = if (paragraph.type == NoteParagraphType.TABLE) paragraph.table?.normalized() else null
+            val paragraphStyle = paragraph.effectiveParagraphStyle()
             paragraph.copy(
+                style = paragraphStyle,
+                listStyle = if (paragraphStyle == NoteParagraphStyle.CODE || paragraphStyle == NoteParagraphStyle.QUOTE || paragraph.isBlockLineForNormalize()) NoteListStyle.NONE else paragraph.effectiveListStyle(),
                 text = normalizedText,
                 checked = if (paragraph.type == NoteParagraphType.TODO) paragraph.checked else false,
                 spans = paragraph.spans
@@ -64,8 +69,13 @@ fun NoteDocument.withNormalizedParagraphs(): NoteDocument {
                     },
                 attachmentPath = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentPath.trim() else "",
                 attachmentName = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentName.trim() else "",
-                attachmentMime = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentMime.trim() else ""
+                attachmentMime = if (paragraph.type == NoteParagraphType.IMAGE || paragraph.type == NoteParagraphType.FILE) paragraph.attachmentMime.trim() else "",
+                table = normalizedTable
             )
         }
     )
+}
+
+private fun NoteParagraph.isBlockLineForNormalize(): Boolean {
+    return type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE || type == NoteParagraphType.DIVIDER || type == NoteParagraphType.TABLE
 }

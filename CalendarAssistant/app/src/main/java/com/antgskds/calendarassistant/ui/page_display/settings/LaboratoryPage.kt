@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,26 +21,38 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory.TestEventType
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.WeatherAlertData
+import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.service.clipboard.ClipboardCodeMonitorService
+import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
@@ -56,6 +69,8 @@ fun LaboratoryPage(
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
     val scrollState = rememberScrollState()
     val context = LocalContext.current
+    val app = context.applicationContext as? App
+    var showNotificationTestSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(settings?.developerOptionsUnlocked, settings?.developerOptionsEnabled, settings?.developerOptionsDisabledAtMillis) {
         val current = settings ?: return@LaunchedEffect
@@ -216,6 +231,9 @@ fun LaboratoryPage(
                                 )
                                 Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                             }
+                        },
+                        onOpenNotificationTests = {
+                            showNotificationTestSheet = true
                         }
                     )
                 }
@@ -224,6 +242,13 @@ fun LaboratoryPage(
 
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
+        if (showNotificationTestSheet) {
+            DeveloperNotificationTestSheet(
+                app = app,
+                settings = settings,
+                onDismiss = { showNotificationTestSheet = false }
+            )
+        }
     }
 }
 
@@ -279,7 +304,8 @@ private fun DeveloperOptionsCard(
     onMigrateLegacyNotes: () -> Unit,
     onCleanLegacyNotes: () -> Unit,
     onCleanDuplicateEvents: () -> Unit,
-    onExportLogs: (Int?) -> Unit
+    onExportLogs: (Int?) -> Unit,
+    onOpenNotificationTests: () -> Unit
 ) {
     val haptics = rememberAppHaptics()
     Card(
@@ -344,6 +370,12 @@ private fun DeveloperOptionsCard(
             ) {
                 Text("清理重复日程")
             }
+            Button(
+                onClick = { haptics.confirm(); onOpenNotificationTests() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("通知/胶囊测试")
+            }
             Text(
                 text = "日志导出",
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
@@ -384,6 +416,473 @@ private fun DeveloperOptionsCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun DeveloperNotificationTestSheet(
+    app: App?,
+    settings: MySettings?,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val haptics = rememberAppHaptics()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    val liveCapsuleEnabled = settings?.isLiveCapsuleEnabled == true
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "通知/胶囊测试",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "点击后会立即发送测试通知，便于检查状态栏、通知栏、实况胶囊和天气图标映射。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!notificationsEnabled) {
+                Text(
+                    text = "系统通知权限未开启，普通通知可能不会显示。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            if (!liveCapsuleEnabled) {
+                Text(
+                    text = "实况胶囊通知开关未开启，实况测试不会显示；请先到偏好设置开启。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            DeveloperSheetSection(title = "普通通知") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DeveloperTestChip("日程") {
+                        haptics.confirm()
+                        toastResult(context, sendDeveloperPlainNotification(context, app, developerScheduleNotificationSample()))
+                    }
+                    DeveloperTestChip("取件") {
+                        haptics.confirm()
+                        toastResult(context, sendDeveloperPlainNotification(context, app, developerPickupNotificationSample()))
+                    }
+                    DeveloperTestChip("课程") {
+                        haptics.confirm()
+                        toastResult(context, sendDeveloperPlainNotification(context, app, developerCourseNotificationSample()))
+                    }
+                }
+            }
+
+            DeveloperSheetSection(title = "天气普通通知") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    developerWeatherAlertSamples().forEach { sample ->
+                        DeveloperTestChip(sample.label) {
+                            haptics.confirm()
+                            toastResult(context, sendDeveloperWeatherNotification(context, app, sample))
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            DeveloperSheetSection(title = "实况胶囊") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DeveloperTestChip("OCR 进度") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperLiveOcrProgress(app, settings))
+                    }
+                    DeveloperTestChip("OCR 完成") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperLiveOcrResult(app, settings))
+                    }
+                    DeveloperTestChip("模型加载") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperLiveModelLoading(app, settings))
+                    }
+                    DeveloperTestChip("网速") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperLiveNetworkSpeed(app, settings))
+                    }
+                }
+            }
+
+            DeveloperSheetSection(title = "天气实况胶囊") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    developerWeatherAlertSamples().forEach { sample ->
+                        DeveloperTestChip(sample.label) {
+                            haptics.confirm()
+                            toastResult(context, showDeveloperWeatherAlertCapsule(app, settings, sample))
+                        }
+                    }
+                    developerWeatherRiskSamples().forEach { sample ->
+                        DeveloperTestChip(sample.label) {
+                            haptics.confirm()
+                            toastResult(context, showDeveloperWeatherRiskCapsule(app, settings, sample))
+                        }
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = {
+                    haptics.warning()
+                    toastResult(context, clearDeveloperLiveCapsules(app))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("清除测试胶囊")
+            }
+
+            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        }
+    }
+}
+
+@Composable
+private fun DeveloperSheetSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        content()
+    }
+}
+
+@Composable
+private fun DeveloperTestChip(
+    label: String,
+    onClick: () -> Unit
+) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label) }
+    )
+}
+
+private data class DeveloperPlainNotificationSample(
+    val key: String,
+    val title: String,
+    val content: String,
+    val channelId: String,
+    val smallIcon: Int
+)
+
+private data class DeveloperWeatherAlertSample(
+    val key: String,
+    val label: String,
+    val eventName: String,
+    val colorCode: String,
+    val description: String,
+    val instruction: String
+)
+
+private data class DeveloperWeatherRiskSample(
+    val key: String,
+    val label: String,
+    val title: String,
+    val level: String,
+    val weatherText: String,
+    val message: String
+)
+
+private fun developerScheduleNotificationSample(): DeveloperPlainNotificationSample {
+    return DeveloperPlainNotificationSample(
+        key = "schedule",
+        title = "开发者测试日程",
+        content = "15 分钟后开始：检查普通日程通知样式。",
+        channelId = App.CHANNEL_ID_POPUP,
+        smallIcon = R.drawable.ic_stat_event
+    )
+}
+
+private fun developerPickupNotificationSample(): DeveloperPlainNotificationSample {
+    return DeveloperPlainNotificationSample(
+        key = "pickup",
+        title = "开发者测试取件",
+        content = "菜鸟驿站 3-2-101，取件码 8-2333。",
+        channelId = App.CHANNEL_ID_POPUP,
+        smallIcon = R.drawable.ic_stat_package
+    )
+}
+
+private fun developerCourseNotificationSample(): DeveloperPlainNotificationSample {
+    return DeveloperPlainNotificationSample(
+        key = "course",
+        title = "开发者测试课程",
+        content = "高等数学即将开始，地点：教学楼 A203。",
+        channelId = App.CHANNEL_ID_POPUP,
+        smallIcon = R.drawable.ic_stat_course
+    )
+}
+
+private fun developerWeatherAlertSamples(): List<DeveloperWeatherAlertSample> {
+    return listOf(
+        DeveloperWeatherAlertSample(
+            key = "heat",
+            label = "高温",
+            eventName = "高温",
+            colorCode = "orange",
+            description = "预计未来 24 小时最高气温将达到 38℃ 以上，请减少户外活动。",
+            instruction = "注意防暑降温，避免长时间暴晒。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "thunder",
+            label = "雷暴",
+            eventName = "雷电",
+            colorCode = "yellow",
+            description = "预计未来 6 小时有雷电活动，并可能伴有短时强降水。",
+            instruction = "请远离高处、水域和金属设施。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "rainstorm",
+            label = "暴雨",
+            eventName = "暴雨",
+            colorCode = "red",
+            description = "预计未来 3 小时降雨量将达 80 毫米以上，城市内涝风险较高。",
+            instruction = "请避开低洼路段，注意交通安全。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "wind",
+            label = "大风",
+            eventName = "大风",
+            colorCode = "blue",
+            description = "预计未来 12 小时阵风可达 8 级以上。",
+            instruction = "请收好阳台物品，减少户外高空作业。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "haze",
+            label = "雾霾",
+            eventName = "霾",
+            colorCode = "yellow",
+            description = "预计未来 12 小时有中度霾，能见度和空气质量下降。",
+            instruction = "敏感人群请减少户外活动。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "snow",
+            label = "降雪",
+            eventName = "暴雪",
+            colorCode = "orange",
+            description = "预计未来 12 小时降雪量将达 8 毫米以上，道路结冰风险较高。",
+            instruction = "出行请注意防滑并预留通勤时间。"
+        )
+    )
+}
+
+private fun developerWeatherRiskSamples(): List<DeveloperWeatherRiskSample> {
+    return listOf(
+        DeveloperWeatherRiskSample(
+            key = "risk_heat",
+            label = "高温风险",
+            title = "天气风险提醒：高温",
+            level = "high",
+            weatherText = "晴热",
+            message = "未来几小时体感温度较高，户外活动中暑风险上升。"
+        ),
+        DeveloperWeatherRiskSample(
+            key = "risk_rain",
+            label = "降雨风险",
+            title = "天气风险提醒：强降雨",
+            level = "medium",
+            weatherText = "阵雨",
+            message = "短时降雨可能影响通勤，请携带雨具并关注路面积水。"
+        ),
+        DeveloperWeatherRiskSample(
+            key = "risk_haze",
+            label = "雾霾风险",
+            title = "天气风险提醒：雾霾",
+            level = "low",
+            weatherText = "霾",
+            message = "空气质量可能转差，敏感人群建议减少长时间户外运动。"
+        )
+    )
+}
+
+private fun sendDeveloperPlainNotification(
+    context: Context,
+    app: App?,
+    sample: DeveloperPlainNotificationSample
+): String {
+    if (app == null) return "应用上下文不可用"
+    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return "系统通知权限未开启"
+    app.notificationCenter.showPlainNotification(
+        notificationId = developerNotificationId("plain_${sample.key}"),
+        title = sample.title,
+        content = sample.content,
+        channelId = sample.channelId,
+        smallIcon = sample.smallIcon
+    )
+    return "已发送 ${sample.title}"
+}
+
+private fun sendDeveloperWeatherNotification(
+    context: Context,
+    app: App?,
+    sample: DeveloperWeatherAlertSample
+): String {
+    val alert = sample.toWeatherAlert()
+    return sendDeveloperPlainNotification(
+        context = context,
+        app = app,
+        sample = DeveloperPlainNotificationSample(
+            key = "weather_${sample.key}",
+            title = "开发者测试${sample.label}预警",
+            content = alert.description,
+            channelId = App.CHANNEL_ID_WEATHER,
+            smallIcon = WeatherAlertIconMapper.officialIconRes(alert)
+        )
+    )
+}
+
+private fun showDeveloperLiveOcrProgress(app: App?, settings: MySettings?): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.showOcrProgress(
+        title = "正在分析截图",
+        content = "开发者测试：OCR 识别中，预计数秒后完成。"
+    )
+    return "已发送 OCR 进度胶囊"
+}
+
+private fun showDeveloperLiveOcrResult(app: App?, settings: MySettings?): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.showOcrResult(
+        title = "识别完成",
+        content = "开发者测试：已识别 1 条日程。",
+        durationMs = 60_000L
+    )
+    return "已发送 OCR 完成胶囊"
+}
+
+private fun showDeveloperLiveModelLoading(app: App?, settings: MySettings?): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.showModelLoading(
+        title = "本地模型加载中",
+        content = "开发者测试：正在准备本地语义模型。"
+    )
+    return "已发送模型加载胶囊"
+}
+
+private fun showDeveloperLiveNetworkSpeed(app: App?, settings: MySettings?): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.updateNetworkSpeed(
+        NetworkSpeedMonitor.NetworkSpeed(
+            downloadSpeed = 2_621_440L,
+            formattedSpeed = "2.5MB/s"
+        )
+    )
+    return if (settings?.isNetworkSpeedCapsuleEnabled == true) {
+        "已发送网速胶囊"
+    } else {
+        "已写入网速测试值；需开启网速胶囊开关才会显示"
+    }
+}
+
+private fun showDeveloperWeatherAlertCapsule(
+    app: App?,
+    settings: MySettings?,
+    sample: DeveloperWeatherAlertSample
+): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.showWeatherAlert("开发者测试城市", sample.toWeatherAlert())
+    return "已发送${sample.label}预警胶囊"
+}
+
+private fun showDeveloperWeatherRiskCapsule(
+    app: App?,
+    settings: MySettings?,
+    sample: DeveloperWeatherRiskSample
+): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.capsuleCenter.showWeatherRisk("开发者测试城市", sample.toWeatherRisk())
+    return "已发送${sample.label}胶囊"
+}
+
+private fun clearDeveloperLiveCapsules(app: App?): String {
+    if (app == null) return "应用上下文不可用"
+    app.capsuleCenter.clearOcrCapsule()
+    app.capsuleCenter.clearModelLoading()
+    app.capsuleCenter.clearWeatherCapsules()
+    app.capsuleCenter.updateNetworkSpeed(null)
+    return "已清除测试胶囊"
+}
+
+private fun liveCapsuleUnavailableMessage(app: App?, settings: MySettings?): String? {
+    if (app == null) return "应用上下文不可用"
+    if (settings?.isLiveCapsuleEnabled != true) return "请先开启实况胶囊通知"
+    return null
+}
+
+private fun DeveloperWeatherAlertSample.toWeatherAlert(): WeatherAlertData {
+    return WeatherAlertData(
+        id = "developer_${key}",
+        senderName = "Will do Developer",
+        eventName = eventName,
+        eventCode = key,
+        severity = colorCode,
+        colorCode = colorCode,
+        headline = "开发者测试：${label}预警",
+        description = description,
+        instruction = instruction
+    )
+}
+
+private fun DeveloperWeatherRiskSample.toWeatherRisk(): WeatherRiskAlert {
+    return WeatherRiskAlert(
+        id = "developer_${key}",
+        title = title,
+        level = level,
+        weatherText = weatherText,
+        message = message
+    )
+}
+
+private fun developerNotificationId(key: String): Int {
+    return "developer_notification_test:$key".hashCode() and Int.MAX_VALUE
+}
+
+private fun toastResult(context: Context, message: String) {
+    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 }
 
 private fun createDeveloperTestEvents(

@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import java.time.OffsetDateTime
@@ -37,7 +36,7 @@ class WeatherNotifier(context: Context) {
                         title = title,
                         content = content.take(120),
                         channelId = App.CHANNEL_ID_WEATHER,
-                        smallIcon = R.drawable.ic_notification_small
+                        smallIcon = WeatherAlertIconMapper.officialIconRes(alert)
                     )
                 }
             }
@@ -55,7 +54,7 @@ class WeatherNotifier(context: Context) {
                         title = title,
                         content = content.take(120),
                         channelId = App.CHANNEL_ID_WEATHER,
-                        smallIcon = R.drawable.ic_notification_small
+                        smallIcon = WeatherAlertIconMapper.riskIconRes(risk)
                     )
                 }
             }

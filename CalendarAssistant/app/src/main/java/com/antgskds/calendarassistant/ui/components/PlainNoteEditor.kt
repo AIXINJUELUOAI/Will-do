@@ -19,10 +19,12 @@ import android.text.method.ArrowKeyMovementMethod
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
@@ -30,8 +32,10 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.roundToInt
@@ -54,27 +58,37 @@ import androidx.core.widget.doAfterTextChanged
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
 import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.note.NoteListStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
+import com.antgskds.calendarassistant.core.note.NoteTableData
 import com.antgskds.calendarassistant.core.note.NoteTextSpan
 import com.antgskds.calendarassistant.core.note.NoteTextStyle
+import com.antgskds.calendarassistant.core.note.effectiveListStyle
+import com.antgskds.calendarassistant.core.note.effectiveParagraphStyle
+import com.antgskds.calendarassistant.core.note.withMigratedParagraphStyles
+import com.antgskds.calendarassistant.core.note.withMigratedParagraphStyle
 
 class PlainNoteEditorController {
     internal var toggleCurrentTodoAction: (() -> NoteDocument)? = null
     internal var clearFocusAction: (() -> Unit)? = null
     internal var applyTextStyleAction: ((NoteTextStyle) -> NoteDocument)? = null
     internal var setParagraphStyleAction: ((NoteParagraphStyle) -> NoteDocument)? = null
+    internal var setListStyleAction: ((NoteListStyle) -> NoteDocument)? = null
     internal var insertAttachmentAction: ((Uri) -> NoteDocument)? = null
     internal var insertDividerAction: (() -> NoteDocument)? = null
+    internal var insertTableAction: (() -> NoteDocument)? = null
     internal var onImageShortcut: (() -> Unit)? = null
     internal var onFileShortcut: (() -> Unit)? = null
 
     fun toggleCurrentTodo(): NoteDocument? = toggleCurrentTodoAction?.invoke()
     fun applyTextStyle(style: NoteTextStyle): NoteDocument? = applyTextStyleAction?.invoke(style)
     fun setParagraphStyle(style: NoteParagraphStyle): NoteDocument? = setParagraphStyleAction?.invoke(style)
+    fun setListStyle(style: NoteListStyle): NoteDocument? = setListStyleAction?.invoke(style)
     fun insertAttachment(uri: Uri): NoteDocument? = insertAttachmentAction?.invoke(uri)
     fun insertDivider(): NoteDocument? = insertDividerAction?.invoke()
+    fun insertTable(): NoteDocument? = insertTableAction?.invoke()
     fun clearFocus() = clearFocusAction?.invoke()
 }
 
@@ -122,8 +136,10 @@ fun PlainNoteEditor(
         controller.toggleCurrentTodoAction = { editor?.toggleCurrentTodo() ?: document }
         controller.applyTextStyleAction = { style -> editor?.applyTextStyle(style) ?: document }
         controller.setParagraphStyleAction = { style -> editor?.setParagraphStyle(style) ?: document }
+        controller.setListStyleAction = { style -> editor?.setListStyle(style) ?: document }
         controller.insertAttachmentAction = { uri -> editor?.insertAttachment(uri) ?: document }
         controller.insertDividerAction = { editor?.insertDivider() ?: document }
+        controller.insertTableAction = { editor?.insertTable() ?: document }
         controller.onImageShortcut = onImageShortcut
         controller.onFileShortcut = onFileShortcut
         controller.clearFocusAction = { editor?.hideKeyboard() }
@@ -147,6 +163,22 @@ private enum class InlineShortcutToken {
     TIME,
     DATE
 }
+
+private data class TableCellRef(
+    val paragraphId: String,
+    val row: Int,
+    val column: Int
+)
+
+private enum class TableSelectionAxis {
+    ROW,
+    COLUMN
+}
+
+private data class TableSelectionRef(
+    val axis: TableSelectionAxis,
+    val index: Int
+)
 
 private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private val root = LinearLayout(context).apply {
@@ -179,6 +211,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private var focusedLineId: String? = null
     private var pendingSelectionOffset: Int? = null
     private var selectedAttachmentId: String? = null
+    private var activeTableCell: TableCellRef? = null
     private var lastBoundTitle = ""
     private var lastBoundDocument: NoteDocument? = null
     private var largeDocumentMode = false
@@ -214,11 +247,11 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
 
     fun updateExternal(title: String, document: NoteDocument, force: Boolean = false) {
         if (!force && title == lastBoundTitle && document === lastBoundDocument) { updateMeta(); return }
-        if (!force && (currentEditText()?.hasFocus() == true || selectedAttachmentId != null)) { updateMeta(); return }
+        if (!force && (currentEditText()?.hasFocus() == true || currentTableEditText()?.hasFocus() == true || selectedAttachmentId != null)) { updateMeta(); return }
         internalUpdate = true
         if (titleEdit.text.toString() != title) titleEdit.setText(title)
         internalUpdate = false
-        paragraphs = document.paragraphs.ifEmpty { listOf(NoteParagraph()) }.toMutableList()
+        paragraphs = document.withMigratedParagraphStyles().paragraphs.ifEmpty { listOf(NoteParagraph()) }.toMutableList()
         largeDocumentMode = shouldUseLargeDocumentMode()
         rebuildLines(focusedLineId)
         lastBoundTitle = title
@@ -243,21 +276,43 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraphId = paragraph.id
         val editable = forceEditable ?: isEditableLine(index, paragraph, focusedLineId)
         val holder: LineViewHolder = if (paragraph.isBlockLine()) {
-            LineViewHolder.AttachmentLine(
-                context = context,
-                onSelected = {
-                    val currentIndex = currentIndexOfParagraph(paragraphId)
-                    if (currentIndex >= 0) selectAttachment(currentIndex)
-                },
-                onDelete = {
-                    val currentIndex = currentIndexOfParagraph(paragraphId)
-                    if (currentIndex >= 0) deleteAttachmentLine(currentIndex)
-                },
-                onOpen = {
-                    val currentIndex = currentIndexOfParagraph(paragraphId)
-                    if (currentIndex >= 0) onOpenAttachment(paragraphs[currentIndex])
-                }
-            )
+            if (paragraph.type == NoteParagraphType.TABLE) {
+                LineViewHolder.TableLine(
+                    context = context,
+                    onSelected = {
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) selectAttachment(currentIndex)
+                    },
+                    onDelete = {
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) deleteAttachmentLine(currentIndex)
+                    },
+                    onActivateCell = { row, column ->
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) activateTableCell(currentIndex, row, column)
+                    },
+                    onTableChanged = { table ->
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) updateTable(currentIndex, table)
+                    }
+                )
+            } else {
+                LineViewHolder.AttachmentLine(
+                    context = context,
+                    onSelected = {
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) selectAttachment(currentIndex)
+                    },
+                    onDelete = {
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) deleteAttachmentLine(currentIndex)
+                    },
+                    onOpen = {
+                        val currentIndex = currentIndexOfParagraph(paragraphId)
+                        if (currentIndex >= 0) onOpenAttachment(paragraphs[currentIndex])
+                    }
+                )
+            }
         } else if (!editable) {
             LineViewHolder.ReadOnlyTextLine(
                 context = context,
@@ -287,6 +342,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
                 },
                 onFocus = {
                     val previousFocusedId = focusedLineId
+                    clearActiveTableCell()
                     selectedAttachmentId = null
                     focusedLineId = paragraphId
                     refreshAttachmentSelection()
@@ -316,6 +372,15 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         }
         holder.applyColors(colors)
         holder.bind(paragraph)
+        when (holder) {
+            is LineViewHolder.AttachmentLine -> holder.setSelected(paragraphId == selectedAttachmentId)
+            is LineViewHolder.TableLine -> {
+                holder.setSelected(paragraphId == selectedAttachmentId)
+                val active = activeTableCell?.takeIf { it.paragraphId == paragraphId }
+                if (active != null) holder.setActiveCell(active.row, active.column) else holder.clearActiveCell()
+            }
+            else -> Unit
+        }
         return holder
     }
 
@@ -367,6 +432,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         if (paragraph.isBlockLine()) return
         val previousFocusedId = focusedLineId
+        clearActiveTableCell()
         focusedLineId = paragraph.id
         selectedAttachmentId = null
         val holder = if (lineViews.getOrNull(index) is LineViewHolder.TextLine) {
@@ -420,7 +486,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
 
     fun toggleCurrentTodo(): NoteDocument {
         val index = focusedIndex()
-        val paragraph = paragraphs.getOrNull(index) ?: return emit()
+        val paragraph = paragraphs.getOrNull(index)?.withMigratedParagraphStyle() ?: return emit()
         if (paragraph.isBlockLine()) return emit()
         paragraphs[index] = if (paragraph.type == NoteParagraphType.TODO) paragraph.copy(type = NoteParagraphType.TEXT, checked = false) else paragraph.copy(type = NoteParagraphType.TODO, checked = false)
         focusedLineId = paragraphs[index].id
@@ -430,11 +496,34 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     fun setParagraphStyle(style: NoteParagraphStyle): NoteDocument {
+        when (style) {
+            NoteParagraphStyle.BULLET -> return setListStyle(NoteListStyle.BULLET)
+            NoteParagraphStyle.ORDERED -> return setListStyle(NoteListStyle.ORDERED)
+            else -> Unit
+        }
         val index = focusedIndex()
-        val paragraph = paragraphs.getOrNull(index) ?: return emit()
+        val paragraph = paragraphs.getOrNull(index)?.withMigratedParagraphStyle() ?: return emit()
         if (paragraph.isBlockLine()) return emit()
-        paragraphs[index] = paragraph.copy(style = style)
+        val cleanStyle = when (style) {
+            NoteParagraphStyle.BULLET,
+            NoteParagraphStyle.ORDERED -> NoteParagraphStyle.BODY
+            else -> style
+        }
+        val nextListStyle = if (cleanStyle == NoteParagraphStyle.CODE || cleanStyle == NoteParagraphStyle.QUOTE) NoteListStyle.NONE else paragraph.effectiveListStyle()
+        paragraphs[index] = paragraph.copy(style = cleanStyle, listStyle = nextListStyle)
         if (style == NoteParagraphStyle.CODE) ensurePlainLineAfter(index)
+        focusedLineId = paragraphs[index].id
+        refreshTailFrom(index)
+        return emit()
+    }
+
+    fun setListStyle(style: NoteListStyle): NoteDocument {
+        val index = focusedIndex()
+        val paragraph = paragraphs.getOrNull(index)?.withMigratedParagraphStyle() ?: return emit()
+        if (paragraph.isBlockLine()) return emit()
+        val paragraphStyle = paragraph.effectiveParagraphStyle()
+        val nextListStyle = if (paragraphStyle == NoteParagraphStyle.CODE || paragraphStyle == NoteParagraphStyle.QUOTE) NoteListStyle.NONE else style
+        paragraphs[index] = paragraph.copy(style = paragraphStyle, listStyle = nextListStyle)
         focusedLineId = paragraphs[index].id
         refreshTailFrom(index)
         return emit()
@@ -485,8 +574,26 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         return emit()
     }
 
+    fun insertTable(): NoteDocument {
+        val insertAt = if (paragraphs.isEmpty()) 0 else focusedIndex() + 1
+        val tableParagraph = NoteParagraph(
+            type = NoteParagraphType.TABLE,
+            table = NoteTableData(columnCount = 2, headerRowCount = 1, cells = List(4) { "" }).normalized()
+        )
+        val nextLine = NoteParagraph()
+        paragraphs.add(insertAt.coerceIn(0, paragraphs.size), tableParagraph)
+        paragraphs.add((insertAt + 1).coerceIn(0, paragraphs.size), nextLine)
+        selectedAttachmentId = tableParagraph.id
+        activeTableCell = null
+        focusedLineId = tableParagraph.id
+        refreshTailFrom(insertAt)
+        selectAttachment(insertAt)
+        return emit()
+    }
+
     fun hideKeyboard() {
         currentEditText()?.clearFocus()
+        currentTableEditText()?.clearFocus()
         context.inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
     }
 
@@ -529,6 +636,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         paragraphs[index] = paragraph.copy(text = text, spans = shiftSpansForText(paragraph.spans, text.length))
         focusedLineId = paragraph.id
+        activeTableCell = null
         largeDocumentMode = shouldUseLargeDocumentMode()
         updateMeta()
         emit()
@@ -548,6 +656,37 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         activateLine(index, offset)
     }
 
+    private fun activateTableCell(index: Int, row: Int, column: Int) {
+        val paragraph = paragraphs.getOrNull(index) ?: return
+        val table = paragraph.table?.normalized() ?: return
+        clearActiveTableCell()
+        currentEditText()?.clearFocus()
+        selectedAttachmentId = null
+        focusedLineId = paragraph.id
+        activeTableCell = TableCellRef(
+            paragraphId = paragraph.id,
+            row = row.coerceIn(0, table.rowCount.coerceAtLeast(1) - 1),
+            column = column.coerceIn(0, table.columnCount.coerceAtLeast(1) - 1)
+        )
+        refreshAttachmentSelection()
+        (lineViews.getOrNull(index) as? LineViewHolder.TableLine)?.setActiveCell(activeTableCell!!.row, activeTableCell!!.column)
+    }
+
+    private fun clearActiveTableCell() {
+        val active = activeTableCell ?: return
+        val index = currentIndexOfParagraph(active.paragraphId)
+        activeTableCell = null
+        (lineViews.getOrNull(index) as? LineViewHolder.TableLine)?.clearActiveCell()
+    }
+
+    private fun updateTable(index: Int, table: NoteTableData) {
+        val paragraph = paragraphs.getOrNull(index) ?: return
+        paragraphs[index] = paragraph.copy(table = table.normalized())
+        largeDocumentMode = shouldUseLargeDocumentMode()
+        updateMeta()
+        emit()
+    }
+
     private fun shouldUseLargeDocumentMode(): Boolean {
         if (paragraphs.size > LARGE_DOCUMENT_PARAGRAPH_THRESHOLD) return true
         var chars = 0
@@ -560,9 +699,9 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
 
     private fun splitLine(index: Int, selectionStart: Int? = null, selectionEnd: Int? = null): Boolean {
         val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
-        val paragraph = paragraphs.getOrNull(index) ?: return false
+        val paragraph = paragraphs.getOrNull(index)?.withMigratedParagraphStyle() ?: return false
         val text = holder.editText.text.toString()
-        if (paragraph.style == NoteParagraphStyle.CODE) {
+        if (paragraph.effectiveParagraphStyle() == NoteParagraphStyle.CODE) {
             return insertCodeLineBreak(index, selectionStart, selectionEnd)
         }
         val start = minOf(selectionStart ?: holder.editText.selectionStart, selectionEnd ?: holder.editText.selectionEnd).coerceIn(0, text.length)
@@ -596,21 +735,35 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         }
         val before = text.substring(0, start)
         val after = text.substring(end)
+        if (start == 0 && end == 0 && text.isNotEmpty()) {
+            val blankLine = NoteParagraph()
+            paragraphs.add(index, blankLine)
+            val previousFocusedId = focusedLineId
+            focusedLineId = blankLine.id
+            insertLine(index, blankLine, active = true)
+            refreshTailFrom(index + 1)
+            refreshActiveWindow(previousFocusedId, focusedLineId)
+            (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+            emit()
+            return true
+        }
         if (paragraph.type == NoteParagraphType.TODO && before.isBlank() && after.isBlank()) {
             paragraphs[index] = paragraph.copy(text = "", type = NoteParagraphType.TEXT, checked = false, spans = emptyList())
             bindLine(index)
             emit()
             return true
         }
-        if (paragraph.style.isListStyle() && before.isBlank() && after.isBlank()) {
-            paragraphs[index] = paragraph.copy(style = NoteParagraphStyle.BODY)
+        if (paragraph.effectiveListStyle() != NoteListStyle.NONE && before.isBlank() && after.isBlank()) {
+            paragraphs[index] = paragraph.copy(style = paragraph.effectiveParagraphStyle(), listStyle = NoteListStyle.NONE)
             bindLine(index)
             emit()
             return true
         }
-        paragraphs[index] = paragraph.copy(text = before, spans = paragraph.spans.filter { it.end <= before.length })
-        val newLineStyle = if (paragraph.style.isListStyle() && before.isNotBlank()) paragraph.style else NoteParagraphStyle.BODY
-        val newLine = NoteParagraph(text = after, style = newLineStyle)
+        val currentParagraphStyle = paragraph.effectiveParagraphStyle()
+        val currentListStyle = paragraph.effectiveListStyle()
+        paragraphs[index] = paragraph.copy(style = currentParagraphStyle, text = before, spans = paragraph.spans.filter { it.end <= before.length })
+        val newLineListStyle = if (currentListStyle != NoteListStyle.NONE && before.isNotBlank()) currentListStyle else NoteListStyle.NONE
+        val newLine = NoteParagraph(text = after, listStyle = newLineListStyle)
         paragraphs.add(index + 1, newLine)
         val previousFocusedId = focusedLineId
         focusedLineId = newLine.id
@@ -695,7 +848,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val holder = lineViews.getOrNull(index) as? LineViewHolder.TextLine ?: return false
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
-        if (paragraph.style == NoteParagraphStyle.CODE) {
+        if (paragraph.effectiveParagraphStyle() == NoteParagraphStyle.CODE) {
             return insertMultilineIntoCode(index, rawText, selectionStart, selectionEnd)
         }
         val start = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
@@ -752,7 +905,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return false
         val text = holder.editText.text.toString()
         if (!text.contains('\n') && !text.contains('\r')) return false
-        if (paragraph.style == NoteParagraphStyle.CODE) {
+        if (paragraph.effectiveParagraphStyle() == NoteParagraphStyle.CODE) {
             val normalized = normalizeLineBreaks(text)
             paragraphs[index] = paragraph.copy(text = normalized, spans = emptyList())
             ensurePlainLineAfter(index)
@@ -793,7 +946,8 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val next = paragraphs.getOrNull(index + 1)
         val hasExitLine = next != null &&
             next.type == NoteParagraphType.TEXT &&
-            next.style == NoteParagraphStyle.BODY &&
+            next.effectiveParagraphStyle() == NoteParagraphStyle.BODY &&
+            next.effectiveListStyle() == NoteListStyle.NONE &&
             next.text.isBlank() &&
             next.spans.isEmpty()
         if (!hasExitLine) paragraphs.add(index + 1, NoteParagraph())
@@ -803,6 +957,14 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return false
         if (paragraph.type == NoteParagraphType.TODO) {
             paragraphs[index] = paragraph.copy(type = NoteParagraphType.TEXT, checked = false)
+            bindLine(index)
+            (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(0)
+            emit()
+            return true
+        }
+        val migratedCurrent = paragraph.withMigratedParagraphStyle()
+        if (migratedCurrent.effectiveListStyle() != NoteListStyle.NONE) {
+            paragraphs[index] = migratedCurrent.copy(listStyle = NoteListStyle.NONE)
             bindLine(index)
             (lineViews.getOrNull(index) as? LineViewHolder.TextLine)?.requestFocusAt(0)
             emit()
@@ -820,7 +982,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         }
         val current = paragraphs[index]
         val previousLength = previous.text.length
-        paragraphs[index - 1] = previous.copy(text = previous.text + current.text, style = previous.style)
+        paragraphs[index - 1] = previous.withMigratedParagraphStyle().copy(text = previous.text + current.text)
         paragraphs.removeAt(index)
         focusedLineId = previous.id
         bindLine(index - 1)
@@ -843,6 +1005,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         if (!paragraph.isBlockLine()) return
         currentEditText()?.clearFocus()
+        clearActiveTableCell()
         selectedAttachmentId = paragraph.id
         focusedLineId = paragraph.id
         lineViews.getOrNull(index)?.container?.requestFocus()
@@ -852,6 +1015,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private fun deleteAttachmentLine(index: Int) {
         val paragraph = paragraphs.getOrNull(index) ?: return
         NoteAttachmentStore.delete(context, paragraph.attachmentPath)
+        if (activeTableCell?.paragraphId == paragraph.id) activeTableCell = null
         paragraphs.removeAt(index)
         if (paragraphs.isEmpty() || paragraphs.none { !it.isBlockLine() }) paragraphs += NoteParagraph()
         val focusIndex = index.coerceAtMost(paragraphs.lastIndex)
@@ -868,6 +1032,7 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     private fun refreshAttachmentSelection() {
         lineViews.forEachIndexed { index, holder ->
             if (holder is LineViewHolder.AttachmentLine) holder.setSelected(paragraphs.getOrNull(index)?.id == selectedAttachmentId)
+            if (holder is LineViewHolder.TableLine) holder.setSelected(paragraphs.getOrNull(index)?.id == selectedAttachmentId)
         }
     }
 
@@ -897,12 +1062,16 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
         var count = 0
         for (i in 0..index.coerceAtMost(paragraphs.lastIndex)) {
             val paragraph = paragraphs[i]
-            if (paragraph.style == NoteParagraphStyle.ORDERED) count++
+            if (paragraph.effectiveListStyle() == NoteListStyle.ORDERED) count++
         }
         return count.coerceAtLeast(1)
     }
 
     private fun focusedIndex(): Int {
+        activeTableCell?.let {
+            val index = paragraphs.indexOfFirst { paragraph -> paragraph.id == it.paragraphId }
+            if (index >= 0) return index
+        }
         val byId = paragraphs.indexOfFirst { it.id == focusedLineId }
         if (byId >= 0) return byId
         val byFocus = lineViews.indexOfFirst { it is LineViewHolder.TextLine && it.editText.hasFocus() }
@@ -910,6 +1079,8 @@ private class NativeLineNoteEditor(context: Context) : ScrollView(context) {
     }
 
     private fun currentEditText(): EditText? = (lineViews.firstOrNull { it is LineViewHolder.TextLine && it.editText.hasFocus() } as? LineViewHolder.TextLine)?.editText
+
+    private fun currentTableEditText(): EditText? = (lineViews.firstOrNull { it is LineViewHolder.TableLine && it.activeEditText?.hasFocus() == true } as? LineViewHolder.TableLine)?.activeEditText
 
     private fun focusLastLine() {
         if (paragraphs.isEmpty()) {
@@ -1133,9 +1304,11 @@ private sealed class LineViewHolder {
         }
 
         private fun bindPrefix(paragraph: NoteParagraph) {
-            prefixView.visibility = if (paragraph.style.isPrefixStyle()) View.VISIBLE else View.GONE
+            val paragraphStyle = paragraph.effectiveParagraphStyle()
+            val listStyle = paragraph.effectiveListStyle()
+            prefixView.visibility = if (paragraphStyle == NoteParagraphStyle.QUOTE || listStyle != NoteListStyle.NONE) View.VISIBLE else View.GONE
             val params = prefixView.layoutParams as LinearLayout.LayoutParams
-            if (paragraph.style == NoteParagraphStyle.QUOTE) {
+            if (paragraphStyle == NoteParagraphStyle.QUOTE) {
                 prefixView.text = ""
                 prefixView.background = roundedDrawable(colors.accentColor, 1.dp)
                 prefixView.setPadding(0, 0, 0, 0)
@@ -1148,9 +1321,9 @@ private sealed class LineViewHolder {
                 params.width = 32.dp
                 params.height = LinearLayout.LayoutParams.WRAP_CONTENT
                 params.setMargins(0, 0, 0, 0)
-                prefixView.text = when (paragraph.style) {
-                    NoteParagraphStyle.BULLET -> "•"
-                    NoteParagraphStyle.ORDERED -> "${orderedIndexProvider()}."
+                prefixView.text = when (listStyle) {
+                    NoteListStyle.BULLET -> "•"
+                    NoteListStyle.ORDERED -> "${orderedIndexProvider()}."
                     else -> ""
                 }
             }
@@ -1167,18 +1340,26 @@ private sealed class LineViewHolder {
         override fun dispose() = Unit
 
         private fun applyTextAppearance(paragraph: NoteParagraph) {
-            val textSize = paragraph.style.textSizeSp()
+            val paragraphStyle = paragraph.effectiveParagraphStyle()
+            val textSize = paragraphStyle.textSizeSp()
             textView.textSize = textSize
             textView.typeface = when {
-                paragraph.style == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
-                paragraph.style.isHeadingStyle() -> Typeface.DEFAULT_BOLD
+                paragraphStyle == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
+                paragraphStyle.isHeadingStyle() -> Typeface.DEFAULT_BOLD
                 else -> Typeface.DEFAULT
             }
-            textView.background = when (paragraph.style) {
+            textView.background = when (paragraphStyle) {
                 NoteParagraphStyle.CODE -> roundedDrawable(0x11_000000, 8.dp)
                 else -> null
             }
-            textView.setPadding(if (paragraph.style == NoteParagraphStyle.CODE || paragraph.style == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
+            if (paragraphStyle == NoteParagraphStyle.CODE) {
+                textView.setSingleLine(false)
+                textView.setHorizontallyScrolling(true)
+            } else {
+                textView.setSingleLine(false)
+                textView.setHorizontallyScrolling(false)
+            }
+            textView.setPadding(if (paragraphStyle == NoteParagraphStyle.CODE || paragraphStyle == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
             textView.minHeight = (textSize + 12).toInt().dp
         }
     }
@@ -1247,9 +1428,11 @@ private sealed class LineViewHolder {
         }
 
         private fun bindPrefix(paragraph: NoteParagraph) {
-            prefixView.visibility = if (paragraph.style.isPrefixStyle()) View.VISIBLE else View.GONE
+            val paragraphStyle = paragraph.effectiveParagraphStyle()
+            val listStyle = paragraph.effectiveListStyle()
+            prefixView.visibility = if (paragraphStyle == NoteParagraphStyle.QUOTE || listStyle != NoteListStyle.NONE) View.VISIBLE else View.GONE
             val params = prefixView.layoutParams as LinearLayout.LayoutParams
-            if (paragraph.style == NoteParagraphStyle.QUOTE) {
+            if (paragraphStyle == NoteParagraphStyle.QUOTE) {
                 prefixView.text = ""
                 prefixView.background = roundedDrawable(colors.accentColor, 1.dp)
                 prefixView.setPadding(0, 0, 0, 0)
@@ -1262,9 +1445,9 @@ private sealed class LineViewHolder {
                 params.width = 32.dp
                 params.height = LinearLayout.LayoutParams.WRAP_CONTENT
                 params.setMargins(0, 0, 0, 0)
-                prefixView.text = when (paragraph.style) {
-                    NoteParagraphStyle.BULLET -> "•"
-                    NoteParagraphStyle.ORDERED -> "${orderedIndexProvider()}."
+                prefixView.text = when (listStyle) {
+                    NoteListStyle.BULLET -> "•"
+                    NoteListStyle.ORDERED -> "${orderedIndexProvider()}."
                     else -> ""
                 }
             }
@@ -1298,24 +1481,32 @@ private sealed class LineViewHolder {
         override fun dispose() { watcher?.let { editText.removeTextChangedListener(it) } }
 
         private fun applyTextAppearance(paragraph: NoteParagraph) {
-            val textSize = paragraph.style.textSizeSp()
+            val paragraphStyle = paragraph.effectiveParagraphStyle()
+            val textSize = paragraphStyle.textSizeSp()
             editText.textSize = textSize
             editText.typeface = when {
-                paragraph.style == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
-                paragraph.style.isHeadingStyle() -> Typeface.DEFAULT_BOLD
+                paragraphStyle == NoteParagraphStyle.CODE -> Typeface.MONOSPACE
+                paragraphStyle.isHeadingStyle() -> Typeface.DEFAULT_BOLD
                 else -> Typeface.DEFAULT
             }
-            editText.inputType = if (paragraph.style == NoteParagraphStyle.CODE) {
+            editText.inputType = if (paragraphStyle == NoteParagraphStyle.CODE) {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             } else {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             }
             editText.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_ENTER_ACTION
-            editText.background = when (paragraph.style) {
+            editText.background = when (paragraphStyle) {
                 NoteParagraphStyle.CODE -> roundedDrawable(0x11_000000, 8.dp)
                 else -> null
             }
-            editText.setPadding(if (paragraph.style == NoteParagraphStyle.CODE || paragraph.style == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
+            if (paragraphStyle == NoteParagraphStyle.CODE) {
+                editText.setSingleLine(false)
+                editText.setHorizontallyScrolling(true)
+            } else {
+                editText.setSingleLine(false)
+                editText.setHorizontallyScrolling(false)
+            }
+            editText.setPadding(if (paragraphStyle == NoteParagraphStyle.CODE || paragraphStyle == NoteParagraphStyle.QUOTE) 8.dp else 0, 2.dp, 0, 2.dp)
             editText.minHeight = (textSize + 12).toInt().dp
         }
 
@@ -1463,11 +1654,588 @@ private sealed class LineViewHolder {
             return true
         }
     }
+
+    class TableLine(
+        private val context: Context,
+        private val onSelected: () -> Unit,
+        private val onDelete: () -> Unit,
+        private val onActivateCell: (row: Int, column: Int) -> Unit,
+        private val onTableChanged: (NoteTableData) -> Unit
+    ) : LineViewHolder() {
+        private val panelPadding = 24.dp
+        private val rowHeaderWidth = panelPadding
+        private val columnHeaderHeight = panelPadding
+        override val container = FrameLayout(context).apply {
+            setPadding(0, 8.dp, 0, 8.dp)
+            isFocusable = true
+            isFocusableInTouchMode = true
+            clipChildren = false
+            clipToPadding = false
+        }
+        private val tablePanel = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, panelPadding, panelPadding)
+            clipChildren = false
+            clipToPadding = false
+        }
+        private val columnHeaderSpacer = View(context)
+        private val rowHeaderColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        private val rowHeaderRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        private val scroll = InterceptingHorizontalScrollView(context)
+        private val tableContentColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        private val columnHeaderRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        private val tableShell = FrameLayout(context).apply {
+            clipChildren = false
+            clipToPadding = false
+            setPadding(1.dp, 1.dp, 1.dp, 1.dp)
+        }
+        private val gridContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        private val selectionOverlay = FrameLayout(context)
+        private var colors = NativeNoteEditorColors(0, 0, 0, 0, 0, 0)
+        private var paragraph: NoteParagraph? = null
+        private var selected = false
+        private var selectedCell: Pair<Int, Int>? = null
+        private var editingCell: Pair<Int, Int>? = null
+        private var selection: TableSelectionRef? = null
+        private val cellBounds = mutableMapOf<Pair<Int, Int>, android.graphics.Rect>()
+        private val rowViews = mutableListOf<LinearLayout>()
+        private var rowHeaderHeights = emptyList<Int>()
+        var activeEditText: EditText? = null
+            private set
+
+        init {
+            scroll.isFillViewport = false
+            scroll.clipToPadding = false
+            scroll.clipChildren = false
+            tableShell.addView(gridContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            tableShell.addView(selectionOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            tableContentColumn.addView(columnHeaderRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, columnHeaderHeight))
+            tableContentColumn.addView(tableShell, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            scroll.addView(tableContentColumn, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            rowHeaderColumn.addView(columnHeaderSpacer, LinearLayout.LayoutParams(rowHeaderWidth, 0))
+            rowHeaderColumn.addView(rowHeaderRows, LinearLayout.LayoutParams(rowHeaderWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
+            tablePanel.addView(rowHeaderColumn, LinearLayout.LayoutParams(rowHeaderWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
+            tablePanel.addView(scroll, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            container.addView(tablePanel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            container.setOnClickListener { onSelected() }
+            container.setOnLongClickListener { onSelected(); true }
+            container.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DEL) { onDelete(); true } else false
+            }
+        }
+
+        override fun bind(paragraph: NoteParagraph) {
+            this.paragraph = paragraph.copy(table = paragraph.table?.normalized())
+            render()
+        }
+
+        override fun applyColors(colors: NativeNoteEditorColors) {
+            this.colors = colors
+            renderSelection()
+            render()
+        }
+
+        override fun dispose() {
+            activeEditText?.clearFocus()
+            activeEditText = null
+        }
+
+        fun setSelected(selected: Boolean) {
+            val previousHeadersVisible = headersVisible()
+            this.selected = selected
+            if (!selected) {
+                selection = null
+                selectedCell = null
+                editingCell = null
+            } else if (selectedCell == null) {
+                paragraph?.table?.normalized()?.let { table ->
+                    selectedCell = 0 to 0
+                }
+            }
+            if (previousHeadersVisible != headersVisible()) {
+                render()
+            } else {
+                renderSelection()
+                container.post { renderMarkers() }
+            }
+        }
+
+        fun setActiveCell(row: Int, column: Int) {
+            selectedCell = row to column
+            editingCell = row to column
+            selection = null
+            render()
+        }
+
+        fun clearActiveCell() {
+            val previousHeadersVisible = headersVisible()
+            selectedCell = null
+            editingCell = null
+            if (previousHeadersVisible != headersVisible()) render() else {
+                renderSelection()
+                renderMarkers()
+            }
+        }
+
+        private fun render() {
+            val table = paragraph?.table?.normalized() ?: return
+            updateHeaderVisibility()
+            gridContainer.removeAllViews()
+            cellBounds.clear()
+            rowViews.clear()
+            activeEditText = null
+            if (rowHeaderHeights.size != table.rowCount) rowHeaderHeights = emptyList()
+            renderHeaders(table)
+            repeat(table.rowCount) { row ->
+                val rowLayout = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                rowViews += rowLayout
+                repeat(table.columnCount) { column ->
+                    val cellText = table.cell(row, column)
+                    val cellView = if (editingCell == row to column) {
+                        buildEditableCell(table, row, column, cellText)
+                    } else {
+                        buildReadOnlyCell(table, row, column, cellText)
+                    }
+                    rowLayout.addView(
+                        cellView,
+                        LinearLayout.LayoutParams(cellWidth(table.columnCount), LinearLayout.LayoutParams.WRAP_CONTENT)
+                    )
+                    if (column < table.columnCount - 1) {
+                        rowLayout.addView(
+                            View(context).apply { setBackgroundColor(0x33000000) },
+                        LinearLayout.LayoutParams(1.dp, LinearLayout.LayoutParams.MATCH_PARENT)
+                        )
+                    }
+                }
+                gridContainer.addView(
+                    rowLayout,
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                )
+                if (row < table.rowCount - 1) {
+                    gridContainer.addView(
+                        View(context).apply { setBackgroundColor(0x33000000) },
+                        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1.dp)
+                    )
+                }
+            }
+            renderSelection()
+            scheduleRowHeaderSync()
+        }
+
+        private fun buildReadOnlyCell(table: NoteTableData, row: Int, column: Int, text: String): TextView {
+            val isHeader = row < table.headerRowCount
+            return TextView(context).apply {
+                setTextColor(colors.textColor)
+                textSize = 15f
+                typeface = if (isHeader) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                minHeight = 42.dp
+                setPadding(12.dp, 10.dp, 12.dp, 10.dp)
+                background = tableCellBackground(isHeader, false)
+                this.text = text
+                gravity = Gravity.TOP or Gravity.START
+                setOnClickListener {
+                    if (selectedCell == row to column && editingCell != row to column) {
+                        onActivateCell(row, column)
+                    } else {
+                        val previousSelectedCell = selectedCell
+                        onSelected()
+                        selectedCell = row to column
+                        selection = null
+                        editingCell = null
+                        renderSelection()
+                        if (previousSelectedCell == null) render() else renderMarkers()
+                    }
+                }
+                setOnLongClickListener { onSelected(); true }
+            }
+        }
+
+        private fun buildEditableCell(table: NoteTableData, row: Int, column: Int, text: String): EditText {
+            return TableCellEditText(context).apply {
+                background = tableCellBackground(row < table.headerRowCount, true)
+                setTextColor(colors.textColor)
+                textSize = 15f
+                minHeight = 42.dp
+                setPadding(12.dp, 10.dp, 12.dp, 10.dp)
+                setText(text)
+                setSelection(text.length)
+                gravity = Gravity.TOP or Gravity.START
+                imeOptions = EditorInfo.IME_ACTION_NEXT or EditorInfo.IME_FLAG_NO_ENTER_ACTION
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                doAfterTextChanged { editable ->
+                    val current = paragraph?.table?.normalized() ?: return@doAfterTextChanged
+                    val updated = current.withCell(row, column, editable?.toString().orEmpty())
+                    paragraph = paragraph?.copy(table = updated)
+                    onTableChanged(updated)
+                }
+                onImeNext = {
+                    val nextColumn = (column + 1) % table.columnCount
+                    val nextRow = if (nextColumn == 0) (row + 1).coerceAtMost(table.rowCount - 1) else row
+                    onActivateCell(nextRow, nextColumn)
+                }
+                setOnKeyListener { _, keyCode, event ->
+                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DEL && selectionStart == 0 && selectionEnd == 0) {
+                        when {
+                            row == 0 && column == 0 -> {
+                                onSelected()
+                                true
+                            }
+                            column > 0 -> {
+                                onActivateCell(row, column - 1)
+                                true
+                            }
+                            row > 0 -> {
+                                onActivateCell(row - 1, table.columnCount - 1)
+                                true
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                }
+                requestFocus()
+                post {
+                    requestFocus()
+                    setSelection(text.length)
+                    context.inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+                }
+                activeEditText = this
+            }
+        }
+
+        private fun renderSelection() {
+            tableShell.background = tableBackgroundDrawable(colors.accentColor, 0x33000000)
+        }
+
+        private fun renderMarkers() {
+            selectionOverlay.removeAllViews()
+            val table = paragraph?.table?.normalized() ?: return
+            val selectedCell = selectedCell ?: return
+            if (tableShell.width == 0 || tableShell.height == 0) return
+            updateCellBounds(table)
+            renderHeaders(table)
+            when (selection?.axis) {
+                TableSelectionAxis.ROW -> {
+                    val index = selection!!.index.coerceIn(0, table.rowCount - 1)
+                    selectionOverlay.addView(buildRowSelectionLine(), selectionLineTopRowParams(index))
+                    selectionOverlay.addView(buildRowSelectionLine(), selectionLineBottomRowParams(index))
+                    selectionOverlay.addView(buildColumnSelectionLine(), selectionLineLeftRowParams(index))
+                    selectionOverlay.addView(buildColumnSelectionLine(), selectionLineRightRowParams(index))
+                }
+                TableSelectionAxis.COLUMN -> {
+                    val index = selection!!.index.coerceIn(0, table.columnCount - 1)
+                    selectionOverlay.addView(buildColumnSelectionLine(), selectionLineLeftColumnParams(index, table.columnCount))
+                    selectionOverlay.addView(buildColumnSelectionLine(), selectionLineRightColumnParams(index, table.columnCount))
+                    selectionOverlay.addView(buildRowSelectionLine(), selectionLineTopColumnParams(index, table.columnCount))
+                    selectionOverlay.addView(buildRowSelectionLine(), selectionLineBottomColumnParams(index, table.columnCount))
+                }
+                null -> drawSelectedCellOutline()
+            }
+        }
+
+        private fun renderHeaders(table: NoteTableData) {
+            updateHeaderVisibility()
+            columnHeaderRow.removeAllViews()
+            rowHeaderRows.removeAllViews()
+            if (!headersVisible()) return
+            val currentRow = selectedCell?.first?.coerceIn(0, table.rowCount - 1)
+            val currentColumn = selectedCell?.second?.coerceIn(0, table.columnCount - 1)
+            repeat(table.columnCount) { column ->
+                val active = selection?.axis == TableSelectionAxis.COLUMN && selection?.index == column
+                val marker = if (column == currentColumn) buildAxisMarker(TableSelectionAxis.COLUMN, column, active) else View(context)
+                columnHeaderRow.addView(marker, LinearLayout.LayoutParams(cellWidth(table.columnCount), LinearLayout.LayoutParams.MATCH_PARENT))
+                if (column < table.columnCount - 1) {
+                    columnHeaderRow.addView(View(context), LinearLayout.LayoutParams(1.dp, LinearLayout.LayoutParams.MATCH_PARENT))
+                }
+            }
+            repeat(table.rowCount) { row ->
+                val active = selection?.axis == TableSelectionAxis.ROW && selection?.index == row
+                val marker = if (row == currentRow) buildAxisMarker(TableSelectionAxis.ROW, row, active) else View(context)
+                rowHeaderRows.addView(marker, LinearLayout.LayoutParams(rowHeaderWidth, rowHeight(row)))
+                if (row < table.rowCount - 1) {
+                    rowHeaderRows.addView(View(context), LinearLayout.LayoutParams(rowHeaderWidth, 1.dp))
+                }
+            }
+        }
+
+        private fun scheduleRowHeaderSync() {
+            tableShell.post {
+                val table = paragraph?.table?.normalized() ?: return@post
+                updateCellBounds(table)
+                val heights = rowViews.map { row -> row.height.takeIf { it > 0 } ?: 42.dp }
+                if (heights != rowHeaderHeights) {
+                    rowHeaderHeights = heights
+                    renderHeaders(table)
+                }
+                renderMarkers()
+            }
+        }
+
+        private fun updateCellBounds(table: NoteTableData) {
+            cellBounds.clear()
+            repeat(table.rowCount) { row ->
+                val rowLayout = rowViews.getOrNull(row) ?: return@repeat
+                repeat(table.columnCount) { column ->
+                    val cellView = rowLayout.getChildAt(column * 2) ?: return@repeat
+                    val left = gridLeftInOverlay() + rowLayout.left + cellView.left
+                    val top = gridTopInOverlay() + rowLayout.top + cellView.top
+                    cellBounds[row to column] = android.graphics.Rect(left, top, left + cellView.width, top + cellView.height)
+                }
+            }
+        }
+
+        private fun updateHeaderVisibility() {
+            val visible = headersVisible()
+            rowHeaderColumn.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+            columnHeaderRow.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+            val spacerParams = columnHeaderSpacer.layoutParams as LinearLayout.LayoutParams
+            spacerParams.height = columnHeaderHeight
+            columnHeaderSpacer.layoutParams = spacerParams
+            val columnParams = columnHeaderRow.layoutParams as LinearLayout.LayoutParams
+            columnParams.height = columnHeaderHeight
+            columnHeaderRow.layoutParams = columnParams
+        }
+
+        private fun headersVisible(): Boolean = selected || selectedCell != null || editingCell != null || selection != null
+
+        private fun drawSelectedCellOutline() {
+            if (selection != null) return
+            val selectedCell = selectedCell ?: return
+            val rect = cellBounds[selectedCell] ?: return
+            val left = rect.left
+            val top = rect.top
+            val width = rect.width()
+            val height = rect.height()
+            val color = colors.accentColor
+            selectionOverlay.addView(View(context).apply { background = roundedDrawable(color, 0) }, FrameLayout.LayoutParams(width, 2.dp).apply {
+                leftMargin = left
+                topMargin = top
+            })
+            selectionOverlay.addView(View(context).apply { background = roundedDrawable(color, 0) }, FrameLayout.LayoutParams(width, 2.dp).apply {
+                leftMargin = left
+                topMargin = top + height - 2.dp
+            })
+            selectionOverlay.addView(View(context).apply { background = roundedDrawable(color, 0) }, FrameLayout.LayoutParams(2.dp, height).apply {
+                leftMargin = left
+                topMargin = top
+            })
+            selectionOverlay.addView(View(context).apply { background = roundedDrawable(color, 0) }, FrameLayout.LayoutParams(2.dp, height).apply {
+                leftMargin = left + width - 2.dp
+                topMargin = top
+            })
+        }
+
+        private fun buildAxisMarker(axis: TableSelectionAxis, index: Int, active: Boolean): View {
+            val marker = TextView(context).apply {
+                text = when (axis) {
+                    TableSelectionAxis.ROW -> "⋮"
+                    TableSelectionAxis.COLUMN -> "⋯"
+                }
+                textSize = if (active) 17f else 16f
+                gravity = Gravity.CENTER
+                alpha = if (active) 1f else 0.82f
+                setTextColor(colors.accentColor)
+                background = roundedDrawable(AndroidColor.TRANSPARENT, 0)
+                setPadding(2.dp, 2.dp, 2.dp, 2.dp)
+                setOnClickListener {
+                    if (selection?.axis == axis && selection?.index == index) {
+                        showAxisMenu(this, axis, index)
+                    } else {
+                        val table = paragraph?.table?.normalized() ?: return@setOnClickListener
+                        selection = TableSelectionRef(axis, index)
+                        selectedCell = when (axis) {
+                            TableSelectionAxis.ROW -> index.coerceIn(0, table.rowCount - 1) to (selectedCell?.second ?: 0).coerceIn(0, table.columnCount - 1)
+                            TableSelectionAxis.COLUMN -> (selectedCell?.first ?: 0).coerceIn(0, table.rowCount - 1) to index.coerceIn(0, table.columnCount - 1)
+                        }
+                        editingCell = null
+                        activeEditText?.clearFocus()
+                        activeEditText = null
+                        renderSelection()
+                        renderMarkers()
+                    }
+                }
+            }
+            return marker
+        }
+
+        private fun showAxisMenu(anchor: View, axis: TableSelectionAxis, index: Int) {
+            val table = paragraph?.table?.normalized() ?: return
+            val popup = PopupMenu(ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_Light), anchor)
+            if (axis == TableSelectionAxis.ROW) {
+                popup.menu.add(0, 1, 0, "上方插入行")
+                popup.menu.add(0, 2, 1, "下方插入行")
+                popup.menu.add(0, 3, 2, "删除行")
+                popup.menu.add(0, 4, 3, "向上移动")
+                popup.menu.add(0, 5, 4, "向下移动")
+            } else {
+                popup.menu.add(0, 6, 0, "左侧插入列")
+                popup.menu.add(0, 7, 1, "右侧插入列")
+                popup.menu.add(0, 8, 2, "删除列")
+            }
+            popup.setOnMenuItemClickListener { item ->
+                val updated = when (item.itemId) {
+                    1 -> table.insertRow(index)
+                    2 -> table.insertRow(index + 1)
+                    3 -> if (table.rowCount <= 1 && table.columnCount <= 1) {
+                        onDelete()
+                        return@setOnMenuItemClickListener true
+                    } else table.removeRow(index)
+                    4 -> table.moveRow(index, (index - 1).coerceAtLeast(0))
+                    5 -> table.moveRow(index, (index + 1).coerceAtMost(table.rowCount - 1))
+                    6 -> table.insertColumn(index)
+                    7 -> table.insertColumn(index + 1)
+                    8 -> if (table.rowCount <= 1 && table.columnCount <= 1) {
+                        onDelete()
+                        return@setOnMenuItemClickListener true
+                    } else table.removeColumn(index)
+                    else -> null
+                }
+                if (updated != null) {
+                    paragraph = paragraph?.copy(table = updated)
+                    onTableChanged(updated)
+                    selection = TableSelectionRef(axis, index.coerceIn(0, if (axis == TableSelectionAxis.ROW) updated.rowCount - 1 else updated.columnCount - 1))
+                    selectedCell = when (axis) {
+                        TableSelectionAxis.ROW -> {
+                            val activeColumn = selectedCell?.second?.coerceIn(0, updated.columnCount - 1) ?: 0
+                            selection!!.index to activeColumn
+                        }
+                        TableSelectionAxis.COLUMN -> {
+                            val activeRow = selectedCell?.first?.coerceIn(0, updated.rowCount - 1) ?: 0
+                            activeRow to selection!!.index
+                        }
+                    }
+                    editingCell = null
+                    render()
+                }
+                true
+            }
+            popup.show()
+        }
+
+        private fun buildRowSelectionLine(): View {
+            return View(context).apply { background = roundedDrawable(colors.accentColor, 999.dp) }
+        }
+
+        private fun buildColumnSelectionLine(): View {
+            return View(context).apply { background = roundedDrawable(colors.accentColor, 999.dp) }
+        }
+
+        private fun selectionLineTopRowParams(row: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 2.dp).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay()
+                topMargin = gridTopInOverlay() + rowTop(row)
+                width = gridWidth()
+            }
+        }
+
+        private fun selectionLineBottomRowParams(row: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 2.dp).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay()
+                topMargin = gridTopInOverlay() + rowBottom(row) - 2.dp
+                width = gridWidth()
+            }
+        }
+
+        private fun selectionLineLeftRowParams(row: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(2.dp, rowBottom(row) - rowTop(row)).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay()
+                topMargin = gridTopInOverlay() + rowTop(row)
+            }
+        }
+
+        private fun selectionLineRightRowParams(row: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(2.dp, rowBottom(row) - rowTop(row)).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay() + gridWidth() - 2.dp
+                topMargin = gridTopInOverlay() + rowTop(row)
+            }
+        }
+
+        private fun selectionLineLeftColumnParams(column: Int, columnCount: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(2.dp, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay() + cellLeft(column, columnCount)
+                topMargin = gridTopInOverlay()
+                height = gridHeight()
+            }
+        }
+
+        private fun selectionLineRightColumnParams(column: Int, columnCount: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(2.dp, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay() + cellLeft(column, columnCount) + cellWidth(columnCount) - 2.dp
+                topMargin = gridTopInOverlay()
+                height = gridHeight()
+            }
+        }
+
+        private fun selectionLineTopColumnParams(column: Int, columnCount: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(cellWidth(columnCount), 2.dp).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay() + cellLeft(column, columnCount)
+                topMargin = gridTopInOverlay()
+            }
+        }
+
+        private fun selectionLineBottomColumnParams(column: Int, columnCount: Int): FrameLayout.LayoutParams {
+            return FrameLayout.LayoutParams(cellWidth(columnCount), 2.dp).apply {
+                gravity = Gravity.START or Gravity.TOP
+                leftMargin = gridLeftInOverlay() + cellLeft(column, columnCount)
+                topMargin = gridTopInOverlay() + gridHeight() - 2.dp
+            }
+        }
+
+        private fun tableCellBackground(isHeader: Boolean, active: Boolean): GradientDrawable {
+            return GradientDrawable().apply {
+                setColor(AndroidColor.TRANSPARENT)
+            }
+        }
+
+        private fun rowTop(row: Int): Int = rowViews.getOrNull(row)?.top ?: (row * (42.dp + 1.dp))
+
+        private fun rowBottom(row: Int): Int = rowViews.getOrNull(row)?.bottom ?: (rowTop(row) + 42.dp)
+
+        private fun rowCenter(row: Int): Int = (rowTop(row) + rowBottom(row)) / 2
+
+        private fun rowHeight(row: Int): Int = rowHeaderHeights.getOrNull(row)
+            ?: rowViews.getOrNull(row)?.height?.takeIf { it > 0 }
+            ?: 42.dp
+
+        private fun gridLeftInOverlay(): Int = gridContainer.left - selectionOverlay.left
+
+        private fun gridTopInOverlay(): Int = gridContainer.top - selectionOverlay.top
+
+        private fun gridWidth(): Int = gridContainer.width.takeIf { it > 0 } ?: tableShell.width
+
+        private fun gridHeight(): Int = gridContainer.height.takeIf { it > 0 } ?: tableShell.height
+
+        private fun cellLeft(column: Int, columnCount: Int): Int = column * (cellWidth(columnCount) + 1.dp)
+
+        private fun cellWidth(columnCount: Int): Int {
+            val columns = columnCount.coerceAtLeast(1)
+            val gridLines = (columns - 1).coerceAtLeast(0).dp
+            val shellPadding = 2.dp
+            return ((tableViewportWidth() - gridLines - shellPadding) / columns).coerceAtLeast(108.dp)
+        }
+
+        private fun tableViewportWidth(): Int {
+            val fallbackPanelWidth = context.resources.displayMetrics.widthPixels - 56.dp
+            val measuredScrollWidth = scroll.width.takeIf { it > 0 }
+            val panelWidth = tablePanel.width.takeIf { it > 0 }
+                ?: container.width.takeIf { it > 0 }
+                ?: fallbackPanelWidth
+            return (measuredScrollWidth ?: (panelWidth - rowHeaderWidth - panelPadding)).coerceAtLeast(180.dp)
+        }
+    }
 }
 
 private fun NoteParagraph.isAttachmentLine(): Boolean = type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE
 
-private fun NoteParagraph.isBlockLine(): Boolean = type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE || type == NoteParagraphType.DIVIDER
+private fun NoteParagraph.isBlockLine(): Boolean = type == NoteParagraphType.IMAGE || type == NoteParagraphType.FILE || type == NoteParagraphType.DIVIDER || type == NoteParagraphType.TABLE
 
 private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
 
@@ -1493,6 +2261,80 @@ private fun roundedStrokeDrawable(strokeColor: Int, radius: Int): GradientDrawab
     setColor(AndroidColor.TRANSPARENT)
     cornerRadius = radius.toFloat()
     setStroke(2.dp, strokeColor)
+}
+
+private fun tableBackgroundDrawable(@Suppress("UNUSED_PARAMETER") strokeColor: Int, borderColor: Int = 0x33000000): GradientDrawable = GradientDrawable().apply {
+    setColor(AndroidColor.TRANSPARENT)
+    cornerRadius = 0f
+    setStroke(1.dp, borderColor)
+}
+
+private class InterceptingHorizontalScrollView(context: Context) : HorizontalScrollView(context) {
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var disallowing = false
+
+    init {
+        isHorizontalScrollBarEnabled = false
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                disallowing = false
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = kotlin.math.abs(event.x - downX)
+                val dy = kotlin.math.abs(event.y - downY)
+                if (dx > touchSlop || dy > touchSlop) {
+                    val shouldDisallow = dx >= dy
+                    if (shouldDisallow != disallowing) {
+                        disallowing = shouldDisallow
+                        parent?.requestDisallowInterceptTouchEvent(shouldDisallow)
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+                disallowing = false
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+}
+
+private class TableCellEditText(context: Context) : EditText(context) {
+    var onImeNext: (() -> Unit)? = null
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        val base = super.onCreateInputConnection(outAttrs)
+        return object : InputConnectionWrapper(base, true) {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                if (text?.toString() == "\n") {
+                    val start = selectionStart.coerceAtLeast(0)
+                    val end = selectionEnd.coerceAtLeast(0)
+                    val editable = editableText
+                    editable.replace(minOf(start, end), maxOf(start, end), "\n")
+                    setSelection(minOf(start, end) + 1)
+                    return true
+                }
+                return super.commitText(text, newCursorPosition)
+            }
+
+            override fun performEditorAction(actionCode: Int): Boolean {
+                return if (actionCode == EditorInfo.IME_ACTION_NEXT) {
+                    post { onImeNext?.invoke() }
+                    true
+                } else {
+                    super.performEditorAction(actionCode)
+                }
+            }
+        }
+    }
 }
 
 private fun buildReadOnlyText(paragraph: NoteParagraph): CharSequence {
@@ -1563,7 +2405,3 @@ private fun NoteParagraphStyle.isHeadingStyle(): Boolean = when (this) {
     NoteParagraphStyle.HEADING -> true
     else -> false
 }
-
-private fun NoteParagraphStyle.isListStyle(): Boolean = this == NoteParagraphStyle.BULLET || this == NoteParagraphStyle.ORDERED
-
-private fun NoteParagraphStyle.isPrefixStyle(): Boolean = this == NoteParagraphStyle.BULLET || this == NoteParagraphStyle.ORDERED || this == NoteParagraphStyle.QUOTE
