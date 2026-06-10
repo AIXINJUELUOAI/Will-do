@@ -262,7 +262,12 @@ object ApiModelProvider {
 
     private fun parseModelResponse(rawBody: String): ApiCallResult {
         return try {
+            parseSseModelResponse(rawBody)?.let { return it }
+
             val root = JSONObject(rawBody)
+            extractErrorMessage(root)?.let { message ->
+                return ApiCallResult.Failure(ApiErrorKind.UNKNOWN, message = message, rawBody = rawBody)
+            }
 
             val outputText = extractResponsesApiText(root)
             if (!outputText.isNullOrBlank()) {
@@ -276,16 +281,10 @@ object ApiModelProvider {
                 return ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Choices", rawBody = rawBody)
             }
 
-            val firstChoice = choices.optJSONObject(0)
-            val message = firstChoice?.optJSONObject("message")
-            val contentField = message?.opt("content")
-            val normalizedContent = when {
-                contentField is String && contentField.isNotBlank() -> contentField
-                contentField is JSONArray -> extractTextFromContentParts(contentField)
-                else -> firstChoice?.optString("text")
-            }?.trim()
-
-            if (normalizedContent.isNullOrBlank()) {
+            val choicesText = extractChoicesText(choices)
+            if (choicesText.isNullOrBlank()) {
+                val firstChoice = choices.optJSONObject(0)
+                val message = firstChoice?.optJSONObject("message")
                 val finishReason = firstChoice?.optString("finish_reason")
                 val nativeFinishReason = firstChoice?.optString("native_finish_reason")
                 val reasoningContent = message?.opt("reasoning_content")
@@ -296,7 +295,7 @@ object ApiModelProvider {
                 )
                 ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
             } else {
-                ApiCallResult.Success(normalizedContent)
+                ApiCallResult.Success(choicesText)
             }
         } catch (e: Exception) {
             ApiCallResult.Failure(
@@ -305,6 +304,131 @@ object ApiModelProvider {
                 rawBody = rawBody
             )
         }
+    }
+
+    private fun parseSseModelResponse(rawBody: String): ApiCallResult? {
+        val dataLines = rawBody.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("data:") }
+            .map { it.removePrefix("data:").trim() }
+            .filter { it.isNotBlank() && it != "[DONE]" }
+            .toList()
+
+        if (dataLines.isEmpty()) return null
+
+        val text = buildString {
+            for (line in dataLines) {
+                val chunk = runCatching { JSONObject(line) }.getOrNull() ?: continue
+                extractErrorMessage(chunk)?.let { return ApiCallResult.Failure(ApiErrorKind.UNKNOWN, message = it, rawBody = rawBody) }
+
+                val responseText = chunk.optJSONObject("response")?.let(::extractResponsesApiText)
+                if (!responseText.isNullOrBlank()) {
+                    append(responseText)
+                    continue
+                }
+
+                val outputText = extractResponsesApiText(chunk)
+                if (!outputText.isNullOrBlank()) {
+                    append(outputText)
+                    continue
+                }
+
+                val delta = nonBlankJsonString(chunk, "delta")
+                if (!delta.isNullOrBlank()) {
+                    append(delta)
+                    continue
+                }
+
+                val partText = extractContentPartText(chunk.optJSONObject("part"))
+                if (!partText.isNullOrBlank()) {
+                    append(partText)
+                    continue
+                }
+
+                val itemText = extractContentPartText(chunk.optJSONObject("item"))
+                if (!itemText.isNullOrBlank()) {
+                    append(itemText)
+                    continue
+                }
+
+                val choicesText = extractChoicesText(chunk.optJSONArray("choices"))
+                if (!choicesText.isNullOrBlank()) {
+                    append(choicesText)
+                }
+            }
+        }.trim()
+
+        Log.d("DEBUG_HTTP_VISION", "parsed response via sse chunks, chars=${text.length}")
+        return if (text.isBlank()) {
+            ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
+        } else {
+            ApiCallResult.Success(text)
+        }
+    }
+
+    private fun extractChoicesText(choices: JSONArray?): String? {
+        if (choices == null || choices.length() == 0) return null
+
+        val text = buildString {
+            for (index in 0 until choices.length()) {
+                val choice = choices.optJSONObject(index) ?: continue
+                val deltaContent = extractMessageContent(choice.optJSONObject("delta"))
+                val messageContent = extractMessageContent(choice.optJSONObject("message"))
+                val content = when {
+                    !deltaContent.isNullOrBlank() -> deltaContent
+                    !messageContent.isNullOrBlank() -> messageContent
+                    else -> nonBlankJsonString(choice, "text")
+                }
+                if (!content.isNullOrBlank()) append(content)
+            }
+        }
+
+        return text.ifBlank { null }
+    }
+
+    private fun extractMessageContent(message: JSONObject?): String? {
+        val content = message?.opt("content") ?: return null
+        return when {
+            content is String && content.isNotBlank() -> content
+            content is JSONArray -> extractTextFromContentParts(content)
+            else -> null
+        }
+    }
+
+    private fun extractContentPartText(part: JSONObject?): String? {
+        if (part == null) return null
+        val directText = nonBlankJsonString(part, "text")
+        if (!directText.isNullOrBlank()) return directText
+        val content = part.optJSONArray("content")
+        return extractTextFromContentParts(content)
+    }
+
+    private fun extractErrorMessage(root: JSONObject): String? {
+        val error = root.opt("error")
+        val message = when (error) {
+            is JSONObject -> {
+                val detail = nonBlankJsonString(error, "message")
+                    ?: nonBlankJsonString(error, "detail")
+                    ?: nonBlankJsonString(error, "code")
+                val code = nonBlankJsonString(error, "code")
+                val type = nonBlankJsonString(error, "type")
+                listOfNotNull(detail, code?.let { "code=$it" }, type?.let { "type=$it" })
+                    .distinct()
+                    .joinToString("; ")
+            }
+            is String -> error.trim()
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+
+        return message
+            ?: nonBlankJsonString(root, "error_message")
+            ?: nonBlankJsonString(root, "message")?.takeIf { root.has("code") || root.has("status") }
+    }
+
+    private fun nonBlankJsonString(root: JSONObject, key: String): String? {
+        return root.optString(key)
+            .trim()
+            .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
     }
 
     private fun extractTextFromContentParts(parts: JSONArray?): String? {

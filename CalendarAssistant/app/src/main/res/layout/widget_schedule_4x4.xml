@@ -74,7 +74,7 @@
                 android:layout_marginTop="8dp">
                 <ImageView android:id="@+id/widget_event_1_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="12dp" android:paddingEnd="12dp">
-                    <TextView android:id="@+id/widget_event_1_strip" android:layout_width="4dp" android:layout_height="38dp" android:background="@drawable/widget_event_strip" android:text="" />
+                    <ImageView android:id="@+id/widget_event_1_strip" android:layout_width="4dp" android:layout_height="38dp" android:scaleType="fitXY" />
                     <TextView android:id="@+id/widget_event_1_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" android:textSize="15sp" tools:text="测试" />
                     <LinearLayout android:layout_width="72dp" android:layout_height="wrap_content" android:gravity="end" android:orientation="vertical">
                         <TextView android:id="@+id/widget_event_1_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:gravity="end" android:includeFontPadding="false" android:maxLines="1" android:textSize="14sp" tools:text="21:10" />
@@ -101,7 +101,7 @@
                 android:layout_marginTop="8dp">
                 <ImageView android:id="@+id/widget_event_2_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="12dp" android:paddingEnd="12dp">
-                    <TextView android:id="@+id/widget_event_2_strip" android:layout_width="4dp" android:layout_height="38dp" android:background="@drawable/widget_event_strip" android:text="" />
+                    <ImageView android:id="@+id/widget_event_2_strip" android:layout_width="4dp" android:layout_height="38dp" android:scaleType="fitXY" />
                     <TextView android:id="@+id/widget_event_2_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" android:textSize="15sp" tools:text="加入功能" />
                     <LinearLayout android:layout_width="72dp" android:layout_height="wrap_content" android:gravity="end" android:orientation="vertical">
                         <TextView android:id="@+id/widget_event_2_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:gravity="end" android:includeFontPadding="false" android:maxLines="1" android:textSize="14sp" tools:text="00:58" />
@@ -128,7 +128,7 @@
                 android:layout_marginTop="8dp">
                 <ImageView android:id="@+id/widget_event_3_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="12dp" android:paddingEnd="12dp">
-                    <TextView android:id="@+id/widget_event_3_strip" android:layout_width="4dp" android:layout_height="38dp" android:background="@drawable/widget_event_strip" android:text="" />
+                    <ImageView android:id="@+id/widget_event_3_strip" android:layout_width="4dp" android:layout_height="38dp" android:scaleType="fitXY" />
                     <TextView android:id="@+id/widget_event_3_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" android:textSize="15sp" tools:text="儿童节" />
                     <LinearLayout android:layout_width="72dp" android:layout_height="wrap_content" android:gravity="end" android:orientation="vertical">
                         <TextView android:id="@+id/widget_event_3_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:gravity="end" android:includeFontPadding="false" android:maxLines="1" android:textSize="14sp" tools:text="全天" />
@@ -153,7 +153,7 @@
                 android:layout_marginTop="8dp">
                 <ImageView android:id="@+id/widget_event_4_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="12dp" android:paddingEnd="12dp">
-                    <TextView android:id="@+id/widget_event_4_strip" android:layout_width="4dp" android:layout_height="38dp" android:background="@drawable/widget_event_strip" android:text="" />
+                    <ImageView android:id="@+id/widget_event_4_strip" android:layout_width="4dp" android:layout_height="38dp" android:scaleType="fitXY" />
                     <TextView android:id="@+id/widget_event_4_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" android:textSize="15sp" tools:text="日程标题" />
                     <LinearLayout android:layout_width="72dp" android:layout_height="wrap_content" android:gravity="end" android:orientation="vertical">
                         <TextView android:id="@+id/widget_event_4_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:gravity="end" android:includeFontPadding="false" android:maxLines="1" android:textSize="14sp" tools:text="10:00" />

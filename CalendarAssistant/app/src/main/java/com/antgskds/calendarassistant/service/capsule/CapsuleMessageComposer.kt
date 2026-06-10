@@ -4,6 +4,9 @@ import android.content.Context
 import com.antgskds.calendarassistant.core.content.EventCapsulePresenter
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.data.model.WeatherAlertData
+import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 
 object CapsuleMessageComposer {
 
@@ -51,35 +54,31 @@ object CapsuleMessageComposer {
         )
     }
 
-    fun composeWeatherAlert(title: String, locationName: String, content: String): CapsuleDisplayModel {
-        val secondary = listOf(locationName, content.lineSequence().firstOrNull().orEmpty())
-            .filter { it.isNotBlank() }
-            .joinToString(" · ")
-        return CapsuleDisplayModel(
-            shortText = title,
-            primaryText = title,
-            secondaryText = secondary.ifBlank { null },
-            expandedText = content.ifBlank { secondary }
-        )
+    fun composeWeatherAlert(
+        locationName: String,
+        alert: WeatherAlertData,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): CapsuleDisplayModel {
+        return NotificationTemplateCenter.composeOfficialWeatherAlert(locationName, alert, templateMode)
     }
 
-    fun composeWeatherRisk(title: String, locationName: String, content: String): CapsuleDisplayModel {
-        val cleanTitle = title.removePrefix("天气风险提醒：").ifBlank { "天气风险提醒" }
-        val secondary = listOf(locationName, content.lineSequence().firstOrNull().orEmpty())
-            .filter { it.isNotBlank() }
-            .joinToString(" · ")
-        return CapsuleDisplayModel(
-            shortText = cleanTitle,
-            primaryText = cleanTitle,
-            secondaryText = secondary.ifBlank { null },
-            expandedText = content.ifBlank { secondary }
-        )
+    fun composeWeatherRisk(
+        locationName: String,
+        risk: WeatherRiskAlert,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): CapsuleDisplayModel {
+        return NotificationTemplateCenter.composeWeatherRisk(locationName, risk, templateMode)
     }
 
     // --- 事件类胶囊 (委托 EventPresenter) ---
 
-    fun composeSchedule(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {
-        return EventCapsulePresenter.present(context, event, isExpired).displayModel
+    fun composeSchedule(
+        context: Context,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): CapsuleDisplayModel {
+        return EventCapsulePresenter.present(context, event, isExpired, templateMode).displayModel
     }
 
     fun composePickup(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {

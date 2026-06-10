@@ -7,8 +7,10 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.service.capsule.NotificationTemplateCenter
 import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -147,7 +149,12 @@ internal object EventPresentationInternals {
         return null
     }
 
-    fun composeCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    fun composeCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): CapsuleDisplayModel {
         return when (model.ruleId) {
             RuleMatchingEngine.RULE_TRAIN -> composeTrainCapsule(model, event, isExpired)
             RuleMatchingEngine.RULE_TAXI -> composeTaxiCapsule(model, event, isExpired)
@@ -155,7 +162,7 @@ internal object EventPresentationInternals {
             RuleMatchingEngine.RULE_FLIGHT -> composeFlightCapsule(model, event, isExpired)
             RuleMatchingEngine.RULE_TICKET -> composeTicketCapsule(model, event, isExpired)
             RuleMatchingEngine.RULE_SENDER -> composeSenderCapsule(model, event, isExpired)
-            else -> composeGeneralCapsule(model, event, isExpired)
+            else -> composeGeneralCapsule(model, event, isExpired, templateMode)
         }
     }
 
@@ -385,20 +392,25 @@ internal object EventPresentationInternals {
         )
     }
 
-    private fun composeGeneralCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeGeneralCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val primaryText = preferText(model.title, "日程提醒")
         val timeText = formatTimeRange(event)
         val locationText = sanitize(event.location)
         val descriptionText = summaryText(event.description)
-        val secondaryText = timeText ?: locationText ?: descriptionText
-        val tertiaryText = when {
-            timeText != null -> null
-            locationText != null -> null
-            else -> null
-        }
-        val expandedText = joinRawLines(primaryText, timeText, locationText, descriptionText)
         val action = if (!event.isCompleted && !isExpired && event.tag != "__removed_course__" && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return CapsuleDisplayModel(primaryText, primaryText, secondaryText, expandedText = expandedText, tertiaryText = tertiaryText, action = action)
+        return NotificationTemplateCenter.composeSchedule(
+            title = primaryText,
+            time = timeText,
+            location = locationText,
+            description = descriptionText,
+            templateMode = templateMode,
+            action = action
+        )
     }
 
     private fun resolveCourseDisplay(event: Event): Triple<String, String?, String?> {

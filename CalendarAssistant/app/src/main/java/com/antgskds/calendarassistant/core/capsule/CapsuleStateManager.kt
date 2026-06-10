@@ -112,7 +112,10 @@ class CapsuleStateManager(
         val startMillis: Long,
         val endMillis: Long,
         val display: CapsuleDisplayModel,
-        val expiresAt: Long?
+        val expiresAt: Long?,
+        val locationName: String = "",
+        val weatherAlert: WeatherAlertData? = null,
+        val weatherRisk: WeatherRiskAlert? = null
     )
 
     private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
@@ -225,7 +228,8 @@ class CapsuleStateManager(
         val now = System.currentTimeMillis()
         val title = WeatherWarningText.officialTitle(alert)
         val content = alert.description.ifBlank { alert.instruction.ifBlank { alert.headline.ifBlank { alert.eventName } } }
-        val display = CapsuleMessageComposer.composeWeatherAlert(title, locationName, content)
+        val templateMode = settingsQueryApi.settings.value.liveNotificationTemplateMode
+        val display = CapsuleMessageComposer.composeWeatherAlert(locationName, alert, templateMode)
         val id = "$WEATHER_CAPSULE_ID_PREFIX${EVENT_TYPE_WEATHER_ALERT}_${alert.id.ifBlank { title }}"
         updateWeatherCapsule(
             OcrCapsuleState(
@@ -240,7 +244,9 @@ class CapsuleStateManager(
                 startMillis = now,
                 endMillis = now + WEATHER_CAPSULE_TIMEOUT_MS,
                 display = display,
-                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS
+                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS,
+                locationName = locationName,
+                weatherAlert = alert
             )
         )
     }
@@ -249,7 +255,8 @@ class CapsuleStateManager(
         val now = System.currentTimeMillis()
         val title = risk.title.ifBlank { "天气风险提醒" }
         val content = risk.message.ifBlank { risk.weatherText }
-        val display = CapsuleMessageComposer.composeWeatherRisk(title, locationName, content)
+        val templateMode = settingsQueryApi.settings.value.liveNotificationTemplateMode
+        val display = CapsuleMessageComposer.composeWeatherRisk(locationName, risk, templateMode)
         val id = "$WEATHER_CAPSULE_ID_PREFIX${EVENT_TYPE_WEATHER_RISK}_${risk.id.ifBlank { title }}"
         updateWeatherCapsule(
             OcrCapsuleState(
@@ -264,7 +271,9 @@ class CapsuleStateManager(
                 startMillis = now,
                 endMillis = now + WEATHER_CAPSULE_TIMEOUT_MS,
                 display = display,
-                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS
+                expiresAt = now + WEATHER_CAPSULE_TIMEOUT_MS,
+                locationName = locationName,
+                weatherRisk = risk
             )
         )
     }
@@ -525,7 +534,7 @@ class CapsuleStateManager(
                     add(createTransientCapsuleItem(state))
                 }
                 activeWeatherCapsules.forEach { state ->
-                    add(createTransientCapsuleItem(state))
+                    add(createTransientCapsuleItem(state.withTemplateMode(settings.liveNotificationTemplateMode)))
                 }
             }
             val scheduleCapsules = computeScheduleCapsules(events, settings)
@@ -587,7 +596,7 @@ class CapsuleStateManager(
             val event = entry.event
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
-            val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired)
+            val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired, settings.liveNotificationTemplateMode)
 
             capsules.add(createCapsuleItem(
                 id = entry.id,
@@ -675,6 +684,15 @@ class CapsuleStateManager(
             endMillis = state.endMillis,
             display = state.display
         )
+    }
+
+    private fun OcrCapsuleState.withTemplateMode(templateMode: String): OcrCapsuleState {
+        val updatedDisplay = when {
+            weatherAlert != null -> CapsuleMessageComposer.composeWeatherAlert(locationName, weatherAlert, templateMode)
+            weatherRisk != null -> CapsuleMessageComposer.composeWeatherRisk(locationName, weatherRisk, templateMode)
+            else -> display
+        }
+        return if (updatedDisplay == display) this else copy(display = updatedDisplay)
     }
 
     private fun resolveWeatherAlertColor(alert: WeatherAlertData): Int {

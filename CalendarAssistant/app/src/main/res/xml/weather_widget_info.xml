@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_weather_description"
+    android:configure="com.antgskds.calendarassistant.widget.WeatherWidgetConfigureActivity"
+    android:initialLayout="@layout/widget_weather_4x2"
+    android:minWidth="100dp"
+    android:minHeight="56dp"
+    android:minResizeWidth="100dp"
+    android:minResizeHeight="56dp"
+    android:previewLayout="@layout/widget_weather_4x2"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetFeatures="reconfigurable|configuration_optional"
+    android:widgetCategory="home_screen" />

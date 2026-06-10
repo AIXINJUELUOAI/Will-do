@@ -17,14 +17,12 @@ import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationErrorCode
 import com.antgskds.calendarassistant.core.operation.OperationResult
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.store.config.SyncConfigStore
 import com.antgskds.calendarassistant.store.local.LocalEventStoreNode
 import com.antgskds.calendarassistant.store.reminder.ReminderStoreNode
 import com.antgskds.calendarassistant.store.sync.SystemCalendarStoreNode
 import com.antgskds.calendarassistant.store.SyncLoopGuard
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -77,7 +75,6 @@ class StoreRootNode(context: Context) {
             Log.i("SyncPush", "createEvent skipped localId=$id reason=${pushDecision.reason}")
         }
 
-        reminderNode.rebuildForEvent(stored)
         return id
     }
 
@@ -132,7 +129,6 @@ class StoreRootNode(context: Context) {
             updated
         }
 
-        reminderNode.rebuildForEvent(stored)
     }
 
     fun deleteEvent(id: Long, deleteFromSystem: Boolean = true) {
@@ -149,12 +145,10 @@ class StoreRootNode(context: Context) {
             if (allowSystemPush(deleteFromSystem)) {
                 syncNode.deleteFromSystem(child)
             }
-            child.id?.let { reminderNode.cancelForInactiveEvent(it) }
         }
         localNode.deleteChildEvents(id)
 
         localNode.deleteEvent(id)
-        reminderNode.cancelForInactiveEvent(id)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -207,10 +201,8 @@ class StoreRootNode(context: Context) {
                     if (allowSystemPush(deleteFromSystem)) {
                         syncNode.deleteFromSystem(child)
                     }
-                    child.id?.let { reminderNode.cancelForInactiveEvent(it) }
                 }
                 localNode.deleteChildEventsFrom(parentEventId, occurrenceTs)
-                reminderNode.rebuildForEvent(updatedParent)
             }
             RecurringMode.ALL -> {
                 deleteEvent(parentEventId, deleteFromSystem)
@@ -236,7 +228,6 @@ class StoreRootNode(context: Context) {
             updated
         }
 
-        reminderNode.rebuildForEvent(stored)
         return stored
     }
 
@@ -274,7 +265,6 @@ class StoreRootNode(context: Context) {
     fun archiveEvent(eventId: Long) {
         val event = localNode.getEvent(eventId) ?: return
         localNode.archiveEvent(eventId, nowSeconds())
-        event.id?.let { reminderNode.cancelForInactiveEvent(it) }
     }
 
     /**
@@ -284,7 +274,6 @@ class StoreRootNode(context: Context) {
     fun archiveOccurrence(parentId: Long, occurrenceTs: Long, syncToSystem: Boolean = true) {
         val childId = materializeOccurrence(parentId, occurrenceTs, syncToSystem) ?: return
         localNode.archiveEvent(childId, nowSeconds())
-        reminderNode.cancelForInactiveEvent(childId)
     }
 
     fun restoreEvent(eventId: Long) {
@@ -292,8 +281,6 @@ class StoreRootNode(context: Context) {
         if (restoreArchivedOccurrenceToSeries(archivedEvent)) return
 
         localNode.restoreEvent(eventId)
-        val restored = localNode.getEvent(eventId) ?: return
-        reminderNode.rebuildForEvent(restored)
     }
 
     fun deleteArchivedEvent(eventId: Long, deleteFromSystem: Boolean = true) {
@@ -320,7 +307,6 @@ class StoreRootNode(context: Context) {
             // 只归档非重复母体、已过期且未归档的事件
             if (event.archivedAt == null && event.endTS < beforeTs && !event.isRecurring) {
                 localNode.archiveEvent(id, now)
-                reminderNode.cancelForInactiveEvent(id)
                 count++
             }
         }
@@ -349,9 +335,7 @@ class StoreRootNode(context: Context) {
         try {
             syncNode.refreshCalendars(ids, manual = true)
             syncNode.recheckCalendars(scheduleNextCalDAVSync = true)
-            val events = localNode.getEvents()
-            Log.d("SyncChain", "manualSyncNow completed localEvents=${events.size}")
-            reconcileNotificationsFromStore()
+            Log.d("SyncChain", "manualSyncNow completed localEvents=${localNode.getEvents().size}")
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -380,9 +364,7 @@ class StoreRootNode(context: Context) {
         try {
             syncNode.refreshCalendars(ids, manual = false)
             syncNode.recheckCalendars(scheduleNextCalDAVSync = true)
-            val events = localNode.getEvents()
-            Log.d("SyncChain", "onScheduledSyncTick completed localEvents=${events.size}")
-            reconcileNotificationsFromStore()
+            Log.d("SyncChain", "onScheduledSyncTick completed localEvents=${localNode.getEvents().size}")
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -400,9 +382,7 @@ class StoreRootNode(context: Context) {
         val syncToken = SyncLoopGuard.beginPullSync()
         try {
             syncNode.recheckCalendars(scheduleNextCalDAVSync = false)
-            val events = localNode.getEvents()
-            Log.d("SyncChain", "onSystemCalendarChanged completed localEvents=${events.size}")
-            reconcileNotificationsFromStore()
+            Log.d("SyncChain", "onSystemCalendarChanged completed localEvents=${localNode.getEvents().size}")
         } finally {
             SyncLoopGuard.endPullSync()
             @Suppress("UNUSED_VARIABLE")
@@ -410,28 +390,12 @@ class StoreRootNode(context: Context) {
         }
     }
 
-    /**
-     * 窗口级通知刷新：展开重复实例，按规则注册/注销通知。
-     * 应在事件变更后异步调用。
-     */
     fun refreshNotificationsForWindow(
         displayItems: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>
     ) {
-        val events = localNode.getEvents()
-        val parentMap = events.filter { it.isRecurring }.associateBy { it.id ?: 0L }
-        reminderNode.refreshForWindow(displayItems, parentMap)
     }
 
     fun reconcileNotificationsFromStore(windowDays: Long = 7L) {
-        val today = LocalDate.now()
-        val events = localNode.getEvents()
-            .map { it.withInferredTag() }
-            .filter { it.archivedAt == null }
-        reminderNode.reconcileForEvents(events)
-
-        val displayItems = ScheduleDisplayHelper.buildDisplayItems(events, today, today.plusDays(windowDays))
-        val parentMap = events.filter { it.isRecurring }.associateBy { it.id ?: 0L }
-        reminderNode.refreshForWindow(displayItems, parentMap)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -486,8 +450,6 @@ class StoreRootNode(context: Context) {
                 val syncedChild = syncNode.insertToSystem(childWithId)
                 localNode.upsertEvent(syncedChild)
             }
-            reminderNode.rebuildForEvent(updatedParent)
-
             childId
         }
     }
@@ -519,8 +481,6 @@ class StoreRootNode(context: Context) {
         }
 
         localNode.deleteEvent(eventId)
-        reminderNode.cancelForInactiveEvent(eventId)
-        reminderNode.rebuildForEvent(storedParent)
         return true
     }
 
@@ -579,7 +539,6 @@ class StoreRootNode(context: Context) {
             val synced = syncNode.updateToSystem(updated)
             localNode.upsertEvent(synced)
         }
-        reminderNode.rebuildForEvent(updated)
         return childId
     }
 
@@ -599,14 +558,11 @@ class StoreRootNode(context: Context) {
             val synced = syncNode.updateToSystem(updatedParent)
             localNode.upsertEvent(synced)
         }
-        reminderNode.rebuildForEvent(updatedParent)
-
         val childToDelete = localNode.getChildEventsFrom(parent.id ?: 0L, occurrenceTs)
         childToDelete.forEach { child ->
             if (allowSystemPush(syncToSystem)) {
                 syncNode.deleteFromSystem(child)
             }
-            child.id?.let { reminderNode.cancelForInactiveEvent(it) }
         }
         localNode.deleteChildEventsFrom(parent.id ?: 0L, occurrenceTs)
 

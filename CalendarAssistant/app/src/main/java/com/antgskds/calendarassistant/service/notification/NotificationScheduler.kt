@@ -266,10 +266,13 @@ object NotificationScheduler {
     }
 
     fun cancelReminders(context: Context, event: Event) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val notificationManager = NotificationManagerCompat.from(context)
+        cancelScheduledAlarms(context, event)
+        cancelVisibleNotifications(context, event, includeLiveCapsule = true)
+    }
 
-        // 1. 取消普通提醒（包括全局提前提醒）
+    fun cancelScheduledAlarms(context: Context, event: Event) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
         val reminderMinutes = event.reminderMinutes.toMutableSet()
         reminderMinutes.add(0)
         reminderMinutes.forEach { minutesBefore ->
@@ -292,15 +295,49 @@ object NotificationScheduler {
 
         // 4. 取消刷新胶囊闹钟
         cancelPendingIntent(context, (event.id ?: 0L).hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
+    }
+
+    fun cancelScheduledAlarms(context: Context, eventId: Long) {
+        if (eventId == 0L) return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        REMINDER_OPTIONS.map { it.first }
+            .plus(listOf(45))
+            .toSet()
+            .forEach { minutesBefore ->
+                cancelPendingIntent(context, eventId.hashCode() + minutesBefore, ACTION_REMINDER, AlarmReceiver::class.java, alarmManager)
+            }
+        cancelPendingIntent(context, eventId.hashCode() + OFFSET_CAPSULE_START, ACTION_CAPSULE_START, AlarmReceiver::class.java, alarmManager)
+        cancelPendingIntent(context, eventId.hashCode() + OFFSET_CAPSULE_END, ACTION_CAPSULE_END, AlarmReceiver::class.java, alarmManager)
+        cancelPendingIntent(context, eventId.hashCode() + OFFSET_REFRESH_CAPSULE, ACTION_REFRESH_CAPSULE, AlarmReceiver::class.java, alarmManager)
+    }
+
+    fun cancelVisibleNotifications(context: Context, event: Event, includeLiveCapsule: Boolean) {
+        val notificationManager = NotificationManagerCompat.from(context)
 
         val eventId = event.id ?: 0L
         if (eventId != 0L) {
-            (setOf(
+            val ids = mutableSetOf(
                 NotificationIds.standardReminder(eventId),
-                NotificationIds.liveCapsule(eventId),
                 NotificationIds.pickupInitial(eventId)
-            ) + NotificationIds.legacyEventIds(eventId)).forEach(notificationManager::cancel)
+            )
+            if (includeLiveCapsule) {
+                ids.add(NotificationIds.liveCapsule(eventId))
+            }
+            (ids + NotificationIds.legacyEventIds(eventId)).forEach(notificationManager::cancel)
         }
+    }
+
+    fun cancelVisibleNotifications(context: Context, eventId: Long, includeLiveCapsule: Boolean) {
+        if (eventId == 0L) return
+        val notificationManager = NotificationManagerCompat.from(context)
+        val ids = mutableSetOf(
+            NotificationIds.standardReminder(eventId),
+            NotificationIds.pickupInitial(eventId)
+        )
+        if (includeLiveCapsule) {
+            ids.add(NotificationIds.liveCapsule(eventId))
+        }
+        (ids + NotificationIds.legacyEventIds(eventId)).forEach(notificationManager::cancel)
 
         // ✅ 新架构：Dumb Service 不需要手动停止
         // Service 会通过 uiState 自动管理生命周期

@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Will do</string>
     <string name="widget_schedule_description">桌面显示今日和近期日程</string>
+    <string name="widget_weather_description">桌面显示实时天气和预报</string>
+    <string name="widget_course_description">桌面显示今日课程和周课表</string>
     <!-- 快捷方式 -->
     <string name="shortcut_quick_recognition">一键识屏</string>
     <string name="shortcut_quick_recognition_long">一键屏幕识别</string>

@@ -5,6 +5,7 @@ import com.antgskds.calendarassistant.core.rule.EventPresenter
 import com.antgskds.calendarassistant.core.rule.EventRenderModel
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 
 data class EventTimelineItem(
@@ -41,10 +42,15 @@ object EventTimelinePresenter {
 }
 
 object EventCapsulePresenter {
-    fun present(context: Context, event: Event, isExpired: Boolean): EventCapsuleItem {
+    fun present(
+        context: Context,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): EventCapsuleItem {
         return EventCapsuleItem(
             eventIds = listOf(event.idString),
-            displayModel = EventPresenter.presentCapsule(context, event, isExpired)
+            displayModel = EventPresenter.presentCapsule(context, event, isExpired, templateMode)
         )
     }
 

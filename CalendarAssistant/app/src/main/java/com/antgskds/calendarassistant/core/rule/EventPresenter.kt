@@ -4,6 +4,7 @@ import android.content.Context
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import java.time.LocalDateTime
 
@@ -84,8 +85,13 @@ object EventPresenter {
         )
     }
 
-    fun presentCapsule(context: Context, event: Event, isExpired: Boolean): CapsuleDisplayModel {
-        return EventPresentationInternals.composeCapsule(present(context, event), event, isExpired)
+    fun presentCapsule(
+        context: Context,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String = LiveNotificationTemplateMode.AUTO
+    ): CapsuleDisplayModel {
+        return EventPresentationInternals.composeCapsule(present(context, event), event, isExpired, templateMode)
     }
 
     fun presentCapsule(context: Context, events: List<Event>): CapsuleDisplayModel {

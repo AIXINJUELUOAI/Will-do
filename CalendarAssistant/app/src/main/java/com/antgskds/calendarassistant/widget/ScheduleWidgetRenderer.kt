@@ -43,26 +43,29 @@ class ScheduleWidgetRenderer(private val context: Context) {
         appWidgetId: Int,
         options: Bundle,
         snapshot: WidgetScheduleSnapshot,
-        settings: MySettings
+        settings: MySettings,
+        config: WidgetInstanceConfig? = null
     ): RemoteViews {
+        val appearance = config?.appearance ?: WidgetAppearanceConfig(settings.widgetThemeMode, settings.widgetBackgroundAlpha)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             return RemoteViews(
                 mapOf(
-                    SizeF(110f, 60f) to renderSize(appWidgetId, WidgetSize.CELL_2X1, snapshot, settings),
-                    SizeF(110f, 110f) to renderSize(appWidgetId, WidgetSize.CELL_2X2, snapshot, settings),
-                    SizeF(230f, 110f) to renderSize(appWidgetId, WidgetSize.CELL_4X2, snapshot, settings),
-                    SizeF(230f, 230f) to renderSize(appWidgetId, WidgetSize.CELL_4X4, snapshot, settings)
+                    SizeF(110f, 60f) to renderSize(appWidgetId, WidgetSize.CELL_2X1, snapshot, settings, appearance),
+                    SizeF(110f, 110f) to renderSize(appWidgetId, WidgetSize.CELL_2X2, snapshot, settings, appearance),
+                    SizeF(230f, 110f) to renderSize(appWidgetId, WidgetSize.CELL_4X2, snapshot, settings, appearance),
+                    SizeF(230f, 230f) to renderSize(appWidgetId, WidgetSize.CELL_4X4, snapshot, settings, appearance)
                 )
             )
         }
-        return renderSize(appWidgetId, resolveSize(options), snapshot, settings)
+        return renderSize(appWidgetId, resolveSize(options), snapshot, settings, appearance)
     }
 
     private fun renderSize(
         appWidgetId: Int,
         size: WidgetSize,
         snapshot: WidgetScheduleSnapshot,
-        settings: MySettings
+        settings: MySettings,
+        appearance: WidgetAppearanceConfig
     ): RemoteViews {
         val layoutId = when (size) {
             WidgetSize.CELL_2X1 -> R.layout.widget_schedule_2x1
@@ -70,7 +73,7 @@ class ScheduleWidgetRenderer(private val context: Context) {
             WidgetSize.CELL_4X2 -> R.layout.widget_schedule_4x2
             WidgetSize.CELL_4X4 -> R.layout.widget_schedule_4x4
         }
-        val colors = resolveColors(settings)
+        val colors = resolveColors(settings, appearance)
         val text = resolveTextSizes(size, settings)
         val views = RemoteViews(context.packageName, layoutId)
         bindCommon(views, appWidgetId, colors)
@@ -195,9 +198,36 @@ class ScheduleWidgetRenderer(private val context: Context) {
             includeDateInTime = true
         )
 
-        val sideItems = build4x2SideItems(snapshot)
-        bindSideItemSlot(views, R.id.widget_group_1_label, R.id.widget_event_2, R.id.widget_event_2_bg, R.id.widget_event_2_strip, R.id.widget_event_2_title, R.id.widget_event_2_time, sideItems.getOrNull(0), snapshot.today, colors, text)
-        bindSideItemSlot(views, R.id.widget_group_2_label, R.id.widget_event_3, R.id.widget_event_3_bg, R.id.widget_event_3_strip, R.id.widget_event_3_title, R.id.widget_event_3_time, sideItems.getOrNull(1), snapshot.today, colors, text)
+        val compactItems = build4x2CompactItems(snapshot, todayItem)
+        val sideItem = compactItems.firstOrNull()
+        bindCompactSideItemSlot(
+            views = views,
+            labelId = R.id.widget_group_1_label,
+            containerId = R.id.widget_event_2,
+            bgId = R.id.widget_event_2_bg,
+            stripId = R.id.widget_event_2_strip,
+            titleId = R.id.widget_event_2_title,
+            timeId = R.id.widget_event_2_time,
+            item = sideItem,
+            today = snapshot.today,
+            colors = colors,
+            text = text
+        )
+        views.setViewVisibility(R.id.widget_group_2_label, View.GONE)
+        views.setTextViewText(R.id.widget_group_2_label, "")
+        bindSummaryChip(
+            views = views,
+            containerId = R.id.widget_event_3,
+            bgId = R.id.widget_event_3_bg,
+            stripId = R.id.widget_event_3_strip,
+            titleId = R.id.widget_event_3_title,
+            timeId = R.id.widget_event_3_time,
+            count = compactItems.drop(1).size,
+            label = "日程",
+            colors = colors,
+            text = text,
+            cardWidthDp = 210
+        )
     }
 
     private fun bind4x4(
@@ -295,6 +325,76 @@ class ScheduleWidgetRenderer(private val context: Context) {
         )
     }
 
+    private fun bindCompactSideItemSlot(
+        views: RemoteViews,
+        labelId: Int,
+        containerId: Int,
+        bgId: Int,
+        stripId: Int,
+        titleId: Int,
+        timeId: Int,
+        item: WidgetScheduleEntry?,
+        today: LocalDate,
+        colors: WidgetColors,
+        text: WidgetTextSizes
+    ) {
+        views.setTextColor(labelId, colors.secondaryText)
+        views.setTextViewTextSize(labelId, TypedValue.COMPLEX_UNIT_PX, text.groupLabelPx)
+        if (item == null) {
+            views.setTextViewText(labelId, "")
+            views.setViewVisibility(labelId, View.GONE)
+            views.setViewVisibility(containerId, View.GONE)
+            return
+        }
+        views.setViewVisibility(labelId, View.VISIBLE)
+        views.setTextViewText(labelId, compactDayLabel(item.date, today))
+        bindEventSlot(
+            views = views,
+            containerId = containerId,
+            bgId = bgId,
+            stripId = stripId,
+            titleId = titleId,
+            timeId = timeId,
+            item = item.item,
+            colors = colors,
+            text = text,
+            emptyTitle = "暂无安排",
+            cardWidthDp = 210,
+            cardHeightDp = 58,
+            includeDateInTime = false
+        )
+    }
+
+    private fun bindSummaryChip(
+        views: RemoteViews,
+        containerId: Int,
+        bgId: Int,
+        stripId: Int,
+        titleId: Int,
+        timeId: Int,
+        count: Int,
+        label: String,
+        colors: WidgetColors,
+        text: WidgetTextSizes,
+        cardWidthDp: Int
+    ) {
+        if (count <= 0) {
+            views.setViewVisibility(containerId, View.GONE)
+            views.setTextViewText(titleId, "")
+            views.setTextViewText(timeId, "")
+            return
+        }
+        views.setViewVisibility(containerId, View.VISIBLE)
+        views.setImageViewBitmap(bgId, roundedBitmap(cardWidthDp, 22, 8, colors.card))
+        views.setViewVisibility(stripId, View.VISIBLE)
+        bindEventStrip(views, stripId, colors.primary, heightDp = 12)
+        views.setTextColor(titleId, colors.primaryText)
+        views.setTextViewTextSize(titleId, TypedValue.COMPLEX_UNIT_PX, text.titlePx)
+        views.setTextViewText(titleId, "其他 $count 个$label")
+        views.setViewVisibility(timeId, View.GONE)
+        views.setTextViewText(timeId, "")
+    }
+
     private fun bindGroupLabel(
         views: RemoteViews,
         labelId: Int?,
@@ -344,8 +444,16 @@ class ScheduleWidgetRenderer(private val context: Context) {
             val cardColor = if (!hasItem && emptyAsPlainText) Color.TRANSPARENT else colors.card
             views.setImageViewBitmap(bgId, roundedBitmap(cardWidthDp, cardHeightDp, 12, cardColor))
         }
-        views.setViewVisibility(stripId, if (!hasItem && emptyAsPlainText) View.GONE else View.VISIBLE)
-        views.setInt(stripId, "setBackgroundColor", item?.safeColor(colors.primary) ?: colors.secondaryText)
+        val showStrip = !hasItem && emptyAsPlainText
+        views.setViewVisibility(stripId, if (showStrip) View.GONE else View.VISIBLE)
+        if (!showStrip) {
+            bindEventStrip(
+                views = views,
+                stripId = stripId,
+                color = item?.safeColor(colors.primary) ?: colors.secondaryText,
+                heightDp = eventStripHeight(cardHeightDp)
+            )
+        }
         views.setTextColor(titleId, if (!hasItem && emptyAsPlainText) colors.secondaryText else colors.primaryText)
         views.setTextColor(timeId, colors.secondaryText)
         views.setTextViewTextSize(titleId, TypedValue.COMPLEX_UNIT_PX, text.titlePx)
@@ -429,9 +537,9 @@ class ScheduleWidgetRenderer(private val context: Context) {
         }
     }
 
-    private fun resolveColors(settings: MySettings): WidgetColors {
-        val dark = resolveDarkTheme(settings)
-        val alpha = (settings.widgetBackgroundAlpha.coerceIn(0.6f, 1f) * 255f).roundToInt()
+    private fun resolveColors(settings: MySettings, appearance: WidgetAppearanceConfig): WidgetColors {
+        val dark = resolveDarkTheme(settings, appearance)
+        val alpha = (appearance.backgroundAlpha.coerceIn(0.6f, 1f) * 255f).roundToInt()
         val schemeName = settings.themeColorScheme
         val colorScheme = if (ThemeColorScheme.fromName(schemeName) == ThemeColorScheme.CUSTOM) {
             ThemeColorGenerator.generateCustomColorScheme(parseThemeHexColor(settings.customThemeColorHex), dark)
@@ -453,8 +561,8 @@ class ScheduleWidgetRenderer(private val context: Context) {
         )
     }
 
-    private fun resolveDarkTheme(settings: MySettings): Boolean {
-        return when (settings.widgetThemeMode) {
+    private fun resolveDarkTheme(settings: MySettings, appearance: WidgetAppearanceConfig): Boolean {
+        return when (appearance.themeMode) {
             WidgetThemeMode.LIGHT -> false
             WidgetThemeMode.DARK -> true
             else -> when (settings.themeMode) {
@@ -482,6 +590,18 @@ class ScheduleWidgetRenderer(private val context: Context) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
         canvas.drawRoundRect(0f, 0f, widthPx.toFloat(), heightPx.toFloat(), radiusPx, radiusPx, paint)
         return bitmap
+    }
+
+    private fun bindEventStrip(views: RemoteViews, stripId: Int, color: Int, heightDp: Int) {
+        views.setImageViewBitmap(stripId, roundedBitmap(4, heightDp, 2, color))
+    }
+
+    private fun eventStripHeight(cardHeightDp: Int): Int {
+        return when {
+            cardHeightDp <= 0 -> 38
+            cardHeightDp <= 52 -> 34
+            else -> 38
+        }
     }
 
     private fun solidBitmap(color: Int): Bitmap {
@@ -545,6 +665,14 @@ class ScheduleWidgetRenderer(private val context: Context) {
         }
     }
 
+    private fun compactDayLabel(date: LocalDate, today: LocalDate): String {
+        return when (date) {
+            today -> "今天"
+            today.plusDays(1) -> "明天"
+            else -> groupLabel(date, useRelativePrefix = false)
+        }
+    }
+
     private fun groupLabel(date: LocalDate, useRelativePrefix: Boolean = true): String {
         val today = LocalDate.now()
         val prefix = if (useRelativePrefix) {
@@ -559,10 +687,14 @@ class ScheduleWidgetRenderer(private val context: Context) {
         return "$prefix ${weekdayText(date)}"
     }
 
-    private fun build4x2SideItems(snapshot: WidgetScheduleSnapshot): List<WidgetScheduleEntry> {
-        return snapshot.visibleEntries
-            .drop(if (snapshot.visibleEntries.firstOrNull()?.date == snapshot.today) 1 else 0)
-            .take(2)
+    private fun build4x2CompactItems(
+        snapshot: WidgetScheduleSnapshot,
+        displayedTodayItem: ScheduleDisplayItem?
+    ): List<WidgetScheduleEntry> {
+        val tomorrow = snapshot.today.plusDays(1)
+        return snapshot.visibleEntries.filter { entry ->
+            (entry.date == snapshot.today || entry.date == tomorrow) && entry.item.stableKey != displayedTodayItem?.stableKey
+        }
     }
 
     private data class WidgetColors(

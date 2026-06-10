@@ -56,7 +56,10 @@ fun PreferenceSettingsPage(
     viewModel: SettingsViewModel,
     uiSize: Int = 2,
     onNavigateToBottomBarEditor: () -> Unit = {},
-    onNavigateToWidgetSettings: () -> Unit = {}
+    onNavigateToWidgetSettings: () -> Unit = {},
+    onNavigateToSemesterConfig: () -> Unit = {},
+    onNavigateToCourseManage: () -> Unit = {},
+    onNavigateToTimeTableManage: () -> Unit = {}
 ) {
     val settings by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
@@ -906,6 +909,90 @@ fun PreferenceSettingsPage(
                 }
             }
 
+            // ================== 课表板块 ==================
+            Text("课表", style = sectionTitleStyle)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "启用课表功能",
+                        subtitle = "关闭后无法在主页下滑进入课表",
+                        checked = settings.courseFeatureEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updatePreference(courseFeatureEnabled = isChecked)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+
+                    AnimatedVisibility(
+                        visible = settings.courseFeatureEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+
+                            ActionSettingItem(
+                                title = "学期配置",
+                                subtitle = "设置第一周、当前周次和学期总周数",
+                                value = "",
+                                icon = Icons.Default.ChevronRight,
+                                enabled = true,
+                                onClick = onNavigateToSemesterConfig,
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+
+                            ActionSettingItem(
+                                title = "管理所有课程",
+                                subtitle = "添加、修改或删除课程",
+                                value = "",
+                                icon = Icons.Default.ChevronRight,
+                                enabled = true,
+                                onClick = onNavigateToCourseManage,
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+
+                            ActionSettingItem(
+                                title = "作息时间设置",
+                                subtitle = "设置每日节次时间段",
+                                value = "",
+                                icon = Icons.Default.ChevronRight,
+                                enabled = true,
+                                onClick = onNavigateToTimeTableManage,
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+                        }
+                    }
+                }
+            }
+
             // ================== 截图板块 (新) ==================
             // 注意：现在它在 Column 内部，位于“日程”卡片之后
             Text("截图", style = sectionTitleStyle)
@@ -921,7 +1008,7 @@ fun PreferenceSettingsPage(
                         subtitle = "截图与分析之间的等待时间",
                         value = settings.screenshotDelayMs.toFloat(),
                         onValueChange = { viewModel.updateScreenshotDelay(it.toLong()) },
-                        valueRange = 1000f..2500f,
+                        valueRange = 1000f..5000f,
                         steps = 0, // 0 = 无极调节
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,

@@ -62,6 +62,12 @@ import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.widget.WidgetActions
+
+private data class PendingWidgetLaunchAction(
+    val action: String,
+    val nonce: Long = System.nanoTime()
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -70,6 +76,8 @@ class MainActivity : ComponentActivity() {
 
     // ViewModel 实例，供 onResume 使用
     private lateinit var mainViewModel: MainViewModel
+
+    private val pendingWidgetAction = mutableStateOf<PendingWidgetLaunchAction?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
@@ -104,6 +112,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
+        consumeWidgetAction(intent)
 
         enableEdgeToEdge()
 
@@ -218,6 +227,8 @@ class MainActivity : ComponentActivity() {
                 }
                 var selectedHomePageKey by rememberSaveable { mutableStateOf(homeStartPageKey) }
                 var lastPickupEventTimestamp by rememberSaveable { mutableLongStateOf(0L) }
+                var lastWidgetActionNonce by rememberSaveable { mutableLongStateOf(0L) }
+                var openCourseRequestId by rememberSaveable { mutableLongStateOf(0L) }
                 val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val floatingActionCardBottomPadding = if (currentBackStackEntry?.destination?.route == AppRoutes.Home) {
                     IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
@@ -236,6 +247,39 @@ class MainActivity : ComponentActivity() {
                     if (timestamp > 0L && timestamp != lastPickupEventTimestamp) {
                         selectedHomePageKey = HomeEntryKey.ALL
                         lastPickupEventTimestamp = timestamp
+                    }
+                }
+
+                LaunchedEffect(pendingWidgetAction.value) {
+                    val pending = pendingWidgetAction.value ?: return@LaunchedEffect
+                    if (pending.nonce == lastWidgetActionNonce) return@LaunchedEffect
+                    lastWidgetActionNonce = pending.nonce
+                    when (pending.action) {
+                        WidgetActions.ACTION_OPEN_WEATHER -> {
+                            navController.navigate(AppRoutes.WeatherDetail) { launchSingleTop = true }
+                        }
+                        WidgetActions.ACTION_OPEN_HOME -> {
+                            if (currentBackStackEntry?.destination?.route != AppRoutes.Home) {
+                                navController.navigate(AppRoutes.Home) {
+                                    launchSingleTop = true
+                                    popUpTo(AppRoutes.Home) { inclusive = false }
+                                }
+                            }
+                        }
+                        WidgetActions.ACTION_OPEN_COURSE -> {
+                            if (currentBackStackEntry?.destination?.route != AppRoutes.Home) {
+                                navController.navigate(AppRoutes.Home) {
+                                    launchSingleTop = true
+                                    popUpTo(AppRoutes.Home) { inclusive = false }
+                                }
+                            }
+                            if (HomeEntryKey.TODAY in homeBottomItems) {
+                                selectedHomePageKey = HomeEntryKey.TODAY
+                            }
+                            if (settings.courseFeatureEnabled) {
+                                openCourseRequestId++
+                            }
+                        }
                     }
                 }
 
@@ -269,8 +313,9 @@ class MainActivity : ComponentActivity() {
                                 UiStyle.MATERIAL3 -> HomeScreen(
                                     mainViewModel = mainViewModel,
                                     settingsViewModel = settingsViewModel,
-                                    pickupTimestamp = pickupEventTimestamp.value,
-                                    selectedPageKey = selectedHomePageKey,
+                                     pickupTimestamp = pickupEventTimestamp.value,
+                                     openCourseRequestId = openCourseRequestId,
+                                     selectedPageKey = selectedHomePageKey,
                                     onSelectedPageKeyChange = { pageKey ->
                                         selectedHomePageKey = if (pageKey in homeBottomItems) pageKey else homeStartPageKey
                                     },
@@ -512,6 +557,20 @@ class MainActivity : ComponentActivity() {
     }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("openPickupList", false)) {
+            pickupEventTimestamp.value = System.currentTimeMillis()
+        }
+        consumeWidgetAction(intent)
+    }
+
+    private fun consumeWidgetAction(intent: Intent?) {
+        val action = intent?.getStringExtra(WidgetActions.EXTRA_WIDGET_ACTION)?.takeIf { it.isNotBlank() } ?: return
+        pendingWidgetAction.value = PendingWidgetLaunchAction(action)
+    }
+
     override fun onResume() {
         super.onResume()
         if (::mainViewModel.isInitialized) {
@@ -520,13 +579,6 @@ class MainActivity : ComponentActivity() {
         (application as App).clipboardCodeCenter.checkClipboardForPrompt("app_resume")
         (application as App).localModelResidueCenter.checkForResidue()
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        if (intent.getBooleanExtra("openPickupList", false)) {
-            pickupEventTimestamp.value = System.currentTimeMillis()
-        }
     }
 
     private fun setupDynamicShortcuts() {

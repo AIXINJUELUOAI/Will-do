@@ -42,7 +42,7 @@ fun AllEventsPage(
     hapticEnabled: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val today = LocalDate.now()
+    val today = uiState.today
     var isLoadingMoreFuture by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
     val futureLimitFormatter = remember { DateTimeFormatter.ofPattern("M月d日", java.util.Locale.CHINA) }
@@ -58,7 +58,7 @@ fun AllEventsPage(
     }
 
     // 核心过滤逻辑
-    val filteredItems by remember(uiState.allScheduleItems, searchQuery, today) {
+    val filteredItems by remember(uiState.allScheduleItems, searchQuery, today, uiState.timeRefreshToken) {
         derivedStateOf {
             uiState.allScheduleItems
                 .distinctBy { it.stableKey }
@@ -138,7 +138,7 @@ fun AllEventsPage(
                     }
                 }
             } else {
-                val currentYear = remember { LocalDate.now().year }
+                val currentYear = today.year
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -172,6 +172,7 @@ fun AllEventsPage(
                                 SwipeableEventItem(
                                     item = item,
                                     isRevealed = uiState.revealedItemKey == item.stableKey,
+                                    timeRefreshToken = uiState.timeRefreshToken,
                                     onExpand = { viewModel.onRevealItem(item.stableKey) },
                                     onCollapse = { viewModel.onRevealItem(null) },
                                     onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },

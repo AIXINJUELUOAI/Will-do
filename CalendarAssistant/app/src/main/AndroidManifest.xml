@@ -116,6 +116,21 @@
             android:taskAffinity=""
             android:exported="false" />
 
+        <activity
+            android:name=".widget.ScheduleWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CalendarAssistant" />
+
+        <activity
+            android:name=".widget.WeatherWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CalendarAssistant" />
+
+        <activity
+            android:name=".widget.CourseWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CalendarAssistant" />
+
         <!-- 1. 无障碍服务 (截图用) -->
         <service
             android:name=".service.accessibility.TextAccessibilityService"
@@ -238,6 +253,40 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/schedule_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WeatherWidgetProvider"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weather_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.CourseWidgetProvider"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.antgskds.calendarassistant.widget.COURSE_SEGMENT_UP" />
+                <action android:name="com.antgskds.calendarassistant.widget.COURSE_SEGMENT_DOWN" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/course_widget_info" />
         </receiver>
 
         <!-- Shizuku Provider (静默提权核心组件) -->

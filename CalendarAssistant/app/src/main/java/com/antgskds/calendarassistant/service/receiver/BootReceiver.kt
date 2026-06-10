@@ -20,8 +20,9 @@ class BootReceiver : BroadcastReceiver() {
 
             val app = context.applicationContext as App
 
-            // 1. 恢复数据相关的闹钟 (StoreRootNode 内部会调 NotificationScheduler)
+            // 1. 恢复数据与提醒/胶囊闹钟
             app.scheduleCenter.refreshAll()
+            app.reminderCenter.reconcileAll()
             app.widgetCenter.requestRefresh()
 
             // 2. 恢复运行时调度（早晚报/保活/反向同步/短信监听）

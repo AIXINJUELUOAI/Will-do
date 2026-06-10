@@ -26,14 +26,22 @@ object IconUtils {
             CapsuleStateManager.TYPE_OCR_PROGRESS -> return R.drawable.ic_stat_scan
             CapsuleStateManager.TYPE_OCR_RESULT -> return R.drawable.ic_stat_success
             CapsuleStateManager.TYPE_MODEL_LOADING -> return R.drawable.ic_model_loading
-            CapsuleStateManager.TYPE_WEATHER_ALERT -> return WeatherAlertIconMapper.iconRes(
-                capsule.title,
-                capsule.content,
-                capsule.description,
-                capsule.display.primaryText,
-                capsule.display.secondaryText.orEmpty(),
-                capsule.display.expandedText.orEmpty()
-            )
+            CapsuleStateManager.TYPE_WEATHER_ALERT -> return if (capsule.eventType == WEATHER_RISK_EVENT_TYPE) {
+                WeatherAlertIconMapper.riskIconRes(
+                    title = capsule.display.primaryText,
+                    weatherText = capsule.display.secondaryText.orEmpty(),
+                    message = listOf(capsule.content, capsule.description, capsule.display.expandedText.orEmpty()).joinToString(" ")
+                )
+            } else {
+                WeatherAlertIconMapper.iconRes(
+                    capsule.title,
+                    capsule.content,
+                    capsule.description,
+                    capsule.display.primaryText,
+                    capsule.display.secondaryText.orEmpty(),
+                    capsule.display.expandedText.orEmpty()
+                )
+            }
         }
 
         // 优先从 RuleRegistry 获取用户自定义图标
@@ -75,4 +83,6 @@ object IconUtils {
     fun getScanningIcon(): Int = R.drawable.ic_stat_scan
 
     fun getSuccessIcon(): Int = R.drawable.ic_stat_success
+
+    private const val WEATHER_RISK_EVENT_TYPE = "weather_risk"
 }

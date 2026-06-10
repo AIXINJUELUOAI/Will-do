@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
@@ -57,6 +56,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +82,7 @@ import java.util.Locale
 fun WeatherDetailPage(uiSize: Int = 2) {
     val app = LocalContext.current.applicationContext as App
     val weatherData by app.weatherQueryApi.weatherData.collectAsState()
+    val bottomInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
 
     Column(
         modifier = Modifier
@@ -114,7 +115,7 @@ fun WeatherDetailPage(uiSize: Int = 2) {
             )
         }
 
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        Spacer(modifier = Modifier.height(bottomInset + 24.dp))
     }
 }
 
@@ -126,6 +127,7 @@ fun WeatherDetailScreen(
 ) {
     val haptics = rememberAppHaptics()
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("天气详情") },
@@ -142,9 +144,14 @@ fun WeatherDetailScreen(
                 )
             )
         },
+        contentWindowInsets = WindowInsets(0),
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
             WeatherDetailPage(uiSize = uiSize)
         }
     }

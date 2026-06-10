@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background_clip"
+    android:clipChildren="true"
+    android:clipToOutline="true"
+    android:clipToPadding="true">
+
+    <ImageView
+        android:id="@+id/widget_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="14dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="62dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentStart="true"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_weather_location"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textSize="14sp"
+                    tools:text="上虞区" />
+
+                <TextView
+                    android:id="@+id/widget_weather_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textSize="42sp"
+                    android:textStyle="bold"
+                    tools:text="17°" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="end"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/widget_weather_icon"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="end"
+                    android:scaleType="centerInside"
+                    tools:src="@drawable/ic_weather_sunny" />
+
+                <TextView
+                    android:id="@+id/widget_weather_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textSize="13sp"
+                    tools:text="雾 16° / 24°" />
+            </LinearLayout>
+        </RelativeLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <LinearLayout android:id="@+id/h1_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h1_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="现在" />
+                <ImageView android:id="@+id/h1_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h1_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="17°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/h2_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h2_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="09:00" />
+                <ImageView android:id="@+id/h2_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h2_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="16°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/h3_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h3_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="10:00" />
+                <ImageView android:id="@+id/h3_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h3_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="22°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/h4_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h4_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="11:00" />
+                <ImageView android:id="@+id/h4_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h4_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="24°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/h5_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h5_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="12:00" />
+                <ImageView android:id="@+id/h5_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h5_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="25°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/h6_row" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <TextView android:id="@+id/h6_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="11sp" tools:text="13:00" />
+                <ImageView android:id="@+id/h6_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_marginTop="5dp" android:layout_marginBottom="5dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/h6_temp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:textSize="13sp" android:textStyle="bold" tools:text="25°" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/weather_daily_divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="8dp"
+            android:text="" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout android:id="@+id/d1_row" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/d1_date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:includeFontPadding="false" android:textSize="14sp" tools:text="6月9日 今天" />
+                <ImageView android:id="@+id/d1_icon" android:layout_width="20dp" android:layout_height="20dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/d1_temp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:includeFontPadding="false" android:textSize="14sp" android:textStyle="bold" tools:text="16° / 24°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/d2_row" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/d2_date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:includeFontPadding="false" android:textSize="14sp" tools:text="6月10日 明天" />
+                <ImageView android:id="@+id/d2_icon" android:layout_width="20dp" android:layout_height="20dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/d2_temp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:includeFontPadding="false" android:textSize="14sp" android:textStyle="bold" tools:text="20° / 30°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/d3_row" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/d3_date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:includeFontPadding="false" android:textSize="14sp" tools:text="6月11日 周四" />
+                <ImageView android:id="@+id/d3_icon" android:layout_width="20dp" android:layout_height="20dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/d3_temp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:includeFontPadding="false" android:textSize="14sp" android:textStyle="bold" tools:text="21° / 32°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/d4_row" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/d4_date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:includeFontPadding="false" android:textSize="14sp" tools:text="6月12日 周五" />
+                <ImageView android:id="@+id/d4_icon" android:layout_width="20dp" android:layout_height="20dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/d4_temp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:includeFontPadding="false" android:textSize="14sp" android:textStyle="bold" tools:text="21° / 32°" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/d5_row" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/d5_date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:includeFontPadding="false" android:textSize="14sp" tools:text="6月13日 周六" />
+                <ImageView android:id="@+id/d5_icon" android:layout_width="20dp" android:layout_height="20dp" android:scaleType="centerInside" tools:src="@drawable/ic_weather_sunny" />
+                <TextView android:id="@+id/d5_temp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:includeFontPadding="false" android:textSize="14sp" android:textStyle="bold" tools:text="22° / 26°" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

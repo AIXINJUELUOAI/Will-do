@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background_clip"
+    android:clipChildren="true"
+    android:clipToOutline="true"
+    android:clipToPadding="true">
+
+    <ImageView
+        android:id="@+id/widget_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="14dp">
+
+        <TextView
+            android:id="@+id/widget_weather_location"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textSize="14sp"
+            tools:text="上虞区" />
+
+        <ImageView
+            android:id="@+id/widget_weather_icon"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:scaleType="centerInside"
+            tools:src="@drawable/ic_weather_sunny" />
+
+        <TextView
+            android:id="@+id/widget_weather_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/widget_weather_location"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textSize="42sp"
+            android:textStyle="bold"
+            tools:text="17°" />
+
+        <TextView
+            android:id="@+id/widget_weather_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/widget_weather_title"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textSize="13sp"
+            tools:text="雾 16° / 24°" />
+
+        <FrameLayout
+            android:id="@+id/widget_weather_alert_container"
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_alignParentBottom="true">
+
+            <ImageView
+                android:id="@+id/widget_weather_alert_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY" />
+
+            <TextView
+                android:id="@+id/widget_weather_alert"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:textSize="12sp"
+                tools:text="雾 16° / 24°" />
+        </FrameLayout>
+    </RelativeLayout>
+</FrameLayout>

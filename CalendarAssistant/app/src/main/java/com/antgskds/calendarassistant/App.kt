@@ -308,6 +308,7 @@ class App : Application() {
             calendarQueryApi = calendarCenter,
             settingsQueryApi = settingsQueryApi,
             widgetScheduleQueryApi = widgetScheduleQueryApi,
+            weatherQueryApi = weatherQueryApi,
             appScope = appScope
         )
     }
@@ -342,6 +343,7 @@ class App : Application() {
         CrashHandler.init(this)
         AnrMonitor.start(this)
         createNotificationChannels()
+        calendarCenter.attachDomainEventBus(domainEventBus)
 
         // 首启自动迁移旧底层数据（Room/JSON）到新 events.db
         runBlocking(Dispatchers.IO) {
@@ -359,7 +361,10 @@ class App : Application() {
         scheduleCenter.refreshEvents()
         noteCenter.start()
         AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
-        scheduleCenter.onScheduleChanged = { widgetCenter.requestRefresh() }
+        scheduleCenter.onScheduleChanged = {
+            widgetCenter.requestRefresh(com.antgskds.calendarassistant.widget.WidgetType.SCHEDULE)
+            widgetCenter.requestRefresh(com.antgskds.calendarassistant.widget.WidgetType.COURSE)
+        }
 
         appScope.launch(Dispatchers.IO) {
             runCatching { eventAttachmentManager.migrateLegacyDescriptionMarkers() }
@@ -387,6 +392,7 @@ class App : Application() {
         initSmsObserver()
         runtimeCenter.startAppRoutines()
         reminderCenter.startEventSubscriptions()
+        reminderCenter.reconcileAll()
         widgetCenter.startSubscriptions()
         AppLogger.i(TAG, "main app routines started")
     }

@@ -48,6 +48,7 @@ import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory.TestEventType
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
@@ -161,6 +162,8 @@ fun LaboratoryPage(
 
                 if (settings!!.developerOptionsEnabled) {
                     DeveloperOptionsCard(
+                        weatherLocationStabilityRequiredHits = settings!!.weatherLocationStabilityRequiredHits,
+                        liveNotificationTemplateMode = settings!!.liveNotificationTemplateMode,
                         onCreateType = { type ->
                             val count = createDeveloperTestEvents(
                                 type = type,
@@ -234,6 +237,15 @@ fun LaboratoryPage(
                         },
                         onOpenNotificationTests = {
                             showNotificationTestSheet = true
+                        },
+                        onWeatherLocationStabilityRequiredHitsChange = { hits ->
+                            settingsViewModel?.updatePreference(weatherLocationStabilityRequiredHits = hits)
+                            Toast.makeText(context, "天气通知位置稳定阈值已设为 $hits 次", Toast.LENGTH_SHORT).show()
+                        },
+                        onLiveNotificationTemplateModeChange = { mode ->
+                            settingsViewModel?.updatePreference(liveNotificationTemplateMode = mode)
+                            app?.capsuleCenter?.forceRefresh()
+                            Toast.makeText(context, "原生实况通知模板已设为 ${liveTemplateModeLabel(mode)}", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -296,6 +308,8 @@ private fun LaboratorySwitchCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DeveloperOptionsCard(
+    weatherLocationStabilityRequiredHits: Int,
+    liveNotificationTemplateMode: String,
     onCreateType: (TestEventType) -> Unit,
     onCreateAll: () -> Unit,
     onClearAll: () -> Unit,
@@ -305,7 +319,9 @@ private fun DeveloperOptionsCard(
     onCleanLegacyNotes: () -> Unit,
     onCleanDuplicateEvents: () -> Unit,
     onExportLogs: (Int?) -> Unit,
-    onOpenNotificationTests: () -> Unit
+    onOpenNotificationTests: () -> Unit,
+    onWeatherLocationStabilityRequiredHitsChange: (Int) -> Unit,
+    onLiveNotificationTemplateModeChange: (String) -> Unit
 ) {
     val haptics = rememberAppHaptics()
     Card(
@@ -377,12 +393,62 @@ private fun DeveloperOptionsCard(
                 Text("通知/胶囊测试")
             }
             Text(
+                text = "原生实况通知模板",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "控制原生实况通知使用完整多行内容还是两行精简内容；仅影响原生通知通道。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LiveNotificationTemplateMode.ALL.forEach { mode ->
+                    val selected = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode) == mode
+                    AssistChip(
+                        onClick = { haptics.confirm(); onLiveNotificationTemplateModeChange(mode) },
+                        label = { Text(if (selected) "${liveTemplateModeLabel(mode)} ✓" else liveTemplateModeLabel(mode)) }
+                    )
+                }
+            }
+            Text(
+                text = "天气通知位置稳定阈值",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "自动定位连续命中同一位置达到阈值后才发送天气预警/风险通知；1 次表示关闭兜底，当前 ${weatherLocationStabilityRequiredHits.coerceIn(1, 3)} 次。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(1, 2, 3).forEach { hits ->
+                    val label = when (hits) {
+                        1 -> "1 次（关闭兜底）"
+                        2 -> "2 次（默认）"
+                        else -> "3 次（严格）"
+                    }
+                    AssistChip(
+                        onClick = { haptics.confirm(); onWeatherLocationStabilityRequiredHitsChange(hits) },
+                        label = { Text(if (weatherLocationStabilityRequiredHits.coerceIn(1, 3) == hits) "$label ✓" else label) }
+                    )
+                }
+            }
+            Text(
                 text = "日志导出",
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "日志可能包含识别文本、Prompt 和模型原始响应，请确认后再分享。",
+                text = "导出本地日志、崩溃日志、识别日志和应用 logcat。日志可能包含识别文本、Prompt、模型响应和接口返回；有 Shizuku/Root 时 logcat 更完整。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -394,12 +460,12 @@ private fun DeveloperOptionsCard(
                 listOf(5, 15, 30, 60).forEach { minutes ->
                     AssistChip(
                         onClick = { haptics.confirm(); onExportLogs(minutes) },
-                        label = { Text("导出最近 ${minutes} 分钟日志") }
+                        label = { Text("导出最近 ${minutes} 分钟诊断日志") }
                     )
                 }
                 AssistChip(
                     onClick = { haptics.confirm(); onExportLogs(null) },
-                    label = { Text("导出完整日志") }
+                    label = { Text("导出完整诊断日志") }
                 )
             }
             FlowRow(
@@ -415,6 +481,14 @@ private fun DeveloperOptionsCard(
                 }
             }
         }
+    }
+}
+
+private fun liveTemplateModeLabel(mode: String): String {
+    return when (LiveNotificationTemplateMode.normalize(mode)) {
+        LiveNotificationTemplateMode.FULL -> "完整"
+        LiveNotificationTemplateMode.COMPACT -> "精简"
+        else -> "自动"
     }
 }
 
