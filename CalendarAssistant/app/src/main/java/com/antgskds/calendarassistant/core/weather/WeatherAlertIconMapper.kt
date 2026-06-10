@@ -17,7 +17,13 @@ object WeatherAlertIconMapper {
     }
 
     fun riskIconRes(risk: WeatherRiskAlert): Int {
-        return iconRes(risk.title, risk.weatherText, risk.message)
+        return riskIconRes(risk.title, risk.weatherText, risk.message)
+    }
+
+    fun riskIconRes(title: String, weatherText: String, message: String): Int {
+        iconResOrNull(title)?.let { return it }
+        iconResOrNull(weatherText)?.let { return it }
+        return iconRes(message)
     }
 
     fun iconRes(vararg values: String): Int {
@@ -26,8 +32,13 @@ object WeatherAlertIconMapper {
             .joinToString(" ")
             .lowercase()
 
+        return iconResOrNull(text) ?: R.drawable.ic_weather_partly_cloudy
+    }
+
+    private fun iconResOrNull(value: String): Int? {
+        val text = value.lowercase().trim()
         return when {
-            text.isBlank() -> R.drawable.ic_weather_partly_cloudy
+            text.isBlank() -> null
             text.contains("高温") || text.contains("热") || text.contains("干旱") -> R.drawable.ic_weather_sunny
             text.contains("冰雹") || text.contains("雹") -> R.drawable.ic_weather_hail
             text.contains("雷") || text.contains("强对流") || text.contains("龙卷") -> R.drawable.ic_weather_thunderstorm
@@ -41,7 +52,7 @@ object WeatherAlertIconMapper {
             text.contains("霾") || text.contains("沙") || text.contains("尘") || text.contains("能见度") -> R.drawable.ic_weather_haze
             text.contains("阴") -> R.drawable.ic_weather_overcast
             text.contains("云") -> R.drawable.ic_weather_partly_cloudy
-            else -> R.drawable.ic_weather_partly_cloudy
+            else -> null
         }
     }
 }

@@ -18,8 +18,6 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,7 +66,6 @@ class ScheduleCenter(
     fun refreshEvents() {
         appScope.launch(Dispatchers.IO) {
             _events.value = calendarCenter.getEvents().filter { it.archivedAt == null && !isRetiredNoteTag(it.tag) }
-            scheduleNotificationRefresh()
             onScheduleChanged?.invoke()
         }
     }
@@ -82,40 +79,10 @@ class ScheduleCenter(
     fun refreshAll() {
         refreshEvents()
         refreshArchivedEvents()
-        scheduleNotificationRefresh()
     }
 
     suspend fun getLatestActiveEvents(): List<Event> = withContext(Dispatchers.IO) {
         calendarCenter.getEvents().filter { it.archivedAt == null && !isRetiredNoteTag(it.tag) }
-    }
-
-    // ── 通知调度 ─────────────────────────────────────────────────
-
-    private var notificationRefreshJob: Job? = null
-    private val NOTIFICATION_DEBOUNCE_MS = 300L
-    private val NOTIFICATION_WINDOW_DAYS = 7L
-
-    /**
-     * 触发通知窗口刷新（带 300ms debounce）。
-     * 任何事件变更后调用，内部自动去重。
-     */
-    fun scheduleNotificationRefresh() {
-        notificationRefreshJob?.cancel()
-        notificationRefreshJob = appScope.launch(Dispatchers.IO) {
-            delay(NOTIFICATION_DEBOUNCE_MS)
-            performNotificationRefresh()
-        }
-    }
-
-    /**
-     * 实际执行通知窗口刷新。
-     * 展开 [now, now+7天] 的实例，按规则注册/注销通知。
-     */
-    private fun performNotificationRefresh() {
-        val today = java.time.LocalDate.now()
-        val windowEnd = today.plusDays(NOTIFICATION_WINDOW_DAYS)
-        val items = ScheduleDisplayHelper.buildDisplayItems(_events.value, today, windowEnd)
-        calendarCenter.refreshNotificationsForWindow(items)
     }
 
     // ── CRUD ─────────────────────────────────────────────────────
@@ -132,7 +99,6 @@ class ScheduleCenter(
             _events.value = _events.value.map { current ->
                 if (current.id == eventId) event else current
             }
-            scheduleNotificationRefresh()
         }
 
         withContext(Dispatchers.IO) {

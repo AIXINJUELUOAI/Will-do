@@ -165,7 +165,10 @@ class SettingsViewModel(
         developerOptionsEnabled: Boolean? = null,
         developerOptionsDisabledAtMillis: Long? = null,
         homeBottomItems: List<String>? = null,
-        homeStartPageKey: String? = null
+        homeStartPageKey: String? = null,
+        weatherLocationStabilityRequiredHits: Int? = null,
+        liveNotificationTemplateMode: String? = null,
+        courseFeatureEnabled: Boolean? = null
     ) {
         viewModelScope.launch {
             val updated = settingsTransformApi.applyPreferenceUpdate(
@@ -200,7 +203,10 @@ class SettingsViewModel(
                 developerOptionsEnabled = developerOptionsEnabled,
                 developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis,
                 homeBottomItems = homeBottomItems,
-                homeStartPageKey = homeStartPageKey
+                homeStartPageKey = homeStartPageKey,
+                weatherLocationStabilityRequiredHits = weatherLocationStabilityRequiredHits,
+                liveNotificationTemplateMode = liveNotificationTemplateMode,
+                courseFeatureEnabled = courseFeatureEnabled
             )
             settingsOperationApi.updateSettings(updated)
         }

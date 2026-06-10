@@ -39,12 +39,15 @@ import com.antgskds.calendarassistant.data.model.Course
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
 data class MainUiState(
     val selectedDate: LocalDate = LocalDate.now(),
+    val today: LocalDate = LocalDate.now(),
+    val timeRefreshToken: Long = System.currentTimeMillis(),
     val revealedItemKey: String? = null,
     val rawEvents: List<Event> = emptyList(),
     val allScheduleItems: List<ScheduleDisplayItem> = emptyList(),
@@ -96,17 +99,11 @@ class MainViewModel(
     private val noteTransferManager = NoteTransferManager(appContext)
 
     init {
-        // 精确定时器：等待最近的未过期事件过期时才触发刷新
+        // 精确定时器：等待最近的未过期事件过期或跨天时触发刷新
         viewModelScope.launch {
             while (true) {
-                val delayMs = calculateDelayToNextExpiration()
-                
-                if (delayMs > 0) {
-                    kotlinx.coroutines.delay(delayMs)
-                } else {
-                    kotlinx.coroutines.delay(60_000L) // 保底：无未过期事件时 60 秒检查一次
-                }
-                _timeTrigger.value = System.currentTimeMillis()
+                kotlinx.coroutines.delay(calculateDelayToNextTimeRefresh())
+                publishTimeRefresh()
             }
         }
 
@@ -128,11 +125,32 @@ class MainViewModel(
         return homeQueryApi.calculateDelayToNextExpiration(scheduleCenter.events.value)
     }
 
+    private fun calculateDelayToNextTimeRefresh(now: LocalDateTime = LocalDateTime.now()): Long {
+        val expirationDelayMs = calculateDelayToNextExpiration().takeIf { it > 0 }
+        val midnightDelayMs = Duration.between(now, now.toLocalDate().plusDays(1).atStartOfDay()).toMillis()
+            .coerceAtLeast(1L)
+        return listOfNotNull(expirationDelayMs, midnightDelayMs, TIME_REFRESH_FALLBACK_CHECK_MS).minOrNull()
+            ?: TIME_REFRESH_FALLBACK_CHECK_MS
+    }
+
+    private fun publishTimeRefresh() {
+        val previousToday = _today.value
+        val currentToday = LocalDate.now()
+        if (previousToday != currentToday) {
+            if (_selectedDate.value == previousToday) {
+                _selectedDate.value = currentToday
+            }
+            _today.value = currentToday
+        }
+        _timeTrigger.value = System.currentTimeMillis()
+    }
+
     // 归档事件（公开访问）
     val archivedEvents = scheduleCenter.archivedEvents
     val notes: StateFlow<List<NoteEntity>> = noteCenter.notes
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
+    private val _today = MutableStateFlow(LocalDate.now())
     private val _revealedItemKey = MutableStateFlow<String?>(null)
     private val _allEventsFutureDays = MutableStateFlow(INITIAL_ALL_EVENTS_FUTURE_DAYS)
 
@@ -143,6 +161,7 @@ class MainViewModel(
         settingsQueryApi.settings,
         weatherQueryApi.weatherData,
         _timeTrigger,
+        _today,
         _allEventsFutureDays
     ) { values ->
         val date = values[0] as LocalDate
@@ -151,7 +170,9 @@ class MainViewModel(
         val activeEvents = events.filter { it.archivedAt == null }
         val settings = values[3] as MySettings
         val weatherData = values[4] as WeatherData?
-        val allEventsFutureDays = values[6] as Int
+        val timeRefreshToken = values[5] as Long
+        val today = values[6] as LocalDate
+        val allEventsFutureDays = values[7] as Int
         val snapshot = homeQueryApi.buildSnapshot(
             selectedDate = date,
             events = activeEvents,
@@ -159,7 +180,6 @@ class MainViewModel(
         )
 
         // 为"全部日程"页展开所有历史日程到未来 7 天
-        val today = LocalDate.now()
         val futureLimit = today.plusDays(allEventsFutureDays.toLong())
         val allItemsStart = activeEvents.minOfOrNull { it.startDate } ?: today
         val allItems = ScheduleDisplayHelper.buildDisplayItems(activeEvents, allItemsStart, futureLimit)
@@ -173,6 +193,8 @@ class MainViewModel(
 
         MainUiState(
             selectedDate = date,
+            today = today,
+            timeRefreshToken = timeRefreshToken,
             revealedItemKey = revealedKey,
             rawEvents = activeEvents,
             allScheduleItems = allItems,
@@ -786,7 +808,7 @@ class MainViewModel(
             // 1. 用户开启自动归档时，归档所有已过期且未归档的日程
             runAutoArchiveIfEnabled("Refresh")
             // 2. 强制触发 UI 重组
-            _timeTrigger.value = System.currentTimeMillis()
+            publishTimeRefresh()
         }
     }
 
@@ -801,5 +823,6 @@ class MainViewModel(
     private companion object {
         private const val INITIAL_ALL_EVENTS_FUTURE_DAYS = 7
         private const val ALL_EVENTS_LOAD_MORE_DAYS = 15
+        private const val TIME_REFRESH_FALLBACK_CHECK_MS = 60_000L
     }
 }

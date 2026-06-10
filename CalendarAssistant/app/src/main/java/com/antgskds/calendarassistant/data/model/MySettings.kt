@@ -2,6 +2,18 @@ package com.antgskds.calendarassistant.data.model
 
 import kotlinx.serialization.Serializable
 
+object LiveNotificationTemplateMode {
+    const val AUTO = "AUTO"
+    const val FULL = "FULL"
+    const val COMPACT = "COMPACT"
+
+    val ALL = listOf(AUTO, FULL, COMPACT)
+
+    fun normalize(value: String): String {
+        return if (value in ALL) value else AUTO
+    }
+}
+
 @Serializable
 data class MySettings(
     // AI 模型配置
@@ -29,6 +41,7 @@ data class MySettings(
     val defaultEventDurationMinutes: Int = 60,
     val screenshotDelayMs: Long = 1000L,
     val isLiveCapsuleEnabled: Boolean = false,
+    val liveNotificationTemplateMode: String = LiveNotificationTemplateMode.AUTO,
 
     // 【新增】取件码聚合开关 (Beta)
     val isPickupAggregationEnabled: Boolean = false,
@@ -54,6 +67,7 @@ data class MySettings(
     val archiveDaysThreshold: Int = 0, // 归档阈值天数（过期多少天后归档，0=立即归档）
 
     // 课表设置
+    val courseFeatureEnabled: Boolean = true,
     val semesterStartDate: String = "",
     val totalWeeks: Int = 20, // 旧版默认为 20
     val timeTableJson: String = "",
@@ -101,6 +115,7 @@ data class MySettings(
     val weatherWarningEnabled: Boolean = true,
     val weatherRiskWarningEnabled: Boolean = true,
     val weatherWarningLookaheadHours: Int = 24,
+    val weatherLocationStabilityRequiredHits: Int = 2,
     val weatherProvider: String = "qweather",
     val weatherRefreshInterval: Int = 30,
     val showWeatherInFloating: Boolean = true,

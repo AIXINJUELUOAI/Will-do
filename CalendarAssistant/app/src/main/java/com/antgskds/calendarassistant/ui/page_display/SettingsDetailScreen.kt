@@ -263,7 +263,10 @@ private fun SettingsPageContent(
                             viewModel = settingsViewModel,
                             uiSize = uiSize,
                             onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) },
-                            onNavigateToWidgetSettings = { onNavigateTo(SettingsDestination.WidgetSettings) }
+                            onNavigateToWidgetSettings = { onNavigateTo(SettingsDestination.WidgetSettings) },
+                            onNavigateToSemesterConfig = { onNavigateTo(SettingsDestination.SemesterConfig) },
+                            onNavigateToCourseManage = { onNavigateTo(SettingsDestination.CourseManage) },
+                            onNavigateToTimeTableManage = { onNavigateTo(SettingsDestination.TimeTableManage) }
                         )
                         SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                         SettingsDestination.About -> AboutPage(

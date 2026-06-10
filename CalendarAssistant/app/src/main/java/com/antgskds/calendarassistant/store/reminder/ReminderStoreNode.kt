@@ -8,9 +8,11 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.Reminder
+import com.antgskds.calendarassistant.calendar.models.isTransit
 import com.antgskds.calendarassistant.calendar.receivers.EventReminderReceiver
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -31,9 +33,8 @@ class ReminderStoreNode(context: Context) {
         val eventId = event.id ?: return
         // 跳过重复母事件 —— 母事件的通知由 refreshForWindow 处理
         if (event.isRecurring) return
-        // 跳过已完成/非待办事件
         if (event.state != STATE_PENDING) {
-            cancelForInactiveEvent(eventId)
+            cancelForDormantEvent(event)
             return
         }
 
@@ -94,6 +95,16 @@ class ReminderStoreNode(context: Context) {
         cancelForEvent(eventId)
         cancelDisplayedNotificationsForInactiveEvent(eventId)
         clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
+    }
+
+    fun cancelForDormantEvent(event: Event) {
+        val eventId = event.id ?: return
+        cancelForEvent(eventId)
+        cancelDisplayedStandardNotificationsForEvent(eventId)
+        clearActiveMarkersForNotificationKey(singleNotificationKey(eventId))
+        if (!(event.state == STATE_CHECKED_IN && event.isTransit)) {
+            cancelDisplayedNotificationsForInactiveEvent(eventId)
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -181,6 +192,10 @@ class ReminderStoreNode(context: Context) {
     fun reconcileForEvents(events: List<Event>) {
         val liveEventIds = events.mapNotNull { it.id }.toSet()
         events.forEach { rebuildForEvent(it) }
+        cancelStaleEventKeys(liveEventIds)
+    }
+
+    fun cancelStaleEvents(liveEventIds: Set<Long>) {
         cancelStaleEventKeys(liveEventIds)
     }
 
