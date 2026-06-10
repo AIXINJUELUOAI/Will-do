@@ -140,4 +140,13 @@ data class MySettings(
     val developerOptionsUnlocked: Boolean = false,
     val developerOptionsEnabled: Boolean = false,
     val developerOptionsDisabledAtMillis: Long = 0L
-)
+) {
+    companion object {
+        const val SCREENSHOT_DELAY_MIN_MS = 500L
+        const val SCREENSHOT_DELAY_MAX_MS = 2500L
+
+        fun normalizeScreenshotDelayMs(delayMs: Long): Long {
+            return delayMs.coerceIn(SCREENSHOT_DELAY_MIN_MS, SCREENSHOT_DELAY_MAX_MS)
+        }
+    }
+}

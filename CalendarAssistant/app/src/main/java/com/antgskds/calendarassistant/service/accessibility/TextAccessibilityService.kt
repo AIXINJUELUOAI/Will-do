@@ -31,6 +31,7 @@ import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
 import kotlinx.coroutines.*
@@ -271,7 +272,7 @@ class TextAccessibilityService : AccessibilityService() {
 
                         when (longPressAction) {
                             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> {
-                                startAnalysis(currentSettings.screenshotDelayMs.milliseconds)
+                                startAnalysis(MySettings.normalizeScreenshotDelayMs(currentSettings.screenshotDelayMs).milliseconds)
                             }
                             ACTION_VOLUME_LONG_PRESS_FLOATING -> {
                                 startFloatingService()
@@ -498,7 +499,6 @@ class TextAccessibilityService : AccessibilityService() {
      */
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        showProgressNotification("正在分析", "正在分析屏幕内容...")
 
         // ✅ 主线程调用 takeScreenshot（系统要求）
         takeScreenshot(
@@ -506,6 +506,7 @@ class TextAccessibilityService : AccessibilityService() {
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshotResult: ScreenshotResult) {
+                    showProgressNotification("正在分析", "正在分析屏幕内容...")
                     // ✅ 将耗时的分析工作移到后台线程
                     analysisJob = serviceScope.launch(Dispatchers.IO) {
                         processScreenshot(screenshotResult)
@@ -513,7 +514,6 @@ class TextAccessibilityService : AccessibilityService() {
                 }
                 override fun onFailure(errorCode: Int) {
                     Log.w(TAG, "takeScreenshot 失败: code=$errorCode")
-                    cancelProgressNotification()
                     showResultNotification(
                         "截图失败",
                         buildScreenshotFailureContent(errorCode),

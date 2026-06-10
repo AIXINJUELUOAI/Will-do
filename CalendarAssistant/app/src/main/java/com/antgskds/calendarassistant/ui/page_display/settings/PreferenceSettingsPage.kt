@@ -42,6 +42,7 @@ import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -1006,9 +1007,9 @@ fun PreferenceSettingsPage(
                     SliderSettingItem(
                         title = "截图延迟",
                         subtitle = "截图与分析之间的等待时间",
-                        value = settings.screenshotDelayMs.toFloat(),
+                        value = MySettings.normalizeScreenshotDelayMs(settings.screenshotDelayMs).toFloat(),
                         onValueChange = { viewModel.updateScreenshotDelay(it.toLong()) },
-                        valueRange = 1000f..5000f,
+                        valueRange = MySettings.SCREENSHOT_DELAY_MIN_MS.toFloat()..MySettings.SCREENSHOT_DELAY_MAX_MS.toFloat(),
                         steps = 0, // 0 = 无极调节
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,

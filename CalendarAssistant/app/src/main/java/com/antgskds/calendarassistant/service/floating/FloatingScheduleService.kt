@@ -52,6 +52,7 @@ import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
@@ -537,7 +538,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             if (accessibilityService != null) {
                 Log.d(TAG, "无障碍服务可用，开始截屏识屏")
-                accessibilityService.startAnalysis(500.milliseconds)
+                val delayMs = MySettings.normalizeScreenshotDelayMs(settingsQueryApi.settings.value.screenshotDelayMs)
+                accessibilityService.startAnalysis(delayMs.milliseconds)
                 finishPendingImagePick()
                 requestClose()
                 return@launch
