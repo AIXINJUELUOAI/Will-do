@@ -36,6 +36,7 @@ class WeatherRepository private constructor(context: Context) {
     private val mutex = Mutex()
     private val client by lazy { HttpClient(Android) }
     private val locationProvider by lazy { WeatherLocationProvider(appContext) }
+    private val locationStabilityGate by lazy { WeatherLocationStabilityGate(appContext) }
     private val notifier by lazy { WeatherNotifier(appContext) }
     private val _weatherData = MutableStateFlow(loadCachedWeather())
     val weatherData: StateFlow<WeatherData?> = _weatherData.asStateFlow()
@@ -89,7 +90,13 @@ class WeatherRepository private constructor(context: Context) {
                 )
                 saveCachedWeather(parsed)
                 _weatherData.value = parsed
-                if (settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled) {
+                if (
+                    (settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled) &&
+                    locationStabilityGate.shouldAllowNotifications(
+                        resolvedLocation,
+                        settings.weatherLocationStabilityRequiredHits
+                    )
+                ) {
                     notifier.notifyAlerts(
                         locationName = parsed.displayLocationName(),
                         alerts = dedupedAlerts,

@@ -94,6 +94,8 @@ fun HomePage(
     currentTab: Int,
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
+    openCourseRequestId: Long = 0L,
+    courseFeatureEnabled: Boolean = true,
     isActionExpanded: Boolean = false,
     onActionExpandedChange: (Boolean) -> Unit = {},
     searchRequestId: Int = 0,
@@ -206,6 +208,7 @@ fun HomePage(
 
     // --- 1. 手势与动画状态 ---
     val offsetY = remember { Animatable(0f) }
+    var lastHandledOpenCourseRequestId by rememberSaveable { mutableLongStateOf(0L) }
     val maxOffsetPx = with(LocalDensity.current) { 600.dp.toPx() }
 
     // 触发阈值：约 100dp
@@ -214,19 +217,40 @@ fun HomePage(
     // 提升 listState，用于精确判断列表是否到达顶部
     val listState = rememberLazyListState()
 
-    val progress = (offsetY.value / maxOffsetPx).coerceIn(0f, 1f)
+    val progress = if (courseFeatureEnabled) (offsetY.value / maxOffsetPx).coerceIn(0f, 1f) else 0f
 
-    LaunchedEffect(offsetY.value) {
-        onScheduleExpandedChange(offsetY.value > 0)
+    LaunchedEffect(courseFeatureEnabled) {
+        if (!courseFeatureEnabled && offsetY.value != 0f) {
+            offsetY.snapTo(0f)
+        }
+    }
+
+    LaunchedEffect(openCourseRequestId, courseFeatureEnabled) {
+        if (
+            openCourseRequestId > 0L &&
+            openCourseRequestId != lastHandledOpenCourseRequestId
+        ) {
+            lastHandledOpenCourseRequestId = openCourseRequestId
+            if (!courseFeatureEnabled) return@LaunchedEffect
+            offsetY.animateTo(
+                targetValue = maxOffsetPx,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
+            )
+        }
+    }
+
+    LaunchedEffect(offsetY.value, courseFeatureEnabled) {
+        onScheduleExpandedChange(courseFeatureEnabled && offsetY.value > 0)
         onScheduleProgressChange(progress)
-        onScheduleOffsetChange(offsetY.value)
+        onScheduleOffsetChange(if (courseFeatureEnabled) offsetY.value else 0f)
     }
 
     // === 核心修改：NestedScrollConnection ===
-    val nestedScrollConnection = remember(currentTab) {
+    val nestedScrollConnection = remember(currentTab, courseFeatureEnabled) {
         object : NestedScrollConnection {
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (!courseFeatureEnabled) return Offset.Zero
                 if (offsetY.value > 0f) {
                     val newOffset = (offsetY.value + available.y).coerceIn(0f, maxOffsetPx)
                     if (newOffset != offsetY.value) {
@@ -238,6 +262,7 @@ fun HomePage(
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (!courseFeatureEnabled) return Offset.Zero
                 if (currentTab != 0) return Offset.Zero
 
                 val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
@@ -253,6 +278,7 @@ fun HomePage(
 
             // === 关键修改：分区域判断意图 ===
             override suspend fun onPreFling(available: Velocity): Velocity {
+                if (!courseFeatureEnabled) return Velocity.Zero
                 if (offsetY.value > 0f) {
                     val target = when {
                         // 1. 速度优先 (降低阈值到 300f，轻轻一划就能触发)
@@ -285,6 +311,7 @@ fun HomePage(
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (!courseFeatureEnabled) return Velocity.Zero
                 if (offsetY.value > 0f) {
                     // 同步 onPreFling 的逻辑，确保双重保险
                     val target = if (offsetY.value < (maxOffsetPx / 2)) {
@@ -354,28 +381,31 @@ fun HomePage(
                 // 处理在课表区域直接触摸滑动的逻辑
                 .draggable(
                     state = rememberDraggableState { delta ->
-                        if (offsetY.value > 0) {
+                        if (courseFeatureEnabled && offsetY.value > 0) {
                             val newOffset = (offsetY.value + delta).coerceIn(0f, maxOffsetPx)
                             scope.launch { offsetY.snapTo(newOffset) }
                         }
                     },
+                    enabled = courseFeatureEnabled,
                     orientation = Orientation.Vertical,
                     onDragStopped = { velocity ->
-                        // === 关键修改：Draggable 的松手逻辑同步 ===
-                        val target = when {
-                            velocity > 300f -> maxOffsetPx
-                            velocity < -300f -> 0f
-                            // 慢速松手判断：
-                            offsetY.value < (maxOffsetPx / 2) -> {
-                                if (offsetY.value > snapThresholdPx) maxOffsetPx else 0f
+                        if (courseFeatureEnabled) {
+                            // === 关键修改：Draggable 的松手逻辑同步 ===
+                            val target = when {
+                                velocity > 300f -> maxOffsetPx
+                                velocity < -300f -> 0f
+                                // 慢速松手判断：
+                                offsetY.value < (maxOffsetPx / 2) -> {
+                                    if (offsetY.value > snapThresholdPx) maxOffsetPx else 0f
+                                }
+                                else -> {
+                                    if (offsetY.value < (maxOffsetPx - snapThresholdPx)) 0f else maxOffsetPx
+                                }
                             }
-                            else -> {
-                                if (offsetY.value < (maxOffsetPx - snapThresholdPx)) 0f else maxOffsetPx
-                            }
-                        }
 
-                        scope.launch {
-                            offsetY.animateTo(target, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                            scope.launch {
+                                offsetY.animateTo(target, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                            }
                         }
                     }
                 )
@@ -497,7 +527,7 @@ fun HomePage(
 
                             // 日期卡片
                             item {
-                                val isToday = uiState.selectedDate == LocalDate.now()
+                                val isToday = uiState.selectedDate == uiState.today
                                 val weatherData = uiState.weatherData
                                 val topBaseColor = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                 Card(
@@ -533,7 +563,7 @@ fun HomePage(
                                                 .weight(0.2f)
                                                 .fillMaxWidth()
                                                 .background(topBaseColor)
-                                                .clickable { viewModel.updateSelectedDate(LocalDate.now()) }
+                                                .clickable { viewModel.updateSelectedDate(uiState.today) }
                                         ) {
                                             if (weatherData != null) {
                                                 Row(
@@ -585,7 +615,7 @@ fun HomePage(
                                                         indication = null
                                                     ) {
                                                         haptics.selection()
-                                                        viewModel.updateSelectedDate(LocalDate.now())
+                                                        viewModel.updateSelectedDate(uiState.today)
                                                     }
                                                 )
                                             Text("${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
@@ -597,16 +627,17 @@ fun HomePage(
                             if (!serviceEnabled) item { PermissionWarningCard(Icons.Default.Warning, "无障碍服务未开启", { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }) }) }
                             if (!notificationEnabled) item { PermissionWarningCard(Icons.Default.NotificationsOff, "通知权限未开启", { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply { putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName); flags = Intent.FLAG_ACTIVITY_NEW_TASK }) }) }
 
-                            item { SectionHeader(if (uiState.selectedDate == LocalDate.now()) "今日安排" else "${uiState.selectedDate.monthValue}月${uiState.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
+                            item { SectionHeader(if (uiState.selectedDate == uiState.today) "今日安排" else "${uiState.selectedDate.monthValue}月${uiState.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
 
                             if (todayEvents.isEmpty()) {
-                                val emptyText = if (todaySearchQuery.isBlank()) "下滑以打开课表" else "未找到相关日程"
+                                val emptyText = if (todaySearchQuery.isBlank()) "今日暂无日程" else "未找到相关日程"
                                 item { Text(emptyText, modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
                             } else {
                                 items(todayEvents, key = { "today_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
                                         item = item,
                                         isRevealed = uiState.revealedItemKey == item.stableKey,
+                                        timeRefreshToken = uiState.timeRefreshToken,
                                         onExpand = { viewModel.onRevealItem(item.stableKey) },
                                         onCollapse = { viewModel.onRevealItem(null) },
                                         onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
@@ -620,12 +651,13 @@ fun HomePage(
                                 }
                             }
 
-                            if (uiState.selectedDate == LocalDate.now() && tomorrowEvents.isNotEmpty()) {
+                            if (uiState.selectedDate == uiState.today && tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
                                 items(tomorrowEvents, key = { "tomorrow_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
                                         item = item,
                                         isRevealed = uiState.revealedItemKey == item.stableKey,
+                                        timeRefreshToken = uiState.timeRefreshToken,
                                         onExpand = { viewModel.onRevealItem(item.stableKey) },
                                         onCollapse = { viewModel.onRevealItem(null) },
                                         onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },

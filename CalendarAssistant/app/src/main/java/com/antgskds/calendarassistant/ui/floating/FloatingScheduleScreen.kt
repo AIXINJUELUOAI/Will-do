@@ -111,8 +111,10 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.res.painterResource
 import com.antgskds.calendarassistant.R
 import androidx.compose.ui.unit.Density
@@ -1133,13 +1135,24 @@ fun CompactTextField(
     enabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value, selection = TextRange(value.length))) }
+
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(value, selection = TextRange(value.length))
+        }
+    }
+
     // 聚焦时边框高亮变色，保持和原生一样的交互体验
     val borderColor = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     val borderWidth = if (isFocused) 1.5.dp else 1.dp
 
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = fieldValue,
+        onValueChange = { next ->
+            fieldValue = next
+            if (next.text != value) onValueChange(next.text)
+        },
         singleLine = singleLine,
         maxLines = maxLines,
         enabled = enabled,
@@ -1154,7 +1167,7 @@ fun CompactTextField(
                     .padding(horizontal = 10.dp, vertical = 8.dp), // 极小的内边距
                 contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart
             ) {
-                if (value.isEmpty()) {
+                if (fieldValue.text.isEmpty()) {
                     Text(placeholder, style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)))
                 }
                 innerTextField()
@@ -1382,7 +1395,7 @@ fun ScheduleCard(
     var draftLocation by remember { mutableStateOf(item.location) }
     var draftDescription by remember { mutableStateOf(stripSourceImageMarkers(item.description)) }
 
-    LaunchedEffect(item.stableKey, item.startTS, item.endTS, item.state) {
+    LaunchedEffect(item.stableKey, item.title, item.startTS, item.endTS, item.location, item.description, item.tag, item.color, item.state) {
         if (!isEditing && !isSaving) {
             draftTitle = item.title
             draftStartDate = item.startDate
@@ -1438,7 +1451,7 @@ fun ScheduleCard(
     val contentColor = if (isExpired) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation = if (isInProgress) 6.dp else 2.dp
 
-    val model = remember(renderEvent.description, renderEvent.tag, renderEvent.state, renderEvent.startTS, renderEvent.endTS) {
+    val model = remember(renderEvent.title, renderEvent.location, renderEvent.description, renderEvent.tag, renderEvent.state, renderEvent.startTS, renderEvent.endTS) {
         EventTimelinePresenter.present(context, renderEvent).renderModel
     }
 

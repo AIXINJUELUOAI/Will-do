@@ -21,7 +21,7 @@ class ReminderReconcileReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val app = context.applicationContext as? App
-                app?.calendarCenter?.reconcileNotificationsFromStore()
+                app?.reminderCenter?.reconcileAllNow()
             } catch (e: Exception) {
                 Log.e(TAG, "Reminder reconcile failed", e)
             } finally {

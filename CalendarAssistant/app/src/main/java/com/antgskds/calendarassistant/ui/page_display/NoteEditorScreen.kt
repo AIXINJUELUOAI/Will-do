@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatStrikethrough
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.BorderAll
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PushPin
@@ -650,6 +651,7 @@ private fun toolsForCategory(category: NoteToolbarCategory): List<NoteToolbarIte
         NoteToolbarItem(label = "S", icon = Icons.Default.FormatStrikethrough, textStyle = NoteTextStyle.STRIKE),
         NoteToolbarItem(label = "引用", icon = Icons.Default.FormatQuote, paragraphStyle = NoteParagraphStyle.QUOTE),
         NoteToolbarItem(label = "代码", icon = Icons.Default.Code, paragraphStyle = NoteParagraphStyle.CODE),
+        NoteToolbarItem(label = "分割线", icon = Icons.Default.HorizontalRule, isDivider = true),
         NoteToolbarItem(label = "无序", icon = Icons.AutoMirrored.Filled.FormatListBulleted, listStyle = NoteListStyle.BULLET),
         NoteToolbarItem(label = "有序", icon = Icons.Default.FormatListNumbered, listStyle = NoteListStyle.ORDERED)
     )
@@ -657,8 +659,7 @@ private fun toolsForCategory(category: NoteToolbarCategory): List<NoteToolbarIte
         NoteToolbarItem(label = "待办", icon = Icons.Default.CheckBox, isTodo = true),
         NoteToolbarItem(label = "图片", icon = Icons.Default.Image, isImage = true),
         NoteToolbarItem(label = "附件", icon = Icons.Default.Description, isAttachment = true),
-        NoteToolbarItem(label = "分割线", icon = Icons.Default.HorizontalRule, isDivider = true),
-        NoteToolbarItem(label = "表格", isTable = true)
+        NoteToolbarItem(label = "表格", icon = Icons.Default.BorderAll, isTable = true)
     )
 }
 

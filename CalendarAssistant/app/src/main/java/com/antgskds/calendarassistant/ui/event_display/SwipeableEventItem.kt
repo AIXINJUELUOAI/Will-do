@@ -45,6 +45,7 @@ import kotlin.math.roundToInt
 fun SwipeableEventItem(
     item: ScheduleDisplayItem,
     isRevealed: Boolean,
+    timeRefreshToken: Long = 0L,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
     onDelete: () -> Unit,
@@ -83,7 +84,7 @@ fun SwipeableEventItem(
         (-offsetX.value).coerceIn(0f, actionMenuWidthPx).toDp()
     }
 
-    val isExpired = remember(item.endTS) {
+    val isExpired = remember(item.endTS, timeRefreshToken) {
         try {
             val endDateTime = LocalDateTime.of(item.endDate, item.endLocalTime)
             endDateTime.isBefore(LocalDateTime.now())

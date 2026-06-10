@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.data.query
 
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
+import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
@@ -38,7 +39,10 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         developerOptionsEnabled: Boolean?,
         developerOptionsDisabledAtMillis: Long?,
         homeBottomItems: List<String>?,
-        homeStartPageKey: String?
+        homeStartPageKey: String?,
+        weatherLocationStabilityRequiredHits: Int?,
+        liveNotificationTemplateMode: String?,
+        courseFeatureEnabled: Boolean?
     ): MySettings {
         var updated = current
         if (showTomorrow != null) updated = updated.copy(showTomorrowEvents = showTomorrow)
@@ -72,6 +76,13 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (developerOptionsDisabledAtMillis != null) updated = updated.copy(developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis)
         if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
         if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)
+        if (weatherLocationStabilityRequiredHits != null) {
+            updated = updated.copy(weatherLocationStabilityRequiredHits = weatherLocationStabilityRequiredHits.coerceIn(1, 3))
+        }
+        if (liveNotificationTemplateMode != null) {
+            updated = updated.copy(liveNotificationTemplateMode = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode))
+        }
+        if (courseFeatureEnabled != null) updated = updated.copy(courseFeatureEnabled = courseFeatureEnabled)
 
         val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems)
         val sanitizedStartPage = sanitizeHomeStartPageKey(updated.homeStartPageKey, sanitizedBottomItems)

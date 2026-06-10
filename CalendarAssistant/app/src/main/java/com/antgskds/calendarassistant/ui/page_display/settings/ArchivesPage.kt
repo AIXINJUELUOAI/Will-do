@@ -47,7 +47,7 @@ fun ArchivesPage(
             .toSortedMap(reverseOrder())
     }
 
-    val currentYear = remember { LocalDate.now().year }
+    val currentYear = uiState.today.year
 
     // 最外层容器
     Box(modifier = Modifier.fillMaxSize()) {
@@ -122,6 +122,7 @@ fun ArchivesPage(
                                 SwipeableEventItem(
                                     item = displayItem,
                                     isRevealed = false,
+                                    timeRefreshToken = uiState.timeRefreshToken,
                                     onExpand = {},
                                     onCollapse = {},
                                     onDelete = { event.id?.let { id -> viewModel.deleteArchivedEvent(id) } },

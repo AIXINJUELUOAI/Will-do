@@ -358,7 +358,7 @@ fun AddEventDialog(
             predictiveBackEnabled = settings.predictiveBackEnabled && !isChildDialogVisible,
             backHandlerEnabled = !isChildDialogVisible,
             contentAlignment = Alignment.Center,
-            contentPadding = WindowInsets.navigationBars.asPaddingValues()
+            contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),

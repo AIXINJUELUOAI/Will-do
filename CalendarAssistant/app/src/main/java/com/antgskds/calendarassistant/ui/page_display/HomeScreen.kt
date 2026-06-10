@@ -73,6 +73,7 @@ fun HomeScreen(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
+    openCourseRequestId: Long = 0L,
     selectedPageKey: String = HomeEntryKey.TODAY,
     onSelectedPageKeyChange: (String) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
@@ -374,8 +375,6 @@ fun HomeScreen(
         openAddEventDialog()
     }
 
-    
-
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val cardFloatingBarOffset =
         IntegratedFloatingBarHeight +
@@ -417,6 +416,8 @@ fun HomeScreen(
                         currentTab = selectedTab,
                         uiSize = settings.uiSize,
                         pickupTimestamp = pickupTimestamp,
+                        openCourseRequestId = openCourseRequestId,
+                        courseFeatureEnabled = settings.courseFeatureEnabled,
                         isActionExpanded = isActionExpanded,
                         onActionExpandedChange = { isActionExpanded = it },
                         searchRequestId = searchRequestId,
