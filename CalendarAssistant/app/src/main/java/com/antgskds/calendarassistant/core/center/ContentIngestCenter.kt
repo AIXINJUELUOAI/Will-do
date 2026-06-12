@@ -19,7 +19,8 @@ import kotlinx.coroutines.launch
 class ContentIngestCenter(
     private val importCenter: ImportCenter,
     private val domainEventBus: DomainEventBus,
-    private val appScope: CoroutineScope
+    private val appScope: CoroutineScope,
+    private val notificationCenter: NotificationCenter? = null
 ) : IngestCommandApi {
     private sealed interface IngestTask {
         val traceId: String
@@ -216,6 +217,7 @@ class ContentIngestCenter(
                 dedupedCount = dedupedCount,
                 createdCount = created.size
             )
+            notificationCenter?.showCreatedEventResultNotifications(task.sourceType, created)
         } else {
             Log.d(
                 "ContentIngestCenter",

@@ -4,7 +4,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -73,6 +77,9 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.filled.LocationOn
@@ -138,8 +145,13 @@ import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteParagraph
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
+import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -161,12 +173,14 @@ enum class FloatingInputMode { SCHEDULE, NOTE }
 @Composable
 fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
-    notes: List<NoteEntity> = emptyList(),
+    quickMemos: List<QuickMemoEntity> = emptyList(),
+    voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
     expandSide: String = "RIGHT",
     onClose: () -> Unit,
-    onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
+    onManualInput: (text: String, isQuickMemo: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
     onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
@@ -175,9 +189,14 @@ fun FloatingScheduleScreen(
     pendingStatusKeys: Set<String> = emptySet(),
     undoPendingLabel: String? = null,
     onUndoAction: () -> Unit = {},
-    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
-    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
+    onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onConfirmVoiceCapture: (Boolean) -> Unit = {},
+    onStartVoiceCapture: () -> Unit = {},
+    onStartLocalVoiceCapture: () -> Unit = {},
+    onStopVoiceCapture: () -> Unit = {},
+    onToggleAudioPlayback: (String?) -> Unit = {},
     onLoadingChange: (Boolean) -> Unit = {},
     hapticEnabled: Boolean = true
 ) {
@@ -217,6 +236,12 @@ fun FloatingScheduleScreen(
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
     var currentMode by remember { mutableStateOf(FloatingInputMode.SCHEDULE) }
+
+    LaunchedEffect(voiceCaptureState.status) {
+        if (voiceCaptureState.isActive) {
+            currentMode = FloatingInputMode.NOTE
+        }
+    }
 
     // 背景透明度动画
     val bgAlpha by animateFloatAsState(
@@ -263,7 +288,8 @@ fun FloatingScheduleScreen(
         ) {
             TimeWheelList(
                 scheduleItems = scheduleItems,
-                notes = notes,
+                quickMemos = quickMemos,
+                audioPlaybackState = audioPlaybackState,
                 weatherData = weatherData,
                 weatherForecastRange = weatherForecastRange,
                 currentMode = currentMode,
@@ -276,11 +302,12 @@ fun FloatingScheduleScreen(
                 onArchiveScheduleItem = onArchiveScheduleItem,
                 onStatusAction = onStatusAction,
                 pendingStatusKeys = pendingStatusKeys,
-                onToggleNoteTodo = onToggleNoteTodo,
-                onDeleteNote = { note, onComplete ->
-                    onDeleteNote(note, onComplete)
+                onToggleQuickMemoTodo = onToggleQuickMemoTodo,
+                onDeleteQuickMemo = { memo, onComplete ->
+                    onDeleteQuickMemo(memo, onComplete)
                 },
-                onSaveNote = onSaveNote,
+                onSaveQuickMemo = onSaveQuickMemo,
+                onToggleAudioPlayback = onToggleAudioPlayback,
                 onRequestDatePicker = { initialDate, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
                 },
@@ -306,6 +333,11 @@ fun FloatingScheduleScreen(
                 modifier = Modifier,
                 text = manualInputText,
                 onTextChange = { manualInputText = it },
+                voiceCaptureState = voiceCaptureState,
+                onConfirmVoiceCapture = onConfirmVoiceCapture,
+                onStartVoiceCapture = onStartVoiceCapture,
+                onStartLocalVoiceCapture = onStartLocalVoiceCapture,
+                onStopVoiceCapture = onStopVoiceCapture,
                 onManualSubmit = { text ->
                     if (text.isNotBlank()) {
                         isLoading = true
@@ -350,6 +382,11 @@ fun BottomInteractionArea(
     modifier: Modifier = Modifier,
     text: String,
     onTextChange: (String) -> Unit,
+    voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
+    onConfirmVoiceCapture: (Boolean) -> Unit = {},
+    onStartVoiceCapture: () -> Unit = {},
+    onStartLocalVoiceCapture: () -> Unit = {},
+    onStopVoiceCapture: () -> Unit = {},
     onManualSubmit: (String) -> Unit,
     onPickImage: () -> Unit,
     onSwipeUpClose: () -> Unit,
@@ -364,6 +401,7 @@ fun BottomInteractionArea(
 
     val isNote = currentMode == FloatingInputMode.NOTE
     val activeColor = primaryColor
+    val voiceActive = voiceCaptureState.isActive
 
     Column(
         modifier = modifier
@@ -405,6 +443,15 @@ fun BottomInteractionArea(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (voiceActive) {
+                        VoiceCaptureContent(
+                            state = voiceCaptureState,
+                            activeColor = activeColor,
+                            onConfirm = onConfirmVoiceCapture,
+                            onStop = onStopVoiceCapture,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
                     // 1. 左侧：日程输入图标
                     Box(
                         modifier = Modifier
@@ -420,7 +467,7 @@ fun BottomInteractionArea(
                         if (isNote) {
                             Icon(
                                 imageVector = Icons.Outlined.StickyNote2,
-                                contentDescription = "便签",
+                                contentDescription = "随口记",
                                 tint = activeColor,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -455,7 +502,7 @@ fun BottomInteractionArea(
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (text.isEmpty()) {
                                     Text(
-                                        text = if (isNote) "记一条便签..." else "一句话安排日程...",
+                                        text = if (isNote) "记一条随口记..." else "一句话安排日程...",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 15.sp
                                     )
@@ -494,31 +541,67 @@ fun BottomInteractionArea(
                             }
                         } else {
                             val isTextNotBlank = text.isNotBlank()
+                            val showVoiceButton = !isTextNotBlank
                             val sendBtnContainerColor by animateColorAsState(
-                                targetValue = if (isTextNotBlank) activeColor else activeColor.copy(alpha = 0.15f),
+                                targetValue = if (isTextNotBlank || showVoiceButton) activeColor else activeColor.copy(alpha = 0.15f),
                                 animationSpec = tween(150), label = "send_bg"
                             )
                             val sendBtnIconColor by animateColorAsState(
-                                targetValue = if (isTextNotBlank) Color.White else activeColor.copy(alpha = 0.6f),
+                                targetValue = if (isTextNotBlank || showVoiceButton) Color.White else activeColor.copy(alpha = 0.6f),
                                 animationSpec = tween(150), label = "send_icon"
                             )
 
+                            if (showVoiceButton) {
+                                Surface(
+                                    onClick = {
+                                        haptics.confirm()
+                                        onStartLocalVoiceCapture()
+                                    },
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "本",
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+
                             Surface(
-                                onClick = { if (isTextNotBlank) { haptics.confirm(); onManualSubmit(text) } },
+                                onClick = {
+                                    when {
+                                        isTextNotBlank -> {
+                                            haptics.confirm()
+                                            onManualSubmit(text)
+                                        }
+                                        showVoiceButton -> {
+                                            haptics.confirm()
+                                            onStartVoiceCapture()
+                                        }
+                                    }
+                                },
                                 shape = CircleShape,
                                 color = sendBtnContainerColor,
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Rounded.ArrowUpward,
-                                        contentDescription = "发送",
+                                        imageVector = if (showVoiceButton) Icons.Rounded.Mic else Icons.Rounded.ArrowUpward,
+                                        contentDescription = if (showVoiceButton) "开始录音" else "发送",
                                         tint = sendBtnIconColor,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -531,7 +614,8 @@ fun BottomInteractionArea(
 @Composable
 fun TimeWheelList(
     scheduleItems: List<ScheduleDisplayItem>,
-    notes: List<NoteEntity> = emptyList(),
+    quickMemos: List<QuickMemoEntity> = emptyList(),
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
@@ -542,9 +626,10 @@ fun TimeWheelList(
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
     onStatusAction: (ScheduleDisplayItem) -> Unit = {},
     pendingStatusKeys: Set<String> = emptySet(),
-    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
-    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
+    onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onToggleAudioPlayback: (String?) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
     hapticEnabled: Boolean = true
@@ -586,17 +671,19 @@ fun TimeWheelList(
                 }
             }
             if (currentMode == FloatingInputMode.NOTE) {
-                items(notes, key = { "note_${it.id ?: it.hashCode()}" }) { note ->
+                items(quickMemos, key = { "quick_memo_${it.id ?: it.hashCode()}" }) { memo ->
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = cardAlignment
                     ) {
-                        FloatingNoteCard(
-                            note = note,
+                        FloatingQuickMemoCard(
+                            memo = memo,
+                            audioPlaybackState = audioPlaybackState,
                             modifier = cardModifier,
-                            onToggleTodo = { paragraphId -> onToggleNoteTodo(note, paragraphId) },
-                            onDelete = { onDeleteNote(note) {} },
-                            onSave = { title, body -> onSaveNote(note, title, body) {} },
+                            onToggleTodo = { onToggleQuickMemoTodo(memo) },
+                            onDelete = { onDeleteQuickMemo(memo) {} },
+                            onSave = { body -> onSaveQuickMemo(memo, body) {} },
+                            onToggleAudioPlayback = onToggleAudioPlayback,
                             expandFromLeft = expandFromLeft,
                             hapticEnabled = hapticEnabled
                         )
@@ -629,28 +716,26 @@ fun TimeWheelList(
 }
 
 @Composable
-private fun FloatingNoteCard(
-    note: NoteEntity,
+private fun FloatingQuickMemoCard(
+    memo: QuickMemoEntity,
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     modifier: Modifier = Modifier,
-    onToggleTodo: (String) -> Unit,
+    onToggleTodo: () -> Unit,
     onDelete: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onSave: (String) -> Unit,
+    onToggleAudioPlayback: (String?) -> Unit = {},
     expandFromLeft: Boolean = false,
     hapticEnabled: Boolean = true
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
-    val document = remember(note.documentJson, note.plainText) { note.document() }
     var isExpanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
-    var draftTitle by remember(note.id, note.title) { mutableStateOf(note.title) }
-    var draftBody by remember(note.id, note.documentJson) { mutableStateOf(document.floatingText()) }
-    val body = remember(document) {
-        document.paragraphs
-            .filter { document.isFloatingPlainTextLine(it) }
-            .map { it.text.trim() }
-            .filter { it.isNotBlank() }
-            .take(3)
-    }
+    var draftBody by remember(memo.id, memo.updatedAt) { mutableStateOf(memo.bodyText) }
+    val isTodo = memo.todoState == QuickMemoTodoState.ACTIVE || memo.todoState == QuickMemoTodoState.COMPLETED
+    val isCompleted = memo.todoState == QuickMemoTodoState.COMPLETED
+    val isVoice = memo.type == QuickMemoType.VOICE
+    val isPlaying = memo.audioPath != null && audioPlaybackState.audioPath == memo.audioPath && audioPlaybackState.isPlaying
+    val displayBody = memo.bodyText.ifBlank { floatingQuickMemoFallbackText(memo) }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -680,8 +765,7 @@ private fun FloatingNoteCard(
                     color = MaterialTheme.colorScheme.primary,
                     onClick = {
                         haptics.click()
-                        draftTitle = note.title
-                        draftBody = note.document().floatingText()
+                        draftBody = memo.bodyText
                         isExpanded = true
                         isEditing = true
                         scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
@@ -698,7 +782,7 @@ private fun FloatingNoteCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .then(if (!isEditing) Modifier.pointerInput(note.id) {
+                .then(if (!isEditing) Modifier.pointerInput(memo.id) {
                 detectHorizontalDragGestures(
                     onDragStart = { scope.launch { offsetX.stop() } },
                     onDragEnd = {
@@ -748,37 +832,82 @@ private fun FloatingNoteCard(
                         if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                         else if (!isEditing) isExpanded = !isExpanded
                     }
-                },
+            },
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = if (isTodo) Color(0xFFFFF8E1).copy(alpha = 0.74f) else MaterialTheme.colorScheme.surface,
             shadowElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                if (isTodo) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(92.dp)
+                            .background(Color(0xFFF2B705))
+                    )
+                }
+                Column(modifier = Modifier.padding(horizontal = 16.dp).weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = note.displayTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (memo.type == QuickMemoType.VOICE) {
+                            Icon(Icons.Rounded.Mic, "语音随口记", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Text(
+                            text = if (memo.type == QuickMemoType.VOICE) "语音随口记" else "随口记",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (isTodo) {
+                            FloatingQuickMemoTodoLabel(done = isCompleted)
+                        }
+                    }
+                    if (isTodo) {
+                        FloatingQuickMemoTodoMark(checked = isCompleted) {
+                            haptics.confirm()
+                            onToggleTodo()
+                        }
+                    }
                 }
-                Row(
-                    modifier = Modifier.padding(bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.updatedAt)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (isVoice && !isExpanded && !isEditing) {
+                    FloatingVoiceMemoCollapsedRow(
+                        isPlaying = isPlaying,
+                        onWaveClick = { isExpanded = true },
+                        onPlayClick = {
+                            haptics.click()
+                            onToggleAudioPlayback(memo.audioPath)
+                        },
+                        modifier = Modifier.padding(bottom = 10.dp)
                     )
+                } else {
+                    Row(
+                        modifier = Modifier.padding(bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(memo.updatedAt)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (isVoice) {
+                            Spacer(Modifier.width(10.dp))
+                            FloatingVoicePlayButton(isPlaying = isPlaying, onClick = {
+                                haptics.click()
+                                onToggleAudioPlayback(memo.audioPath)
+                            })
+                        }
+                    }
                 }
                 AnimatedVisibility(
                     visible = isExpanded,
@@ -788,60 +917,220 @@ private fun FloatingNoteCard(
                     Column(modifier = Modifier.padding(bottom = 12.dp)) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
                         Spacer(Modifier.height(8.dp))
-                        AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editing ->
+                        AnimatedContent(targetState = isEditing, label = "quick_memo_edit_transition") { editing ->
                             if (editing) {
                                 Column {
-                                    CompactTextField(value = draftTitle, onValueChange = { draftTitle = it }, placeholder = "标题", singleLine = true, maxLines = 1)
-                                    Spacer(Modifier.height(8.dp))
                                     CompactTextField(value = draftBody, onValueChange = { draftBody = it }, placeholder = "正文", singleLine = false, maxLines = 6)
                                     Spacer(Modifier.height(8.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                         FloatingCompactTextButton(
                                             text = "取消",
-                                            onClick = { draftTitle = note.title; draftBody = note.document().floatingText(); isEditing = false }
+                                            onClick = { draftBody = memo.bodyText; isEditing = false }
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         FloatingCompactPrimaryButton(
                                             text = "保存",
-                                            onClick = { haptics.confirm(); onSave(draftTitle.trim().ifBlank { "无标题" }, draftBody); isEditing = false }
+                                            onClick = { haptics.confirm(); onSave(draftBody); isEditing = false }
                                         )
                                     }
                                 }
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    body.forEach { line -> Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                                    if (body.isEmpty()) Text("空白便签", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        text = displayBody,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textDecoration = if (isCompleted) TextDecoration.LineThrough else null
+                                    )
                                 }
                             }
                         }
                     }
                 }
                 if (!isExpanded) Spacer(Modifier.height(12.dp))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun FloatingNoteProgressLabel(text: String, textColor: Color, backgroundColor: Color) {
-    Box(
-        modifier = Modifier
-            .background(backgroundColor, RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        contentAlignment = Alignment.Center
+private fun VoiceCaptureContent(
+    state: QuickMemoVoiceCaptureState,
+    activeColor: Color,
+    onConfirm: (Boolean) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = textColor,
-            fontWeight = FontWeight.Bold
-        )
+        when (state.status) {
+            QuickMemoVoiceCaptureStatus.RECORDING -> {
+                FloatingWaveform(modifier = Modifier.weight(1f), color = activeColor)
+                Surface(
+                    onClick = onStop,
+                    shape = CircleShape,
+                    color = activeColor,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = "停止录音", tint = Color.White, modifier = Modifier.size(21.dp))
+                    }
+                }
+            }
+            QuickMemoVoiceCaptureStatus.CONFIRMING -> {
+                FloatingWaveform(modifier = Modifier.weight(1f), color = activeColor)
+                Surface(
+                    onClick = { onConfirm(true) },
+                    shape = CircleShape,
+                    color = Color(0xFFF2B705).copy(alpha = 0.9f),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = "保存为待办", tint = Color.White, modifier = Modifier.size(21.dp))
+                    }
+                }
+                Surface(
+                    onClick = { onConfirm(false) },
+                    shape = CircleShape,
+                    color = activeColor,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = "保存", tint = Color.White, modifier = Modifier.size(21.dp))
+                    }
+                }
+            }
+            QuickMemoVoiceCaptureStatus.SAVING -> {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = activeColor)
+                Text("保存中...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            QuickMemoVoiceCaptureStatus.SAVED -> {
+                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = activeColor, modifier = Modifier.size(22.dp))
+                Text("已保存到随口记", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            QuickMemoVoiceCaptureStatus.TOO_SHORT -> {
+                Text("录音太短", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+            QuickMemoVoiceCaptureStatus.ERROR -> {
+                Text(state.message.ifBlank { "录音失败" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+            QuickMemoVoiceCaptureStatus.IDLE -> Unit
+        }
     }
 }
 
 @Composable
-private fun FloatingTodoMark(checked: Boolean, onClick: () -> Unit) {
-    val accent = if (checked) Color.Gray else MaterialTheme.colorScheme.primary
+private fun FloatingWaveform(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
+    val transition = rememberInfiniteTransition(label = "floating_waveform")
+    Row(
+        modifier = modifier.height(28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        repeat(13) { index ->
+            val phase by transition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 560 + index * 22),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "wave_$index"
+            )
+            val height = (8 + ((index % 5) + 1) * 3).dp * phase.coerceIn(0.35f, 1f)
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(height)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(color.copy(alpha = 0.42f + 0.38f * phase))
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingVoiceMemoCollapsedRow(
+    isPlaying: Boolean,
+    onWaveClick: () -> Unit,
+    onPlayClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            onClick = onWaveClick,
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+            modifier = Modifier
+                .weight(1f)
+                .height(34.dp)
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                FloatingWaveform(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        FloatingVoicePlayButton(isPlaying = isPlaying, onClick = onPlayClick)
+    }
+}
+
+@Composable
+private fun FloatingVoicePlayButton(
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.size(34.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (isPlaying) "暂停语音" else "播放语音",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingQuickMemoTodoLabel(done: Boolean) {
+    Text(
+        text = if (done) "已完成" else "待办",
+        modifier = Modifier
+            .background(Color(0xFFF2B705).copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = Color(0xFF8A6200),
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun FloatingQuickMemoTodoMark(checked: Boolean, onClick: () -> Unit) {
+    val accent = if (checked) Color.Gray else Color(0xFFF2B705)
     val shape = RoundedCornerShape(4.dp)
     Box(
         modifier = Modifier
@@ -866,6 +1155,16 @@ private fun FloatingTodoMark(checked: Boolean, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+private fun floatingQuickMemoFallbackText(memo: QuickMemoEntity): String {
+    return when {
+        memo.type != QuickMemoType.VOICE -> "空白随口记"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PENDING -> "转写中"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PROCESSING -> "转写中"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED -> "转写失败，可重试"
+        else -> "仅音频"
     }
 }
 

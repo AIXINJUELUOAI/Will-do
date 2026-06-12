@@ -9,10 +9,10 @@ import kotlin.math.roundToInt
 object WeatherRiskAnalyzer {
     fun analyze(hourly: List<WeatherHourlyForecast>, lookaheadHours: Int): List<WeatherRiskAlert> {
         val selectedByCategory = linkedMapOf<String, RiskCandidate>()
-        hourly
-            .take(lookaheadHours.coerceIn(1, 168))
+        val selectedHours = hourly.take(lookaheadHours.coerceIn(1, 168))
+        selectedHours
             .forEachIndexed { index, hour ->
-                val candidate = riskForHour(hour, index) ?: return@forEachIndexed
+                val candidate = riskForHour(hour, index, selectedHours) ?: return@forEachIndexed
                 selectedByCategory.putIfAbsent(candidate.category, candidate)
             }
         return selectedByCategory.values
@@ -20,12 +20,13 @@ object WeatherRiskAnalyzer {
             .map { it.alert }
     }
 
-    private fun riskForHour(hour: WeatherHourlyForecast, index: Int): RiskCandidate? {
+    private fun riskForHour(hour: WeatherHourlyForecast, index: Int, hourly: List<WeatherHourlyForecast>): RiskCandidate? {
         val text = hour.text
         val temp = hour.temp.toIntOrNull()
         val precip = hour.precip.toDoubleOrNull() ?: 0.0
         val pop = hour.pop.toIntOrNull() ?: 0
         val windScaleMax = Regex("\\d+").findAll(hour.windScale).mapNotNull { it.value.toIntOrNull() }.maxOrNull() ?: 0
+        val temperatureDrop = temperatureDropBefore(hourly, index, temp)
 
         val type = when {
             text.contains("高温") || (temp != null && temp >= 35) -> RiskType(
@@ -33,6 +34,23 @@ object WeatherRiskAnalyzer {
                 title = "高温",
                 level = if (temp != null && temp >= 38) "high" else "medium",
                 advice = "请减少长时间户外活动，注意补水和防暑降温。"
+            )
+            text.contains("寒潮") || text.contains("强降温") || temperatureDrop >= STRONG_COOLING_DROP_CELSIUS -> RiskType(
+                category = "cold",
+                title = if (text.contains("寒潮")) "寒潮" else "强降温",
+                level = if (text.contains("寒潮") || temperatureDrop >= SEVERE_COOLING_DROP_CELSIUS) "high" else "medium",
+                advice = "请及时添衣保暖，留意温差变化和出行影响。"
+            )
+            text.contains("低温") || text.contains("寒冷") || text.contains("霜冻") || text.contains("冰冻") || (temp != null && temp <= 0) -> RiskType(
+                category = "cold",
+                title = when {
+                    text.contains("霜冻") -> "霜冻"
+                    text.contains("冰冻") -> "冰冻"
+                    text.contains("寒冷") -> "寒冷"
+                    else -> "低温"
+                },
+                level = if (temp != null && temp <= -5) "high" else "medium",
+                advice = "请做好保暖，注意老人儿童和清晨夜间低温。"
             )
             text.contains("雷") || text.contains("强对流") || text.contains("冰雹") || text.contains("雹") -> RiskType(
                 category = "thunder",
@@ -123,6 +141,15 @@ object WeatherRiskAnalyzer {
         }
     }
 
+    private fun temperatureDropBefore(hourly: List<WeatherHourlyForecast>, index: Int, temp: Int?): Int {
+        if (temp == null || index <= 0) return 0
+        val start = (index - COOLING_LOOKBACK_HOURS).coerceAtLeast(0)
+        val previousMax = hourly.subList(start, index)
+            .mapNotNull { it.temp.toIntOrNull() }
+            .maxOrNull() ?: return 0
+        return previousMax - temp
+    }
+
     private fun detailLine(hour: WeatherHourlyForecast, windScaleMax: Int): String? {
         val details = buildList {
             if (hour.temp.isNotBlank()) add("气温 ${hour.temp}°C")
@@ -167,4 +194,8 @@ object WeatherRiskAnalyzer {
         val severityScore: Int,
         val alert: WeatherRiskAlert
     )
+
+    private const val COOLING_LOOKBACK_HOURS = 6
+    private const val STRONG_COOLING_DROP_CELSIUS = 6
+    private const val SEVERE_COOLING_DROP_CELSIUS = 10
 }

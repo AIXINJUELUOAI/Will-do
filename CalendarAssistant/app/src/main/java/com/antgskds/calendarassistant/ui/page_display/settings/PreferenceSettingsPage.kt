@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStatus
+import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStore
 import com.antgskds.calendarassistant.service.floating.EdgeBarService
 import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
@@ -49,7 +51,9 @@ import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -75,6 +79,7 @@ fun PreferenceSettingsPage(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showSourceCalendarSheet by remember { mutableStateOf(false) }
     var showEventDurationPicker by remember { mutableStateOf(false) }
+    var asrModelStatus by remember { mutableStateOf(QuickMemoAsrModelStore.status(context)) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -104,6 +109,10 @@ fun PreferenceSettingsPage(
             ?: Settings.canDrawOverlays(context)
     }
 
+    fun refreshAsrModelStatus() {
+        asrModelStatus = QuickMemoAsrModelStore.status(context)
+    }
+
     LaunchedEffect(Unit) {
         refreshOverlayPermission()
     }
@@ -112,6 +121,7 @@ fun PreferenceSettingsPage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshOverlayPermission()
+                refreshAsrModelStatus()
                 viewModel.refreshSyncStatus()
                 viewModel.refreshSyncCalendars()
             }
@@ -203,6 +213,22 @@ fun PreferenceSettingsPage(
         } else if (!SmsNotificationListenerService.isEnabled(context)) {
             Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
             SmsNotificationListenerService.requestEnable(context)
+        }
+    }
+
+    val asrModelImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                QuickMemoAsrModelStore.importModelFile(context, uri)
+            }
+            refreshAsrModelStatus()
+            result.fold(
+                onSuccess = { fileName -> showToast("已导入 $fileName", ToastType.SUCCESS) },
+                onFailure = { error -> showToast(error.message ?: "模型导入失败", ToastType.ERROR) }
+            )
         }
     }
 
@@ -559,6 +585,21 @@ fun PreferenceSettingsPage(
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    ActionSettingItem(
+                        title = "语音转写模型",
+                        subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),
+                        value = if (asrModelStatus.ready) "更换" else "导入",
+                        enabled = true,
+                        onClick = { asrModelImportLauncher.launch(arrayOf("*/*")) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
@@ -1342,6 +1383,15 @@ private fun buildCalendarMetaLine(
     }
 }
 
+private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): String {
+    return when {
+        status.ready -> "已导入本地模型，可离线转写"
+        !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
+        !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
+        else -> "缺少 tokens.txt"
+    }
+}
+
 // ... SliderSettingItem 修复并优化 ...
 @Composable
 fun SliderSettingItem(
@@ -1443,12 +1493,13 @@ fun VolumeLongPressSettingItem(
                     Text(text = "无操作", style = cardSubtitleStyle)
                     Text(text = "识屏", style = cardSubtitleStyle)
                     Text(text = "悬浮窗", style = cardSubtitleStyle)
+                    Text(text = "语音", style = cardSubtitleStyle)
                 }
                 Slider(
                     value = action.toFloat(),
                     onValueChange = { onActionChange(it.toInt()) },
-                    valueRange = 0f..2f,
-                    steps = 1
+                    valueRange = 0f..3f,
+                    steps = 2
                 )
             }
         }

@@ -16,9 +16,23 @@ import com.antgskds.calendarassistant.calendar.models.EventAttachment
 import com.antgskds.calendarassistant.calendar.models.EventType
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NotesDao
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoDao
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import java.util.concurrent.Executors
 
-@Database(entities = [Event::class, EventType::class, EventAttachment::class, NoteEntity::class], version = 7, exportSchema = false)
+@Database(
+    entities = [
+        Event::class,
+        EventType::class,
+        EventAttachment::class,
+        NoteEntity::class,
+        QuickMemoEntity::class,
+        QuickMemoSuggestionEntity::class
+    ],
+    version = 8,
+    exportSchema = false
+)
 @TypeConverters(Converters::class)
 abstract class EventsDatabase : RoomDatabase() {
 
@@ -26,6 +40,7 @@ abstract class EventsDatabase : RoomDatabase() {
     abstract fun eventTypesDao(): EventTypesDao
     abstract fun eventAttachmentsDao(): EventAttachmentsDao
     abstract fun notesDao(): NotesDao
+    abstract fun quickMemoDao(): QuickMemoDao
 
     companion object {
         @Volatile
@@ -37,7 +52,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -149,6 +164,52 @@ abstract class EventsDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN pinned_at INTEGER DEFAULT NULL")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_pinned_at ON notes(pinned_at)")
+            }
+        }
+
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS quick_memos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        type TEXT NOT NULL,
+                        body_text TEXT NOT NULL,
+                        audio_path TEXT,
+                        audio_duration_ms INTEGER NOT NULL,
+                        transcription_status TEXT NOT NULL,
+                        analysis_status TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        todo_state TEXT NOT NULL,
+                        todo_pending_until INTEGER,
+                        todo_completed_at INTEGER
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_created_at ON quick_memos(created_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_updated_at ON quick_memos(updated_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_todo_state ON quick_memos(todo_state)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_type ON quick_memos(type)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS quick_memo_suggestions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        quick_memo_id INTEGER NOT NULL,
+                        type TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        candidate_json TEXT NOT NULL,
+                        event_id INTEGER,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        FOREIGN KEY(quick_memo_id) REFERENCES quick_memos(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_quick_memo_id ON quick_memo_suggestions(quick_memo_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_status ON quick_memo_suggestions(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_type ON quick_memo_suggestions(type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_event_id ON quick_memo_suggestions(event_id)")
             }
         }
     }

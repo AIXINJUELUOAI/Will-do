@@ -123,7 +123,7 @@ data class MySettings(
 
     // 长按音量+动作
     val volumeUpLongPressEnabled: Boolean = false,
-    val volumeUpLongPressAction: Int = 0, // 0=无操作, 1=识屏, 2=悬浮窗
+    val volumeUpLongPressAction: Int = 0, // 0=无操作, 1=识屏, 2=悬浮窗, 3=语音输入
 
     // 侧边栏唤起
     val edgeBarEnabled: Boolean = false,

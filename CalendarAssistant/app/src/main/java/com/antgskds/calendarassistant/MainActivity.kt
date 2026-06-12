@@ -1,8 +1,10 @@
 package com.antgskds.calendarassistant
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.drawable.ColorDrawable
@@ -26,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -112,6 +116,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
+        requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
 
         enableEdgeToEdge()
@@ -131,6 +136,8 @@ class MainActivity : ComponentActivity() {
                         appContext = app.applicationContext,
                         scheduleCenter = app.scheduleCenter,
                         noteCenter = app.noteCenter,
+                        quickMemoCenter = app.quickMemoCenter,
+                        audioPlaybackCenter = app.audioPlaybackCenter,
                         settingsQueryApi = app.settingsQueryApi,
                         homeQueryApi = app.homeQueryApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
@@ -382,6 +389,9 @@ class MainActivity : ComponentActivity() {
                                     onOpenImportedNote = { importedId ->
                                         navController.navigate(AppRoutes.noteEditor(importedId))
                                     },
+                                    onToggleAudioAttachment = { path ->
+                                        mainViewModel.toggleAudioPlayback(path)
+                                    },
                                     onShowMessage = { message, _ ->
                                         android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -563,7 +573,16 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
+        requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
+    }
+
+    private fun requestRecordAudioPermissionIfNeeded(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_RECORD_AUDIO_PERMISSION, false) != true) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO_PERMISSION)
+        }
+        intent.removeExtra(EXTRA_REQUEST_RECORD_AUDIO_PERMISSION)
     }
 
     private fun consumeWidgetAction(intent: Intent?) {
@@ -598,6 +617,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val EXTRA_REQUEST_RECORD_AUDIO_PERMISSION = "request_record_audio_permission"
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 2401
         private var currentUiSize: Int = -1
         private var currentThemeMode: Int = -1
         private var currentThemeColorScheme: String = ""

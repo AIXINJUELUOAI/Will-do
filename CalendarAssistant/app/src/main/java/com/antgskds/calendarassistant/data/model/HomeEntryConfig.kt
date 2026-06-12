@@ -31,7 +31,7 @@ fun homeEntryLabel(key: String): String {
         HomeEntryKey.SIDEBAR -> "侧边栏"
         HomeEntryKey.TODAY -> "今日日程"
         HomeEntryKey.ALL -> "全部日程"
-        HomeEntryKey.NOTE -> "便签"
+        HomeEntryKey.NOTE -> "随口记"
         else -> key
     }
 }

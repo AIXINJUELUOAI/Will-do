@@ -220,7 +220,12 @@ class WeatherWidgetRenderer(private val context: android.content.Context) {
         val title = WeatherWarningText.officialTitle(alert).ifBlank { alert.headline }.ifBlank { "天气预警" }
         if (title.length <= 8) return title
         val event = alert.eventName.ifBlank { alert.headline.extractWeatherEvent() }.ifBlank { "天气" }
-        return "$event 预警".replace(" ", "")
+        val suffix = when {
+            WeatherWarningText.isCancel(alert) -> "解除"
+            WeatherWarningText.isUpdate(alert) -> "更新"
+            else -> "预警"
+        }
+        return "$event $suffix".replace(" ", "")
     }
 
     private fun riskAlertText(risk: WeatherRiskAlert): String {
@@ -234,6 +239,8 @@ class WeatherWidgetRenderer(private val context: android.content.Context) {
             value.contains("雷") || value.contains("强对流") -> "雷雨"
             value.contains("雨") || value.contains("降水") -> "下雨"
             value.contains("雪") || value.contains("结冰") -> "降雪"
+            value.contains("强降温") || value.contains("寒潮") -> "降温"
+            value.contains("低温") || value.contains("寒冷") || value.contains("霜冻") || value.contains("冰冻") -> "低温"
             value.contains("风") || value.contains("台风") -> "大风"
             value.contains("高温") -> "高温"
             value.contains("雾") || value.contains("霾") -> "雾天"
@@ -252,7 +259,7 @@ class WeatherWidgetRenderer(private val context: android.content.Context) {
     }
 
     private fun String.extractWeatherEvent(): String {
-        return listOf("雷暴大风", "暴雨", "大风", "台风", "暴雪", "高温", "寒潮", "冰雹", "道路结冰", "雷雨", "降雨", "雾", "霾")
+        return listOf("雷暴大风", "雷雨大风", "暴雨", "大风", "台风", "暴雪", "强降温", "低温", "寒潮", "寒冷", "霜冻", "冰冻", "冻雨", "高温", "冰雹", "道路结冰", "雷雨", "降雨", "雾", "霾")
             .firstOrNull { contains(it) }
             .orEmpty()
     }
