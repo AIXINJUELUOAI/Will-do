@@ -47,7 +47,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
             .setShowWhen(true)
 
         builder.setContentText(display.secondaryText ?: " ")
-        display.tertiaryText?.let { builder.setSubText(it) }
 
         val expandedText = display.expandedText ?: display.secondaryText ?: " "
         builder.setStyle(

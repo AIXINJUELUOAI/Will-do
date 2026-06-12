@@ -7,10 +7,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.ai.AiPrompts
+import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.NoteCenter
+import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
@@ -28,6 +30,11 @@ import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NoteTransferManager
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
+import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.CourseMeta
 import com.antgskds.calendarassistant.core.course.calculateSemesterWeek
@@ -75,6 +82,8 @@ class MainViewModel(
     private val appContext: Context,
     private val scheduleCenter: ScheduleCenter,
     private val noteCenter: NoteCenter,
+    private val quickMemoCenter: QuickMemoCenter,
+    private val audioPlaybackCenter: AudioPlaybackCenter,
     private val settingsQueryApi: SettingsQueryApi,
     private val homeQueryApi: HomeQueryApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
@@ -148,6 +157,9 @@ class MainViewModel(
     // 归档事件（公开访问）
     val archivedEvents = scheduleCenter.archivedEvents
     val notes: StateFlow<List<NoteEntity>> = noteCenter.notes
+    val quickMemos: StateFlow<List<QuickMemoEntity>> = quickMemoCenter.quickMemos
+    val quickMemoSuggestions: StateFlow<List<QuickMemoSuggestionEntity>> = quickMemoCenter.suggestions
+    val audioPlaybackState: StateFlow<AudioPlaybackState> = audioPlaybackCenter.playbackState
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _today = MutableStateFlow(LocalDate.now())
@@ -342,6 +354,53 @@ class MainViewModel(
 
     fun setNotePinned(noteId: Long, pinned: Boolean) = viewModelScope.launch {
         noteCenter.setPinned(noteId, pinned)
+    }
+
+    fun createTextQuickMemo(bodyText: String, asTodo: Boolean = false, onCreated: (Long) -> Unit = {}) = viewModelScope.launch {
+        val id = quickMemoCenter.createTextMemo(bodyText, asTodo)
+        onCreated(id)
+    }
+
+    fun updateQuickMemoBody(memoId: Long, bodyText: String) = viewModelScope.launch {
+        quickMemoCenter.updateBody(memoId, bodyText)
+    }
+
+    fun deleteQuickMemo(memoId: Long, onDeleted: () -> Unit = {}) = viewModelScope.launch {
+        quickMemoCenter.deleteQuickMemo(memoId)
+        onDeleted()
+    }
+
+    fun toggleQuickMemoTodoCompletion(memoId: Long) = viewModelScope.launch {
+        quickMemoCenter.toggleTodoCompletion(memoId)
+    }
+
+    fun retryQuickMemoTranscription(memoId: Long) {
+        quickMemoCenter.retryTranscription(memoId)
+    }
+
+    fun toggleAudioPlayback(audioPath: String?) {
+        audioPlaybackCenter.toggle(audioPath)
+    }
+
+    fun stopAudioPlayback() {
+        audioPlaybackCenter.stop()
+    }
+
+    fun createEventFromQuickMemoSuggestion(suggestionId: Long, onResult: (Result<Long>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            val suggestion = quickMemoCenter.getSuggestion(suggestionId) ?: error("候选不存在")
+            val draft = QuickMemoSuggestionCodec.decode(suggestion.candidateJson) ?: error("候选解析失败")
+            val settings = settingsQueryApi.settings.value
+            val event = convertDraftToEvent(
+                draft = draft,
+                defaultDurationMinutes = settings.defaultEventDurationMinutes,
+                forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow
+            )
+            val eventId = scheduleCenter.addEvent(event)
+            quickMemoCenter.markSuggestionCreated(suggestionId, eventId)
+            eventId
+        }
+        onResult(result)
     }
 
     fun exportNote(noteId: Long, uri: Uri, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {

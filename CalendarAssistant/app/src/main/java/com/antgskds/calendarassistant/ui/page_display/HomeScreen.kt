@@ -22,6 +22,7 @@ import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
@@ -209,6 +210,7 @@ fun HomeScreen(
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var selectedNoteAction by remember { mutableStateOf<NoteEntity?>(null) }
+    var selectedQuickMemoAction by remember { mutableStateOf<QuickMemoEntity?>(null) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -430,6 +432,7 @@ fun HomeScreen(
                         onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
                         onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
                         onRequestDeleteNote = { note -> selectedNoteAction = note },
+                        onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
@@ -468,11 +471,7 @@ fun HomeScreen(
             onEditClick = {
                 isActionExpanded = false
                 isSidebarOpen = false
-                if (currentPageKey == HomeEntryKey.NOTE) {
-                    onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg)
-                } else {
-                    openPrimaryCreateDialog()
-                }
+                openPrimaryCreateDialog()
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -488,6 +487,24 @@ fun HomeScreen(
 
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
+        PredictiveFloatingActionCard(
+            visible = selectedQuickMemoAction != null,
+            title = "删除随口记",
+            content = "删除后无法恢复，确认删除这条随口记吗？",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = {
+                selectedQuickMemoAction?.id?.let { mainViewModel.deleteQuickMemo(it) }
+                selectedQuickMemoAction = null
+            },
+            onDismiss = { selectedQuickMemoAction = null },
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
         PredictiveFloatingActionCard(
             visible = selectedNoteAction != null,
             title = "删除便签",

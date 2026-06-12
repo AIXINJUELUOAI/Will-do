@@ -192,6 +192,7 @@ class WeatherRepository private constructor(context: Context) {
             val value = listOf(alert.eventName, alert.headline, alert.description).joinToString(" ")
             buildList {
                 if (value.contains("高温")) add("heat")
+                if (value.contains("低温") || value.contains("寒潮") || value.contains("强降温") || value.contains("寒冷") || value.contains("霜冻") || value.contains("冰冻")) add("cold")
                 if (value.contains("雷") || value.contains("强对流") || value.contains("冰雹") || value.contains("雹")) add("thunder")
                 if (value.contains("暴雨") || value.contains("降雨") || value.contains("雨")) add("rain")
                 if (value.contains("大风") || value.contains("台风") || value.contains("风")) add("wind")
@@ -205,6 +206,7 @@ class WeatherRepository private constructor(context: Context) {
         val value = "$title $text"
         return when {
             value.contains("高温") -> "heat"
+            value.contains("低温") || value.contains("寒潮") || value.contains("强降温") || value.contains("寒冷") || value.contains("霜冻") || value.contains("冰冻") -> "cold"
             value.contains("雷") || value.contains("强对流") || value.contains("冰雹") || value.contains("雹") -> "thunder"
             value.contains("雪") || value.contains("冻雨") || value.contains("结冰") -> "snow"
             value.contains("雨") || value.contains("降雨") -> "rain"

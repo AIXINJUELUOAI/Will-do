@@ -8,11 +8,17 @@ package com.antgskds.calendarassistant.service.notification
  */
 object NotificationIds {
     const val CLIPBOARD_CODE_MONITOR = 0xC1A0D
+    const val QUICK_MEMO_VOICE_CAPTURE = 0x51A11
+    const val CREATED_EVENT_RESULT_GROUP = 0x51A12
+    const val QUICK_MEMO_SUGGESTION_GROUP = 0x51A13
+    const val RECOGNITION_FAILURE_RESULT = 0x51A14
 
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"
     private const val PICKUP_INITIAL_NAMESPACE = "pickup-initial"
     private const val WEATHER_WARNING_NAMESPACE = "weather-warning"
+    private const val QUICK_MEMO_SUGGESTION_NAMESPACE = "quick-memo-suggestion"
+    private const val CREATED_EVENT_RESULT_NAMESPACE = "created-event-result"
 
     private const val LEGACY_PICKUP_INITIAL_OFFSET = 1_000_000
 
@@ -27,6 +33,10 @@ object NotificationIds {
     fun pickupInitial(eventId: Long): Int = stableId(PICKUP_INITIAL_NAMESPACE, eventId.toString())
 
     fun weatherWarning(key: String): Int = stableId(WEATHER_WARNING_NAMESPACE, key)
+
+    fun quickMemoSuggestion(suggestionId: Long): Int = stableId(QUICK_MEMO_SUGGESTION_NAMESPACE, suggestionId.toString())
+
+    fun createdEventResult(source: String, eventId: String): Int = stableId(CREATED_EVENT_RESULT_NAMESPACE, "$source:$eventId")
 
     fun legacyEventIds(eventId: Long): Set<Int> {
         val base = eventId.hashCode()

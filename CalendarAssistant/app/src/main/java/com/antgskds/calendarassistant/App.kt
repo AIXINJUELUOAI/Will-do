@@ -19,6 +19,7 @@ import com.antgskds.calendarassistant.core.center.LocalModelResidueCenter
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.core.center.PermissionCenter
+import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.center.RecognitionCenter
 import com.antgskds.calendarassistant.core.center.ReminderCenter
 import com.antgskds.calendarassistant.core.center.RuleCenter
@@ -33,6 +34,9 @@ import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.core.note.NoteRepository
 import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoRepository
+import com.antgskds.calendarassistant.core.quickmemo.asr.SherpaParaformerTranscriber
+import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
@@ -119,6 +123,24 @@ class App : Application() {
         NoteCenter(noteRepository, appScope)
     }
 
+    private val quickMemoRepository: QuickMemoRepository by lazy {
+        QuickMemoRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).quickMemoDao())
+    }
+
+    val audioPlaybackCenter: AudioPlaybackCenter by lazy { AudioPlaybackCenter() }
+
+    val quickMemoCenter: QuickMemoCenter by lazy {
+        QuickMemoCenter(
+            repository = quickMemoRepository,
+            appScope = appScope,
+            speechTranscriber = SherpaParaformerTranscriber(applicationContext),
+            recognitionCenter = recognitionCenter,
+            settingsQueryApi = settingsQueryApi,
+            appContext = applicationContext,
+            notificationCenter = notificationCenter
+        )
+    }
+
     val legacyNoteMigrationCenter: LegacyNoteMigrationCenter by lazy {
         LegacyNoteMigrationCenter(applicationContext, noteRepository)
     }
@@ -196,7 +218,8 @@ class App : Application() {
         ContentIngestCenter(
             importCenter = importCenter,
             domainEventBus = domainEventBus,
-            appScope = appScope
+            appScope = appScope,
+            notificationCenter = notificationCenter
         )
     }
 
@@ -360,6 +383,7 @@ class App : Application() {
         // 初始化日程数据
         scheduleCenter.refreshEvents()
         noteCenter.start()
+        quickMemoCenter.start()
         AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
         scheduleCenter.onScheduleChanged = {
             widgetCenter.requestRefresh(com.antgskds.calendarassistant.widget.WidgetType.SCHEDULE)

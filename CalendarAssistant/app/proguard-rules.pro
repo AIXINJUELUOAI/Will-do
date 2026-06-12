@@ -63,3 +63,10 @@
 
 # Optional logger binding referenced by transitive JVM libraries.
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+# iFlytek MSC SDK is accessed heavily from libmsc.so through JNI/reflection.
+# Keep class and member names stable, otherwise native calls such as
+# MSCSessionInfo.errorcode crash with JNI fid == null.
+-keep class com.iflytek.** { *; }
+-keep class com.iflytek.msc.** { *; }
+-dontwarn com.iflytek.**

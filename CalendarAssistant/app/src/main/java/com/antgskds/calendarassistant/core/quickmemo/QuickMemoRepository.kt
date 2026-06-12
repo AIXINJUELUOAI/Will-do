@@ -1,0 +1,151 @@
+package com.antgskds.calendarassistant.core.quickmemo
+
+import java.io.File
+import kotlinx.coroutines.flow.Flow
+
+class QuickMemoRepository(
+    private val quickMemoDao: QuickMemoDao
+) {
+    val quickMemos: Flow<List<QuickMemoEntity>> = quickMemoDao.observeQuickMemos()
+    val suggestions: Flow<List<QuickMemoSuggestionEntity>> = quickMemoDao.observeSuggestions()
+
+    suspend fun getQuickMemo(id: Long): QuickMemoEntity? = quickMemoDao.getQuickMemo(id)
+
+    suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false): Long {
+        val now = System.currentTimeMillis()
+        return quickMemoDao.insertQuickMemo(
+            QuickMemoEntity(
+                type = QuickMemoType.TEXT,
+                bodyText = normalizeBody(bodyText),
+                transcriptionStatus = QuickMemoTranscriptionStatus.NONE,
+                analysisStatus = QuickMemoAnalysisStatus.NONE,
+                createdAt = now,
+                updatedAt = now,
+                todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
+            )
+        )
+    }
+
+    suspend fun createVoiceMemo(
+        audioPath: String,
+        durationMs: Long,
+        bodyText: String = "",
+        asTodo: Boolean = false
+    ): Long {
+        val now = System.currentTimeMillis()
+        return quickMemoDao.insertQuickMemo(
+            QuickMemoEntity(
+                type = QuickMemoType.VOICE,
+                bodyText = normalizeBody(bodyText),
+                audioPath = audioPath,
+                audioDurationMs = durationMs.coerceAtLeast(0L),
+                transcriptionStatus = QuickMemoTranscriptionStatus.PENDING,
+                analysisStatus = QuickMemoAnalysisStatus.NONE,
+                createdAt = now,
+                updatedAt = now,
+                todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
+            )
+        )
+    }
+
+    suspend fun updateBody(id: Long, bodyText: String) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                bodyText = normalizeBody(bodyText),
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun updateTranscriptionStatus(id: Long, status: String, bodyText: String? = null) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        val now = System.currentTimeMillis()
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                bodyText = bodyText?.let { normalizeBody(it) } ?: memo.bodyText,
+                transcriptionStatus = status,
+                updatedAt = now
+            )
+        )
+    }
+
+    suspend fun updateAnalysisStatus(id: Long, status: String) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                analysisStatus = status,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun updateTodoState(id: Long, todoState: String) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        val now = System.currentTimeMillis()
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                todoState = normalizeTodoState(todoState),
+                todoPendingUntil = null,
+                todoCompletedAt = if (todoState == QuickMemoTodoState.COMPLETED) now else null,
+                updatedAt = now
+            )
+        )
+    }
+
+    suspend fun toggleTodoCompletion(id: Long) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        if (!memo.isTodo) return
+        updateTodoState(
+            id = id,
+            todoState = if (memo.isTodoCompleted) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.COMPLETED
+        )
+    }
+
+    suspend fun deleteQuickMemo(id: Long) {
+        val memo = quickMemoDao.getQuickMemo(id)
+        quickMemoDao.deleteQuickMemoById(id)
+        memo?.audioPath?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching { File(path).delete() }
+        }
+    }
+
+    suspend fun insertSuggestion(suggestion: QuickMemoSuggestionEntity): Long {
+        return quickMemoDao.insertSuggestion(suggestion)
+    }
+
+    suspend fun getSuggestion(id: Long): QuickMemoSuggestionEntity? {
+        return quickMemoDao.getSuggestion(id)
+    }
+
+    suspend fun updateSuggestion(suggestion: QuickMemoSuggestionEntity) {
+        quickMemoDao.updateSuggestion(suggestion.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun updateSuggestionStatus(id: Long, status: String, eventId: Long? = null) {
+        val suggestion = quickMemoDao.getSuggestion(id) ?: return
+        quickMemoDao.updateSuggestion(
+            suggestion.copy(
+                status = status,
+                eventId = eventId ?: suggestion.eventId,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun getSuggestionsForMemo(quickMemoId: Long): List<QuickMemoSuggestionEntity> {
+        return quickMemoDao.getSuggestionsForMemo(quickMemoId)
+    }
+
+    private fun normalizeBody(bodyText: String): String {
+        return bodyText.replace("\r\n", "\n").replace('\r', '\n').trim()
+    }
+
+    private fun normalizeTodoState(todoState: String): String {
+        return when (todoState) {
+            QuickMemoTodoState.ACTIVE,
+            QuickMemoTodoState.COMPLETED -> todoState
+            else -> QuickMemoTodoState.NONE
+        }
+    }
+}
