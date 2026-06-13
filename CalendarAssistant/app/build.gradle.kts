@@ -27,9 +27,6 @@ fun escapeBuildConfigString(value: String): String {
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 }
 
-val iflytekTestAppId = localProperty("IFLYTEK_TEST_APP_ID").ifBlank { "be38dacc" }
-val iflytekTestAppKey = localProperty("IFLYTEK_TEST_APP_KEY").ifBlank { "5cee406c" }
-
 android {
     namespace = "com.antgskds.calendarassistant"
     compileSdkVersion("android-37.0")
@@ -38,7 +35,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 67
+        versionCode = 71
         versionName = "2.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -58,10 +55,9 @@ android {
         )
         buildConfigField(
             "String",
-            "IFLYTEK_TEST_APP_ID",
-            "\"${escapeBuildConfigString(iflytekTestAppId)}\""
+            "APP_UPDATE_URL",
+            "\"${escapeBuildConfigString(localProperty("APP_UPDATE_URL"))}\""
         )
-        manifestPlaceholders["IFLYTEK_TEST_APP_KEY"] = iflytekTestAppKey
     }
 
     buildTypes {
@@ -133,7 +129,6 @@ dependencies {
 
     // === 离线语音转写 ===
     implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.21")
-    implementation(files("libs/Msc.jar"))
 
     // === 测试库 ===
     testImplementation(libs.junit)

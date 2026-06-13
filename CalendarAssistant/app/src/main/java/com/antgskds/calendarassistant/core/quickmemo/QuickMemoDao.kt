@@ -5,12 +5,13 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface QuickMemoDao {
-    @Query("SELECT * FROM quick_memos ORDER BY created_at DESC")
+    @Query("SELECT * FROM quick_memos ORDER BY sort_rank ASC, updated_at DESC")
     fun observeQuickMemos(): Flow<List<QuickMemoEntity>>
 
     @Query("SELECT * FROM quick_memo_suggestions ORDER BY created_at DESC")
@@ -18,6 +19,15 @@ interface QuickMemoDao {
 
     @Query("SELECT * FROM quick_memos WHERE id = :id LIMIT 1")
     suspend fun getQuickMemo(id: Long): QuickMemoEntity?
+
+    @Query("SELECT * FROM quick_memos ORDER BY created_at ASC")
+    suspend fun getAllQuickMemos(): List<QuickMemoEntity>
+
+    @Query("SELECT * FROM quick_memos WHERE type = 'VOICE' AND transcription_status IN ('PENDING', 'PROCESSING') ORDER BY created_at ASC")
+    suspend fun getUnfinishedVoiceMemos(): List<QuickMemoEntity>
+
+    @Query("SELECT MIN(sort_rank) FROM quick_memos")
+    suspend fun getMinSortRank(): Long?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuickMemo(memo: QuickMemoEntity): Long
@@ -31,11 +41,24 @@ interface QuickMemoDao {
     @Query("DELETE FROM quick_memos WHERE id = :id")
     suspend fun deleteQuickMemoById(id: Long)
 
+    @Query("UPDATE quick_memos SET sort_rank = :sortRank WHERE id = :id")
+    suspend fun updateSortRank(id: Long, sortRank: Long)
+
+    @Transaction
+    suspend fun updateSortRanks(ids: List<Long>) {
+        ids.forEachIndexed { index, id ->
+            updateSortRank(id, index.toLong() * 1_000L)
+        }
+    }
+
     @Query("SELECT * FROM quick_memo_suggestions WHERE quick_memo_id = :quickMemoId ORDER BY created_at DESC")
     fun observeSuggestionsForMemo(quickMemoId: Long): Flow<List<QuickMemoSuggestionEntity>>
 
     @Query("SELECT * FROM quick_memo_suggestions WHERE quick_memo_id = :quickMemoId ORDER BY created_at DESC")
     suspend fun getSuggestionsForMemo(quickMemoId: Long): List<QuickMemoSuggestionEntity>
+
+    @Query("SELECT * FROM quick_memo_suggestions ORDER BY created_at ASC")
+    suspend fun getAllSuggestions(): List<QuickMemoSuggestionEntity>
 
     @Query("SELECT * FROM quick_memo_suggestions WHERE id = :id LIMIT 1")
     suspend fun getSuggestion(id: Long): QuickMemoSuggestionEntity?

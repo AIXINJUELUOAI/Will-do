@@ -11,8 +11,6 @@
     <!-- 基础网络与通知 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -89,11 +87,6 @@
             android:name="com.samsung.android.support.ongoing_activity"
             android:value="true" />
 
-        <!-- iFlytek MSC SDK metadata, matching the official demo manifest. -->
-        <meta-data
-            android:name="IFLYTEK_APPKEY"
-            android:value="${IFLYTEK_TEST_APP_KEY}" />
-
         <!-- UI 入口 -->
         <activity
             android:name=".MainActivity"
@@ -133,12 +126,6 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:exported="false" />
-
-        <activity
-            android:name=".core.service.voice.IflytekRecognizerTestActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.CalendarAssistant" />
 
         <activity
             android:name=".core.service.voice.LocalRecorderTestActivity"

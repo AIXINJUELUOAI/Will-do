@@ -53,11 +53,13 @@ class ClipboardCodeMonitorService : Service() {
             return START_NOT_STICKY
         }
         startForeground(NotificationIds.CLIPBOARD_CODE_MONITOR, buildNotification())
+        app.clipboardCodeCenter.setPrivilegedMonitorActive(true)
         startMonitor()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        app.clipboardCodeCenter.setPrivilegedMonitorActive(false)
         monitorJob?.cancel()
         processHandle?.destroy()
         processHandle = null
@@ -73,10 +75,13 @@ class ClipboardCodeMonitorService : Service() {
             while (app.settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
                 PrivilegeManager.refreshPrivilege()
                 if (!PrivilegeManager.hasPrivilege) break
+                runCatching { tryAutoIngestCurrentClipboard("clipboard_monitor_start") }
+                    .onFailure { Log.w(TAG, "Clipboard initial check failed", it) }
                 runCatching { monitorLogcatOnce() }
                     .onFailure { Log.w(TAG, "Clipboard log monitor failed", it) }
                 delay(RESTART_DELAY_MS)
             }
+            app.clipboardCodeCenter.setPrivilegedMonitorActive(false)
             stopSelf()
         }
     }
@@ -103,7 +108,11 @@ class ClipboardCodeMonitorService : Service() {
 
     private suspend fun onClipboardChangedLog(line: String) {
         if (line.contains(packageName)) return
-        val ingested = app.clipboardCodeCenter.autoIngestCurrentClipboard("clipboard_background")
+        tryAutoIngestCurrentClipboard("clipboard_background")
+    }
+
+    private suspend fun tryAutoIngestCurrentClipboard(source: String) {
+        val ingested = app.clipboardCodeCenter.autoIngestCurrentClipboard(source)
         if (ingested) {
             withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(applicationContext, "已创建剪贴板码类日程", android.widget.Toast.LENGTH_SHORT).show()

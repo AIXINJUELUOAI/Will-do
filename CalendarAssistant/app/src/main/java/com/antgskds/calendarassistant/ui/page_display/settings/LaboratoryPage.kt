@@ -49,7 +49,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureDisplay
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory.TestEventType
-import com.antgskds.calendarassistant.core.service.voice.IflytekRecognizerTestActivity
+import com.antgskds.calendarassistant.core.query.DailySummaryPayload
 import com.antgskds.calendarassistant.core.service.voice.LocalRecorderTestActivity
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
@@ -64,6 +64,7 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
@@ -115,15 +116,6 @@ fun LaboratoryPage(
             text = "实验功能",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary
-        )
-
-        LaboratoryActionCard(
-            title = "讯飞 SDK 录音测试",
-            subtitle = "打开讯飞 RecognizerDialog，验证 SDK 自带录音能否在当前手机上启动并返回文字。",
-            buttonText = "开始测试",
-            onClick = {
-                context.startActivity(Intent(context, IflytekRecognizerTestActivity::class.java))
-            }
         )
 
         LaboratoryActionCard(
@@ -637,6 +629,23 @@ private fun DeveloperNotificationTestSheet(
                 }
             }
 
+            DeveloperSheetSection(title = "每日提醒") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DeveloperTestChip("今日提醒") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperDailySummaryNotification(context, app, settings, isMorning = true))
+                    }
+                    DeveloperTestChip("明日预告") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperDailySummaryNotification(context, app, settings, isMorning = false))
+                    }
+                }
+            }
+
             DeveloperSheetSection(title = "天气实况胶囊") {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -984,6 +993,44 @@ private fun showDeveloperRecognitionFailure(app: App?, settings: MySettings?): S
         )
     )
     return "已发送识别失败结果"
+}
+
+private fun showDeveloperDailySummaryNotification(
+    context: Context,
+    app: App?,
+    settings: MySettings?,
+    isMorning: Boolean
+): String {
+    if (app == null) return "应用上下文不可用"
+    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return "系统通知权限未开启"
+    val payload = settings?.let { currentSettings ->
+        app.dailySummaryQueryApi.buildPayload(
+            isMorning = isMorning,
+            settings = currentSettings.copy(isDailySummaryEnabled = true),
+            events = app.scheduleCenter.events.value,
+            weatherData = app.weatherQueryApi.weatherData.value
+        )
+    } ?: developerDailySummaryPayload(isMorning)
+    app.notificationCenter.showDailySummaryNotification(payload, isMorning)
+    return "已发送${payload.shortTitle}测试通知"
+}
+
+private fun developerDailySummaryPayload(isMorning: Boolean): DailySummaryPayload {
+    val shortTitle = if (isMorning) "今日提醒" else "明日预告"
+    val titles = if (isMorning) {
+        listOf("开发者测试晨会", "开发者测试取件", "开发者测试复盘")
+    } else {
+        listOf("开发者测试早课", "开发者测试航班", "开发者测试晚间复盘")
+    }
+    return DailySummaryPayload(
+        targetDate = if (isMorning) LocalDate.now() else LocalDate.now().plusDays(1),
+        title = "$shortTitle|24°C 阴",
+        shortTitle = shortTitle,
+        content = "您有 ${titles.size} 个日程：${titles.joinToString("，")}",
+        eventCount = titles.size,
+        fullLines = titles,
+        compactLines = listOf(titles.first(), "以及其他 ${titles.size - 1} 个日程")
+    )
 }
 
 private fun showDeveloperLiveModelLoading(app: App?, settings: MySettings?): String {

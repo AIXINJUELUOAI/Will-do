@@ -49,6 +49,7 @@ object QuickMemoSuggestionStatus {
     indices = [
         Index(value = ["created_at"]),
         Index(value = ["updated_at"]),
+        Index(value = ["sort_rank"]),
         Index(value = ["todo_state"]),
         Index(value = ["type"])
     ]
@@ -72,6 +73,8 @@ data class QuickMemoEntity(
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "sort_rank")
+    val sortRank: Long = 0L,
     @ColumnInfo(name = "todo_state")
     val todoState: String = QuickMemoTodoState.NONE,
     @ColumnInfo(name = "todo_pending_until")

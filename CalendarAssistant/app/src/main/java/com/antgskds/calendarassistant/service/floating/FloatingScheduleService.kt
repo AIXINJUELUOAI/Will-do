@@ -58,7 +58,6 @@ import com.antgskds.calendarassistant.core.query.WeatherQueryApi
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
-import com.antgskds.calendarassistant.core.service.voice.IflytekRecognizerTestActivity
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
@@ -463,6 +462,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUndoAction = {
                             scheduleCenter.undoStatusAction()
                         },
+                        onMarkQuickMemoTodo = { memo ->
+                            serviceScope.launch { memo.id?.let { quickMemoCenter.markTodoActive(it) } }
+                        },
+                        onRemoveQuickMemoTodo = { memo ->
+                            serviceScope.launch { memo.id?.let { quickMemoCenter.removeTodo(it) } }
+                        },
                         onToggleQuickMemoTodo = { memo ->
                             serviceScope.launch { memo.id?.let { quickMemoCenter.toggleTodoCompletion(it) } }
                         },
@@ -485,13 +490,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                 }
                             }
                         },
+                        onReorderQuickMemos = { ids ->
+                            serviceScope.launch { quickMemoCenter.updateSortRanks(ids) }
+                        },
                         onConfirmVoiceCapture = { asTodo ->
                             confirmVoiceCapture(asTodo)
                         },
                         onStartVoiceCapture = {
-                            startIflytekVoiceCaptureTest()
-                        },
-                        onStartLocalVoiceCapture = {
                             startVoiceCapture()
                         },
                         onStopVoiceCapture = {
@@ -647,40 +652,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     status = QuickMemoVoiceCaptureStatus.ERROR,
                     message = if (e is SecurityException) "系统限制后台录音，请重试" else "录音失败"
                 )
-                delay(1400)
-                voiceCaptureState.value = QuickMemoVoiceCaptureState()
-            }
-        }
-    }
-
-    private fun startIflytekVoiceCaptureTest() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            voiceCaptureState.value = QuickMemoVoiceCaptureState(
-                status = QuickMemoVoiceCaptureStatus.ERROR,
-                message = "需要麦克风权限"
-            )
-            Toast.makeText(applicationContext, "需要麦克风权限", Toast.LENGTH_SHORT).show()
-            requestRecordAudioPermission()
-            serviceScope.launch {
-                delay(1400)
-                voiceCaptureState.value = QuickMemoVoiceCaptureState()
-            }
-            return
-        }
-        try {
-            startActivity(Intent(this, IflytekRecognizerTestActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                putExtra(IflytekRecognizerTestActivity.EXTRA_AUTO_START_DIALOG, true)
-            })
-        } catch (e: Exception) {
-            Log.e(TAG, "启动讯飞悬浮窗录音测试失败", e)
-            voiceCaptureState.value = QuickMemoVoiceCaptureState(
-                status = QuickMemoVoiceCaptureStatus.ERROR,
-                message = "讯飞录音测试启动失败"
-            )
-            Toast.makeText(applicationContext, "讯飞录音测试启动失败", Toast.LENGTH_SHORT).show()
-            serviceScope.launch {
                 delay(1400)
                 voiceCaptureState.value = QuickMemoVoiceCaptureState()
             }

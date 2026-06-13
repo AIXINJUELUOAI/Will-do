@@ -2,18 +2,15 @@ package com.antgskds.calendarassistant.service.receiver
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,38 +42,19 @@ class DailySummaryReceiver : BroadcastReceiver() {
                     weatherData = cachedWeather
                 ) ?: return@launch
 
-                // 5. 发送通知
-                sendNotification(context, payload.title, payload.content, type)
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED
+                ) {
+                    app.notificationCenter.showDailySummaryNotification(payload, isMorning)
+                }
 
             } catch (e: Exception) {
                 Log.e("DailySummary", "Error processing summary", e)
             } finally {
+                scheduleAlarm(context, if (type == TYPE_MORNING) 6 else 22, 0, type)
                 pendingResult.finish()
             }
         }
-    }
-
-    private fun sendNotification(context: Context, title: String, content: String, idOffset: Int) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED) return
-
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val intent = Intent(context, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = NotificationCompat.Builder(context, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle(title)
-            .setContentText(content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-
-        manager.notify(8000 + idOffset, builder.build())
     }
 
     // --- 调度逻辑收敛在 Companion Object 中 ---
@@ -86,9 +64,7 @@ class DailySummaryReceiver : BroadcastReceiver() {
         private const val TYPE_MORNING = 0
         private const val TYPE_EVENING = 1
 
-        /**
-         * 外部调用入口：设置每天 06:00 和 22:00 的闹钟
-         */
+        /** 外部调用入口：设置每天 06:00 和 22:00 的单次闹钟。 */
         fun schedule(context: Context) {
             scheduleAlarm(context, 6, 0, TYPE_MORNING)  // 早报
             scheduleAlarm(context, 22, 0, TYPE_EVENING) // 晚报
@@ -112,21 +88,38 @@ class DailySummaryReceiver : BroadcastReceiver() {
                 set(Calendar.SECOND, 0)
             }
 
-            // 如果时间已过，推迟到明天
             if (calendar.timeInMillis <= System.currentTimeMillis()) {
                 calendar.add(Calendar.DAY_OF_YEAR, 1)
             }
 
+            alarmManager.cancel(pendingIntent)
+
             try {
-                alarmManager.setInexactRepeating(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    AlarmManager.INTERVAL_DAY,
-                    pendingIntent
-                )
+                setDailySummaryAlarm(alarmManager, calendar.timeInMillis, pendingIntent)
                 Log.d("DailySummary", "Scheduled type $type for ${calendar.time}")
             } catch (e: Exception) {
                 Log.e("DailySummary", "Schedule failed", e)
+            }
+        }
+
+        private fun setDailySummaryAlarm(
+            alarmManager: AlarmManager,
+            triggerAtMillis: Long,
+            pendingIntent: PendingIntent
+        ) {
+            try {
+                when {
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                    }
+                    else -> alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                }
+            } catch (e: SecurityException) {
+                Log.w("DailySummary", "Exact alarm permission missing, falling back to inexact alarm", e)
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            } catch (e: IllegalStateException) {
+                Log.w("DailySummary", "Exact alarm quota reached, falling back to inexact alarm", e)
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             }
         }
     }

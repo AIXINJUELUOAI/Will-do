@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
         QuickMemoEntity::class,
         QuickMemoSuggestionEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -52,7 +52,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -210,6 +210,51 @@ abstract class EventsDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_status ON quick_memo_suggestions(status)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_type ON quick_memo_suggestions(type)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_suggestions_event_id ON quick_memo_suggestions(event_id)")
+            }
+        }
+
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN sort_rank INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    UPDATE quick_memos
+                    SET sort_rank = (
+                        SELECT COUNT(*)
+                        FROM quick_memos AS other
+                        WHERE
+                            CASE other.todo_state
+                                WHEN 'ACTIVE' THEN 0
+                                WHEN 'NONE' THEN 1
+                                WHEN 'COMPLETED' THEN 2
+                                ELSE 1
+                            END < CASE quick_memos.todo_state
+                                WHEN 'ACTIVE' THEN 0
+                                WHEN 'NONE' THEN 1
+                                WHEN 'COMPLETED' THEN 2
+                                ELSE 1
+                            END
+                            OR (
+                                CASE other.todo_state
+                                    WHEN 'ACTIVE' THEN 0
+                                    WHEN 'NONE' THEN 1
+                                    WHEN 'COMPLETED' THEN 2
+                                    ELSE 1
+                                END = CASE quick_memos.todo_state
+                                    WHEN 'ACTIVE' THEN 0
+                                    WHEN 'NONE' THEN 1
+                                    WHEN 'COMPLETED' THEN 2
+                                    ELSE 1
+                                END
+                                AND (
+                                    other.updated_at > quick_memos.updated_at
+                                    OR (other.updated_at = quick_memos.updated_at AND other.id > quick_memos.id)
+                                )
+                            )
+                    ) * 1000
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_sort_rank ON quick_memos(sort_rank)")
             }
         }
     }

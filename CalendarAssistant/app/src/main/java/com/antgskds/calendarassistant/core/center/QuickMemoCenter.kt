@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 class QuickMemoCenter(
@@ -35,12 +36,14 @@ class QuickMemoCenter(
 ) {
     companion object {
         private const val TAG = "QuickMemoCenter"
+        private const val TRANSCRIPTION_TIMEOUT_MS = 120_000L
     }
 
     private val _quickMemos = MutableStateFlow<List<QuickMemoEntity>>(emptyList())
     val quickMemos: StateFlow<List<QuickMemoEntity>> = _quickMemos.asStateFlow()
     private val _suggestions = MutableStateFlow<List<QuickMemoSuggestionEntity>>(emptyList())
     val suggestions: StateFlow<List<QuickMemoSuggestionEntity>> = _suggestions.asStateFlow()
+    private val activeTranscriptionIds = mutableSetOf<Long>()
 
     fun start() {
         appScope.launch(Dispatchers.IO) {
@@ -52,6 +55,9 @@ class QuickMemoCenter(
             repository.suggestions.collect { list ->
                 _suggestions.value = list
             }
+        }
+        appScope.launch(Dispatchers.IO) {
+            recoverUnfinishedTranscriptions()
         }
     }
 
@@ -82,8 +88,16 @@ class QuickMemoCenter(
         repository.updateTodoState(id, QuickMemoTodoState.ACTIVE)
     }
 
+    suspend fun removeTodo(id: Long) = withContext(Dispatchers.IO) {
+        repository.updateTodoState(id, QuickMemoTodoState.NONE)
+    }
+
     suspend fun toggleTodoCompletion(id: Long) = withContext(Dispatchers.IO) {
         repository.toggleTodoCompletion(id)
+    }
+
+    suspend fun updateSortRanks(ids: List<Long>) = withContext(Dispatchers.IO) {
+        repository.updateSortRanks(ids)
     }
 
     suspend fun deleteQuickMemo(id: Long) = withContext(Dispatchers.IO) {
@@ -104,11 +118,16 @@ class QuickMemoCenter(
 
     fun processVoiceMemoAsync(id: Long) {
         appScope.launch(Dispatchers.IO) {
+            if (!tryBeginTranscription(id)) return@launch
             try {
                 val memo = repository.getQuickMemo(id) ?: return@launch
-                val audioPath = memo.audioPath?.takeIf { it.isNotBlank() } ?: return@launch
+                val audioPath = memo.audioPath?.takeIf { it.isNotBlank() }
+                if (audioPath == null) {
+                    repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
+                    return@launch
+                }
                 repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.PROCESSING)
-                when (val result = speechTranscriber.transcribe(audioPath)) {
+                when (val result = withTimeout(TRANSCRIPTION_TIMEOUT_MS) { speechTranscriber.transcribe(audioPath) }) {
                     is TranscriptionResult.Success -> {
                         val text = result.text.trim()
                         if (text.isBlank()) {
@@ -126,8 +145,25 @@ class QuickMemoCenter(
             } catch (e: Exception) {
                 Log.e(TAG, "处理语音随口记失败", e)
                 repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
+            } finally {
+                finishTranscription(id)
             }
         }
+    }
+
+    private suspend fun recoverUnfinishedTranscriptions() {
+        repository.getUnfinishedVoiceMemos().forEach { memo ->
+            val id = memo.id ?: return@forEach
+            processVoiceMemoAsync(id)
+        }
+    }
+
+    private fun tryBeginTranscription(id: Long): Boolean = synchronized(activeTranscriptionIds) {
+        activeTranscriptionIds.add(id)
+    }
+
+    private fun finishTranscription(id: Long) = synchronized(activeTranscriptionIds) {
+        activeTranscriptionIds.remove(id)
     }
 
     fun analyzeTextForSuggestions(id: Long, text: String) {
@@ -157,7 +193,7 @@ class QuickMemoCenter(
                                     candidateJson = QuickMemoSuggestionCodec.encode(draft)
                                 )
                             )
-                            notificationCenter?.showQuickMemoScheduleSuggestion(suggestionId, draft)
+                            notificationCenter?.showQuickMemoScheduleSuggestion(suggestionId, id, draft)
                         }
                         repository.updateAnalysisStatus(id, QuickMemoAnalysisStatus.SUCCESS)
                     }

@@ -85,7 +85,8 @@ object NotificationTemplateCenter {
         val officialTitle = WeatherWarningText.officialTitle(alert)
         val location = compactLocationName(locationName)
         val headerTitle = joinParts(location, officialTitle) ?: officialTitle
-        val primaryTitle = compactWeatherTitle(officialTitle, WEATHER_PRIMARY_TITLE_MAX_CHARS, fallback = "天气预警")
+        val shortTitle = officialWeatherShortTitle(alert)
+        val primaryTitle = compactPrimaryTitle(shortTitle, officialTitle)
         val timeLine = officialTimeLine(alert)
         val factLine = officialFactLine(alert)
         val description = clean(alert.description)
@@ -95,7 +96,7 @@ object NotificationTemplateCenter {
         return compose(
             headerTitle = headerTitle,
             primaryText = primaryTitle,
-            shortText = officialWeatherShortTitle(alert),
+            shortText = shortTitle,
             fullBodyLines = cleanLines(location, timeLine, sender, description, instruction),
             compactBodyLines = cleanLines(factLine, timeLine),
             templateMode = templateMode,
@@ -111,7 +112,8 @@ object NotificationTemplateCenter {
         val event = clean(alert.eventName) ?: WeatherWarningText.officialShortText(alert).removeSuffix("解除").ifBlank { "天气" }
         val color = WeatherWarningText.colorName(alert.colorCode)
         val primary = "${event}预警已解除"
-        val primaryTitle = compactWeatherTitle(primary, WEATHER_PRIMARY_TITLE_MAX_CHARS, fallback = "预警解除")
+        val shortTitle = compactWeatherTitle("${event}解除", WEATHER_SHORT_TITLE_MAX_CHARS, fallback = "预警解除")
+        val primaryTitle = compactPrimaryTitle(shortTitle, WeatherWarningText.officialTitle(alert))
         val statusLine = canceledStatusLine(location, color, alert)
         val factLine = officialFactLine(alert)?.takeIf { it != primary }
         val fullTitle = joinParts(location, WeatherWarningText.officialTitle(alert))
@@ -121,7 +123,7 @@ object NotificationTemplateCenter {
         return compose(
             headerTitle = primary,
             primaryText = primaryTitle,
-            shortText = compactWeatherTitle("${event}解除", WEATHER_SHORT_TITLE_MAX_CHARS, fallback = "预警解除"),
+            shortText = shortTitle,
             fullBodyLines = cleanLines(statusLine, fullTitle, factLine, description, instruction),
             compactBodyLines = cleanLines(statusLine, factLine),
             templateMode = templateMode,
@@ -179,15 +181,74 @@ object NotificationTemplateCenter {
             .ifEmpty { cleanLines(risk.weatherText) }
         val compactSummary = riskCompactSummary(risk)
         val compactAdvice = riskCompactAdvice(risk)
+        val shortTitle = compactWeatherTitle(riskTitle, WEATHER_SHORT_TITLE_MAX_CHARS, fallback = "天气风险")
 
         return compose(
             headerTitle = headerTitle,
-            primaryText = compactWeatherTitle(riskTitle, WEATHER_PRIMARY_TITLE_MAX_CHARS, fallback = "天气风险"),
-            shortText = compactWeatherTitle(riskTitle, WEATHER_SHORT_TITLE_MAX_CHARS, fallback = "天气风险"),
+            primaryText = compactPrimaryTitle(shortTitle, riskTimingTitle(risk)),
+            shortText = shortTitle,
             fullBodyLines = cleanLines(location, *fullLines.toTypedArray()),
             compactBodyLines = cleanLines(compactSummary, compactAdvice),
             templateMode = templateMode
         )
+    }
+
+    private fun compactPrimaryTitle(shortTitle: String, detailTitle: String?): String {
+        val short = clean(shortTitle) ?: "提醒"
+        val detail = compactTitleDetail(detailTitle, WEATHER_PRIMARY_TITLE_MAX_CHARS - short.length - 1)
+        if (detail == null || detail == short) return short.take(WEATHER_PRIMARY_TITLE_MAX_CHARS)
+        val title = "$short|$detail"
+        return if (title.length <= WEATHER_PRIMARY_TITLE_MAX_CHARS) title else short.take(WEATHER_PRIMARY_TITLE_MAX_CHARS)
+    }
+
+    private fun compactTitleDetail(value: String?, maxChars: Int): String? {
+        if (maxChars <= 0) return null
+        val clean = clean(value) ?: return null
+        val candidates = listOf(
+            clean,
+            clean.removeSuffix("预警解除") + if (clean.endsWith("预警解除")) "解除" else "",
+            clean.removeSuffix("预警更新") + if (clean.endsWith("预警更新")) "更新" else "",
+            clean.removeSuffix("预警"),
+            clean.removeSuffix("预警解除"),
+            clean.removeSuffix("预警更新"),
+            clean.replace("低温雨雪冰冻", "冰冻")
+                .replace("短时强降雨", "强降雨")
+                .replace("农业气象风险", "农业气象")
+                .removeSuffix("预警")
+        ).mapNotNull(::clean).distinct()
+        return candidates.firstOrNull { it.length <= maxChars } ?: clean.take(maxChars)
+    }
+
+    private fun riskTimingTitle(risk: WeatherRiskAlert): String? {
+        val parsed = runCatching { OffsetDateTime.parse(risk.fxTime) }.getOrNull()
+        if (parsed != null) {
+            val minutes = Duration.between(OffsetDateTime.now(parsed.offset), parsed).toMinutes()
+            return when {
+                minutes <= 30 -> "即将出现"
+                minutes < 90 -> "一小时后"
+                minutes < 24 * 60 -> "${chineseHour((minutes / 60.0).roundToInt().coerceAtLeast(1))}小时后"
+                else -> null
+            }
+        }
+        if (risk.message.contains("即将")) return "即将出现"
+        val hours = Regex("约?(\\d+)小时后").find(risk.message)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        return hours?.let { "${chineseHour(it)}小时后" }
+    }
+
+    private fun chineseHour(hour: Int): String {
+        return when (hour.coerceAtLeast(1)) {
+            1 -> "一"
+            2 -> "两"
+            3 -> "三"
+            4 -> "四"
+            5 -> "五"
+            6 -> "六"
+            7 -> "七"
+            8 -> "八"
+            9 -> "九"
+            10 -> "十"
+            else -> hour.toString()
+        }
     }
 
     private fun compose(
@@ -468,6 +529,7 @@ object NotificationTemplateCenter {
 
     private fun compactLocationName(value: String): String? {
         val clean = clean(value) ?: return null
+        if (clean == "当前位置" || clean == "最近位置" || clean == "手动位置") return null
         return clean.split(' ', '·').lastOrNull()?.takeIf { it.isNotBlank() } ?: clean
     }
 

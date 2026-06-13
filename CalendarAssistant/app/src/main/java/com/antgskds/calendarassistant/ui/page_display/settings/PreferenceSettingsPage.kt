@@ -578,7 +578,10 @@ fun PreferenceSettingsPage(
                         checked = settings.volumeUpLongPressEnabled,
                         action = settings.volumeUpLongPressAction,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(volumeUpLongPressEnabled = isChecked)
+                            viewModel.updatePreference(
+                                volumeUpLongPressEnabled = isChecked,
+                                volumeUpLongPressAction = if (isChecked) settings.volumeUpLongPressAction.coerceIn(1, 3) else settings.volumeUpLongPressAction
+                            )
                         },
                         onActionChange = { action ->
                             viewModel.updatePreference(volumeUpLongPressAction = action)
@@ -655,8 +658,8 @@ fun PreferenceSettingsPage(
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     SwitchSettingItem(
-                        title = "每日日程提醒",
-                        subtitle = "早06:00和晚22:00推送汇总",
+                        title = "每日提醒",
+                        subtitle = "早06:00和晚22:00推送日程汇总",
                         checked = settings.isDailySummaryEnabled,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(dailySummary = isChecked)
@@ -1453,7 +1456,8 @@ fun VolumeLongPressSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
-    HapticValueChangeEffect(valueKey = action)
+    val normalizedAction = action.coerceIn(1, 3)
+    HapticValueChangeEffect(valueKey = normalizedAction)
     val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
@@ -1490,16 +1494,15 @@ fun VolumeLongPressSettingItem(
                         .padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "无操作", style = cardSubtitleStyle)
                     Text(text = "识屏", style = cardSubtitleStyle)
                     Text(text = "悬浮窗", style = cardSubtitleStyle)
                     Text(text = "语音", style = cardSubtitleStyle)
                 }
                 Slider(
-                    value = action.toFloat(),
-                    onValueChange = { onActionChange(it.toInt()) },
-                    valueRange = 0f..3f,
-                    steps = 2
+                    value = normalizedAction.toFloat(),
+                    onValueChange = { onActionChange(it.roundToInt().coerceIn(1, 3)) },
+                    valueRange = 1f..3f,
+                    steps = 1
                 )
             }
         }

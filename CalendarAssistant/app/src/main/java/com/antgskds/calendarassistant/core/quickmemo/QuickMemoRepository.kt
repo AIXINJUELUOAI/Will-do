@@ -11,6 +11,8 @@ class QuickMemoRepository(
 
     suspend fun getQuickMemo(id: Long): QuickMemoEntity? = quickMemoDao.getQuickMemo(id)
 
+    suspend fun getUnfinishedVoiceMemos(): List<QuickMemoEntity> = quickMemoDao.getUnfinishedVoiceMemos()
+
     suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false): Long {
         val now = System.currentTimeMillis()
         return quickMemoDao.insertQuickMemo(
@@ -21,6 +23,7 @@ class QuickMemoRepository(
                 analysisStatus = QuickMemoAnalysisStatus.NONE,
                 createdAt = now,
                 updatedAt = now,
+                sortRank = nextTopSortRank(),
                 todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
             )
         )
@@ -43,6 +46,7 @@ class QuickMemoRepository(
                 analysisStatus = QuickMemoAnalysisStatus.NONE,
                 createdAt = now,
                 updatedAt = now,
+                sortRank = nextTopSortRank(),
                 todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
             )
         )
@@ -83,11 +87,14 @@ class QuickMemoRepository(
     suspend fun updateTodoState(id: Long, todoState: String) {
         val memo = quickMemoDao.getQuickMemo(id) ?: return
         val now = System.currentTimeMillis()
+        val normalizedState = normalizeTodoState(todoState)
+        val shouldMoveToTop = normalizedState == QuickMemoTodoState.ACTIVE && memo.todoState != QuickMemoTodoState.ACTIVE
         quickMemoDao.updateQuickMemo(
             memo.copy(
-                todoState = normalizeTodoState(todoState),
+                todoState = normalizedState,
                 todoPendingUntil = null,
-                todoCompletedAt = if (todoState == QuickMemoTodoState.COMPLETED) now else null,
+                todoCompletedAt = if (normalizedState == QuickMemoTodoState.COMPLETED) now else null,
+                sortRank = if (shouldMoveToTop) nextTopSortRank() else memo.sortRank,
                 updatedAt = now
             )
         )
@@ -108,6 +115,10 @@ class QuickMemoRepository(
         memo?.audioPath?.takeIf { it.isNotBlank() }?.let { path ->
             runCatching { File(path).delete() }
         }
+    }
+
+    suspend fun updateSortRanks(ids: List<Long>) {
+        quickMemoDao.updateSortRanks(ids.distinct())
     }
 
     suspend fun insertSuggestion(suggestion: QuickMemoSuggestionEntity): Long {
@@ -147,5 +158,9 @@ class QuickMemoRepository(
             QuickMemoTodoState.COMPLETED -> todoState
             else -> QuickMemoTodoState.NONE
         }
+    }
+
+    private suspend fun nextTopSortRank(): Long {
+        return (quickMemoDao.getMinSortRank() ?: 0L) - 1_000L
     }
 }

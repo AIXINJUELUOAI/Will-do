@@ -12,6 +12,8 @@ object NotificationIds {
     const val CREATED_EVENT_RESULT_GROUP = 0x51A12
     const val QUICK_MEMO_SUGGESTION_GROUP = 0x51A13
     const val RECOGNITION_FAILURE_RESULT = 0x51A14
+    const val DAILY_SUMMARY_MORNING = 0x51A15
+    const val DAILY_SUMMARY_EVENING = 0x51A16
 
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"

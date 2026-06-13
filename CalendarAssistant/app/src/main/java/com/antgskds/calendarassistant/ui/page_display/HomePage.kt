@@ -110,6 +110,7 @@ fun HomePage(
     onCreateNote: () -> Unit = {},
     onRequestDeleteNote: (NoteEntity) -> Unit = {},
     onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
+    onOpenQuickMemoDetail: (Long) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
@@ -482,22 +483,7 @@ fun HomePage(
                             }
                             Text(title)
                         },
-                        actions = {
-                            if (currentTab == 2) {
-                                if (isLegacyNoteMode) {
-                                    TextButton(onClick = { isLegacyNoteMode = false }) {
-                                        Text("随口记")
-                                    }
-                                    IconButton(onClick = onCreateNote) {
-                                        Icon(Icons.Default.Add, contentDescription = "新建便签")
-                                    }
-                                } else {
-                                    TextButton(onClick = { isLegacyNoteMode = true }) {
-                                        Text("便签")
-                                    }
-                                }
-                            }
-                        }
+                        actions = {}
                     )
                 },
             ) { innerPadding ->
@@ -720,7 +706,9 @@ fun HomePage(
                         QuickMemoPage(
                             viewModel = viewModel,
                             searchQuery = noteSearchQuery,
+                            uiSize = uiSize,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
+                            onOpenDetail = onOpenQuickMemoDetail,
                             onPendingDeleteChange = { memo -> memo?.let(onRequestDeleteQuickMemo) },
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )

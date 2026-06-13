@@ -10,6 +10,8 @@ import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
+import com.antgskds.calendarassistant.core.update.AppUpdateChecker
+import com.antgskds.calendarassistant.core.update.AppUpdateCheckResult
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
@@ -24,6 +26,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.RemotePrompts
+import com.antgskds.calendarassistant.data.model.RemoteAppUpdateInfo
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
@@ -78,6 +81,14 @@ data class PromptCheckFeedback(
     val type: ToastType
 )
 
+data class AppUpdateUiState(
+    val info: RemoteAppUpdateInfo? = null,
+    val hasUpdate: Boolean = false,
+    val localVersionCode: Int = com.antgskds.calendarassistant.BuildConfig.VERSION_CODE,
+    val isChecking: Boolean = false,
+    val errorMessage: String? = null
+)
+
 class MainViewModel(
     private val appContext: Context,
     private val scheduleCenter: ScheduleCenter,
@@ -105,6 +116,8 @@ class MainViewModel(
     private val _promptCheckFeedback = MutableSharedFlow<PromptCheckFeedback>(extraBufferCapacity = 1)
     val promptCheckFeedback: SharedFlow<PromptCheckFeedback> = _promptCheckFeedback.asSharedFlow()
     private var pendingPromptUpdate: RemotePrompts? = null
+    private val _appUpdateUiState = MutableStateFlow(AppUpdateUiState())
+    val appUpdateUiState: StateFlow<AppUpdateUiState> = _appUpdateUiState.asStateFlow()
     private val noteTransferManager = NoteTransferManager(appContext)
 
     init {
@@ -128,6 +141,7 @@ class MainViewModel(
         }
 
         checkPromptUpdatesSilently()
+        checkAppUpdatesSilently()
     }
 
     private fun calculateDelayToNextExpiration(): Long {
@@ -316,6 +330,36 @@ class MainViewModel(
 
     private fun sendPromptFeedback(message: String, type: ToastType) {
         _promptCheckFeedback.tryEmit(PromptCheckFeedback(message, type))
+    }
+
+    fun checkAppUpdatesManually() {
+        checkAppUpdates(silent = false)
+    }
+
+    private fun checkAppUpdatesSilently() {
+        checkAppUpdates(silent = true)
+    }
+
+    private fun checkAppUpdates(silent: Boolean) {
+        if (_appUpdateUiState.value.isChecking) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _appUpdateUiState.update { it.copy(isChecking = true, errorMessage = null) }
+            val nextState = when (val result = AppUpdateChecker.check()) {
+                is AppUpdateCheckResult.Success -> AppUpdateUiState(
+                    info = result.info,
+                    hasUpdate = result.hasUpdate,
+                    localVersionCode = result.localVersionCode,
+                    isChecking = false,
+                    errorMessage = null
+                )
+                is AppUpdateCheckResult.Error -> _appUpdateUiState.value.copy(
+                    isChecking = false,
+                    errorMessage = if (silent) null else result.message
+                )
+            }
+            _appUpdateUiState.value = nextState
+        }
     }
 
     // --- 普通事件操作 ---

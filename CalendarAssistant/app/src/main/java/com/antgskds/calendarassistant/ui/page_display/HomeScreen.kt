@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.center.ClipboardCodePrompt
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.event.DomainEventType
@@ -76,15 +77,20 @@ fun HomeScreen(
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
     openCourseRequestId: Long = 0L,
     selectedPageKey: String = HomeEntryKey.TODAY,
+    clipboardPrompt: ClipboardCodePrompt? = null,
+    onConfirmClipboardPrompt: () -> Unit = {},
+    onDismissClipboardPrompt: () -> Unit = {},
     onSelectedPageKeyChange: (String) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
     onOpenNoteEditor: (Long) -> Unit = {},
+    onOpenQuickMemoDetail: (Long) -> Unit = {},
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
     // 从 settings 读取主题状态
     val settings by settingsViewModel.settings.collectAsState()
     val uiState by mainViewModel.uiState.collectAsState()
+    val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
 
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
@@ -401,6 +407,7 @@ fun HomeScreen(
             sidebar = {
                 SettingsSidebar(
                     isDarkMode = settings.isDarkMode,
+                    hasAppUpdate = appUpdateUiState.hasUpdate,
                     onThemeToggle = { isDark ->
                         settingsViewModel.updateDarkMode(isDark)
                     },
@@ -433,6 +440,7 @@ fun HomeScreen(
                         onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
                         onRequestDeleteNote = { note -> selectedNoteAction = note },
                         onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
+                        onOpenQuickMemoDetail = onOpenQuickMemoDetail,
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
@@ -487,6 +495,22 @@ fun HomeScreen(
 
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
+        val clipboardPromptItem = clipboardPrompt
+        PredictiveFloatingActionCard(
+            visible = clipboardPromptItem != null,
+            title = "识别到剪贴板中的${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}",
+            content = "${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}：${clipboardPromptItem?.candidate?.code.orEmpty()}",
+            confirmText = "入库",
+            dismissText = "忽略",
+            isDestructive = false,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = onConfirmClipboardPrompt,
+            onDismiss = onDismissClipboardPrompt,
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
         PredictiveFloatingActionCard(
             visible = selectedQuickMemoAction != null,
             title = "删除随口记",

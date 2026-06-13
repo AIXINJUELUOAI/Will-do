@@ -55,6 +55,7 @@ class TextAccessibilityService : AccessibilityService() {
     // 标记是否已经触发了长按事件
     private var isLongPressTriggered = false
     private var isVoiceCaptureTriggered = false
+    private var isVolumeUpPressed = false
 
     private val NOTIFICATION_ID_PROGRESS = 1001
     private val NOTIFICATION_ID_RESULT = 2002
@@ -131,6 +132,8 @@ class TextAccessibilityService : AccessibilityService() {
         } else {
             volumeLongPressJob?.cancel()
             isLongPressTriggered = false
+            isVoiceCaptureTriggered = false
+            isVolumeUpPressed = false
             baseFlags
         }
 
@@ -144,7 +147,7 @@ class TextAccessibilityService : AccessibilityService() {
     private fun shouldFilterVolumeUpKeys(): Boolean {
         val settings = settingsQueryApi.settings.value
         if (!settings.volumeUpLongPressEnabled) return false
-        return when (settings.volumeUpLongPressAction) {
+        return when (settings.volumeUpLongPressAction.coerceIn(1, 3)) {
             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
             ACTION_VOLUME_LONG_PRESS_FLOATING -> settings.isFloatingWindowEnabled
             ACTION_VOLUME_LONG_PRESS_VOICE -> settings.isFloatingWindowEnabled
@@ -223,13 +226,14 @@ class TextAccessibilityService : AccessibilityService() {
             return super.onKeyEvent(event)
         }
 
-        val longPressAction = currentSettings.volumeUpLongPressAction
+        val longPressAction = currentSettings.volumeUpLongPressAction.coerceIn(1, 3)
         val shouldHandleLongPress = shouldFilterVolumeUpKeys()
 
         if (!shouldHandleLongPress) {
             volumeLongPressJob?.cancel()
             isLongPressTriggered = false
             isVoiceCaptureTriggered = false
+            isVolumeUpPressed = false
             return false
         }
 
@@ -245,6 +249,7 @@ class TextAccessibilityService : AccessibilityService() {
                         return true
                     }
 
+                    isVolumeUpPressed = true
                     isLongPressTriggered = false
                     isVoiceCaptureTriggered = false
                     volumeLongPressJob?.cancel()
@@ -255,7 +260,7 @@ class TextAccessibilityService : AccessibilityService() {
                         val actionLabel = when (longPressAction) {
                             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> "识屏"
                             ACTION_VOLUME_LONG_PRESS_FLOATING -> "悬浮窗"
-                            ACTION_VOLUME_LONG_PRESS_VOICE -> "悬浮窗"
+                            ACTION_VOLUME_LONG_PRESS_VOICE -> "语音"
                             else -> "无操作"
                         }
                         Log.d(TAG, "长按音量+ 已确认，触发 $actionLabel")
@@ -267,10 +272,23 @@ class TextAccessibilityService : AccessibilityService() {
                                 startAnalysis(MySettings.normalizeScreenshotDelayMs(currentSettings.screenshotDelayMs).milliseconds)
                             }
                             ACTION_VOLUME_LONG_PRESS_FLOATING -> {
-                                startFloatingService()
+                                if (FloatingScheduleService.isShowing) {
+                                    isVoiceCaptureTriggered = true
+                                    startVoiceCaptureService()
+                                } else {
+                                    startFloatingService()
+                                    serviceScope.launch {
+                                        delay(240)
+                                        if (isVolumeUpPressed) {
+                                            isVoiceCaptureTriggered = true
+                                            startVoiceCaptureService()
+                                        }
+                                    }
+                                }
                             }
                             ACTION_VOLUME_LONG_PRESS_VOICE -> {
-                                startFloatingService()
+                                isVoiceCaptureTriggered = true
+                                startVoiceCaptureService()
                             }
                         }
                     }
@@ -279,6 +297,7 @@ class TextAccessibilityService : AccessibilityService() {
                 }
 
                 KeyEvent.ACTION_UP -> {
+                    isVolumeUpPressed = false
                     volumeLongPressJob?.cancel()
 
                     if (isLongPressTriggered) {
@@ -305,6 +324,7 @@ class TextAccessibilityService : AccessibilityService() {
                 }
 
                 else -> {
+                    isVolumeUpPressed = false
                     volumeLongPressJob?.cancel()
                     if (isVoiceCaptureTriggered) {
                         stopVoiceCaptureService()
