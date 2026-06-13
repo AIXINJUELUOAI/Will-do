@@ -82,7 +82,7 @@ fun PredictiveBottomDialogHost(
     }
 
     if (appearProgress > 0f || transitionState.currentState || transitionState.targetState) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

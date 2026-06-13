@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,8 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.core.ai.RecognitionFailureDisplay
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory
 import com.antgskds.calendarassistant.core.developer.DeveloperTestDataFactory.TestEventType
+import com.antgskds.calendarassistant.core.query.DailySummaryPayload
+import com.antgskds.calendarassistant.core.service.voice.LocalRecorderTestActivity
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
@@ -59,6 +64,9 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -108,6 +116,15 @@ fun LaboratoryPage(
             text = "实验功能",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary
+        )
+
+        LaboratoryActionCard(
+            title = "本地录音测试",
+            subtitle = "直接调用本地 QuickMemoAudioRecorder，验证前台页面里的 MediaRecorder/AudioRecord 是否能正常录音。",
+            buttonText = "开始测试",
+            onClick = {
+                context.startActivity(Intent(context, LocalRecorderTestActivity::class.java))
+            }
         )
 
         if (settings != null) {
@@ -589,9 +606,17 @@ private fun DeveloperNotificationTestSheet(
                         haptics.confirm()
                         toastResult(context, showDeveloperLiveOcrProgress(app, settings))
                     }
-                    DeveloperTestChip("OCR 完成") {
+                    DeveloperTestChip("识别成功") {
                         haptics.confirm()
-                        toastResult(context, showDeveloperLiveOcrResult(app, settings))
+                        toastResult(context, showDeveloperRecognitionSuccess(app, settings, count = 1))
+                    }
+                    DeveloperTestChip("识别成功 x2") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperRecognitionSuccess(app, settings, count = 2))
+                    }
+                    DeveloperTestChip("识别失败") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperRecognitionFailure(app, settings))
                     }
                     DeveloperTestChip("模型加载") {
                         haptics.confirm()
@@ -600,6 +625,23 @@ private fun DeveloperNotificationTestSheet(
                     DeveloperTestChip("网速") {
                         haptics.confirm()
                         toastResult(context, showDeveloperLiveNetworkSpeed(app, settings))
+                    }
+                }
+            }
+
+            DeveloperSheetSection(title = "每日提醒") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DeveloperTestChip("今日提醒") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperDailySummaryNotification(context, app, settings, isMorning = true))
+                    }
+                    DeveloperTestChip("明日预告") {
+                        haptics.confirm()
+                        toastResult(context, showDeveloperDailySummaryNotification(context, app, settings, isMorning = false))
                     }
                 }
             }
@@ -683,7 +725,8 @@ private data class DeveloperWeatherAlertSample(
     val eventName: String,
     val colorCode: String,
     val description: String,
-    val instruction: String
+    val instruction: String,
+    val messageTypeCode: String = "alert"
 )
 
 private data class DeveloperWeatherRiskSample(
@@ -723,6 +766,57 @@ private fun developerCourseNotificationSample(): DeveloperPlainNotificationSampl
         channelId = App.CHANNEL_ID_POPUP,
         smallIcon = R.drawable.ic_stat_course
     )
+}
+
+@Composable
+private fun LaboratoryActionCard(
+    title: String,
+    subtitle: String,
+    buttonText: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = onClick) {
+                Text(buttonText)
+            }
+        }
+    }
+}
+
+private fun developerRecognitionEvents(count: Int): List<Event> {
+    val now = LocalDateTime.now().withSecond(0).withNano(0)
+    return (0 until count).map { index ->
+        val start = now.plusMinutes(30L + index * 90L)
+        val end = start.plusMinutes(45L)
+        val startSeconds = start.atZone(ZoneId.systemDefault()).toEpochSecond()
+        val endSeconds = end.atZone(ZoneId.systemDefault()).toEpochSecond()
+        Event(
+            id = -(System.currentTimeMillis() % 100_000L) - index,
+            startTS = startSeconds,
+            endTS = endSeconds,
+            title = if (index == 0) "开发者测试会议" else "开发者测试复盘",
+            location = if (index == 0) "会议室 A203" else "线上会议",
+            description = if (index == 0) "确认识别结果胶囊的两行内容" else "验证多个日程各发一条结果通知"
+        )
+    }
 }
 
 private fun developerWeatherAlertSamples(): List<DeveloperWeatherAlertSample> {
@@ -774,6 +868,32 @@ private fun developerWeatherAlertSamples(): List<DeveloperWeatherAlertSample> {
             colorCode = "orange",
             description = "预计未来 12 小时降雪量将达 8 毫米以上，道路结冰风险较高。",
             instruction = "出行请注意防滑并预留通勤时间。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "cold",
+            label = "低温",
+            eventName = "低温",
+            colorCode = "blue",
+            description = "预计未来 24 小时最低气温将降至 -3℃ 左右，清晨夜间体感寒冷。",
+            instruction = "请注意添衣保暖，照顾老人儿童。"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "cold_wave_update",
+            label = "寒潮更新",
+            eventName = "寒潮",
+            colorCode = "orange",
+            description = "气象台继续发布寒潮橙色预警信号：预计未来 24 小时气温下降 10℃ 以上。",
+            instruction = "请做好防寒保暖和设施防风加固。",
+            messageTypeCode = "update"
+        ),
+        DeveloperWeatherAlertSample(
+            key = "thunder_cancel",
+            label = "雷电解除",
+            eventName = "雷电",
+            colorCode = "yellow",
+            description = "目前雷雨云团已移出本区，雷电黄色预警信号解除。",
+            instruction = "后续仍需关注天气变化。",
+            messageTypeCode = "cancel"
         )
     )
 }
@@ -853,15 +973,64 @@ private fun showDeveloperLiveOcrProgress(app: App?, settings: MySettings?): Stri
     return "已发送 OCR 进度胶囊"
 }
 
-private fun showDeveloperLiveOcrResult(app: App?, settings: MySettings?): String {
+private fun showDeveloperRecognitionSuccess(app: App?, settings: MySettings?, count: Int): String {
     val unavailable = liveCapsuleUnavailableMessage(app, settings)
     if (unavailable != null) return unavailable
-    app!!.capsuleCenter.showOcrResult(
-        title = "识别完成",
-        content = "开发者测试：已识别 1 条日程。",
-        durationMs = 60_000L
+    app!!.notificationCenter.showCreatedEventResultNotifications(
+        sourceType = "developer",
+        events = developerRecognitionEvents(count)
     )
-    return "已发送 OCR 完成胶囊"
+    return "已发送 ${count} 条识别成功结果"
+}
+
+private fun showDeveloperRecognitionFailure(app: App?, settings: MySettings?): String {
+    val unavailable = liveCapsuleUnavailableMessage(app, settings)
+    if (unavailable != null) return unavailable
+    app!!.notificationCenter.showRecognitionFailureResultNotification(
+        RecognitionFailureDisplay(
+            reason = "模型返回格式异常",
+            suggestion = "请重试，或切换到更稳定的模型"
+        )
+    )
+    return "已发送识别失败结果"
+}
+
+private fun showDeveloperDailySummaryNotification(
+    context: Context,
+    app: App?,
+    settings: MySettings?,
+    isMorning: Boolean
+): String {
+    if (app == null) return "应用上下文不可用"
+    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return "系统通知权限未开启"
+    val payload = settings?.let { currentSettings ->
+        app.dailySummaryQueryApi.buildPayload(
+            isMorning = isMorning,
+            settings = currentSettings.copy(isDailySummaryEnabled = true),
+            events = app.scheduleCenter.events.value,
+            weatherData = app.weatherQueryApi.weatherData.value
+        )
+    } ?: developerDailySummaryPayload(isMorning)
+    app.notificationCenter.showDailySummaryNotification(payload, isMorning)
+    return "已发送${payload.shortTitle}测试通知"
+}
+
+private fun developerDailySummaryPayload(isMorning: Boolean): DailySummaryPayload {
+    val shortTitle = if (isMorning) "今日提醒" else "明日预告"
+    val titles = if (isMorning) {
+        listOf("开发者测试晨会", "开发者测试取件", "开发者测试复盘")
+    } else {
+        listOf("开发者测试早课", "开发者测试航班", "开发者测试晚间复盘")
+    }
+    return DailySummaryPayload(
+        targetDate = if (isMorning) LocalDate.now() else LocalDate.now().plusDays(1),
+        title = "$shortTitle|24°C 阴",
+        shortTitle = shortTitle,
+        content = "您有 ${titles.size} 个日程：${titles.joinToString("，")}",
+        eventCount = titles.size,
+        fullLines = titles,
+        compactLines = listOf(titles.first(), "以及其他 ${titles.size - 1} 个日程")
+    )
 }
 
 private fun showDeveloperLiveModelLoading(app: App?, settings: MySettings?): String {
@@ -935,6 +1104,7 @@ private fun DeveloperWeatherAlertSample.toWeatherAlert(): WeatherAlertData {
         eventCode = key,
         severity = colorCode,
         colorCode = colorCode,
+        messageTypeCode = messageTypeCode,
         headline = "开发者测试：${label}预警",
         description = description,
         instruction = instruction

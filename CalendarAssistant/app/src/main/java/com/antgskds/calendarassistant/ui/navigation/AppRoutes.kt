@@ -7,6 +7,9 @@ object AppRoutes {
     const val NoteEditorArg = "noteId"
     const val NoteEditorNewArg = -1L
     const val NoteEditorPattern = "$NoteEditorBase/{$NoteEditorArg}"
+    const val QuickMemoDetailBase = "quick_memo_detail"
+    const val QuickMemoDetailArg = "memoId"
+    const val QuickMemoDetailPattern = "$QuickMemoDetailBase/{$QuickMemoDetailArg}"
 
     const val SettingsBase = "settings"
     const val SettingsTypeArg = "type"
@@ -15,4 +18,6 @@ object AppRoutes {
     fun settings(destinationName: String): String = "$SettingsBase/$destinationName"
 
     fun noteEditor(noteId: Long = NoteEditorNewArg): String = "$NoteEditorBase/$noteId"
+
+    fun quickMemoDetail(memoId: Long): String = "$QuickMemoDetailBase/$memoId"
 }

@@ -115,11 +115,12 @@ object MiuiIslandManager {
         isNewTarget: Boolean
     ): MiuiIslandRequest {
         val display = item.display
-        val title = display.primaryText.ifBlank { display.shortText }
+        val useShortTitle = useShortTitleForIsland(item)
+        val title = buildIslandTitle(display, useShortTitle)
         val actionsPayload = buildActions(context, item)
         val actions = actionsPayload.actions
         val templateType = resolveTemplateType(item, display, actions)
-        val content = buildContent(display, templateType)
+        val content = buildContent(display, templateType, useShortTitle)
         val (iconLight, iconDark) = buildEventIcons(context, item)
         val appIcon = buildAppIcon(context)
         val contentIntent = createContentPendingIntent(context, item)
@@ -159,7 +160,19 @@ object MiuiIslandManager {
         )
     }
 
-    private fun buildContent(display: CapsuleDisplayModel, templateType: Int): String {
+    private fun buildIslandTitle(display: CapsuleDisplayModel, useShortTitle: Boolean): String {
+        return if (useShortTitle) {
+            display.shortText.ifBlank { display.primaryText }
+        } else {
+            display.primaryText.ifBlank { display.shortText }
+        }
+    }
+
+    private fun buildContent(
+        display: CapsuleDisplayModel,
+        templateType: Int,
+        usePrimaryDetailFallback: Boolean
+    ): String {
         val candidates = listOf(
             display.secondaryText,
             display.tertiaryText,
@@ -176,8 +189,28 @@ object MiuiIslandManager {
         val content = filtered
             .distinct()
             .joinToString(" · ")
-            .ifBlank { display.primaryText }
+            .ifBlank {
+                if (usePrimaryDetailFallback) {
+                    primaryDetail(display.primaryText) ?: display.primaryText
+                } else {
+                    display.primaryText
+                }
+            }
         return truncate(content, 42)
+    }
+
+    private fun useShortTitleForIsland(item: CapsuleUiState.Active.CapsuleItem): Boolean {
+        return when (item.type) {
+            CapsuleStateManager.TYPE_WEATHER_ALERT,
+            CapsuleStateManager.TYPE_OCR_PROGRESS,
+            CapsuleStateManager.TYPE_OCR_RESULT,
+            CapsuleStateManager.TYPE_MODEL_LOADING -> true
+            else -> false
+        }
+    }
+
+    private fun primaryDetail(primaryText: String): String? {
+        return sanitizeLine(primaryText.substringAfter('|', missingDelimiterValue = ""))
     }
 
     private fun buildEventIcons(
@@ -212,7 +245,11 @@ object MiuiIslandManager {
         val action = item.display.action ?: return emptyActionPayload()
         val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
             this.action = action.receiverAction
-            putExtra(EventActionReceiver.EXTRA_EVENT_ID, item.id)
+            if (action.extraLongKey != null && action.extraLongValue != null) {
+                putExtra(action.extraLongKey, action.extraLongValue)
+            } else {
+                putExtra(EventActionReceiver.EXTRA_EVENT_ID, item.id)
+            }
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,

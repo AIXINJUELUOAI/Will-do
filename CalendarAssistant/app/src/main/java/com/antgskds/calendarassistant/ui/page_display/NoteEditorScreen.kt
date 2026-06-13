@@ -142,6 +142,7 @@ fun NoteEditorScreen(
     onExportMarkdownNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
     onImportNote: (android.net.Uri, (Result<Long>) -> Unit) -> Unit,
     onOpenImportedNote: (Long) -> Unit,
+    onToggleAudioAttachment: (String) -> Unit = {},
     onShowMessage: (String, ToastType) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -310,6 +311,16 @@ fun NoteEditorScreen(
     fun openAttachment(paragraph: NoteParagraph) {
         if (paragraph.type == NoteParagraphType.IMAGE) {
             previewImage = paragraph
+            return
+        }
+        if (isAudioAttachment(paragraph)) {
+            val file = NoteAttachmentStore.fileForRelativePath(context, paragraph.attachmentPath)
+            if (!file.exists()) {
+                onShowMessage("附件不存在", ToastType.ERROR)
+                return
+            }
+            onToggleAudioAttachment(file.absolutePath)
+            onShowMessage("音频播放/暂停", ToastType.INFO)
             return
         }
         val intent = NoteAttachmentStore.openAttachmentIntent(context, paragraph)
@@ -1172,4 +1183,13 @@ private fun NoteImagePreviewContent(paragraph: NoteParagraph, onDismiss: () -> U
             )
         }
     }
+}
+
+private fun isAudioAttachment(paragraph: NoteParagraph): Boolean {
+    val mime = paragraph.attachmentMime.lowercase()
+    if (mime.startsWith("audio/")) return true
+    val name = paragraph.attachmentName.ifBlank { paragraph.attachmentPath }.lowercase()
+    return name.endsWith(".m4a") || name.endsWith(".mp3") || name.endsWith(".aac") ||
+        name.endsWith(".wav") || name.endsWith(".ogg") || name.endsWith(".opus") ||
+        name.endsWith(".flac") || name.endsWith(".amr")
 }

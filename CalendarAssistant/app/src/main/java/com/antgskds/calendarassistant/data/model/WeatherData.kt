@@ -78,6 +78,8 @@ data class WeatherAlertData(
     val eventCode: String = "",
     val severity: String = "",
     val colorCode: String = "",
+    val messageTypeCode: String = "",
+    val messageTypeSupersedes: List<String> = emptyList(),
     val issuedTime: String = "",
     val effectiveTime: String = "",
     val onsetTime: String = "",

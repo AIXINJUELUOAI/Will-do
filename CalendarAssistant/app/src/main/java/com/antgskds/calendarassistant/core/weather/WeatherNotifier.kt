@@ -126,6 +126,7 @@ class WeatherNotifier(context: Context) {
         val text = risk.weatherText
         return when {
             title.contains("高温") || text.contains("高温") -> "heat"
+            title.contains("低温") || title.contains("寒潮") || title.contains("强降温") || title.contains("寒冷") || title.contains("霜冻") || title.contains("冰冻") || text.contains("低温") || text.contains("寒潮") || text.contains("强降温") || text.contains("寒冷") || text.contains("霜冻") || text.contains("冰冻") -> "cold"
             title.contains("雷") || title.contains("强对流") || title.contains("冰雹") || title.contains("雹") -> "thunder"
             title.contains("雪") || title.contains("冻雨") || title.contains("结冰") -> "snow"
             title.contains("雨") || title.contains("降雨") -> "rain"

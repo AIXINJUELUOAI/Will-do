@@ -64,7 +64,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (floatingEventRange != null) updated = updated.copy(floatingEventRange = floatingEventRange)
         if (floatingExpandSide != null) updated = updated.copy(floatingExpandSide = sanitizeFloatingSide(floatingExpandSide))
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
-        if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction)
+        if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction.coerceIn(1, 3))
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
         if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
         if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
@@ -86,7 +86,11 @@ class LocalSettingsTransformApi : SettingsTransformApi {
 
         val sanitizedBottomItems = sanitizeHomeBottomItems(updated.homeBottomItems)
         val sanitizedStartPage = sanitizeHomeStartPageKey(updated.homeStartPageKey, sanitizedBottomItems)
-        return updated.copy(homeBottomItems = sanitizedBottomItems, homeStartPageKey = sanitizedStartPage)
+        return updated.copy(
+            homeBottomItems = sanitizedBottomItems,
+            homeStartPageKey = sanitizedStartPage,
+            volumeUpLongPressAction = updated.volumeUpLongPressAction.coerceIn(1, 3)
+        )
     }
 
     private fun sanitizeFloatingSide(side: String): String {

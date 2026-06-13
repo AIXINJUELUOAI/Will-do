@@ -44,6 +44,7 @@ import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.settings.AboutPage
+import com.antgskds.calendarassistant.ui.page_display.settings.AppUpdatePage
 import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage
 import com.antgskds.calendarassistant.ui.page_display.settings.BackupSettingsPage
@@ -72,6 +73,7 @@ private object SettingsRoutes {
     const val Preference = "settings_preference"
     const val Archives = "settings_archives"
     const val Backup = "settings_backup"
+    const val AppUpdate = "settings_app_update"
     const val Theme = "settings_theme"
     const val About = "settings_about"
     const val Donate = "settings_donate"
@@ -99,6 +101,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.Preference -> SettingsRoutes.Preference
         SettingsDestination.Archives -> SettingsRoutes.Archives
         SettingsDestination.Backup -> SettingsRoutes.Backup
+        SettingsDestination.AppUpdate -> SettingsRoutes.AppUpdate
         SettingsDestination.Theme -> SettingsRoutes.Theme
         SettingsDestination.About -> SettingsRoutes.About
         SettingsDestination.Donate -> SettingsRoutes.Donate
@@ -121,6 +124,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.Preference -> SettingsDestination.Preference
         SettingsRoutes.Archives -> SettingsDestination.Archives
         SettingsRoutes.Backup -> SettingsDestination.Backup
+        SettingsRoutes.AppUpdate -> SettingsDestination.AppUpdate
         SettingsRoutes.Theme -> SettingsDestination.Theme
         SettingsRoutes.About -> SettingsDestination.About
         SettingsRoutes.Donate -> SettingsDestination.Donate
@@ -142,6 +146,7 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.Preference -> "偏好设置"
         SettingsDestination.Archives -> "归档"
         SettingsDestination.Backup -> "数据备份"
+        SettingsDestination.AppUpdate -> "软件更新"
         SettingsDestination.Theme -> "主题设置"
         SettingsDestination.About -> "关于应用"
         SettingsDestination.Donate -> "捐赠开发者"
@@ -269,6 +274,7 @@ private fun SettingsPageContent(
                             onNavigateToTimeTableManage = { onNavigateTo(SettingsDestination.TimeTableManage) }
                         )
                         SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
+                        SettingsDestination.AppUpdate -> AppUpdatePage(mainViewModel, uiSize)
                         SettingsDestination.About -> AboutPage(
                             uiSize = uiSize,
                             onNavigateToDonate = { onNavigateTo(SettingsDestination.Donate) },
@@ -327,6 +333,7 @@ fun SettingsDetailScreen(
     uiSize: Int = 2
 ) {
     val settings by settingsViewModel.settings.collectAsState()
+    val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
     val settingsNavController = rememberNavController()
     val initialDestination = remember(destinationStr) { parseSettingsDestination(destinationStr) }
     val initialRoute = remember(destinationStr) {
@@ -378,6 +385,7 @@ fun SettingsDetailScreen(
         sidebar = {
             SettingsSidebar(
                 isDarkMode = settings.isDarkMode,
+                hasAppUpdate = appUpdateUiState.hasUpdate,
                 onThemeToggle = { isDark -> settingsViewModel.updateDarkMode(isDark) },
                 onNavigate = { destination -> navigateToDestination(destination) }
             )
@@ -491,6 +499,16 @@ fun SettingsDetailScreen(
                     settingsPageComposable(SettingsRoutes.Backup) {
                         SettingsPageContent(
                             destination = SettingsDestination.Backup,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.AppUpdate) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.AppUpdate,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,

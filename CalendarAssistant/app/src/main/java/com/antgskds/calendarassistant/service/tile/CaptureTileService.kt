@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +70,13 @@ class CaptureTileService : TileService() {
 
                 service.closeNotificationPanel()
 
-                service.startAnalysis(500.milliseconds)
+                val delayMs = (applicationContext as App)
+                    .settingsQueryApi
+                    .settings
+                    .value
+                    .screenshotDelayMs
+                    .let(MySettings::normalizeScreenshotDelayMs)
+                service.startAnalysis(delayMs.milliseconds)
 
                 if (tile != null) {
                     tile.state = Tile.STATE_INACTIVE

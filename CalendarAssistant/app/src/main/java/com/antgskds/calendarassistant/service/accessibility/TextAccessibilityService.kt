@@ -31,6 +31,7 @@ import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
 import kotlinx.coroutines.*
@@ -53,6 +54,8 @@ class TextAccessibilityService : AccessibilityService() {
     private var volumeLongPressJob: Job? = null
     // 标记是否已经触发了长按事件
     private var isLongPressTriggered = false
+    private var isVoiceCaptureTriggered = false
+    private var isVolumeUpPressed = false
 
     private val NOTIFICATION_ID_PROGRESS = 1001
     private val NOTIFICATION_ID_RESULT = 2002
@@ -84,6 +87,7 @@ class TextAccessibilityService : AccessibilityService() {
         private const val ACTION_VOLUME_LONG_PRESS_NONE = 0
         private const val ACTION_VOLUME_LONG_PRESS_SCREENSHOT = 1
         private const val ACTION_VOLUME_LONG_PRESS_FLOATING = 2
+        private const val ACTION_VOLUME_LONG_PRESS_VOICE = 3
 
         fun isConnected(): Boolean = instance != null
 
@@ -128,6 +132,8 @@ class TextAccessibilityService : AccessibilityService() {
         } else {
             volumeLongPressJob?.cancel()
             isLongPressTriggered = false
+            isVoiceCaptureTriggered = false
+            isVolumeUpPressed = false
             baseFlags
         }
 
@@ -141,9 +147,10 @@ class TextAccessibilityService : AccessibilityService() {
     private fun shouldFilterVolumeUpKeys(): Boolean {
         val settings = settingsQueryApi.settings.value
         if (!settings.volumeUpLongPressEnabled) return false
-        return when (settings.volumeUpLongPressAction) {
+        return when (settings.volumeUpLongPressAction.coerceIn(1, 3)) {
             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
             ACTION_VOLUME_LONG_PRESS_FLOATING -> settings.isFloatingWindowEnabled
+            ACTION_VOLUME_LONG_PRESS_VOICE -> settings.isFloatingWindowEnabled
             else -> false
         }
     }
@@ -159,11 +166,8 @@ class TextAccessibilityService : AccessibilityService() {
                         return@collect
                     }
                     cancelProgressNotification()
-                    showResultNotification(
-                        title = "识别失败",
-                        content = buildRecognitionFailureContent(payload),
-                        useOcrCapsule = true,
-                        durationMs = 8000L
+                    app.notificationCenter.showRecognitionFailureResultNotification(
+                        RecognitionFailureMessageMapper.display(payload)
                     )
                     Handler(Looper.getMainLooper()).postDelayed({
                         cancelResultNotification()
@@ -182,17 +186,13 @@ class TextAccessibilityService : AccessibilityService() {
                     if (payload.sourceType != RECOGNITION_SOURCE_TYPE || payload.sourceId != RECOGNITION_SOURCE_ID) {
                         return@collect
                     }
-                    val title = "新增 ${payload.createdCount} 个事件"
-                    val content = when {
-                        payload.createdEventIds.size == 1 -> "识别结果已保存"
-                        payload.createdEventIds.isNotEmpty() -> "识别结果已批量保存"
-                        else -> "识别完成"
-                    }
                     cancelProgressNotification()
-                    showResultNotification(title, content, useOcrCapsule = true, durationMs = 8000L)
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        cancelResultNotification()
-                    }, 8000)
+                    if (payload.createdCount <= 0) {
+                        showResultNotification("识别完成", "没有可入库的新事件", useOcrCapsule = true, durationMs = 8000L)
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            cancelResultNotification()
+                        }, 8000)
+                    }
                 }
         }
 
@@ -226,73 +226,86 @@ class TextAccessibilityService : AccessibilityService() {
             return super.onKeyEvent(event)
         }
 
-        val longPressAction = currentSettings.volumeUpLongPressAction
+        val longPressAction = currentSettings.volumeUpLongPressAction.coerceIn(1, 3)
         val shouldHandleLongPress = shouldFilterVolumeUpKeys()
 
         if (!shouldHandleLongPress) {
             volumeLongPressJob?.cancel()
             isLongPressTriggered = false
+            isVoiceCaptureTriggered = false
+            isVolumeUpPressed = false
             return false
         }
 
-        // 1. 如果悬浮窗已显示，完全放行所有按键，确保用户可以正常调节音量或进行其他操作
-        if (FloatingScheduleService.isShowing) {
-            Log.d(TAG, "悬浮窗已显示，放行按键")
+        if (FloatingScheduleService.isShowing && longPressAction == ACTION_VOLUME_LONG_PRESS_SCREENSHOT) {
+            Log.d(TAG, "悬浮窗已显示，识屏长按放行")
             return false
         }
 
-        // 2. 监听音量加键 (KEYCODE_VOLUME_UP)
-        // 采用“完全拦截 + 手动补偿”策略，避免长按弹出系统音量条
         if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
-                    // 如果是重复的 DOWN 事件（物理按住不放时系统会发送多个 DOWN），直接拦截
                     if (event.repeatCount > 0) {
                         return true
                     }
 
+                    isVolumeUpPressed = true
                     isLongPressTriggered = false
+                    isVoiceCaptureTriggered = false
                     volumeLongPressJob?.cancel()
 
-                    // 启动计时协程
                     volumeLongPressJob = serviceScope.launch {
                         delay(LONG_PRESS_THRESHOLD)
-                        // 延时结束，说明用户按住超过了阈值，触发长按逻辑
                         isLongPressTriggered = true
                         val actionLabel = when (longPressAction) {
                             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> "识屏"
                             ACTION_VOLUME_LONG_PRESS_FLOATING -> "悬浮窗"
+                            ACTION_VOLUME_LONG_PRESS_VOICE -> "语音"
                             else -> "无操作"
                         }
                         Log.d(TAG, "长按音量+ 已确认，触发 $actionLabel")
 
-                        // 触发轻微震动反馈，告诉用户“功能已激活，可以松手了”
                         performHapticFeedback()
 
                         when (longPressAction) {
                             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> {
-                                startAnalysis(currentSettings.screenshotDelayMs.milliseconds)
+                                startAnalysis(MySettings.normalizeScreenshotDelayMs(currentSettings.screenshotDelayMs).milliseconds)
                             }
                             ACTION_VOLUME_LONG_PRESS_FLOATING -> {
-                                startFloatingService()
+                                if (FloatingScheduleService.isShowing) {
+                                    isVoiceCaptureTriggered = true
+                                    startVoiceCaptureService()
+                                } else {
+                                    startFloatingService()
+                                    serviceScope.launch {
+                                        delay(240)
+                                        if (isVolumeUpPressed) {
+                                            isVoiceCaptureTriggered = true
+                                            startVoiceCaptureService()
+                                        }
+                                    }
+                                }
+                            }
+                            ACTION_VOLUME_LONG_PRESS_VOICE -> {
+                                isVoiceCaptureTriggered = true
+                                startVoiceCaptureService()
                             }
                         }
                     }
 
-                    // 拦截事件：告诉系统“我处理了”，系统就不会弹出音量条
                     return true
                 }
 
                 KeyEvent.ACTION_UP -> {
-                    // 取消长按计时
+                    isVolumeUpPressed = false
                     volumeLongPressJob?.cancel()
 
                     if (isLongPressTriggered) {
-                        // 如果之前已经触发了长按逻辑，这里什么都不做
                         Log.d(TAG, "音量+ 抬起 (长按处理完毕)")
+                        if (isVoiceCaptureTriggered) {
+                            stopVoiceCaptureService()
+                        }
                     } else {
-                        // 如果没触发长按，说明这是一次短按
-                        // 手动补偿：调用系统 API 增加音量并显示音量条
                         Log.d(TAG, "音量+ 抬起 (短按)，模拟系统音量增加")
                         try {
                             audioManager.adjustSuggestedStreamVolume(
@@ -305,23 +318,24 @@ class TextAccessibilityService : AccessibilityService() {
                         }
                     }
 
-                    // 重置状态
                     isLongPressTriggered = false
-                    // 拦截事件：防止系统处理 UP 事件导致意外行为
+                    isVoiceCaptureTriggered = false
                     return true
                 }
 
                 else -> {
+                    isVolumeUpPressed = false
                     volumeLongPressJob?.cancel()
+                    if (isVoiceCaptureTriggered) {
+                        stopVoiceCaptureService()
+                    }
                     isLongPressTriggered = false
+                    isVoiceCaptureTriggered = false
                     return true
                 }
             }
         }
 
-        // 3. 音量减 (KEYCODE_VOLUME_DOWN) 及其他按键
-        // 直接放行 (return super)，恢复系统默认行为
-        // 这样可以保留“电源+音量减”截图功能，也可以保留长按音量减快速静音的功能
         return super.onKeyEvent(event)
     }
 
@@ -353,6 +367,24 @@ class TextAccessibilityService : AccessibilityService() {
         }
         serviceScope.launch {
             floatingCenter.startFloatingService()
+        }
+    }
+
+    private fun startVoiceCaptureService() {
+        if (!floatingCenter.canDrawOverlays(this)) {
+            Log.w(TAG, "悬浮窗权限未授予，无法启动语音输入")
+            showResultNotification("悬浮窗权限未授予", "请在设置中开启悬浮窗权限")
+            return
+        }
+        serviceScope.launch {
+            floatingCenter.startVoiceCaptureService()
+        }
+    }
+
+    private fun stopVoiceCaptureService() {
+        if (!floatingCenter.canDrawOverlays(this)) return
+        serviceScope.launch {
+            floatingCenter.stopVoiceCaptureService()
         }
     }
 
@@ -498,7 +530,6 @@ class TextAccessibilityService : AccessibilityService() {
      */
     private fun takeScreenshotAndAnalyze() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        showProgressNotification("正在分析", "正在分析屏幕内容...")
 
         // ✅ 主线程调用 takeScreenshot（系统要求）
         takeScreenshot(
@@ -506,6 +537,7 @@ class TextAccessibilityService : AccessibilityService() {
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshotResult: ScreenshotResult) {
+                    showProgressNotification("正在分析", "正在分析屏幕内容...")
                     // ✅ 将耗时的分析工作移到后台线程
                     analysisJob = serviceScope.launch(Dispatchers.IO) {
                         processScreenshot(screenshotResult)
@@ -513,7 +545,6 @@ class TextAccessibilityService : AccessibilityService() {
                 }
                 override fun onFailure(errorCode: Int) {
                     Log.w(TAG, "takeScreenshot 失败: code=$errorCode")
-                    cancelProgressNotification()
                     showResultNotification(
                         "截图失败",
                         buildScreenshotFailureContent(errorCode),
@@ -670,10 +701,6 @@ class TextAccessibilityService : AccessibilityService() {
         } else {
             showBaseNotification(NOTIFICATION_ID_RESULT, title, content, isProgress = false, autoLaunch = autoLaunch)
         }
-    }
-
-    private fun buildRecognitionFailureContent(payload: RecognitionFailedEvent): String {
-        return RecognitionFailureMessageMapper.userMessage(payload)
     }
 
     private fun buildScreenshotFailureContent(errorCode: Int): String {

@@ -19,4 +19,8 @@ class PermissionCenter {
     fun hasSmsReadPermission(context: Context): Boolean {
         return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
     }
+
+    fun hasRecordAudioPermission(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
 }

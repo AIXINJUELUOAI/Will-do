@@ -23,6 +23,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 import java.util.Locale
 
 class WeatherRepository private constructor(context: Context) {
@@ -61,7 +66,9 @@ class WeatherRepository private constructor(context: Context) {
                 Result.failure(IllegalStateException("Weather not configured"))
             } else {
                 val requestLocation = resolveRequestLocation(settings)
-                val resolvedLocation = enrichLocation(settings, requestLocation)
+                val resolvedLocation = applyTrustedLocationFallback(enrichLocation(settings, requestLocation))
+                saveCachedLocation(resolvedLocation)
+                saveTrustedLocation(resolvedLocation)
                 val rawBody = requestWeather(settings, resolvedLocation, "/v7/weather/now")
                 val hourly = runCatching {
                     WeatherApiAdapter.parseHourly(requestWeather(settings, resolvedLocation, "/v7/weather/24h"))
@@ -98,7 +105,7 @@ class WeatherRepository private constructor(context: Context) {
                     )
                 ) {
                     notifier.notifyAlerts(
-                        locationName = parsed.displayLocationName(),
+                        locationName = parsed.displayNotificationLocationName(),
                         alerts = dedupedAlerts,
                         risks = risks,
                         showLiveNotification = settings.isLiveCapsuleEnabled
@@ -192,6 +199,7 @@ class WeatherRepository private constructor(context: Context) {
             val value = listOf(alert.eventName, alert.headline, alert.description).joinToString(" ")
             buildList {
                 if (value.contains("高温")) add("heat")
+                if (value.contains("低温") || value.contains("寒潮") || value.contains("强降温") || value.contains("寒冷") || value.contains("霜冻") || value.contains("冰冻")) add("cold")
                 if (value.contains("雷") || value.contains("强对流") || value.contains("冰雹") || value.contains("雹")) add("thunder")
                 if (value.contains("暴雨") || value.contains("降雨") || value.contains("雨")) add("rain")
                 if (value.contains("大风") || value.contains("台风") || value.contains("风")) add("wind")
@@ -205,6 +213,7 @@ class WeatherRepository private constructor(context: Context) {
         val value = "$title $text"
         return when {
             value.contains("高温") -> "heat"
+            value.contains("低温") || value.contains("寒潮") || value.contains("强降温") || value.contains("寒冷") || value.contains("霜冻") || value.contains("冰冻") -> "cold"
             value.contains("雷") || value.contains("强对流") || value.contains("冰雹") || value.contains("雹") -> "thunder"
             value.contains("雪") || value.contains("冻雨") || value.contains("结冰") -> "snow"
             value.contains("雨") || value.contains("降雨") -> "rain"
@@ -222,9 +231,7 @@ class WeatherRepository private constructor(context: Context) {
 
         val currentResult = locationProvider.resolveCurrentLocation()
         if (currentResult.isSuccess) {
-            val current = currentResult.getOrThrow()
-            saveCachedLocation(current)
-            return current
+            return currentResult.getOrThrow()
         }
 
         val cached = loadCachedLocation()
@@ -244,6 +251,19 @@ class WeatherRepository private constructor(context: Context) {
             .getOrNull()
             ?.copy(source = location.source)
             ?: location
+    }
+
+    private fun applyTrustedLocationFallback(location: WeatherLocation): WeatherLocation {
+        if (location.hasTrustedName()) return location
+        val trusted = loadTrustedLocation() ?: return location
+        if (distanceMeters(location, trusted) > TRUSTED_LOCATION_MATCH_RADIUS_METERS) return location
+        return location.copy(
+            locationId = trusted.locationId,
+            name = trusted.name,
+            adm1 = trusted.adm1,
+            adm2 = trusted.adm2,
+            country = trusted.country
+        )
     }
 
     private fun manualLocation(settings: MySettings): WeatherLocation? {
@@ -295,6 +315,20 @@ class WeatherRepository private constructor(context: Context) {
             .apply()
     }
 
+    private fun saveTrustedLocation(location: WeatherLocation) {
+        if (!location.hasTrustedName()) return
+        prefs.edit()
+            .putString(KEY_TRUSTED_LOCATION_LAT, location.latitude.toString())
+            .putString(KEY_TRUSTED_LOCATION_LON, location.longitude.toString())
+            .putString(KEY_TRUSTED_LOCATION_ID, location.locationId)
+            .putString(KEY_TRUSTED_LOCATION_NAME, location.name)
+            .putString(KEY_TRUSTED_LOCATION_ADM1, location.adm1)
+            .putString(KEY_TRUSTED_LOCATION_ADM2, location.adm2)
+            .putString(KEY_TRUSTED_LOCATION_COUNTRY, location.country)
+            .putLong(KEY_TRUSTED_LOCATION_TIME, System.currentTimeMillis())
+            .apply()
+    }
+
     private fun loadCachedLocation(): WeatherLocation? {
         val lat = prefs.getString(KEY_LOCATION_LAT, null)?.toDoubleOrNull() ?: return null
         val lon = prefs.getString(KEY_LOCATION_LON, null)?.toDoubleOrNull() ?: return null
@@ -309,6 +343,48 @@ class WeatherRepository private constructor(context: Context) {
             adm2 = prefs.getString(KEY_LOCATION_ADM2, "").orEmpty(),
             country = prefs.getString(KEY_LOCATION_COUNTRY, "").orEmpty()
         )
+    }
+
+    private fun loadTrustedLocation(): WeatherLocation? {
+        val lat = prefs.getString(KEY_TRUSTED_LOCATION_LAT, null)?.toDoubleOrNull() ?: return null
+        val lon = prefs.getString(KEY_TRUSTED_LOCATION_LON, null)?.toDoubleOrNull() ?: return null
+        val time = prefs.getLong(KEY_TRUSTED_LOCATION_TIME, 0L)
+        if (time <= 0L || System.currentTimeMillis() - time > TRUSTED_LOCATION_MAX_AGE_MS) return null
+        return WeatherLocation(
+            latitude = lat,
+            longitude = lon,
+            source = "trusted",
+            locationId = prefs.getString(KEY_TRUSTED_LOCATION_ID, "").orEmpty(),
+            name = prefs.getString(KEY_TRUSTED_LOCATION_NAME, "").orEmpty(),
+            adm1 = prefs.getString(KEY_TRUSTED_LOCATION_ADM1, "").orEmpty(),
+            adm2 = prefs.getString(KEY_TRUSTED_LOCATION_ADM2, "").orEmpty(),
+            country = prefs.getString(KEY_TRUSTED_LOCATION_COUNTRY, "").orEmpty()
+        ).takeIf { it.hasTrustedName() }
+    }
+
+    private fun WeatherLocation.hasTrustedName(): Boolean {
+        return locationId.isNotBlank() || name.isNotBlank() || adm2.isNotBlank() || adm1.isNotBlank()
+    }
+
+    private fun WeatherData.displayNotificationLocationName(): String {
+        return displayLocationName().takeUnless { it.isGenericLocationName() }.orEmpty()
+    }
+
+    private fun String.isGenericLocationName(): Boolean {
+        val clean = trim()
+        return clean == "当前位置" || clean == "最近位置" || clean == "手动位置"
+    }
+
+    private fun distanceMeters(first: WeatherLocation, second: WeatherLocation): Double {
+        val earthRadiusMeters = 6_371_000.0
+        val firstLat = Math.toRadians(first.latitude)
+        val secondLat = Math.toRadians(second.latitude)
+        val deltaLat = Math.toRadians(second.latitude - first.latitude)
+        val deltaLon = Math.toRadians(second.longitude - first.longitude)
+        val a = sin(deltaLat / 2).pow(2.0) +
+            cos(firstLat) * cos(secondLat) * sin(deltaLon / 2).pow(2.0)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return earthRadiusMeters * c
     }
 
     fun clearCache() {
@@ -333,6 +409,16 @@ class WeatherRepository private constructor(context: Context) {
         private const val KEY_LOCATION_ADM2 = "location_adm2"
         private const val KEY_LOCATION_COUNTRY = "location_country"
         private const val KEY_LOCATION_TIME = "location_time"
+        private const val KEY_TRUSTED_LOCATION_LAT = "trusted_location_lat"
+        private const val KEY_TRUSTED_LOCATION_LON = "trusted_location_lon"
+        private const val KEY_TRUSTED_LOCATION_ID = "trusted_location_id"
+        private const val KEY_TRUSTED_LOCATION_NAME = "trusted_location_name"
+        private const val KEY_TRUSTED_LOCATION_ADM1 = "trusted_location_adm1"
+        private const val KEY_TRUSTED_LOCATION_ADM2 = "trusted_location_adm2"
+        private const val KEY_TRUSTED_LOCATION_COUNTRY = "trusted_location_country"
+        private const val KEY_TRUSTED_LOCATION_TIME = "trusted_location_time"
+        private const val TRUSTED_LOCATION_MATCH_RADIUS_METERS = 10_000.0
+        private const val TRUSTED_LOCATION_MAX_AGE_MS = 30L * 24L * 60L * 60L * 1000L
         const val LOCATION_MODE_AUTO = "auto"
         const val LOCATION_MODE_MANUAL = "manual"
         const val LOCATION_MODE_AUTO_FALLBACK_MANUAL = "auto_fallback_manual"

@@ -35,8 +35,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 65
-        versionName = "2.1.2"
+        versionCode = 71
+        versionName = "2.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_MODEL_EDITION", "false")
@@ -52,6 +52,11 @@ android {
             "String",
             "PROMPT_UPDATE_URL",
             "\"${escapeBuildConfigString(localProperty("PROMPT_UPDATE_URL"))}\""
+        )
+        buildConfigField(
+            "String",
+            "APP_UPDATE_URL",
+            "\"${escapeBuildConfigString(localProperty("APP_UPDATE_URL"))}\""
         )
     }
 
@@ -121,6 +126,9 @@ dependencies {
 
     // === ML Kit (OCR 识别) ===
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
+    // === 离线语音转写 ===
+    implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.21")
 
     // === 测试库 ===
     testImplementation(libs.junit)

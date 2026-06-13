@@ -281,10 +281,11 @@ class SettingsViewModel(
 
     // 更新截图延迟
     fun updateScreenshotDelay(delay: Long) {
+        val normalizedDelay = MySettings.normalizeScreenshotDelayMs(delay)
         val current = settings.value
-        if (current.screenshotDelayMs != delay) {
+        if (current.screenshotDelayMs != normalizedDelay) {
             viewModelScope.launch {
-                settingsOperationApi.updateSettings(current.copy(screenshotDelayMs = delay))
+                settingsOperationApi.updateSettings(current.copy(screenshotDelayMs = normalizedDelay))
             }
         }
     }

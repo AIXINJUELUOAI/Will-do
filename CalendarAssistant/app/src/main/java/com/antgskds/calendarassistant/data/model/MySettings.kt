@@ -123,7 +123,7 @@ data class MySettings(
 
     // 长按音量+动作
     val volumeUpLongPressEnabled: Boolean = false,
-    val volumeUpLongPressAction: Int = 0, // 0=无操作, 1=识屏, 2=悬浮窗
+    val volumeUpLongPressAction: Int = 1, // 1=识屏, 2=悬浮窗, 3=语音输入
 
     // 侧边栏唤起
     val edgeBarEnabled: Boolean = false,
@@ -140,4 +140,13 @@ data class MySettings(
     val developerOptionsUnlocked: Boolean = false,
     val developerOptionsEnabled: Boolean = false,
     val developerOptionsDisabledAtMillis: Long = 0L
-)
+) {
+    companion object {
+        const val SCREENSHOT_DELAY_MIN_MS = 500L
+        const val SCREENSHOT_DELAY_MAX_MS = 2500L
+
+        fun normalizeScreenshotDelayMs(delayMs: Long): Long {
+            return delayMs.coerceIn(SCREENSHOT_DELAY_MIN_MS, SCREENSHOT_DELAY_MAX_MS)
+        }
+    }
+}

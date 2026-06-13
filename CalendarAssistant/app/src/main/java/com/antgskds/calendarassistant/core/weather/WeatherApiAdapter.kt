@@ -105,6 +105,8 @@ object WeatherApiAdapter {
                 val item = alerts.optJSONObject(index) ?: continue
                 val eventType = item.optJSONObject("eventType")
                 val color = item.optJSONObject("color")
+                val messageType = item.optJSONObject("messageType")
+                val supersedes = messageType?.optJSONArray("supersedes")
                 add(
                     WeatherAlertData(
                         id = item.optString("id"),
@@ -113,6 +115,14 @@ object WeatherApiAdapter {
                         eventCode = eventType?.optString("code").orEmpty(),
                         severity = item.optString("severity"),
                         colorCode = color?.optString("code").orEmpty(),
+                        messageTypeCode = messageType?.optString("code").orEmpty(),
+                        messageTypeSupersedes = buildList {
+                            if (supersedes != null) {
+                                for (supersedeIndex in 0 until supersedes.length()) {
+                                    supersedes.optString(supersedeIndex).takeIf { it.isNotBlank() }?.let(::add)
+                                }
+                            }
+                        },
                         issuedTime = item.optString("issuedTime"),
                         effectiveTime = item.optString("effectiveTime"),
                         onsetTime = item.optString("onsetTime"),

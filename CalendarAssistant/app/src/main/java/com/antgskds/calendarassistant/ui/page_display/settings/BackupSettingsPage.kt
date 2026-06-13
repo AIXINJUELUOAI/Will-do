@@ -209,7 +209,13 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
             val name = uri.lastPathSegment.orEmpty()
             pendingImportUri = uri
             pendingImportIsZip = type.contains("zip", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
-            importOptions = AppBackupOptions(includeEvents = true, includeSettings = true, includeAttachments = pendingImportIsZip, includePrompts = true)
+            importOptions = AppBackupOptions(
+                includeEvents = true,
+                includeSettings = true,
+                includeAttachments = pendingImportIsZip,
+                includePrompts = true,
+                includeQuickMemos = pendingImportIsZip
+            )
             showBackupImportSheet = true
         }
     }
@@ -286,7 +292,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
             )
             BackupCard(
                 title = "数据备份",
-                desc = "备份/恢复日程、设置、附件和提示词",
+                desc = "备份/恢复日程、随口记、设置、附件和提示词",
                 onExport = {
                     haptics.click()
                     exportOptions = AppBackupOptions(includeEvents = true)
@@ -413,7 +419,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
         if (showBackupExportSheet) {
             BackupOptionsSheet(
                 title = "导出数据备份",
-                description = "选择要写入备份文件的数据。包含附件时会导出 ZIP，否则导出 JSON。",
+                description = "选择要写入备份文件的数据。包含附件或随口记时会导出 ZIP，否则导出 JSON。",
                 options = exportOptions,
                 attachmentCount = attachmentCount,
                 attachmentSizeText = attachmentSizeText,
@@ -426,7 +432,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                     val normalized = if (exportOptions.includeAttachments) exportOptions.copy(includeEvents = true) else exportOptions
                     exportOptions = normalized
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                    if (normalized.includeAttachments) {
+                    if (normalized.includeAttachments || normalized.includeQuickMemos) {
                         exportBackupZipLauncher.launch("willdo_backup_$timestamp.zip")
                     } else {
                         exportBackupJsonLauncher.launch("willdo_backup_$timestamp.json")
@@ -753,6 +759,12 @@ private fun BackupOptionsSheet(
                     onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeAttachments = it, includeEvents = normalizedOptions.includeEvents || it)) }
                 )
                 BackupOptionRow(
+                    title = "随口记",
+                    subtitle = "包含随口记、状态和录音",
+                    checked = normalizedOptions.includeQuickMemos,
+                    onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeQuickMemos = it)) }
+                )
+                BackupOptionRow(
                     title = "提示词",
                     subtitle = "当前本地提示词配置",
                     checked = normalizedOptions.includePrompts,
@@ -768,7 +780,7 @@ private fun BackupOptionsSheet(
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = onConfirm,
-                enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings || normalizedOptions.includePrompts,
+                enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings || normalizedOptions.includePrompts || normalizedOptions.includeQuickMemos,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(confirmText)
@@ -811,6 +823,7 @@ private fun formatBackupImportResult(result: AppBackupImportResult): String {
     if (result.settingsImported) parts += "设置"
     if (result.promptsImported) parts += "提示词"
     if (result.attachmentsImported > 0) parts += "附件 ${result.attachmentsImported} 个"
+    if (result.quickMemosImported > 0) parts += "随口记 ${result.quickMemosImported} 条"
     return if (parts.isEmpty()) "导入完成" else "导入成功：${parts.joinToString("，")}"
 }
 

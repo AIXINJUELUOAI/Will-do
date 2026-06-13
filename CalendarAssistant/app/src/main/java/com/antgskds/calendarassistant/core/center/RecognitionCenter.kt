@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.center
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
@@ -64,6 +65,52 @@ class RecognitionCenter(
                 )
             }
 
+            is AnalysisResult.Failure -> {
+                domainEventBus.emit(
+                    eventType = DomainEventType.RECOGNITION_FAILED,
+                    traceId = traceId,
+                    source = "recognition_center",
+                    entityKey = EventIdentity.entityKey(sourceType, sourceId, text),
+                    payload = RecognitionFailedEvent(
+                        sourceType = sourceType,
+                        sourceId = sourceId,
+                        errorCode = result.failure.detail.takeIf { it.isLocalModelStatusCode() } ?: "ANALYSIS_FAILURE",
+                        retryable = true,
+                        message = result.failure.fullMessage()
+                    )
+                )
+            }
+        }
+        return result
+    }
+
+    suspend fun analyzeTextEvents(
+        text: String,
+        settings: MySettings,
+        context: Context,
+        sourceType: String = "text_events",
+        sourceId: String = "text_events_input",
+        ingestRequested: Boolean = false,
+        traceId: String = EventIdentity.newTraceId()
+    ): AnalysisResult<List<RecognitionDraft>> {
+        val result = RecognitionProcessor.analyzeTextEvents(text, settings, context)
+        when (result) {
+            is AnalysisResult.Success -> {
+                domainEventBus.emit(
+                    eventType = DomainEventType.RECOGNITION_COMPLETED,
+                    traceId = traceId,
+                    source = "recognition_center",
+                    entityKey = EventIdentity.entityKey(sourceType, sourceId, text),
+                    payload = RecognitionCompletedEvent(
+                        sourceType = sourceType,
+                        sourceId = sourceId,
+                        candidates = result.data,
+                        sourceImagePath = null,
+                        ingestRequested = ingestRequested
+                    )
+                )
+            }
+            is AnalysisResult.Empty -> Unit
             is AnalysisResult.Failure -> {
                 domainEventBus.emit(
                     eventType = DomainEventType.RECOGNITION_FAILED,

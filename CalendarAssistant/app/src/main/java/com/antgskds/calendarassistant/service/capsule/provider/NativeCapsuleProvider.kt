@@ -47,7 +47,6 @@ class NativeCapsuleProvider : ICapsuleProvider {
             .setShowWhen(true)
 
         builder.setContentText(display.secondaryText ?: " ")
-        display.tertiaryText?.let { builder.setSubText(it) }
 
         val expandedText = display.expandedText ?: display.secondaryText ?: " "
         builder.setStyle(
@@ -98,7 +97,11 @@ class NativeCapsuleProvider : ICapsuleProvider {
     ) {
         val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
             this.action = action.receiverAction
-            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+            if (action.extraLongKey != null && action.extraLongValue != null) {
+                putExtra(action.extraLongKey, action.extraLongValue)
+            } else {
+                putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+            }
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,

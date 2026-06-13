@@ -61,6 +61,7 @@ import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
@@ -108,6 +109,8 @@ fun HomePage(
     onEditNote: (NoteEntity) -> Unit = {},
     onCreateNote: () -> Unit = {},
     onRequestDeleteNote: (NoteEntity) -> Unit = {},
+    onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
+    onOpenQuickMemoDetail: (Long) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
@@ -123,6 +126,7 @@ fun HomePage(
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
     var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
+    var isLegacyNoteMode by rememberSaveable { mutableStateOf(false) }
 
     val allTabIndex = 1
 
@@ -333,6 +337,12 @@ fun HomePage(
         }
     }
 
+    LaunchedEffect(currentTab) {
+        if (currentTab != 2) {
+            isLegacyNoteMode = false
+        }
+    }
+
     LaunchedEffect(imageRequestId) {
         if (imageRequestId > 0 && !isImageImporting) {
             imagePickerLauncher.launch("image/*")
@@ -468,7 +478,7 @@ fun HomePage(
                         title = {
                             val title = when (currentTab) {
                                 0 -> "今日日程"
-                                2 -> "便签"
+                                2 -> if (isLegacyNoteMode) "普通便签" else "随口记"
                                 else -> "全部日程"
                             }
                             Text(title)
@@ -683,13 +693,23 @@ fun HomePage(
                             onRequestDeleteItem = onRequestDeleteItem,
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
-                    } else {
+                    } else if (isLegacyNoteMode) {
                         NotePage(
                             viewModel = viewModel,
                             searchQuery = noteSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
                             onEditNote = onEditNote,
                             onPendingDeleteChange = { note -> note?.let(onRequestDeleteNote) },
+                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                        )
+                    } else {
+                        QuickMemoPage(
+                            viewModel = viewModel,
+                            searchQuery = noteSearchQuery,
+                            uiSize = uiSize,
+                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
+                            onOpenDetail = onOpenQuickMemoDetail,
+                            onPendingDeleteChange = { memo -> memo?.let(onRequestDeleteQuickMemo) },
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     }
@@ -750,7 +770,15 @@ fun HomePage(
                                             keyboardController?.show()
                                         }
                                     },
-                                placeholder = { Text("搜索标题、备注或地点...") },
+                                placeholder = {
+                                    Text(
+                                        when (currentTab) {
+                                            allTabIndex -> "搜索标题、备注或地点..."
+                                            2 -> if (isLegacyNoteMode) "搜索便签标题或正文..." else "搜索随口记正文..."
+                                            else -> "搜索标题、备注或地点..."
+                                        }
+                                    )
+                                },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Search,

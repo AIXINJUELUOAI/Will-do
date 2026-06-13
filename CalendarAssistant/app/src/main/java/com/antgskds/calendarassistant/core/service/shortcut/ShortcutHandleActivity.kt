@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
 import kotlinx.coroutines.launch
@@ -35,7 +37,13 @@ class ShortcutHandleActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             } else {
-                service.startAnalysis(delayDuration = 400.milliseconds, fromShortcut = true)
+                val delayMs = (applicationContext as App)
+                    .settingsQueryApi
+                    .settings
+                    .value
+                    .screenshotDelayMs
+                    .let(MySettings::normalizeScreenshotDelayMs)
+                service.startAnalysis(delayDuration = delayMs.milliseconds, fromShortcut = true)
             }
 
             finish()

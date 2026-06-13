@@ -14,8 +14,13 @@ import com.antgskds.calendarassistant.data.model.AppBackupData
 import com.antgskds.calendarassistant.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupManifest
 import com.antgskds.calendarassistant.data.model.AppBackupOptions
+import com.antgskds.calendarassistant.data.model.AppBackupQuickMemoDto
+import com.antgskds.calendarassistant.data.model.AppBackupQuickMemoSuggestionDto
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
@@ -78,13 +83,19 @@ class BackupCenter(
     suspend fun exportBackupData(options: AppBackupOptions): String {
         val normalized = normalizeBackupOptions(options)
         if (normalized.includeAttachments) error("附件备份需要导出为 ZIP")
+        if (normalized.includeQuickMemos) error("随口记备份需要导出为 ZIP")
         return json.encodeToString(buildBackupData(normalized))
     }
 
     suspend fun exportBackupZip(uri: Uri, options: AppBackupOptions) {
-        val normalized = normalizeBackupOptions(options.copy(includeAttachments = true))
-        val exportItems = buildAttachmentExportItems()
-        val backupData = buildBackupData(normalized, exportItems.map { it.dto })
+        val normalized = normalizeBackupOptions(options)
+        val exportItems = if (normalized.includeAttachments) buildAttachmentExportItems() else emptyList()
+        val quickMemoExportItems = if (normalized.includeQuickMemos) buildQuickMemoAudioExportItems() else emptyList()
+        val backupData = buildBackupData(
+            options = normalized,
+            attachmentDtos = exportItems.map { it.dto },
+            quickMemoAudioFileNames = quickMemoExportItems.associate { it.backupKey to it.fileName }
+        )
         appContext.contentResolver.openOutputStream(uri)?.use { output ->
             ZipOutputStream(output.buffered()).use { zip ->
                 zip.putJson("manifest.json", json.encodeToString(AppBackupManifest(createdAt = backupData.createdAt, options = normalized)))
@@ -92,6 +103,13 @@ class BackupCenter(
                 exportItems.forEach { item ->
                     if (item.file.exists()) {
                         zip.putNextEntry(ZipEntry("attachments/${item.dto.fileName}"))
+                        item.file.inputStream().use { input -> input.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                }
+                quickMemoExportItems.forEach { item ->
+                    if (item.file.exists()) {
+                        zip.putNextEntry(ZipEntry("quick_memos/audio/${item.fileName}"))
                         item.file.inputStream().use { input -> input.copyTo(zip) }
                         zip.closeEntry()
                     }
@@ -124,6 +142,10 @@ class BackupCenter(
                                 "backup.json" -> backupJson = zip.readBytes().toString(Charsets.UTF_8)
                                 else -> if (safeName.startsWith("attachments/")) {
                                     val file = File(tempDir, File(safeName).name)
+                                    file.outputStream().use { output -> zip.copyTo(output) }
+                                } else if (safeName.startsWith("quick_memos/audio/")) {
+                                    val audioDir = File(tempDir, QUICK_MEMO_AUDIO_IMPORT_DIR).apply { mkdirs() }
+                                    val file = File(audioDir, File(safeName).name)
                                     file.outputStream().use { output -> zip.copyTo(output) }
                                 }
                             }
@@ -163,18 +185,22 @@ class BackupCenter(
         }
     }
 
-    private fun buildBackupData(
+    private suspend fun buildBackupData(
         options: AppBackupOptions,
-        attachmentDtos: List<AppBackupAttachmentDto> = if (options.includeAttachments) buildAttachmentDtos() else emptyList()
+        attachmentDtos: List<AppBackupAttachmentDto> = if (options.includeAttachments) buildAttachmentDtos() else emptyList(),
+        quickMemoAudioFileNames: Map<String, String> = emptyMap()
     ): AppBackupData {
         val eventsJson = if (options.includeEvents) legacyDataMigrationCoordinator.exportEventsData() else null
+        val quickMemoData = if (options.includeQuickMemos) buildQuickMemoDtos(quickMemoAudioFileNames) else QuickMemoBackupData()
         return AppBackupData(
             createdAt = System.currentTimeMillis(),
             options = options,
             eventsJson = eventsJson,
             settings = if (options.includeSettings) settingsQueryApi.settings.value else null,
             promptsJson = if (options.includePrompts) AiPrompts.exportToJson(appContext) else null,
-            attachments = attachmentDtos
+            attachments = attachmentDtos,
+            quickMemos = quickMemoData.memos,
+            quickMemoSuggestions = quickMemoData.suggestions
         )
     }
 
@@ -232,11 +258,17 @@ class BackupCenter(
         } else {
             0
         }
+        val importedQuickMemos = if (options.includeQuickMemos) {
+            importQuickMemos(data.quickMemos, data.quickMemoSuggestions, attachmentsDir)
+        } else {
+            0
+        }
         return AppBackupImportResult(
             eventsResult = eventsResult,
             settingsImported = options.includeSettings && data.settings != null,
             promptsImported = promptsImported,
-            attachmentsImported = importedAttachments
+            attachmentsImported = importedAttachments,
+            quickMemosImported = importedQuickMemos
         )
     }
 
@@ -263,6 +295,149 @@ class BackupCenter(
         return imported
     }
 
+    private suspend fun buildQuickMemoDtos(audioFileNames: Map<String, String>): QuickMemoBackupData {
+        val memos = db.quickMemoDao().getAllQuickMemos()
+        if (memos.isEmpty()) return QuickMemoBackupData()
+        val memoKeys = memos.associate { memo -> (memo.id ?: 0L) to quickMemoBackupKey(memo) }
+        val memoDtos = memos.map { memo ->
+            val backupKey = quickMemoBackupKey(memo)
+            AppBackupQuickMemoDto(
+                backupKey = backupKey,
+                type = memo.type,
+                bodyText = memo.bodyText,
+                audioFileName = audioFileNames[backupKey],
+                audioDurationMs = memo.audioDurationMs,
+                transcriptionStatus = memo.transcriptionStatus,
+                analysisStatus = memo.analysisStatus,
+                createdAt = memo.createdAt,
+                updatedAt = memo.updatedAt,
+                sortRank = memo.sortRank,
+                todoState = memo.todoState,
+                todoPendingUntil = memo.todoPendingUntil,
+                todoCompletedAt = memo.todoCompletedAt
+            )
+        }
+        val suggestionDtos = db.quickMemoDao().getAllSuggestions().mapNotNull { suggestion ->
+            val backupMemoKey = memoKeys[suggestion.quickMemoId] ?: return@mapNotNull null
+            AppBackupQuickMemoSuggestionDto(
+                backupMemoKey = backupMemoKey,
+                type = suggestion.type,
+                status = suggestion.status,
+                candidateJson = suggestion.candidateJson,
+                eventId = suggestion.eventId,
+                createdAt = suggestion.createdAt,
+                updatedAt = suggestion.updatedAt
+            )
+        }
+        return QuickMemoBackupData(memoDtos, suggestionDtos)
+    }
+
+    private suspend fun buildQuickMemoAudioExportItems(): List<QuickMemoAudioExportItem> {
+        return db.quickMemoDao().getAllQuickMemos().mapNotNull { memo ->
+            val audioPath = memo.audioPath?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val file = File(audioPath)
+            if (!file.exists() || !file.isFile) return@mapNotNull null
+            val backupKey = quickMemoBackupKey(memo)
+            QuickMemoAudioExportItem(
+                backupKey = backupKey,
+                fileName = "${memo.id ?: memo.createdAt}_${file.name}",
+                file = file
+            )
+        }
+    }
+
+    private suspend fun importQuickMemos(
+        memos: List<AppBackupQuickMemoDto>,
+        suggestions: List<AppBackupQuickMemoSuggestionDto>,
+        tempDir: File?
+    ): Int {
+        if (memos.isEmpty()) return 0
+        val dao = db.quickMemoDao()
+        val existingKeys = dao.getAllQuickMemos().map { quickMemoDuplicateKey(it) }.toMutableSet()
+        val importedMemoIds = mutableMapOf<String, Long>()
+        val audioTempDir = tempDir?.let { File(it, QUICK_MEMO_AUDIO_IMPORT_DIR) }
+        var imported = 0
+
+        memos.forEach { dto ->
+            val duplicateKey = quickMemoDuplicateKey(dto)
+            if (duplicateKey in existingKeys) return@forEach
+            val audioPath = importQuickMemoAudio(dto.audioFileName, audioTempDir)
+            val memoId = dao.insertQuickMemo(
+                QuickMemoEntity(
+                    type = dto.type,
+                    bodyText = dto.bodyText,
+                    audioPath = audioPath,
+                    audioDurationMs = dto.audioDurationMs,
+                    transcriptionStatus = dto.transcriptionStatus,
+                    analysisStatus = dto.analysisStatus,
+                    createdAt = dto.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    updatedAt = dto.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    sortRank = dto.sortRank,
+                    todoState = dto.todoState,
+                    todoPendingUntil = dto.todoPendingUntil,
+                    todoCompletedAt = dto.todoCompletedAt
+                )
+            )
+            importedMemoIds[dto.backupKey] = memoId
+            existingKeys += duplicateKey
+            imported++
+        }
+
+        suggestions.forEach { dto ->
+            val memoId = importedMemoIds[dto.backupMemoKey] ?: return@forEach
+            dao.insertSuggestion(
+                QuickMemoSuggestionEntity(
+                    quickMemoId = memoId,
+                    type = dto.type,
+                    status = if (dto.eventId == null) dto.status else QuickMemoSuggestionStatus.PENDING,
+                    candidateJson = dto.candidateJson,
+                    eventId = null,
+                    createdAt = dto.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    updatedAt = dto.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                )
+            )
+        }
+        return imported
+    }
+
+    private fun importQuickMemoAudio(fileName: String?, audioTempDir: File?): String? {
+        if (fileName.isNullOrBlank() || audioTempDir == null) return null
+        val sourceFile = File(audioTempDir, File(fileName).name)
+        if (!sourceFile.exists() || !sourceFile.isFile) return null
+        val targetDir = File(appContext.filesDir, QUICK_MEMO_AUDIO_STORE_DIR).apply { mkdirs() }
+        val targetFile = uniqueFile(targetDir, sourceFile.name)
+        sourceFile.inputStream().use { input ->
+            targetFile.outputStream().use { output -> input.copyTo(output) }
+        }
+        return targetFile.absolutePath
+    }
+
+    private fun uniqueFile(directory: File, fileName: String): File {
+        val cleanName = File(fileName).name.ifBlank { "quick_memo_audio" }
+        val dotIndex = cleanName.lastIndexOf('.')
+        val baseName = if (dotIndex > 0) cleanName.substring(0, dotIndex) else cleanName
+        val extension = if (dotIndex > 0) cleanName.substring(dotIndex) else ""
+        var candidate = File(directory, cleanName)
+        var index = 1
+        while (candidate.exists()) {
+            candidate = File(directory, "${baseName}_$index$extension")
+            index++
+        }
+        return candidate
+    }
+
+    private fun quickMemoBackupKey(memo: QuickMemoEntity): String {
+        return "${memo.id ?: 0L}:${memo.createdAt}:${memo.type}:${memo.audioDurationMs}:${memo.bodyText.hashCode()}"
+    }
+
+    private fun quickMemoDuplicateKey(memo: QuickMemoEntity): String {
+        return listOf(memo.type, memo.createdAt, memo.bodyText, memo.audioDurationMs).joinToString("|")
+    }
+
+    private fun quickMemoDuplicateKey(dto: AppBackupQuickMemoDto): String {
+        return listOf(dto.type, dto.createdAt, dto.bodyText, dto.audioDurationMs).joinToString("|")
+    }
+
     private fun ZipOutputStream.putJson(name: String, content: String) {
         putNextEntry(ZipEntry(name))
         write(content.toByteArray())
@@ -273,6 +448,22 @@ class BackupCenter(
         val file: File,
         val dto: AppBackupAttachmentDto
     )
+
+    private data class QuickMemoAudioExportItem(
+        val backupKey: String,
+        val fileName: String,
+        val file: File
+    )
+
+    private data class QuickMemoBackupData(
+        val memos: List<AppBackupQuickMemoDto> = emptyList(),
+        val suggestions: List<AppBackupQuickMemoSuggestionDto> = emptyList()
+    )
+
+    private companion object {
+        const val QUICK_MEMO_AUDIO_IMPORT_DIR = "quick_memo_audio"
+        const val QUICK_MEMO_AUDIO_STORE_DIR = "quick_memos/audio"
+    }
 
     suspend fun fetchWakeUpShareImport(shareText: String): Result<ParsedCourseImport> = runCatching {
         val key = CourseImportParser.extractWakeUpKey(shareText) ?: error("剪贴板中未识别到 WakeUp 分享口令")
