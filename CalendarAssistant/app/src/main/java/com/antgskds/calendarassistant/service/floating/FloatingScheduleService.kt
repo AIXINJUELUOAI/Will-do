@@ -1,16 +1,24 @@
 package com.antgskds.calendarassistant.service.floating
 
+import android.Manifest
+import android.app.Notification
+import android.app.PendingIntent
 import android.app.Service
 import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.pm.ServiceInfo
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -21,6 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -30,6 +40,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.MainActivity
+import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
@@ -43,7 +55,9 @@ import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.WeatherQueryApi
-import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
@@ -52,9 +66,11 @@ import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.service.notification.NotificationIds
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
@@ -63,10 +79,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import java.io.File
 import java.time.LocalDate
 
 class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
@@ -78,9 +97,19 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
         const val ACTION_IMAGE_PICKED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICKED"
         const val ACTION_IMAGE_PICK_CANCELLED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICK_CANCELLED"
+        const val ACTION_PREPARE_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.PREPARE_VOICE_CAPTURE"
+        const val ACTION_START_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.START_VOICE_CAPTURE"
+        const val ACTION_STOP_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.STOP_VOICE_CAPTURE"
+        const val ACTION_VOICE_CAPTURE_RECORDING = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_RECORDING"
+        const val ACTION_VOICE_CAPTURE_COMPLETED = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_COMPLETED"
+        const val ACTION_VOICE_CAPTURE_TOO_SHORT = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_TOO_SHORT"
+        const val ACTION_VOICE_CAPTURE_ERROR = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_ERROR"
         const val ACTION_FLOATING_SHOWN = "com.antgskds.calendarassistant.floating.action.SHOWN"
         const val ACTION_FLOATING_HIDDEN = "com.antgskds.calendarassistant.floating.action.HIDDEN"
         const val EXTRA_IMAGE_URI = "extra_image_uri"
+        const val EXTRA_VOICE_AUDIO_PATH = "extra_voice_audio_path"
+        const val EXTRA_VOICE_DURATION_MS = "extra_voice_duration_ms"
+        const val EXTRA_VOICE_ERROR_MESSAGE = "extra_voice_error_message"
 
         @Volatile var isShowing: Boolean = false
             private set
@@ -101,10 +130,17 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private var pendingImagePickCompletion: (() -> Unit)? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val voiceCaptureState = MutableStateFlow(QuickMemoVoiceCaptureState())
+    private val audioRecorder by lazy { QuickMemoAudioRecorder(applicationContext) }
+    private var voiceConfirmJob: Job? = null
+    private var voiceStartJob: Job? = null
+    private var voiceStopRequested: Boolean = false
+    private var voiceForegroundActive: Boolean = false
 
     private val app by lazy { applicationContext as App }
     private val scheduleCenter: ScheduleCenter by lazy { app.scheduleCenter }
-    private val noteCenter by lazy { app.noteCenter }
+    private val quickMemoCenter by lazy { app.quickMemoCenter }
+    private val audioPlaybackCenter by lazy { app.audioPlaybackCenter }
     private val scheduleQueryApi: ScheduleQueryApi by lazy { app.scheduleQueryApi }
     private val settingsQueryApi: SettingsQueryApi by lazy { app.settingsQueryApi }
     private val weatherQueryApi: WeatherQueryApi by lazy { app.weatherQueryApi }
@@ -289,7 +325,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings by settingsQueryApi.settings.collectAsState()
                 val context = LocalContext.current
                 val weatherData by weatherQueryApi.weatherData.collectAsState()
-                val notes by noteCenter.notes.collectAsState()
+                val quickMemos by quickMemoCenter.quickMemos.collectAsState()
+                val currentVoiceCaptureState by voiceCaptureState.collectAsState()
+                val audioPlaybackState by audioPlaybackCenter.playbackState.collectAsState()
                 val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
                 val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
 
@@ -375,14 +413,16 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                             )
                             UiStyle.MATERIAL3 -> FloatingScheduleScreen(
                         scheduleItems = scheduleItems,
-                        notes = notes,
+                        quickMemos = quickMemos,
+                        voiceCaptureState = currentVoiceCaptureState,
+                        audioPlaybackState = audioPlaybackState,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         weatherForecastRange = settings.floatingWeatherForecastRange,
                         expandSide = settings.floatingExpandSide,
                         hapticEnabled = settings.hapticFeedbackEnabled,
                         onClose = { requestClose() },
-                        onManualInput = { text, isNote, onComplete ->
-                            handleManualInput(text = text, isNote = isNote, onComplete = onComplete)
+                        onManualInput = { text, isQuickMemo, onComplete ->
+                            handleManualInput(text = text, isQuickMemo = isQuickMemo, onComplete = onComplete)
                         },
                         onPickImageRequest = { onComplete ->
                             startScreenshotAnalysisFlow(onComplete)
@@ -422,31 +462,50 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onUndoAction = {
                             scheduleCenter.undoStatusAction()
                         },
-                        onToggleNoteTodo = { note, paragraphId ->
-                            serviceScope.launch { note.id?.let { noteCenter.toggleTodo(it, paragraphId) } }
+                        onMarkQuickMemoTodo = { memo ->
+                            serviceScope.launch { memo.id?.let { quickMemoCenter.markTodoActive(it) } }
                         },
-                        onDeleteNote = { note, onComplete ->
+                        onRemoveQuickMemoTodo = { memo ->
+                            serviceScope.launch { memo.id?.let { quickMemoCenter.removeTodo(it) } }
+                        },
+                        onToggleQuickMemoTodo = { memo ->
+                            serviceScope.launch { memo.id?.let { quickMemoCenter.toggleTodoCompletion(it) } }
+                        },
+                        onDeleteQuickMemo = { memo, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    note.id?.let { noteCenter.deleteNote(it) }
+                                    memo.id?.let { quickMemoCenter.deleteQuickMemo(it) }
                                     Toast.makeText(applicationContext, "已删除", Toast.LENGTH_SHORT).show()
                                 } finally {
                                     onComplete()
                                 }
                             }
                         },
-                        onSaveNote = { note, title, body, onComplete ->
+                        onSaveQuickMemo = { memo, body, onComplete ->
                             serviceScope.launch {
                                 try {
-                                    noteCenter.saveNote(
-                                        id = note.id,
-                                        title = title,
-                                        document = note.document().withFloatingText(body),
-                                        createdAt = note.createdAt
-                                    )
+                                    memo.id?.let { quickMemoCenter.updateBody(it, body) }
                                 } finally {
                                     onComplete()
                                 }
+                            }
+                        },
+                        onReorderQuickMemos = { ids ->
+                            serviceScope.launch { quickMemoCenter.updateSortRanks(ids) }
+                        },
+                        onConfirmVoiceCapture = { asTodo ->
+                            confirmVoiceCapture(asTodo)
+                        },
+                        onStartVoiceCapture = {
+                            startVoiceCapture()
+                        },
+                        onStopVoiceCapture = {
+                            stopVoiceCapture()
+                        },
+                        onToggleAudioPlayback = { path ->
+                            serviceScope.launch(Dispatchers.IO) {
+                                runCatching { audioPlaybackCenter.toggle(path) }
+                                    .onFailure { Log.e(TAG, "播放语音随口记失败", it) }
                             }
                         },
                         onLoadingChange = { _ -> }
@@ -488,20 +547,38 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         }
     }
 
+    private fun detachFloatingWindowForVoice() {
+        val view = composeView ?: return
+        if (!isViewAttached && !view.isAttachedToWindow) return
+        try {
+            windowManager.removeView(view)
+            isViewAttached = false
+        } catch (e: IllegalArgumentException) {
+            isViewAttached = false
+        } catch (e: Exception) {
+            Log.w(TAG, "detachFloatingWindowForVoice failed", e)
+        }
+    }
+
     private fun showFloatingWindow() {
         val view = composeView ?: return
         val params = windowLayoutParams ?: return
         if (!permissionCenter.canDrawOverlays(this)) return
 
-        if (!isViewAttached || !view.isAttachedToWindow) {
+        if (!isViewAttached && !view.isAttachedToWindow) {
             try {
                 windowManager.addView(view, params)
+                isViewAttached = true
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "showFloatingWindow addView already attached", e)
                 isViewAttached = true
             } catch (e: Exception) {
                 Log.e(TAG, "showFloatingWindow addView failed", e)
                 isViewAttached = false
                 return
             }
+        } else {
+            isViewAttached = true
         }
 
         try {
@@ -521,7 +598,279 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         callback?.invoke()
     }
 
-    
+    private fun startVoiceCapture() {
+        voiceConfirmJob?.cancel()
+        voiceStartJob?.cancel()
+        voiceStopRequested = false
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                status = QuickMemoVoiceCaptureStatus.ERROR,
+                message = "需要麦克风权限"
+            )
+            Toast.makeText(applicationContext, "需要麦克风权限", Toast.LENGTH_SHORT).show()
+            requestRecordAudioPermission()
+            serviceScope.launch {
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+            }
+            return
+        }
+        try {
+            startVoiceForeground()
+        } catch (e: Exception) {
+            Log.e(TAG, "启动随口记前台录音失败", e)
+            val message = if (e is SecurityException) "系统限制后台录音，请重试" else "录音失败"
+            voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                status = QuickMemoVoiceCaptureStatus.ERROR,
+                message = message
+            )
+            Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+            showFloatingWindow()
+            serviceScope.launch {
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+            }
+            return
+        }
+        voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.RECORDING)
+        showFloatingWindow()
+        voiceStartJob = serviceScope.launch {
+            try {
+                withContext(Dispatchers.IO) { audioRecorder.start() }
+                if (voiceStopRequested) {
+                    voiceStopRequested = false
+                    stopVoiceCapture()
+                    return@launch
+                }
+                performServiceHaptic()
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.RECORDING)
+            } catch (e: Exception) {
+                Log.e(TAG, "启动随口记录音失败", e)
+                stopVoiceForeground()
+                withContext(Dispatchers.IO) { audioRecorder.stopAndDiscard() }
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                    status = QuickMemoVoiceCaptureStatus.ERROR,
+                    message = if (e is SecurityException) "系统限制后台录音，请重试" else "录音失败"
+                )
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+            }
+        }
+    }
+
+    private fun stopVoiceCapture() {
+        if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.RECORDING && !audioRecorder.isRecording) {
+            voiceStopRequested = true
+            return
+        }
+        if (voiceCaptureState.value.status != QuickMemoVoiceCaptureStatus.RECORDING && !audioRecorder.isRecording) return
+        serviceScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { audioRecorder.stop() }
+                stopVoiceForeground()
+                performServiceHaptic()
+                if (result == null || result.durationMs < QuickMemoAudioRecorder.MIN_RECORDING_MS) {
+                    result?.path?.let { path -> withContext(Dispatchers.IO) { File(path).delete() } }
+                    voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.TOO_SHORT)
+                    delay(1100)
+                    voiceCaptureState.value = QuickMemoVoiceCaptureState()
+                    return@launch
+                }
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                    status = QuickMemoVoiceCaptureStatus.CONFIRMING,
+                    tempAudioPath = result.path,
+                    durationMs = result.durationMs
+                )
+                voiceConfirmJob?.cancel()
+                voiceConfirmJob = serviceScope.launch {
+                    delay(5000)
+                    confirmVoiceCapture(asTodo = false)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "停止随口记录音失败", e)
+                stopVoiceForeground()
+                withContext(Dispatchers.IO) { audioRecorder.stopAndDiscard() }
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                    status = QuickMemoVoiceCaptureStatus.ERROR,
+                    message = "录音失败"
+                )
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+            }
+        }
+    }
+
+    private fun handleExternalVoiceRecording() {
+        voiceConfirmJob?.cancel()
+        voiceConfirmJob = null
+        voiceStartJob?.cancel()
+        voiceStopRequested = false
+        voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.RECORDING)
+    }
+
+    private fun handleExternalVoiceCompleted(path: String?, durationMs: Long) {
+        if (path.isNullOrBlank()) {
+            handleExternalVoiceError("录音失败")
+            return
+        }
+        voiceConfirmJob?.cancel()
+        voiceConfirmJob = null
+        voiceStartJob?.cancel()
+        voiceStopRequested = false
+        voiceCaptureState.value = QuickMemoVoiceCaptureState(
+            status = QuickMemoVoiceCaptureStatus.CONFIRMING,
+            tempAudioPath = path,
+            durationMs = durationMs
+        )
+        showFloatingWindow()
+        voiceConfirmJob = serviceScope.launch {
+            delay(5000)
+            confirmVoiceCapture(asTodo = false)
+        }
+    }
+
+    private fun handleExternalVoiceTooShort() {
+        voiceConfirmJob?.cancel()
+        voiceConfirmJob = null
+        voiceStartJob?.cancel()
+        voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.TOO_SHORT)
+        showFloatingWindow()
+        serviceScope.launch {
+            delay(1100)
+            voiceCaptureState.value = QuickMemoVoiceCaptureState()
+        }
+    }
+
+    private fun handleExternalVoiceError(message: String) {
+        voiceConfirmJob?.cancel()
+        voiceConfirmJob = null
+        voiceStartJob?.cancel()
+        voiceCaptureState.value = QuickMemoVoiceCaptureState(
+            status = QuickMemoVoiceCaptureStatus.ERROR,
+            message = message.ifBlank { "录音失败" }
+        )
+        showFloatingWindow()
+        serviceScope.launch {
+            delay(1400)
+            voiceCaptureState.value = QuickMemoVoiceCaptureState()
+        }
+    }
+
+    private fun startVoiceForeground() {
+        if (voiceForegroundActive) return
+        val notification = buildVoiceCaptureNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NotificationIds.QUICK_MEMO_VOICE_CAPTURE,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
+        } else {
+            startForeground(NotificationIds.QUICK_MEMO_VOICE_CAPTURE, notification)
+        }
+        voiceForegroundActive = true
+    }
+
+    private fun stopVoiceForeground() {
+        if (!voiceForegroundActive) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        voiceForegroundActive = false
+    }
+
+    private fun buildVoiceCaptureNotification(): Notification {
+        val tapIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            NotificationIds.QUICK_MEMO_VOICE_CAPTURE,
+            tapIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setContentTitle("正在录制随口记")
+            .setContentText("松开音量+保存录音")
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun requestRecordAudioPermission() {
+        try {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_REQUEST_RECORD_AUDIO_PERMISSION, true)
+            })
+        } catch (e: Exception) {
+            Log.w(TAG, "无法打开麦克风权限引导", e)
+        }
+    }
+
+    private fun confirmVoiceCapture(asTodo: Boolean, closeAfterSave: Boolean = false) {
+        val current = voiceCaptureState.value
+        if (current.status != QuickMemoVoiceCaptureStatus.CONFIRMING) return
+        val path = current.tempAudioPath?.takeIf { it.isNotBlank() } ?: return
+        voiceConfirmJob?.cancel()
+        voiceConfirmJob = null
+        serviceScope.launch {
+            try {
+                voiceCaptureState.value = current.copy(status = QuickMemoVoiceCaptureStatus.SAVING)
+                withContext(Dispatchers.IO) {
+                    quickMemoCenter.createVoiceMemo(
+                        audioPath = path,
+                        durationMs = current.durationMs,
+                        asTodo = asTodo
+                    )
+                }
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.SAVED)
+                Toast.makeText(applicationContext, "已保存到随口记", Toast.LENGTH_SHORT).show()
+                if (closeAfterSave) {
+                    finishClose()
+                } else {
+                    delay(1100)
+                    voiceCaptureState.value = QuickMemoVoiceCaptureState()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "保存语音随口记失败", e)
+                withContext(Dispatchers.IO) { File(path).delete() }
+                voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                    status = QuickMemoVoiceCaptureStatus.ERROR,
+                    message = "保存失败"
+                )
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+                if (closeAfterSave) finishClose()
+            }
+        }
+    }
+
+    private fun performServiceHaptic() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(35)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "随口记录音震动反馈失败", e)
+        }
+    }
 
     private fun startScreenshotAnalysisFlow(onComplete: () -> Unit) {
         if (pendingImagePickCompletion != null) return
@@ -537,7 +886,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
             if (accessibilityService != null) {
                 Log.d(TAG, "无障碍服务可用，开始截屏识屏")
-                accessibilityService.startAnalysis(500.milliseconds)
+                val delayMs = MySettings.normalizeScreenshotDelayMs(settingsQueryApi.settings.value.screenshotDelayMs)
+                accessibilityService.startAnalysis(delayMs.milliseconds)
                 finishPendingImagePick()
                 requestClose()
                 return@launch
@@ -613,7 +963,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private fun handleManualInput(
         text: String,
-        isNote: Boolean = false,
+        isQuickMemo: Boolean = false,
         sourceImagePath: String? = null,
         onComplete: () -> Unit = {}
     ) {
@@ -624,13 +974,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         serviceScope.launch {
             try {
                 val settings = settingsQueryApi.settings.value
-                if (isNote) {
+                if (isQuickMemo) {
                     val clean = text.trim()
-                    val title = clean.lines().firstOrNull { it.isNotBlank() }?.take(80).orEmpty().ifBlank { "便签" }
                     withContext(Dispatchers.IO) {
-                        noteCenter.saveNote(null, title, NoteDocument.fromPlainText(clean))
+                        quickMemoCenter.createTextMemo(clean)
                     }
-                    Toast.makeText(applicationContext, "便签已添加", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(applicationContext, "已保存到随口记", Toast.LENGTH_SHORT).show()
                 } else {
                     val traceId = EventIdentity.newTraceId("floating")
                     val result = withContext(Dispatchers.IO) {
@@ -753,6 +1102,43 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 finishPendingImagePick()
                 return START_NOT_STICKY
             }
+            ACTION_PREPARE_VOICE_CAPTURE -> {
+                detachFloatingWindowForVoice()
+                return START_NOT_STICKY
+            }
+            ACTION_VOICE_CAPTURE_RECORDING -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                handleExternalVoiceRecording()
+                return START_NOT_STICKY
+            }
+            ACTION_VOICE_CAPTURE_COMPLETED -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                handleExternalVoiceCompleted(
+                    path = intent.getStringExtra(EXTRA_VOICE_AUDIO_PATH),
+                    durationMs = intent.getLongExtra(EXTRA_VOICE_DURATION_MS, 0L)
+                )
+                return START_NOT_STICKY
+            }
+            ACTION_VOICE_CAPTURE_TOO_SHORT -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                handleExternalVoiceTooShort()
+                return START_NOT_STICKY
+            }
+            ACTION_VOICE_CAPTURE_ERROR -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                handleExternalVoiceError(intent.getStringExtra(EXTRA_VOICE_ERROR_MESSAGE).orEmpty())
+                return START_NOT_STICKY
+            }
+            ACTION_START_VOICE_CAPTURE -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                startVoiceCapture()
+                return START_NOT_STICKY
+            }
+            ACTION_STOP_VOICE_CAPTURE -> {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                stopVoiceCapture()
+                return START_NOT_STICKY
+            }
         }
 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -765,6 +1151,10 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         serviceScope.cancel()
+        audioPlaybackCenter.stop()
+        audioRecorder.stopAndDiscard()
+        voiceConfirmJob?.cancel()
+        voiceStartJob?.cancel()
         recognitionFailedSubscriptionJob?.cancel()
         recognitionFailedSubscriptionJob = null
         ingestSucceededSubscriptionJob?.cancel()
@@ -785,6 +1175,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun requestClose() {
+        if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.CONFIRMING) {
+            confirmVoiceCapture(asTodo = false, closeAfterSave = true)
+            return
+        }
+        if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.RECORDING) {
+            audioRecorder.stopAndDiscard()
+            voiceCaptureState.value = QuickMemoVoiceCaptureState()
+        }
+        finishClose()
+    }
+
+    private fun finishClose() {
         sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         stopSelf()
     }

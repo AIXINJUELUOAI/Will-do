@@ -4,7 +4,13 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -20,10 +26,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -33,6 +41,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
@@ -73,6 +82,10 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.filled.LocationOn
@@ -90,6 +103,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,10 +112,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -118,9 +137,11 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.res.painterResource
 import com.antgskds.calendarassistant.R
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -138,8 +159,13 @@ import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteParagraph
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
+import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -152,21 +178,29 @@ import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private const val FLOATING_EXPAND_LEFT = "LEFT"
+private val FloatingActionYellowContainer = Color(0xFFFFF3C4)
+private val FloatingActionYellowIcon = Color(0xFF8A6200)
+private val FloatingActionWarningIcon = Color(0xFFE08600)
 
 enum class FloatingInputMode { SCHEDULE, NOTE }
 
 @Composable
 fun FloatingScheduleScreen(
     scheduleItems: List<ScheduleDisplayItem>,
-    notes: List<NoteEntity> = emptyList(),
+    quickMemos: List<QuickMemoEntity> = emptyList(),
+    voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
     expandSide: String = "RIGHT",
     onClose: () -> Unit,
-    onManualInput: (text: String, isNote: Boolean, onComplete: () -> Unit) -> Unit,
+    onManualInput: (text: String, isQuickMemo: Boolean, onComplete: () -> Unit) -> Unit,
     onPickImageRequest: ((() -> Unit) -> Unit),
     onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
@@ -175,9 +209,16 @@ fun FloatingScheduleScreen(
     pendingStatusKeys: Set<String> = emptySet(),
     undoPendingLabel: String? = null,
     onUndoAction: () -> Unit = {},
-    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
-    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
+    onMarkQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onReorderQuickMemos: (List<Long>) -> Unit = {},
+    onConfirmVoiceCapture: (Boolean) -> Unit = {},
+    onStartVoiceCapture: () -> Unit = {},
+    onStopVoiceCapture: () -> Unit = {},
+    onToggleAudioPlayback: (String?) -> Unit = {},
     onLoadingChange: (Boolean) -> Unit = {},
     hapticEnabled: Boolean = true
 ) {
@@ -217,6 +258,12 @@ fun FloatingScheduleScreen(
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
     var currentMode by remember { mutableStateOf(FloatingInputMode.SCHEDULE) }
+
+    LaunchedEffect(voiceCaptureState.status) {
+        if (voiceCaptureState.isActive) {
+            currentMode = FloatingInputMode.NOTE
+        }
+    }
 
     // 背景透明度动画
     val bgAlpha by animateFloatAsState(
@@ -263,7 +310,8 @@ fun FloatingScheduleScreen(
         ) {
             TimeWheelList(
                 scheduleItems = scheduleItems,
-                notes = notes,
+                quickMemos = quickMemos,
+                audioPlaybackState = audioPlaybackState,
                 weatherData = weatherData,
                 weatherForecastRange = weatherForecastRange,
                 currentMode = currentMode,
@@ -276,11 +324,15 @@ fun FloatingScheduleScreen(
                 onArchiveScheduleItem = onArchiveScheduleItem,
                 onStatusAction = onStatusAction,
                 pendingStatusKeys = pendingStatusKeys,
-                onToggleNoteTodo = onToggleNoteTodo,
-                onDeleteNote = { note, onComplete ->
-                    onDeleteNote(note, onComplete)
+                onMarkQuickMemoTodo = onMarkQuickMemoTodo,
+                onRemoveQuickMemoTodo = onRemoveQuickMemoTodo,
+                onToggleQuickMemoTodo = onToggleQuickMemoTodo,
+                onDeleteQuickMemo = { memo, onComplete ->
+                    onDeleteQuickMemo(memo, onComplete)
                 },
-                onSaveNote = onSaveNote,
+                onSaveQuickMemo = onSaveQuickMemo,
+                onReorderQuickMemos = onReorderQuickMemos,
+                onToggleAudioPlayback = onToggleAudioPlayback,
                 onRequestDatePicker = { initialDate, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
                 },
@@ -306,6 +358,10 @@ fun FloatingScheduleScreen(
                 modifier = Modifier,
                 text = manualInputText,
                 onTextChange = { manualInputText = it },
+                voiceCaptureState = voiceCaptureState,
+                onConfirmVoiceCapture = onConfirmVoiceCapture,
+                onStartVoiceCapture = onStartVoiceCapture,
+                onStopVoiceCapture = onStopVoiceCapture,
                 onManualSubmit = { text ->
                     if (text.isNotBlank()) {
                         isLoading = true
@@ -350,6 +406,10 @@ fun BottomInteractionArea(
     modifier: Modifier = Modifier,
     text: String,
     onTextChange: (String) -> Unit,
+    voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
+    onConfirmVoiceCapture: (Boolean) -> Unit = {},
+    onStartVoiceCapture: () -> Unit = {},
+    onStopVoiceCapture: () -> Unit = {},
     onManualSubmit: (String) -> Unit,
     onPickImage: () -> Unit,
     onSwipeUpClose: () -> Unit,
@@ -364,6 +424,7 @@ fun BottomInteractionArea(
 
     val isNote = currentMode == FloatingInputMode.NOTE
     val activeColor = primaryColor
+    val voiceActive = voiceCaptureState.isActive
 
     Column(
         modifier = modifier
@@ -405,6 +466,15 @@ fun BottomInteractionArea(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (voiceActive) {
+                        VoiceCaptureContent(
+                            state = voiceCaptureState,
+                            activeColor = activeColor,
+                            onConfirm = onConfirmVoiceCapture,
+                            onStop = onStopVoiceCapture,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
                     // 1. 左侧：日程输入图标
                     Box(
                         modifier = Modifier
@@ -420,7 +490,7 @@ fun BottomInteractionArea(
                         if (isNote) {
                             Icon(
                                 imageVector = Icons.Outlined.StickyNote2,
-                                contentDescription = "便签",
+                                contentDescription = "随口记",
                                 tint = activeColor,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -455,7 +525,7 @@ fun BottomInteractionArea(
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (text.isEmpty()) {
                                     Text(
-                                        text = if (isNote) "记一条便签..." else "一句话安排日程...",
+                                        text = if (isNote) "记一条随口记..." else "一句话安排日程...",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 15.sp
                                     )
@@ -504,7 +574,14 @@ fun BottomInteractionArea(
                             )
 
                             Surface(
-                                onClick = { if (isTextNotBlank) { haptics.confirm(); onManualSubmit(text) } },
+                                onClick = {
+                                    when {
+                                        isTextNotBlank -> {
+                                            haptics.confirm()
+                                            onManualSubmit(text)
+                                        }
+                                    }
+                                },
                                 shape = CircleShape,
                                 color = sendBtnContainerColor,
                                 modifier = Modifier.size(40.dp)
@@ -520,6 +597,7 @@ fun BottomInteractionArea(
                             }
                         }
                     }
+                    }
                 }
             }
         }
@@ -531,7 +609,8 @@ fun BottomInteractionArea(
 @Composable
 fun TimeWheelList(
     scheduleItems: List<ScheduleDisplayItem>,
-    notes: List<NoteEntity> = emptyList(),
+    quickMemos: List<QuickMemoEntity> = emptyList(),
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
@@ -542,15 +621,20 @@ fun TimeWheelList(
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
     onStatusAction: (ScheduleDisplayItem) -> Unit = {},
     pendingStatusKeys: Set<String> = emptySet(),
-    onToggleNoteTodo: (NoteEntity, String) -> Unit = { _, _ -> },
-    onDeleteNote: (NoteEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveNote: (NoteEntity, String, String, () -> Unit) -> Unit = { _, _, _, onComplete -> onComplete() },
+    onMarkQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
+    onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onReorderQuickMemos: (List<Long>) -> Unit = {},
+    onToggleAudioPlayback: (String?) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
     hapticEnabled: Boolean = true
 ) {
     val now = LocalDateTime.now()
     val haptics = rememberAppHaptics(hapticEnabled)
+    val density = LocalDensity.current
     val cardAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
     val cardModifier = if (expandFromLeft) {
         Modifier.padding(start = 20.dp).width(260.dp)
@@ -561,6 +645,38 @@ fun TimeWheelList(
         scheduleItems
             .distinctBy { it.stableKey }
             .sortedByDescending { it.startTS }
+    }
+    val sortedQuickMemos = remember(quickMemos) {
+        quickMemos.sortedWith(compareBy<QuickMemoEntity> { it.sortRank }.thenByDescending { it.updatedAt })
+    }
+    fun quickMemoOrderKey(memo: QuickMemoEntity): String = memo.id?.let { "id_$it" } ?: "temp_${memo.hashCode()}"
+    val sortedQuickMemoKeys = remember(sortedQuickMemos) { sortedQuickMemos.map(::quickMemoOrderKey) }
+    val quickMemoOrder = remember { mutableStateListOf<String>() }
+    var draggingQuickMemoKey by remember { mutableStateOf<String?>(null) }
+    var draggedQuickMemoOffsetY by remember { mutableStateOf(0f) }
+    val quickMemoDragStepPx = with(density) { 74.dp.toPx() }
+
+    LaunchedEffect(sortedQuickMemoKeys) {
+        if (quickMemoOrder.isEmpty()) {
+            quickMemoOrder.addAll(sortedQuickMemoKeys)
+        } else {
+            quickMemoOrder.removeAll { it !in sortedQuickMemoKeys }
+            sortedQuickMemoKeys.forEachIndexed { index, key ->
+                if (key !in quickMemoOrder) {
+                    quickMemoOrder.add(index.coerceAtMost(quickMemoOrder.size), key)
+                }
+            }
+        }
+    }
+    val quickMemoOrderSnapshot = quickMemoOrder.toList()
+    val displayQuickMemos = remember(sortedQuickMemos, quickMemoOrderSnapshot) {
+        val byKey = sortedQuickMemos.associateBy(::quickMemoOrderKey)
+        val ordered = quickMemoOrderSnapshot.mapNotNull(byKey::get)
+        ordered + sortedQuickMemos.filter { quickMemoOrderKey(it) !in quickMemoOrderSnapshot }
+    }
+    fun currentQuickMemoIdsInOrder(): List<Long> {
+        val byKey = sortedQuickMemos.associateBy(::quickMemoOrderKey)
+        return quickMemoOrder.mapNotNull { byKey[it]?.id }
     }
     Box(modifier = modifier) {
         LazyColumn(
@@ -586,17 +702,67 @@ fun TimeWheelList(
                 }
             }
             if (currentMode == FloatingInputMode.NOTE) {
-                items(notes, key = { "note_${it.id ?: it.hashCode()}" }) { note ->
+                items(displayQuickMemos, key = { "quick_memo_${it.id ?: it.hashCode()}" }) { memo ->
+                    val memoKey = quickMemoOrderKey(memo)
+                    val isDragging = draggingQuickMemoKey == memoKey
+                    val dragScale by animateFloatAsState(
+                        targetValue = if (isDragging) 1.035f else 1f,
+                        animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+                        label = "floating_quick_memo_drag_scale"
+                    )
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (isDragging) Modifier else Modifier.animateItem())
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, if (isDragging) draggedQuickMemoOffsetY.roundToInt() else 0) }
+                            .scale(dragScale)
+                            .pointerInput(memoKey, displayQuickMemos.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        haptics.longPress()
+                                        draggingQuickMemoKey = memoKey
+                                        draggedQuickMemoOffsetY = 0f
+                                    },
+                                    onDragEnd = {
+                                        onReorderQuickMemos(currentQuickMemoIdsInOrder())
+                                        draggingQuickMemoKey = null
+                                        draggedQuickMemoOffsetY = 0f
+                                    },
+                                    onDragCancel = {
+                                        onReorderQuickMemos(currentQuickMemoIdsInOrder())
+                                        draggingQuickMemoKey = null
+                                        draggedQuickMemoOffsetY = 0f
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        if (quickMemoOrder.size <= 1 || draggingQuickMemoKey != memoKey) return@detectDragGesturesAfterLongPress
+                                        draggedQuickMemoOffsetY += dragAmount.y
+                                        val currentIndex = quickMemoOrder.indexOf(memoKey)
+                                        if (currentIndex == -1) return@detectDragGesturesAfterLongPress
+                                        val moveBy = (draggedQuickMemoOffsetY / quickMemoDragStepPx).roundToInt()
+                                        if (moveBy == 0) return@detectDragGesturesAfterLongPress
+                                        val targetIndex = (currentIndex + moveBy).coerceIn(0, quickMemoOrder.lastIndex)
+                                        if (targetIndex != currentIndex) {
+                                            quickMemoOrder.removeAt(currentIndex)
+                                            quickMemoOrder.add(targetIndex, memoKey)
+                                            draggedQuickMemoOffsetY -= (targetIndex - currentIndex) * quickMemoDragStepPx
+                                        }
+                                    }
+                                )
+                            },
                         contentAlignment = cardAlignment
                     ) {
-                        FloatingNoteCard(
-                            note = note,
+                        FloatingQuickMemoCard(
+                            memo = memo,
+                            audioPlaybackState = audioPlaybackState,
                             modifier = cardModifier,
-                            onToggleTodo = { paragraphId -> onToggleNoteTodo(note, paragraphId) },
-                            onDelete = { onDeleteNote(note) {} },
-                            onSave = { title, body -> onSaveNote(note, title, body) {} },
+                            onMarkTodo = { onMarkQuickMemoTodo(memo) },
+                            onRemoveTodo = { onRemoveQuickMemoTodo(memo) },
+                            onToggleTodo = { onToggleQuickMemoTodo(memo) },
+                            onDelete = { onDeleteQuickMemo(memo) {} },
+                            onSave = { body -> onSaveQuickMemo(memo, body) {} },
+                            onToggleAudioPlayback = onToggleAudioPlayback,
                             expandFromLeft = expandFromLeft,
                             hapticEnabled = hapticEnabled
                         )
@@ -629,43 +795,104 @@ fun TimeWheelList(
 }
 
 @Composable
-private fun FloatingNoteCard(
-    note: NoteEntity,
+private fun FloatingQuickMemoCard(
+    memo: QuickMemoEntity,
+    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     modifier: Modifier = Modifier,
-    onToggleTodo: (String) -> Unit,
+    onMarkTodo: () -> Unit,
+    onRemoveTodo: () -> Unit,
+    onToggleTodo: () -> Unit,
     onDelete: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onSave: (String) -> Unit,
+    onToggleAudioPlayback: (String?) -> Unit = {},
     expandFromLeft: Boolean = false,
     hapticEnabled: Boolean = true
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
-    val document = remember(note.documentJson, note.plainText) { note.document() }
     var isExpanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
-    var draftTitle by remember(note.id, note.title) { mutableStateOf(note.title) }
-    var draftBody by remember(note.id, note.documentJson) { mutableStateOf(document.floatingText()) }
-    val body = remember(document) {
-        document.paragraphs
-            .filter { document.isFloatingPlainTextLine(it) }
-            .map { it.text.trim() }
-            .filter { it.isNotBlank() }
-            .take(3)
+    var draftBody by remember(memo.id, memo.updatedAt) { mutableStateOf(memo.bodyText) }
+    val isTodo = memo.todoState == QuickMemoTodoState.ACTIVE || memo.todoState == QuickMemoTodoState.COMPLETED
+    val isCompleted = memo.todoState == QuickMemoTodoState.COMPLETED
+    val isVoice = memo.type == QuickMemoType.VOICE
+    val isPlaying = memo.audioPath != null && audioPlaybackState.audioPath == memo.audioPath && audioPlaybackState.isPlaying
+    val displayBody = memo.bodyText.ifBlank { floatingQuickMemoFallbackText(memo) }
+    val todoAccentColor = Color(0xFFF2B705)
+    val accentColor = when {
+        isCompleted -> MaterialTheme.colorScheme.outlineVariant
+        isTodo -> todoAccentColor
+        else -> MaterialTheme.colorScheme.primary
     }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val actionButtonSize = 46.dp
+    val actionButtonSpacing = 10.dp
     val actionAreaSidePadding = 14.dp
     val cardToButtonGap = 12.dp
     val actionDirection = if (expandFromLeft) 1f else -1f
     val deleteDirection = -actionDirection
-    val actionAreaWidthPx = with(density) { (actionAreaSidePadding + actionButtonSize + cardToButtonGap).toPx() }
+    val actionButtonCount = 2
+    val actionAreaWidthPx = with(density) {
+        (actionAreaSidePadding + (actionButtonSize * actionButtonCount) + (actionButtonSpacing * (actionButtonCount - 1)) + cardToButtonGap).toPx()
+    }
     val revealOffsetPx = actionDirection * actionAreaWidthPx
     val revealSnapThresholdPx = actionAreaWidthPx * 0.35f
+    val fullSwipeTriggerPx = with(density) { 150.dp.toPx() }
     val deleteTriggerPx = with(density) { 110.dp.toPx() }
     val screenWidthPx = with(density) { 400.dp.toPx() }
-    val dragLimitPx = revealOffsetPx + actionDirection * with(density) { 40.dp.toPx() }
+    val dragLimitPx = actionDirection * with(density) { 190.dp.toPx() }
     val swipeSpringSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
+
+    @Composable
+    fun TodoActionButton() {
+        Surface(
+            modifier = Modifier.size(actionButtonSize),
+            shape = CircleShape,
+            color = todoAccentColor.copy(alpha = 0.92f),
+            onClick = {
+                scope.launch {
+                    haptics.confirm()
+                    if (isTodo) onToggleTodo() else onMarkTodo()
+                    offsetX.animateTo(0f, swipeSpringSpec)
+                }
+            }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                val actionIcon = if (isCompleted) Icons.Rounded.Undo else Icons.Rounded.CheckCircle
+                Icon(
+                    actionIcon,
+                    when {
+                        !isTodo -> "转为待办"
+                        isCompleted -> "撤回待办"
+                        else -> "完成待办"
+                    },
+                    Modifier.size(22.dp),
+                    tint = Color.White
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun EditActionButton() {
+        Surface(
+            modifier = Modifier.size(actionButtonSize),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            onClick = {
+                haptics.click()
+                draftBody = memo.bodyText
+                isExpanded = true
+                isEditing = true
+                scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
+            }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
+    }
 
     Box(modifier = modifier) {
         if (offsetX.value * actionDirection > 1f) {
@@ -674,21 +901,17 @@ private fun FloatingNoteCard(
                 modifier = if (expandFromLeft) Modifier.matchParentSize().padding(start = actionAreaSidePadding) else Modifier.matchParentSize().padding(end = actionAreaSidePadding),
                 contentAlignment = if (expandFromLeft) Alignment.CenterStart else Alignment.CenterEnd
             ) {
-                Surface(
-                    modifier = Modifier.size(actionButtonSize).alpha(revealProgress),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    onClick = {
-                        haptics.click()
-                        draftTitle = note.title
-                        draftBody = note.document().floatingText()
-                        isExpanded = true
-                        isEditing = true
-                        scope.launch { offsetX.animateTo(0f, swipeSpringSpec) }
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(actionButtonSpacing),
+                    modifier = Modifier.alpha(revealProgress)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Edit, "编辑", Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                    if (expandFromLeft) {
+                        EditActionButton()
+                        TodoActionButton()
+                    } else {
+                        TodoActionButton()
+                        EditActionButton()
                     }
                 }
             }
@@ -698,14 +921,20 @@ private fun FloatingNoteCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .then(if (!isEditing) Modifier.pointerInput(note.id) {
+                .then(if (!isEditing) Modifier.pointerInput(memo.id, memo.todoState) {
                 detectHorizontalDragGestures(
                     onDragStart = { scope.launch { offsetX.stop() } },
                     onDragEnd = {
+                        val fullSwipeAction = offsetX.value * actionDirection >= fullSwipeTriggerPx
                         val shouldRevealAction = offsetX.value * actionDirection >= revealSnapThresholdPx
                         val fullSwipeDelete = offsetX.value * deleteDirection >= deleteTriggerPx
                         scope.launch {
                             when {
+                                fullSwipeAction -> {
+                                    haptics.confirm()
+                                    if (isTodo) onToggleTodo() else onMarkTodo()
+                                    offsetX.animateTo(0f, swipeSpringSpec)
+                                }
                                 fullSwipeDelete -> {
                                     haptics.warning()
                                     offsetX.animateTo(deleteDirection * screenWidthPx, tween(200))
@@ -729,6 +958,7 @@ private fun FloatingNoteCard(
                             val draggingAction = dragAmount * actionDirection > 0f
                             val draggingDelete = dragAmount * deleteDirection > 0f
                             val resistance = when {
+                                draggingAction && current * actionDirection >= fullSwipeTriggerPx -> 0.25f
                                 draggingAction && current * actionDirection >= actionAreaWidthPx -> 0.45f
                                 draggingDelete && current * deleteDirection >= deleteTriggerPx -> 0.95f
                                 else -> 0.85f
@@ -748,100 +978,587 @@ private fun FloatingNoteCard(
                         if (offsetX.value * actionDirection > 10f) offsetX.animateTo(0f, swipeSpringSpec)
                         else if (!isEditing) isExpanded = !isExpanded
                     }
-                },
+            },
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = note.displayTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+            if (!isEditing) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    FloatingQuickMemoCompactContent(
+                        accentColor = accentColor,
+                        text = displayBody,
+                        isCompleted = isCompleted,
+                        isVoice = isVoice,
+                        isPlaying = isPlaying,
+                        onContentClick = {
+                            haptics.click()
+                            isExpanded = !isExpanded
+                        },
+                        onPlayClick = {
+                            haptics.click()
+                            onToggleAudioPlayback(memo.audioPath)
+                        }
                     )
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
+                        exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                        ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = displayBody,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                                textDecoration = if (isCompleted) TextDecoration.LineThrough else null
+                            )
+                        }
+                    }
                 }
+            } else {
                 Row(
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Rounded.CalendarToday, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()).format(java.util.Date(note.updatedAt)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(48.dp)
+                            .padding(vertical = 8.dp)
+                            .background(accentColor, RoundedCornerShape(2.dp))
                     )
-                }
-                AnimatedVisibility(
-                    visible = isExpanded,
-                    enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
-                    exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
-                ) {
-                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
-                        Spacer(Modifier.height(8.dp))
-                        AnimatedContent(targetState = isEditing, label = "note_edit_transition") { editing ->
-                            if (editing) {
-                                Column {
-                                    CompactTextField(value = draftTitle, onValueChange = { draftTitle = it }, placeholder = "标题", singleLine = true, maxLines = 1)
-                                    Spacer(Modifier.height(8.dp))
-                                    CompactTextField(value = draftBody, onValueChange = { draftBody = it }, placeholder = "正文", singleLine = false, maxLines = 6)
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                        FloatingCompactTextButton(
-                                            text = "取消",
-                                            onClick = { draftTitle = note.title; draftBody = note.document().floatingText(); isEditing = false }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        FloatingCompactPrimaryButton(
-                                            text = "保存",
-                                            onClick = { haptics.confirm(); onSave(draftTitle.trim().ifBlank { "无标题" }, draftBody); isEditing = false }
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
+                        exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
+                    ) {
+                        Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+                            Spacer(Modifier.height(8.dp))
+                            AnimatedContent(targetState = isEditing, label = "quick_memo_edit_transition") { editing ->
+                                if (editing) {
+                                    Column {
+                                        CompactTextField(value = draftBody, onValueChange = { draftBody = it }, placeholder = "正文", singleLine = false, maxLines = 6)
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                            if (isTodo) {
+                                                FloatingCompactTextButton(
+                                                    text = "移除代办",
+                                                    onClick = {
+                                                        haptics.confirm()
+                                                        onRemoveTodo()
+                                                        isEditing = false
+                                                    }
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                            }
+                                            FloatingCompactTextButton(
+                                                text = "取消",
+                                                onClick = { draftBody = memo.bodyText; isEditing = false }
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            FloatingCompactPrimaryButton(
+                                                text = "保存",
+                                                onClick = { haptics.confirm(); onSave(draftBody); isEditing = false }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = displayBody,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 4,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textDecoration = if (isCompleted) TextDecoration.LineThrough else null
                                         )
                                     }
-                                }
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    body.forEach { line -> Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                                    if (body.isEmpty()) Text("空白便签", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
                     }
+                    if (!isExpanded) Spacer(Modifier.height(12.dp))
+                    }
                 }
-                if (!isExpanded) Spacer(Modifier.height(12.dp))
             }
         }
     }
 }
 
 @Composable
-private fun FloatingNoteProgressLabel(text: String, textColor: Color, backgroundColor: Color) {
-    Box(
+private fun FloatingQuickMemoCompactContent(
+    accentColor: Color,
+    text: String,
+    isCompleted: Boolean,
+    isVoice: Boolean,
+    isPlaying: Boolean,
+    onContentClick: () -> Unit,
+    onPlayClick: () -> Unit
+) {
+    val contentColor = if (isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    val waveformColor = if (isCompleted) MaterialTheme.colorScheme.outline else accentColor
+    val playContainerColor = if (isCompleted) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    }
+    val playIconColor = if (isCompleted) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+    Row(
         modifier = Modifier
-            .background(backgroundColor, RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(48.dp)
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accentColor)
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(if (isVoice) 48.dp else 40.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onContentClick
+                ),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (isVoice) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = contentColor,
+                        textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    FloatingSiriWaveform(
+                        isPlaying = isPlaying,
+                        modifier = Modifier.fillMaxWidth().height(18.dp),
+                        color = waveformColor
+                    )
+                }
+            } else {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = contentColor,
+                    textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (isVoice) {
+            FloatingVoicePlayButton(
+                isPlaying = isPlaying,
+                onClick = onPlayClick,
+                buttonSize = 40.dp,
+                iconSize = 20.dp,
+                containerColor = playContainerColor,
+                iconColor = playIconColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoiceCaptureContent(
+    state: QuickMemoVoiceCaptureState,
+    activeColor: Color,
+    onConfirm: (Boolean) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        when (state.status) {
+            QuickMemoVoiceCaptureStatus.RECORDING -> {
+                FloatingSiriWaveform(isPlaying = true, modifier = Modifier.weight(1f), color = activeColor)
+                Surface(
+                    onClick = onStop,
+                    shape = CircleShape,
+                    color = activeColor,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = "停止录音", tint = Color.White, modifier = Modifier.size(21.dp))
+                    }
+                }
+            }
+            QuickMemoVoiceCaptureStatus.CONFIRMING -> {
+                FloatingSiriWaveform(isPlaying = false, modifier = Modifier.weight(1f), color = activeColor)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        onClick = { onConfirm(true) },
+                        shape = CircleShape,
+                        color = Color(0xFFF2B705).copy(alpha = 0.9f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = "保存为待办", tint = Color.White, modifier = Modifier.size(21.dp))
+                        }
+                    }
+                    Surface(
+                        onClick = { onConfirm(false) },
+                        shape = CircleShape,
+                        color = activeColor,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = "保存", tint = Color.White, modifier = Modifier.size(21.dp))
+                        }
+                    }
+                }
+            }
+            QuickMemoVoiceCaptureStatus.SAVING -> {
+                FloatingVoiceStatusLine(
+                    text = "保存中...",
+                    color = activeColor,
+                    leading = { CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp, color = activeColor) }
+                )
+            }
+            QuickMemoVoiceCaptureStatus.SAVED -> {
+                FloatingVoiceStatusLine(
+                    text = "已保存到随口记",
+                    color = activeColor,
+                    leading = { Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = activeColor, modifier = Modifier.size(18.dp)) }
+                )
+            }
+            QuickMemoVoiceCaptureStatus.TOO_SHORT -> {
+                FloatingVoiceStatusLine(
+                    text = "录音太短",
+                    color = FloatingActionWarningIcon,
+                    leading = {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = FloatingActionWarningIcon,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
+            QuickMemoVoiceCaptureStatus.ERROR -> {
+                FloatingVoiceStatusLine(
+                    text = state.message.ifBlank { "录音失败" },
+                    color = MaterialTheme.colorScheme.error,
+                    leading = {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
+            QuickMemoVoiceCaptureStatus.IDLE -> Unit
+        }
+    }
+}
+
+@Composable
+private fun RowScope.FloatingVoiceStatusLine(
+    text: String,
+    color: Color,
+    leading: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .height(40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        leading()
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = textColor,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @Composable
-private fun FloatingTodoMark(checked: Boolean, onClick: () -> Unit) {
-    val accent = if (checked) Color.Gray else MaterialTheme.colorScheme.primary
+private fun FloatingWaveform(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
+    val transition = rememberInfiniteTransition(label = "floating_waveform")
+    Row(
+        modifier = modifier.height(28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        repeat(13) { index ->
+            val phase by transition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 560 + index * 22),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "wave_$index"
+            )
+            val height = (8 + ((index % 5) + 1) * 3).dp * phase.coerceIn(0.35f, 1f)
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(height)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(color.copy(alpha = 0.42f + 0.38f * phase))
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingVoiceMemoPlayerContent(
+    accentColor: Color,
+    isPlaying: Boolean,
+    onWaveClick: () -> Unit,
+    onPlayClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(48.dp)
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accentColor)
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(34.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onWaveClick
+                )
+                .padding(horizontal = 4.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            FloatingSiriWaveform(
+                isPlaying = isPlaying,
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        FloatingVoicePlayButton(
+            isPlaying = isPlaying,
+            onClick = onPlayClick,
+            buttonSize = 40.dp,
+            iconSize = 20.dp
+        )
+    }
+}
+
+@Composable
+private fun FloatingSiriWaveform(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
+    val transition = rememberInfiniteTransition(label = "floating_siri_waveform")
+    val timePhase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (PI * 2).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "floating_siri_wave_phase"
+    )
+    val amplitudeFactor by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.15f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "floating_siri_wave_amplitude"
+    )
+    val paths = remember { List(3) { Path() } }
+
+    Canvas(modifier = modifier.height(32.dp)) {
+        val width = size.width
+        val centerY = size.height / 2f
+        val maxAmplitude = size.height / 2f * 0.85f
+        val step = (width / 120f).coerceAtLeast(1f)
+        val waveParams = listOf(
+            FloatingWaveParam(1.5f, 1.0f, 1.0f, 0.88f, 2.4.dp.toPx()),
+            FloatingWaveParam(2.2f, -1.2f, 0.7f, 0.46f, 1.9.dp.toPx()),
+            FloatingWaveParam(3.0f, 0.8f, 0.4f, 0.28f, 1.4.dp.toPx())
+        )
+
+        waveParams.forEachIndexed { index, param ->
+            val path = paths[index]
+            path.reset()
+            path.moveTo(0f, centerY)
+
+            var x = 0f
+            while (x <= width) {
+                val progress = x / width
+                val envelope = sin(progress * PI).pow(2).toFloat()
+                val waveX = progress * PI.toFloat() * 2f * param.frequency
+                val currentPhase = timePhase * param.speedMultiplier
+                val sineValue = sin(waveX + currentPhase)
+                val y = centerY + sineValue * maxAmplitude * param.amplitudeWeight * amplitudeFactor * envelope
+
+                path.lineTo(x, y)
+                x += step
+            }
+
+            drawPath(
+                path = path,
+                color = color.copy(alpha = param.alpha),
+                style = Stroke(
+                    width = param.strokeWidth,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+        }
+    }
+}
+
+private data class FloatingWaveParam(
+    val frequency: Float,
+    val speedMultiplier: Float,
+    val amplitudeWeight: Float,
+    val alpha: Float,
+    val strokeWidth: Float
+)
+
+@Composable
+private fun FloatingVoicePlayButton(
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    buttonSize: Dp = 34.dp,
+    iconSize: Dp = 18.dp,
+    containerColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+    iconColor: Color = MaterialTheme.colorScheme.primary
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = containerColor,
+        modifier = modifier.size(buttonSize)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (isPlaying) "暂停语音" else "播放语音",
+                tint = iconColor,
+                modifier = Modifier.size(iconSize)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingQuickMemoTodoLabel(done: Boolean) {
+    Text(
+        text = if (done) "已完成" else "待办",
+        modifier = Modifier
+            .background(Color(0xFFF2B705).copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = Color(0xFF8A6200),
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun FloatingQuickMemoDefaultLabel() {
+    Text(
+        text = "随口记",
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun FloatingQuickMemoTodoButton(checked: Boolean, onClick: () -> Unit) {
+    val accent = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFF2B705)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = if (checked) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f) else Color(0xFFF2B705).copy(alpha = 0.18f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = accent
+            )
+            Text(
+                text = if (checked) "撤回" else "完成",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF8A6200),
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingQuickMemoTodoMark(checked: Boolean, onClick: () -> Unit) {
+    val accent = if (checked) Color.Gray else Color(0xFFF2B705)
     val shape = RoundedCornerShape(4.dp)
     Box(
         modifier = Modifier
@@ -866,6 +1583,27 @@ private fun FloatingTodoMark(checked: Boolean, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+private fun floatingQuickMemoFallbackText(memo: QuickMemoEntity): String {
+    return when {
+        memo.type != QuickMemoType.VOICE -> "空白随口记"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PENDING -> "转写中"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PROCESSING -> "转写中"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED -> "转写失败，可重试"
+        else -> "仅音频"
+    }
+}
+
+private fun floatingQuickMemoStatusText(memo: QuickMemoEntity): String {
+    return when {
+        memo.type != QuickMemoType.VOICE -> "随口记"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PENDING -> "等待转写"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PROCESSING -> "正在转写"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED -> "转写失败"
+        memo.transcriptionStatus == QuickMemoTranscriptionStatus.SUCCESS -> "转写完成"
+        else -> "仅音频"
     }
 }
 
@@ -918,8 +1656,9 @@ private fun FloatingWeatherCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = locationName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)

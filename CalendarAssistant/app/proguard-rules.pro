@@ -63,3 +63,8 @@
 
 # Optional logger binding referenced by transitive JVM libraries.
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+# Sherpa ONNX JNI looks up Java config fields by their original names.
+# Obfuscating these classes makes native recognizer creation abort the process.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-dontwarn com.k2fsa.sherpa.onnx.**

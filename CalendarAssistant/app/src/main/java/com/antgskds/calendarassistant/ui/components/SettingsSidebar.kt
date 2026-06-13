@@ -57,6 +57,7 @@ enum class SettingsDestination {
     Preference,        // 偏好设置
     Archives,          // 日程归档
     Backup,            // 数据备份
+    AppUpdate,         // 软件更新
 
     // 操作类（不导航，直接执行）
     Theme,             // 主题设置
@@ -74,6 +75,7 @@ enum class SettingsDestination {
 fun SettingsSidebar(
     modifier: Modifier = Modifier,
     isDarkMode: Boolean = false,
+    hasAppUpdate: Boolean = false,
     onThemeToggle: (Boolean) -> Unit = {},
     onNavigate: (SettingsDestination) -> Unit = {}
 ) {
@@ -179,9 +181,10 @@ fun SettingsSidebar(
             // 第一块：顶部操作卡片（退出、主题切换、关于）
             SidebarTopActionsCard(
                 isDarkMode = isDarkMode,
+                hasAppUpdate = hasAppUpdate,
                 onThemeNavigate = { onNavigate(SettingsDestination.Theme) },
                 onAbout = { onNavigate(SettingsDestination.About) },
-                onLogout = { onNavigate(SettingsDestination.Logout) }
+                onAppUpdate = { onNavigate(SettingsDestination.AppUpdate) }
             )
 
             // 第二块：课表管理卡片
@@ -206,9 +209,10 @@ fun SettingsSidebar(
 @Composable
 private fun SidebarTopActionsCard(
     isDarkMode: Boolean,
+    hasAppUpdate: Boolean,
     onThemeNavigate: () -> Unit,
     onAbout: () -> Unit,
-    onLogout: () -> Unit
+    onAppUpdate: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -230,13 +234,13 @@ private fun SidebarTopActionsCard(
                 subtitle = "版本信息与帮助",
                 onClick = onAbout
             )
-            // 退出应用
+            // 软件更新
             SidebarActionItem(
-                icon = Icons.Default.ExitToApp,
-                title = "退出应用",
-                subtitle = "安全退出应用",
-                onClick = onLogout,
-                showChevron = false
+                icon = Icons.Default.SystemUpdate,
+                title = "软件更新",
+                subtitle = "版本日志与下载",
+                onClick = onAppUpdate,
+                showBadge = hasAppUpdate
             )
         }
     }
@@ -249,7 +253,8 @@ private fun SidebarActionItem(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    showChevron: Boolean = true
+    showChevron: Boolean = true,
+    showBadge: Boolean = false
 ) {
     val haptics = rememberAppHaptics()
     val interactionSource = remember { MutableInteractionSource() }
@@ -270,12 +275,24 @@ private fun SidebarActionItem(
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            if (showBadge) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(MaterialTheme.colorScheme.error, RoundedCornerShape(50))
+                )
+            }
+        }
         if (showChevron) {
             Icon(
                 Icons.Default.ChevronRight,

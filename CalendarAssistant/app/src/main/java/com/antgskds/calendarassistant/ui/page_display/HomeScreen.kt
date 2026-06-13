@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.core.center.ClipboardCodePrompt
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.event.DomainEventType
@@ -22,6 +23,7 @@ import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
@@ -75,15 +77,20 @@ fun HomeScreen(
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
     openCourseRequestId: Long = 0L,
     selectedPageKey: String = HomeEntryKey.TODAY,
+    clipboardPrompt: ClipboardCodePrompt? = null,
+    onConfirmClipboardPrompt: () -> Unit = {},
+    onDismissClipboardPrompt: () -> Unit = {},
     onSelectedPageKeyChange: (String) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
     onOpenNoteEditor: (Long) -> Unit = {},
+    onOpenQuickMemoDetail: (Long) -> Unit = {},
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
     // 从 settings 读取主题状态
     val settings by settingsViewModel.settings.collectAsState()
     val uiState by mainViewModel.uiState.collectAsState()
+    val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
 
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
@@ -209,6 +216,7 @@ fun HomeScreen(
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var selectedNoteAction by remember { mutableStateOf<NoteEntity?>(null) }
+    var selectedQuickMemoAction by remember { mutableStateOf<QuickMemoEntity?>(null) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -399,6 +407,7 @@ fun HomeScreen(
             sidebar = {
                 SettingsSidebar(
                     isDarkMode = settings.isDarkMode,
+                    hasAppUpdate = appUpdateUiState.hasUpdate,
                     onThemeToggle = { isDark ->
                         settingsViewModel.updateDarkMode(isDark)
                     },
@@ -430,6 +439,8 @@ fun HomeScreen(
                         onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
                         onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
                         onRequestDeleteNote = { note -> selectedNoteAction = note },
+                        onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
+                        onOpenQuickMemoDetail = onOpenQuickMemoDetail,
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
                         onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
@@ -468,11 +479,7 @@ fun HomeScreen(
             onEditClick = {
                 isActionExpanded = false
                 isSidebarOpen = false
-                if (currentPageKey == HomeEntryKey.NOTE) {
-                    onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg)
-                } else {
-                    openPrimaryCreateDialog()
-                }
+                openPrimaryCreateDialog()
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -488,6 +495,40 @@ fun HomeScreen(
 
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
+        val clipboardPromptItem = clipboardPrompt
+        PredictiveFloatingActionCard(
+            visible = clipboardPromptItem != null,
+            title = "识别到剪贴板中的${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}",
+            content = "${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}：${clipboardPromptItem?.candidate?.code.orEmpty()}",
+            confirmText = "入库",
+            dismissText = "忽略",
+            isDestructive = false,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = onConfirmClipboardPrompt,
+            onDismiss = onDismissClipboardPrompt,
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
+        PredictiveFloatingActionCard(
+            visible = selectedQuickMemoAction != null,
+            title = "删除随口记",
+            content = "删除后无法恢复，确认删除这条随口记吗？",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = {
+                selectedQuickMemoAction?.id?.let { mainViewModel.deleteQuickMemo(it) }
+                selectedQuickMemoAction = null
+            },
+            onDismiss = { selectedQuickMemoAction = null },
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
         PredictiveFloatingActionCard(
             visible = selectedNoteAction != null,
             title = "删除便签",

@@ -270,6 +270,12 @@ object RecognitionProcessor {
         }
     }
 
+    suspend fun analyzeTextEvents(text: String, settings: MySettings, context: Context): AnalysisResult<List<RecognitionDraft>> {
+        val normalizedText = text.trim()
+        if (normalizedText.isBlank()) return AnalysisResult.Empty()
+        return analyzeSchedule(normalizedText, settings, context.applicationContext)
+    }
+
     suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<RecognitionDraft>> {
         val appContext = context.applicationContext
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")

@@ -1,8 +1,10 @@
 package com.antgskds.calendarassistant
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.drawable.ColorDrawable
@@ -26,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -56,6 +60,7 @@ import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.NoteEditorScreen
+import com.antgskds.calendarassistant.ui.page_display.QuickMemoDetailPage
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
 import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
@@ -69,6 +74,11 @@ private data class PendingWidgetLaunchAction(
     val nonce: Long = System.nanoTime()
 )
 
+private data class PendingQuickMemoDetailLaunch(
+    val memoId: Long,
+    val nonce: Long = System.nanoTime()
+)
+
 class MainActivity : ComponentActivity() {
 
     // 取件码时间戳
@@ -78,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var mainViewModel: MainViewModel
 
     private val pendingWidgetAction = mutableStateOf<PendingWidgetLaunchAction?>(null)
+    private val pendingQuickMemoDetailLaunch = mutableStateOf<PendingQuickMemoDetailLaunch?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
@@ -112,7 +123,9 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
+        requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
+        consumeQuickMemoDetailIntent(intent)
 
         enableEdgeToEdge()
 
@@ -131,6 +144,8 @@ class MainActivity : ComponentActivity() {
                         appContext = app.applicationContext,
                         scheduleCenter = app.scheduleCenter,
                         noteCenter = app.noteCenter,
+                        quickMemoCenter = app.quickMemoCenter,
+                        audioPlaybackCenter = app.audioPlaybackCenter,
                         settingsQueryApi = app.settingsQueryApi,
                         homeQueryApi = app.homeQueryApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
@@ -228,12 +243,36 @@ class MainActivity : ComponentActivity() {
                 var selectedHomePageKey by rememberSaveable { mutableStateOf(homeStartPageKey) }
                 var lastPickupEventTimestamp by rememberSaveable { mutableLongStateOf(0L) }
                 var lastWidgetActionNonce by rememberSaveable { mutableLongStateOf(0L) }
+                var lastQuickMemoDetailNonce by rememberSaveable { mutableLongStateOf(0L) }
                 var openCourseRequestId by rememberSaveable { mutableLongStateOf(0L) }
                 val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val floatingActionCardBottomPadding = if (currentBackStackEntry?.destination?.route == AppRoutes.Home) {
                     IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
                 } else {
                     bottomInset + 16.dp
+                }
+                val showClipboardPromptOnMaterialHome =
+                    currentBackStackEntry?.destination?.route == AppRoutes.Home && uiStyle == UiStyle.MATERIAL3
+
+                var crashDialogShown by remember { mutableStateOf(false) }
+                var cleanupDialogShown by remember { mutableStateOf(false) }
+                var cleanupInfo by remember { mutableStateOf("") }
+
+                val showCrashDialog = crashDialogShown
+                val showCleanupDialog = cleanupDialogShown && cleanupInfo.isNotEmpty()
+                val showLocalModelResiduePrompt = localModelResiduePrompt != null && !showCrashDialog && !showCleanupDialog
+                val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt
+                val showClipboardPromptGlobally = showClipboardPrompt && !showClipboardPromptOnMaterialHome
+                val homeClipboardPrompt = clipboardPrompt.takeIf { showClipboardPrompt && showClipboardPromptOnMaterialHome }
+                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt && !showClipboardPrompt
+
+                val handleCrashDismiss = {
+                    crashDialogShown = false
+                    cleanupInfo = CrashHandler.getCleanupInfo(this@MainActivity) ?: ""
+                    if (cleanupInfo.isNotEmpty()) {
+                        cleanupDialogShown = true
+                    }
+                    CrashHandler.clearCrashState(this@MainActivity)
                 }
 
                 LaunchedEffect(homeBottomItems, homeStartPageKey, selectedHomePageKey) {
@@ -283,6 +322,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                LaunchedEffect(pendingQuickMemoDetailLaunch.value) {
+                    val pending = pendingQuickMemoDetailLaunch.value ?: return@LaunchedEffect
+                    if (pending.nonce == lastQuickMemoDetailNonce) return@LaunchedEffect
+                    lastQuickMemoDetailNonce = pending.nonce
+                    navController.navigate(AppRoutes.quickMemoDetail(pending.memoId)) { launchSingleTop = true }
+                }
+
                 // 最外层容器（包裹 NavHost 和所有弹窗）
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     NavHost(
@@ -316,6 +362,9 @@ class MainActivity : ComponentActivity() {
                                      pickupTimestamp = pickupEventTimestamp.value,
                                      openCourseRequestId = openCourseRequestId,
                                      selectedPageKey = selectedHomePageKey,
+                                    clipboardPrompt = homeClipboardPrompt,
+                                    onConfirmClipboardPrompt = { app.clipboardCodeCenter.confirmPendingPrompt() },
+                                    onDismissClipboardPrompt = { app.clipboardCodeCenter.dismissPendingPrompt() },
                                     onSelectedPageKeyChange = { pageKey ->
                                         selectedHomePageKey = if (pageKey in homeBottomItems) pageKey else homeStartPageKey
                                     },
@@ -324,6 +373,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenNoteEditor = { noteId ->
                                         navController.navigate(AppRoutes.noteEditor(noteId))
+                                    },
+                                    onOpenQuickMemoDetail = { memoId ->
+                                        navController.navigate(AppRoutes.quickMemoDetail(memoId))
                                     },
                                     onNavigateToSettings = { destination ->
                                         if (destination == SettingsDestination.Logout) {
@@ -382,6 +434,9 @@ class MainActivity : ComponentActivity() {
                                     onOpenImportedNote = { importedId ->
                                         navController.navigate(AppRoutes.noteEditor(importedId))
                                     },
+                                    onToggleAudioAttachment = { path ->
+                                        mainViewModel.toggleAudioPlayback(path)
+                                    },
                                     onShowMessage = { message, _ ->
                                         android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -391,6 +446,28 @@ class MainActivity : ComponentActivity() {
                                     CircularProgressIndicator()
                                 }
                             }
+                        }
+
+                        composable(
+                            route = AppRoutes.QuickMemoDetailPattern,
+                            arguments = listOf(navArgument(AppRoutes.QuickMemoDetailArg) { type = NavType.LongType }),
+                            enterTransition = { navForwardEnterTransition() },
+                            exitTransition = { null },
+                            popEnterTransition = { null },
+                            popExitTransition = { navBackwardExitTransition() }
+                        ) { backStackEntry ->
+                            BackHandler(enabled = !predictiveBackEnabled) {
+                                navController.popBackStack()
+                            }
+                            val memoId = backStackEntry.arguments?.getLong(AppRoutes.QuickMemoDetailArg) ?: -1L
+                            val uiState by mainViewModel.uiState.collectAsState()
+                            QuickMemoDetailPage(
+                                memoId = memoId,
+                                viewModel = mainViewModel,
+                                onBack = { navController.popBackStack() },
+                                uiSize = uiState.settings.uiSize,
+                                hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                            )
                         }
 
                         composable(
@@ -444,26 +521,6 @@ class MainActivity : ComponentActivity() {
 
                 // --- 弹窗区域 ---
 
-                // ✅ 致命修复点：补上了 remember { }，防止每次界面刷新重置变量并抛出编译错误
-                var crashDialogShown by remember { mutableStateOf(false) }
-                var cleanupDialogShown by remember { mutableStateOf(false) }
-                var cleanupInfo by remember { mutableStateOf("") }
-
-                val showCrashDialog = crashDialogShown
-                val showCleanupDialog = cleanupDialogShown && cleanupInfo.isNotEmpty()
-                val showLocalModelResiduePrompt = localModelResiduePrompt != null && !showCrashDialog && !showCleanupDialog
-                val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt
-                val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt && !showClipboardPrompt
-
-                val handleCrashDismiss = {
-                    crashDialogShown = false
-                    cleanupInfo = CrashHandler.getCleanupInfo(this@MainActivity) ?: ""
-                    if (cleanupInfo.isNotEmpty()) {
-                        cleanupDialogShown = true
-                    }
-                    CrashHandler.clearCrashState(this@MainActivity)
-                }
-
                 // 1. Prompt 更新弹窗（优先级最低）
                 if (showPromptDialog) {
                     val dialogState = promptUpdateDialogState!!
@@ -498,7 +555,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (showClipboardPrompt) {
+                if (showClipboardPromptGlobally) {
                     val prompt = clipboardPrompt!!
                     PredictiveFloatingActionCard(
                         visible = showClipboardPrompt,
@@ -563,7 +620,17 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openPickupList", false)) {
             pickupEventTimestamp.value = System.currentTimeMillis()
         }
+        requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
+        consumeQuickMemoDetailIntent(intent)
+    }
+
+    private fun requestRecordAudioPermissionIfNeeded(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_RECORD_AUDIO_PERMISSION, false) != true) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO_PERMISSION)
+        }
+        intent.removeExtra(EXTRA_REQUEST_RECORD_AUDIO_PERMISSION)
     }
 
     private fun consumeWidgetAction(intent: Intent?) {
@@ -571,14 +638,26 @@ class MainActivity : ComponentActivity() {
         pendingWidgetAction.value = PendingWidgetLaunchAction(action)
     }
 
+    private fun consumeQuickMemoDetailIntent(intent: Intent?) {
+        val memoId = intent?.getLongExtra(EXTRA_OPEN_QUICK_MEMO_ID, -1L)?.takeIf { it > 0L } ?: return
+        pendingQuickMemoDetailLaunch.value = PendingQuickMemoDetailLaunch(memoId)
+        intent.removeExtra(EXTRA_OPEN_QUICK_MEMO_ID)
+    }
+
     override fun onResume() {
         super.onResume()
         if (::mainViewModel.isInitialized) {
             mainViewModel.refreshData()
         }
-        (application as App).clipboardCodeCenter.checkClipboardForPrompt("app_resume")
         (application as App).localModelResidueCenter.checkForResidue()
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            (application as App).clipboardCodeCenter.checkClipboardForPrompt("window_focus")
+        }
     }
 
     private fun setupDynamicShortcuts() {
@@ -598,6 +677,9 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val EXTRA_REQUEST_RECORD_AUDIO_PERMISSION = "request_record_audio_permission"
+        const val EXTRA_OPEN_QUICK_MEMO_ID = "open_quick_memo_id"
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 2401
         private var currentUiSize: Int = -1
         private var currentThemeMode: Int = -1
         private var currentThemeColorScheme: String = ""
