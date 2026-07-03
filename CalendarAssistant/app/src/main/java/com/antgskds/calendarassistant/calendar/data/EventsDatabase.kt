@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
         QuickMemoEntity::class,
         QuickMemoSuggestionEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -52,7 +52,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -255,6 +255,12 @@ abstract class EventsDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_sort_rank ON quick_memos(sort_rank)")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN image_path TEXT")
             }
         }
     }

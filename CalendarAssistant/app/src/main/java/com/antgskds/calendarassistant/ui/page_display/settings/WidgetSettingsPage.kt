@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -60,16 +58,17 @@ import com.antgskds.calendarassistant.data.model.WidgetScheduleSnapshot
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
 import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.widget.CourseWidgetProvider
-import com.antgskds.calendarassistant.widget.CourseWidgetSnapshot
-import com.antgskds.calendarassistant.widget.CourseWidgetSnapshotBuilder
-import com.antgskds.calendarassistant.widget.ScheduleWidgetProvider
-import com.antgskds.calendarassistant.widget.WeatherWidgetProvider
-import com.antgskds.calendarassistant.widget.WidgetAppearanceConfig
-import com.antgskds.calendarassistant.widget.WidgetInstanceConfigStore
-import com.antgskds.calendarassistant.widget.WidgetType
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetSnapshot
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetSnapshotBuilder
+import com.antgskds.calendarassistant.platform.widget.ScheduleWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.WeatherWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.WidgetAppearanceConfig
+import com.antgskds.calendarassistant.platform.widget.WidgetInstanceConfigStore
+import com.antgskds.calendarassistant.platform.widget.WidgetType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -119,11 +118,10 @@ fun WidgetSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("实时预览", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier
@@ -180,11 +178,10 @@ fun WidgetSettingsPage(
         }
 
         Text("默认显示设置", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 WidgetThemeModeSetting(
@@ -935,7 +932,7 @@ private fun ScheduleDisplayItem.safeComposeColor(fallback: Color): Color {
     return if (color == 0) fallback else Color(color)
 }
 
-private fun com.antgskds.calendarassistant.widget.CourseWidgetItem.safeComposeColor(fallback: Color): Color {
+private fun com.antgskds.calendarassistant.platform.widget.CourseWidgetItem.safeComposeColor(fallback: Color): Color {
     return if (color == 0) fallback else Color(color)
 }
 

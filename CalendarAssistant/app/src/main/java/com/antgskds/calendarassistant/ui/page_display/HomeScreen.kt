@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -44,6 +45,7 @@ import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.dialogs.*
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -169,25 +171,7 @@ fun HomeScreen(
         sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
     }
 
-    fun pageKeyToTab(pageKey: String): Int {
-        return when (pageKey) {
-            HomeEntryKey.TODAY -> 0
-            HomeEntryKey.ALL -> 1
-            HomeEntryKey.NOTE -> 2
-            else -> 0
-        }
-    }
-
-    fun tabToPageKey(tab: Int): String {
-        return when {
-            tab == 0 -> HomeEntryKey.TODAY
-            tab == 1 -> HomeEntryKey.ALL
-            else -> HomeEntryKey.NOTE
-        }
-    }
-
     val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
-    val selectedTab = pageKeyToTab(effectiveSelectedPageKey)
 
     LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey) {
         if (homeBottomItems != settings.homeBottomItems || homeStartPageKey != settings.homeStartPageKey) {
@@ -380,7 +364,13 @@ fun HomeScreen(
 
     fun openPrimaryCreateDialog() {
         isActionExpanded = false
-        openAddEventDialog()
+        if (effectiveSelectedPageKey == HomeEntryKey.NOTE) {
+            mainViewModel.createTextQuickMemo("") { id ->
+                onOpenQuickMemoDetail(id)
+            }
+        } else {
+            openAddEventDialog()
+        }
     }
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -393,6 +383,7 @@ fun HomeScreen(
             IntegratedFloatingBarToastGap +
             IntegratedFloatingBarBottomSpacing +
             bottomInset
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
 
     Box(modifier = Modifier) {
         BackHandler(enabled = isSidebarOpen) {
@@ -404,25 +395,32 @@ fun HomeScreen(
             isOpen = isSidebarOpen,
             onOpenChange = { isSidebarOpen = it },
             enableGesture = !isScheduleExpanded, // 课表展开时禁用侧边栏手势
+            contentContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background,
             sidebar = {
-                SettingsSidebar(
-                    isDarkMode = settings.isDarkMode,
-                    hasAppUpdate = appUpdateUiState.hasUpdate,
-                    onThemeToggle = { isDark ->
-                        settingsViewModel.updateDarkMode(isDark)
-                    },
-                    onNavigate = { destination ->
-                        // 关闭侧边栏并触发导航
-                        isSidebarOpen = false
-                        onNavigateToSettings(destination)
-                    }
-                )
+                AppBackgroundStyleTheme(
+                    enabled = hasAppBackground,
+                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+                ) {
+                    SettingsSidebar(
+                        isDarkMode = settings.isDarkMode,
+                        glassMode = hasAppBackground,
+                        hasAppUpdate = appUpdateUiState.hasUpdate,
+                        onThemeToggle = { isDark ->
+                            settingsViewModel.updateDarkMode(isDark)
+                        },
+                        onNavigate = { destination ->
+                            // 关闭侧边栏并触发导航
+                            isSidebarOpen = false
+                            onNavigateToSettings(destination)
+                        }
+                    )
+                }
             },
             bottomBar = {},
             content = {
                     HomePage(
                         viewModel = mainViewModel,
-                        currentTab = selectedTab,
+                        currentPageKey = effectiveSelectedPageKey,
                         uiSize = settings.uiSize,
                         pickupTimestamp = pickupTimestamp,
                         openCourseRequestId = openCourseRequestId,
@@ -432,7 +430,7 @@ fun HomeScreen(
                         searchRequestId = searchRequestId,
                         imageRequestId = imageRequestId,
                         isSidebarOpen = isSidebarOpen,
-                        onTabChange = { tab -> onSelectedPageKeyChange(tabToPageKey(tab)) },
+                        onPageChange = onSelectedPageKeyChange,
                         onAddEventClick = { openPrimaryCreateDialog() },
                         onEditItem = { item -> beginEditItem(item) },
                         onRequestDeleteItem = { item -> requestDeleteItem(item) },
@@ -448,8 +446,6 @@ fun HomeScreen(
                     )
             }
         )
-
-        val currentPageKey = tabToPageKey(selectedTab)
 
         IntegratedFloatingBar(
             isExpanded = isActionExpanded,
@@ -481,6 +477,8 @@ fun HomeScreen(
                 isSidebarOpen = false
                 openPrimaryCreateDialog()
             },
+            backgroundMode = hasAppBackground,
+            miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()

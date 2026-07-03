@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.util.OsUtils
-import com.antgskds.calendarassistant.xposed.XposedModuleStatus
+import com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus
 
 class LocalCapsuleRoutingQueryApi : CapsuleRoutingQueryApi {
     override fun resolveMode(liveCapsuleEnabled: Boolean): CapsuleRouteMode {

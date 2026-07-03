@@ -6,6 +6,10 @@ import kotlinx.coroutines.flow.Flow
 class QuickMemoRepository(
     private val quickMemoDao: QuickMemoDao
 ) {
+    private companion object {
+        const val VOICE_TRANSCRIPTION_DIVIDER = "——————————————"
+    }
+
     val quickMemos: Flow<List<QuickMemoEntity>> = quickMemoDao.observeQuickMemos()
     val suggestions: Flow<List<QuickMemoSuggestionEntity>> = quickMemoDao.observeSuggestions()
 
@@ -52,6 +56,27 @@ class QuickMemoRepository(
         )
     }
 
+    suspend fun createImageMemo(
+        imagePath: String,
+        bodyText: String = "",
+        asTodo: Boolean = false
+    ): Long {
+        val now = System.currentTimeMillis()
+        return quickMemoDao.insertQuickMemo(
+            QuickMemoEntity(
+                type = QuickMemoType.IMAGE,
+                bodyText = normalizeBody(bodyText),
+                imagePath = imagePath,
+                transcriptionStatus = QuickMemoTranscriptionStatus.NONE,
+                analysisStatus = QuickMemoAnalysisStatus.NONE,
+                createdAt = now,
+                updatedAt = now,
+                sortRank = nextTopSortRank(),
+                todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
+            )
+        )
+    }
+
     suspend fun updateBody(id: Long, bodyText: String) {
         val memo = quickMemoDao.getQuickMemo(id) ?: return
         quickMemoDao.updateQuickMemo(
@@ -62,12 +87,46 @@ class QuickMemoRepository(
         )
     }
 
+    suspend fun attachImage(id: Long, imagePath: String) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        val oldPath = memo.imagePath?.takeIf { it.isNotBlank() && it != imagePath }
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                type = if (memo.type == QuickMemoType.VOICE) memo.type else QuickMemoType.IMAGE,
+                imagePath = imagePath,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        oldPath?.let { path -> runCatching { File(path).delete() } }
+    }
+
+    suspend fun attachVoice(id: Long, audioPath: String, durationMs: Long): Boolean {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return false
+        val oldPath = memo.audioPath?.takeIf { it.isNotBlank() && it != audioPath }
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                type = QuickMemoType.VOICE,
+                audioPath = audioPath,
+                audioDurationMs = durationMs.coerceAtLeast(0L),
+                transcriptionStatus = QuickMemoTranscriptionStatus.PENDING,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        oldPath?.let { path -> runCatching { File(path).delete() } }
+        return true
+    }
+
     suspend fun updateTranscriptionStatus(id: Long, status: String, bodyText: String? = null) {
         val memo = quickMemoDao.getQuickMemo(id) ?: return
         val now = System.currentTimeMillis()
+        val nextBody = if (status == QuickMemoTranscriptionStatus.SUCCESS && bodyText != null) {
+            mergeVoiceTranscription(memo.bodyText, bodyText)
+        } else {
+            bodyText?.let { normalizeBody(it) } ?: memo.bodyText
+        }
         quickMemoDao.updateQuickMemo(
             memo.copy(
-                bodyText = bodyText?.let { normalizeBody(it) } ?: memo.bodyText,
+                bodyText = nextBody,
                 transcriptionStatus = status,
                 updatedAt = now
             )
@@ -115,6 +174,9 @@ class QuickMemoRepository(
         memo?.audioPath?.takeIf { it.isNotBlank() }?.let { path ->
             runCatching { File(path).delete() }
         }
+        memo?.imagePath?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching { File(path).delete() }
+        }
     }
 
     suspend fun updateSortRanks(ids: List<Long>) {
@@ -149,7 +211,25 @@ class QuickMemoRepository(
     }
 
     private fun normalizeBody(bodyText: String): String {
-        return bodyText.replace("\r\n", "\n").replace('\r', '\n').trim()
+        return bodyText.replace("\r\n", "\n").replace('\r', '\n')
+    }
+
+    private fun mergeVoiceTranscription(currentBody: String, transcription: String): String {
+        val normalizedBody = normalizeBody(currentBody)
+        val normalizedTranscription = normalizeBody(transcription).trim()
+        if (normalizedTranscription.isBlank()) return normalizedBody
+
+        val dividerIndex = normalizedBody.lastIndexOf(VOICE_TRANSCRIPTION_DIVIDER)
+        val baseText = if (dividerIndex >= 0) {
+            normalizedBody.substring(0, dividerIndex).trimEnd()
+        } else {
+            normalizedBody.trimEnd()
+        }
+        return if (baseText.isBlank()) {
+            normalizedTranscription
+        } else {
+            "$baseText\n$VOICE_TRANSCRIPTION_DIVIDER\n$normalizedTranscription"
+        }
     }
 
     private fun normalizeTodoState(todoState: String): String {

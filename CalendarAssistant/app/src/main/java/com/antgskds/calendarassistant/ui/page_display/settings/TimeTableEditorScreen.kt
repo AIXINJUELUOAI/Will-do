@@ -22,9 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -54,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutConfig
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.TimeNode
+import com.antgskds.calendarassistant.ui.components.AppAlertDialog
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -256,7 +256,7 @@ fun TimeTableEditorScreen(
                     }
                 }
 
-                Card(
+                AppCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { haptics.click(); showDurationPickerForNode = nodeIndex },
@@ -435,7 +435,7 @@ fun TimeTableEditorScreen(
             )
         }
         var selectedBreak by remember(nodeIndex, initialBreak) { mutableIntStateOf(initialBreak) }
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showBreakPickerForNode = null },
             title = { CenteredDialogTitle("课间时长") },
             text = {
@@ -483,7 +483,7 @@ fun TimeTableEditorScreen(
         }
         var selectedDuration by remember(nodeIndex, currentDuration) { mutableIntStateOf(currentDuration) }
 
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDurationPickerForNode = null },
             title = { CenteredDialogTitle("第 $nodeIndex 节时长") },
             text = {
@@ -592,7 +592,7 @@ private fun TimeTableStructureDialog(
         )
     }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle("课程结构") },
         text = {

@@ -21,8 +21,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.RemoteAppUpdateSection
 import com.antgskds.calendarassistant.data.model.RemoteAppVersion
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable
@@ -61,10 +60,10 @@ fun AppUpdatePage(
     ) {
         val versions = updateState.info?.versions.orEmpty()
         if (versions.isEmpty()) {
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
             ) {
                 Text(
                     text = updateState.errorMessage ?: "暂无更新日志",
@@ -103,12 +102,12 @@ private fun AppVersionCard(
 ) {
     var expanded by rememberSaveable(version.versionname) { mutableStateOf(defaultExpanded) }
 
-    Card(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
     ) {
         Column(
             modifier = Modifier

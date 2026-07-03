@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.StickyNote2
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.Icon
@@ -55,6 +54,7 @@ import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.homeEntryLabel
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -134,11 +134,10 @@ fun BottomBarEditorPage(
     ) {
 
         // 0. 顶部实时预览框
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // 预览标题
@@ -183,11 +182,10 @@ fun BottomBarEditorPage(
         }
 
         // 1. 当前底栏设置
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
@@ -301,11 +299,10 @@ fun BottomBarEditorPage(
         }
 
         // 2. 备选区
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
@@ -363,11 +360,10 @@ fun BottomBarEditorPage(
         }
 
         // 3. 默认启动页
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),

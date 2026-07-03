@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.viewmodel
 
+import android.content.Context
 import android.net.Uri
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
@@ -25,18 +26,24 @@ import com.antgskds.calendarassistant.core.query.SettingsTransformApi
 import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupOptions
+import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
+import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
+import com.antgskds.calendarassistant.feature.appearance.domain.AppBackgroundImageStore
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 
 class SettingsViewModel(
+    appContext: Context,
     private val scheduleCenter: ScheduleCenter,
     private val backupCenter: BackupCenter,
     private val syncCenter: SyncCenter,
@@ -48,6 +55,8 @@ class SettingsViewModel(
     private val legacyNoteMigrationCenter: LegacyNoteMigrationCenter,
     private val duplicateEventCleanupCenter: DuplicateEventCleanupCenter
 ) : ViewModel() {
+    private val backgroundImageStore = AppBackgroundImageStore(appContext)
+
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
 
@@ -137,6 +146,8 @@ class SettingsViewModel(
     fun updatePreference(
         showTomorrow: Boolean? = null,
         dailySummary: Boolean? = null,
+        dailySummaryMorningMinuteOfDay: Int? = null,
+        dailySummaryEveningMinuteOfDay: Int? = null,
         liveCapsule: Boolean? = null,
         pickupAggregation: Boolean? = null,
         hapticFeedbackEnabled: Boolean? = null,
@@ -146,6 +157,7 @@ class SettingsViewModel(
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
         autoArchive: Boolean? = null,
+        recognitionMode: Int? = null,
         defaultEventDurationMinutes: Int? = null,
         useMultimodalAi: Boolean? = null,
         disableThinking: Boolean? = null,
@@ -159,6 +171,8 @@ class SettingsViewModel(
         forceInstantCodeTimeToNow: Boolean? = null,
         predictiveBackEnabled: Boolean? = null,
         clipboardCodeRecognitionEnabled: Boolean? = null,
+        voiceInputEnabled: Boolean? = null,
+        floatingVoiceLongPressEnabled: Boolean? = null,
         widgetThemeMode: Int? = null,
         widgetBackgroundAlpha: Float? = null,
         developerOptionsUnlocked: Boolean? = null,
@@ -175,6 +189,8 @@ class SettingsViewModel(
                 current = settings.value,
                 showTomorrow = showTomorrow,
                 dailySummary = dailySummary,
+                dailySummaryMorningMinuteOfDay = dailySummaryMorningMinuteOfDay,
+                dailySummaryEveningMinuteOfDay = dailySummaryEveningMinuteOfDay,
                 liveCapsule = liveCapsule,
                 pickupAggregation = pickupAggregation,
                 hapticFeedbackEnabled = hapticFeedbackEnabled,
@@ -184,6 +200,7 @@ class SettingsViewModel(
                 advanceReminderEnabled = advanceReminderEnabled,
                 advanceReminderMinutes = advanceReminderMinutes,
                 autoArchive = autoArchive,
+                recognitionMode = recognitionMode,
                 defaultEventDurationMinutes = defaultEventDurationMinutes,
                 useMultimodalAi = useMultimodalAi,
                 disableThinking = disableThinking,
@@ -197,6 +214,8 @@ class SettingsViewModel(
                 forceInstantCodeTimeToNow = forceInstantCodeTimeToNow,
                 predictiveBackEnabled = predictiveBackEnabled,
                 clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled,
+                voiceInputEnabled = voiceInputEnabled,
+                floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled,
                 widgetThemeMode = widgetThemeMode,
                 widgetBackgroundAlpha = widgetBackgroundAlpha,
                 developerOptionsUnlocked = developerOptionsUnlocked,
@@ -210,6 +229,79 @@ class SettingsViewModel(
             )
             settingsOperationApi.updateSettings(updated)
         }
+    }
+
+    /**
+     * 更新列表排序方向开关（首页 / 全部日程 / 悬浮窗 / 归档）。
+     * 直接走 copy，不经 transform 层；传 null 表示该项不变。
+     */
+    fun updateListSortOrder(
+        homeListReverseOrder: Boolean? = null,
+        allEventsListReverseOrder: Boolean? = null,
+        floatingListReverseOrder: Boolean? = null,
+        archivesListReverseOrder: Boolean? = null
+    ) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    homeListReverseOrder = homeListReverseOrder ?: current.homeListReverseOrder,
+                    allEventsListReverseOrder = allEventsListReverseOrder ?: current.allEventsListReverseOrder,
+                    floatingListReverseOrder = floatingListReverseOrder ?: current.floatingListReverseOrder,
+                    archivesListReverseOrder = archivesListReverseOrder ?: current.archivesListReverseOrder
+                )
+            )
+        }
+    }
+
+    fun updateDailySummaryTimes(
+        morningMinuteOfDay: Int? = null,
+        eveningMinuteOfDay: Int? = null,
+        onUpdated: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val current = settings.value
+            val updated = current.copy(
+                dailySummaryMorningMinuteOfDay = morningMinuteOfDay
+                    ?.let(MySettings::normalizeDailySummaryMinuteOfDay)
+                    ?: current.dailySummaryMorningMinuteOfDay,
+                dailySummaryEveningMinuteOfDay = eveningMinuteOfDay
+                    ?.let(MySettings::normalizeDailySummaryMinuteOfDay)
+                    ?: current.dailySummaryEveningMinuteOfDay
+            )
+            settingsOperationApi.updateSettings(updated)
+            onUpdated()
+        }
+    }
+
+    /**
+     * 把列表排序方向恢复为出厂默认（首页/全部=正序，悬浮窗/归档=倒序）。
+     * 取 MySettings() 的默认值，避免硬编码漂移。
+     */
+    fun resetListSortOrderToDefault() {
+        viewModelScope.launch {
+            val current = settings.value
+            val defaults = MySettings()
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    homeListReverseOrder = defaults.homeListReverseOrder,
+                    allEventsListReverseOrder = defaults.allEventsListReverseOrder,
+                    floatingListReverseOrder = defaults.floatingListReverseOrder,
+                    archivesListReverseOrder = defaults.archivesListReverseOrder
+                )
+            )
+        }
+    }
+
+    fun updateEventColorPalette(hexColors: List<String>) {
+        val sanitized = sanitizeEventColorPaletteHex(hexColors)
+        viewModelScope.launch {
+            settingsOperationApi.updateSettings(settings.value.copy(eventColorPaletteHex = sanitized))
+        }
+    }
+
+    fun resetEventColorPalette() {
+        updateEventColorPalette(DEFAULT_EVENT_COLOR_PALETTE_HEX)
     }
 
     fun unlockDeveloperOptions() {
@@ -300,7 +392,12 @@ class SettingsViewModel(
     // 更新主题配色方案
     fun updateThemeColorScheme(scheme: String) {
         viewModelScope.launch {
-            settingsOperationApi.updateSettings(settings.value.copy(themeColorScheme = scheme))
+            settingsOperationApi.updateSettings(
+                settings.value.copy(
+                    themeColorScheme = scheme,
+                    appBackgroundImageColorEnabled = false
+                )
+            )
         }
     }
 
@@ -310,8 +407,111 @@ class SettingsViewModel(
             settingsOperationApi.updateSettings(
                 settings.value.copy(
                     themeColorScheme = ThemeColorScheme.CUSTOM.name,
-                    customThemeColorHex = normalized
+                    customThemeColorHex = normalized,
+                    appBackgroundImageColorEnabled = false
                 )
+            )
+        }
+    }
+
+    fun importAppBackground(uri: Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val current = settings.value
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    backgroundImageStore.importBackground(uri, current.appBackgroundImagePath)
+                }
+            }.onSuccess { result ->
+                val resetImageColor = current.appBackgroundImageColorEnabled
+                settingsOperationApi.updateSettings(
+                    current.copy(
+                        appBackgroundEnabled = true,
+                        appBackgroundImagePath = result.path,
+                        appBackgroundSeedColorHex = "",
+                        appBackgroundImageColorEnabled = false,
+                        appBackgroundScrimAlphaPercent = 0,
+                        themeColorScheme = if (resetImageColor) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
+                    )
+                )
+                onResult(true, "主界面壁纸已设置")
+            }.onFailure { error ->
+                onResult(false, error.message ?: "背景图片导入失败")
+            }
+        }
+    }
+
+    fun clearAppBackground() {
+        viewModelScope.launch {
+            val current = settings.value
+            withContext(Dispatchers.IO) {
+                backgroundImageStore.clearBackground(current.appBackgroundImagePath)
+            }
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    appBackgroundEnabled = false,
+                        appBackgroundImagePath = "",
+                        appBackgroundSeedColorHex = "",
+                        appBackgroundImageColorEnabled = false,
+                        appBackgroundWallpaperBlurEnabled = false,
+                        appBackgroundScrimAlphaPercent = 0,
+                        themeColorScheme = if (current.appBackgroundImageColorEnabled) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
+                    )
+                )
+        }
+    }
+
+    fun updateAppBackgroundImageColorEnabled(enabled: Boolean, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val current = settings.value
+            if (!enabled) {
+                settingsOperationApi.updateSettings(
+                    current.copy(
+                        appBackgroundImageColorEnabled = false,
+                        themeColorScheme = ThemeColorScheme.DEFAULT.name
+                    )
+                )
+                onResult(true, "已切换为系统取色")
+                return@launch
+            }
+
+            if (current.appBackgroundImagePath.isBlank()) {
+                onResult(false, "请先选择背景图片")
+                return@launch
+            }
+
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    current.appBackgroundSeedColorHex.takeIf { normalizeThemeHexColor(it) != null }
+                        ?: backgroundImageStore.extractSeedColorHex(current.appBackgroundImagePath)
+                }
+            }.onSuccess { seedHex ->
+                val normalized = normalizeThemeHexColor(seedHex) ?: "#6750A4"
+                settingsOperationApi.updateSettings(
+                    current.copy(
+                        appBackgroundSeedColorHex = normalized,
+                        appBackgroundImageColorEnabled = true,
+                        themeColorScheme = ThemeColorScheme.CUSTOM.name,
+                        customThemeColorHex = normalized
+                    )
+                )
+                onResult(true, "已切换为图片取色")
+            }.onFailure { error ->
+                onResult(false, error.message ?: "图片取色失败")
+            }
+        }
+    }
+
+    fun updateAppBackgroundMiuiBlurTestEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsOperationApi.updateSettings(settings.value.copy(appBackgroundMiuiBlurTestEnabled = enabled))
+        }
+    }
+
+    fun updateAppBackgroundWallpaperBlurEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsOperationApi.updateSettings(
+                current.copy(appBackgroundWallpaperBlurEnabled = enabled && current.appBackgroundImagePath.isNotBlank())
             )
         }
     }

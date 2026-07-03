@@ -11,6 +11,8 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         current: MySettings,
         showTomorrow: Boolean?,
         dailySummary: Boolean?,
+        dailySummaryMorningMinuteOfDay: Int?,
+        dailySummaryEveningMinuteOfDay: Int?,
         liveCapsule: Boolean?,
         pickupAggregation: Boolean?,
         hapticFeedbackEnabled: Boolean?,
@@ -20,6 +22,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         advanceReminderEnabled: Boolean?,
         advanceReminderMinutes: Int?,
         autoArchive: Boolean?,
+        recognitionMode: Int?,
         defaultEventDurationMinutes: Int?,
         useMultimodalAi: Boolean?,
         disableThinking: Boolean?,
@@ -33,6 +36,8 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         forceInstantCodeTimeToNow: Boolean?,
         predictiveBackEnabled: Boolean?,
         clipboardCodeRecognitionEnabled: Boolean?,
+        voiceInputEnabled: Boolean?,
+        floatingVoiceLongPressEnabled: Boolean?,
         widgetThemeMode: Int?,
         widgetBackgroundAlpha: Float?,
         developerOptionsUnlocked: Boolean?,
@@ -47,6 +52,16 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         var updated = current
         if (showTomorrow != null) updated = updated.copy(showTomorrowEvents = showTomorrow)
         if (dailySummary != null) updated = updated.copy(isDailySummaryEnabled = dailySummary)
+        if (dailySummaryMorningMinuteOfDay != null) {
+            updated = updated.copy(
+                dailySummaryMorningMinuteOfDay = MySettings.normalizeDailySummaryMinuteOfDay(dailySummaryMorningMinuteOfDay)
+            )
+        }
+        if (dailySummaryEveningMinuteOfDay != null) {
+            updated = updated.copy(
+                dailySummaryEveningMinuteOfDay = MySettings.normalizeDailySummaryMinuteOfDay(dailySummaryEveningMinuteOfDay)
+            )
+        }
         if (liveCapsule != null) updated = updated.copy(isLiveCapsuleEnabled = liveCapsule)
         if (pickupAggregation != null) updated = updated.copy(isPickupAggregationEnabled = pickupAggregation)
         if (hapticFeedbackEnabled != null) updated = updated.copy(hapticFeedbackEnabled = hapticFeedbackEnabled)
@@ -56,6 +71,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (advanceReminderEnabled != null) updated = updated.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
         if (advanceReminderMinutes != null) updated = updated.copy(advanceReminderMinutes = advanceReminderMinutes)
         if (autoArchive != null) updated = updated.copy(autoArchiveEnabled = autoArchive)
+        if (recognitionMode != null) updated = updated.copy(recognitionMode = MySettings.normalizeRecognitionMode(recognitionMode))
         if (defaultEventDurationMinutes != null) updated = updated.copy(defaultEventDurationMinutes = defaultEventDurationMinutes)
         if (useMultimodalAi != null) updated = updated.copy(useMultimodalAi = useMultimodalAi)
         if (disableThinking != null) updated = updated.copy(disableThinking = disableThinking)
@@ -69,6 +85,8 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
         if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
         if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
+        if (voiceInputEnabled != null) updated = updated.copy(voiceInputEnabled = voiceInputEnabled)
+        if (floatingVoiceLongPressEnabled != null) updated = updated.copy(floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled)
         if (widgetThemeMode != null) updated = updated.copy(widgetThemeMode = widgetThemeMode.coerceIn(0, 2))
         if (widgetBackgroundAlpha != null) updated = updated.copy(widgetBackgroundAlpha = widgetBackgroundAlpha.coerceIn(0.6f, 1f))
         if (developerOptionsUnlocked != null) updated = updated.copy(developerOptionsUnlocked = developerOptionsUnlocked)

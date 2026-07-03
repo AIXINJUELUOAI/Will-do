@@ -7,10 +7,13 @@ import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
+import com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.core.rule.RecognitionModePolicy
+import com.antgskds.calendarassistant.data.model.MySettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -20,7 +23,9 @@ class ContentIngestCenter(
     private val importCenter: ImportCenter,
     private val domainEventBus: DomainEventBus,
     private val appScope: CoroutineScope,
-    private val notificationCenter: NotificationCenter? = null
+    private val notificationCenter: NotificationCenter? = null,
+    private val settingsProvider: (() -> MySettings)? = null,
+    private val regexAiReviewCoordinator: RegexAiReviewCoordinator? = null,
 ) : IngestCommandApi {
     private sealed interface IngestTask {
         val traceId: String
@@ -39,6 +44,7 @@ class ContentIngestCenter(
     private data class RecognizedIngestTask(
         val events: List<RecognitionDraft>,
         val sourceImagePath: String?,
+        val regexReviewContext: RegexAiReviewCoordinator.ReviewContext?,
         override val traceId: String,
         override val sourceType: String,
         override val sourceId: String,
@@ -110,6 +116,7 @@ class ContentIngestCenter(
                         RecognizedIngestTask(
                             events = payload.candidates,
                             sourceImagePath = payload.sourceImagePath,
+                            regexReviewContext = buildRegexReviewContext(payload),
                             traceId = event.traceId,
                             sourceType = payload.sourceType,
                             sourceId = payload.sourceId,
@@ -160,6 +167,7 @@ class ContentIngestCenter(
             RecognizedIngestTask(
                 events = events,
                 sourceImagePath = sourceImagePath,
+                regexReviewContext = null,
                 traceId = traceId,
                 sourceType = "recognized",
                 sourceId = sourceImagePath ?: "recognized_input",
@@ -217,6 +225,7 @@ class ContentIngestCenter(
                 dedupedCount = dedupedCount,
                 createdCount = created.size
             )
+            maybeStartRegexAiReview(task, created)
             notificationCenter?.showCreatedEventResultNotifications(task.sourceType, created)
         } else {
             Log.d(
@@ -233,6 +242,28 @@ class ContentIngestCenter(
                 message = "没有可入库的新事件"
             )
         }
+    }
+
+    private fun buildRegexReviewContext(payload: RecognitionCompletedEvent): RegexAiReviewCoordinator.ReviewContext? {
+        val settings = settingsProvider?.invoke() ?: return null
+        if (!RecognitionModePolicy.shouldReviewRegexResultAfterIngest(settings)) return null
+        val rawText = payload.rawText?.trim().orEmpty()
+        if (rawText.isBlank() || payload.candidates.size != 1) return null
+        return RegexAiReviewCoordinator.ReviewContext(
+            rawText = rawText,
+            regexDraft = payload.candidates.single(),
+            settings = settings,
+        )
+    }
+
+    private fun maybeStartRegexAiReview(task: RecognizedIngestTask, created: List<Event>) {
+        val reviewContext = task.regexReviewContext ?: return
+        val eventId = created.singleOrNull()?.id ?: return
+        regexAiReviewCoordinator?.reviewAfterIngest(
+            traceId = task.traceId,
+            eventId = eventId,
+            context = reviewContext,
+        )
     }
 
     private suspend fun emitIngestSucceeded(

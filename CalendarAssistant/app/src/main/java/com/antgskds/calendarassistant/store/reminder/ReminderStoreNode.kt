@@ -13,12 +13,11 @@ import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.Reminder
 import com.antgskds.calendarassistant.calendar.models.isTransit
-import com.antgskds.calendarassistant.calendar.receivers.EventReminderReceiver
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.service.notification.NotificationIds
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
-import com.antgskds.calendarassistant.service.receiver.AlarmReceiver
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
+import com.antgskds.calendarassistant.platform.receiver.AlarmReceiver
 
 class ReminderStoreNode(context: Context) {
     private val appContext = context.applicationContext
@@ -54,27 +53,11 @@ class ReminderStoreNode(context: Context) {
             return
         }
 
-        val requestCodes = mutableSetOf<Int>()
-        ReminderPolicy.effectiveReminders(event, currentSettings).forEach { reminder ->
-            val triggerMillis = (event.startTS - reminder.minutes * 60L) * 1000L
-            val requestCode = buildRequestCode(eventId, reminder.minutes, reminder.type)
-            if (triggerMillis > now) {
-                val pendingIntent = createPendingIntent(
-                    requestCode = requestCode,
-                    eventId = eventId,
-                    title = event.title,
-                    description = event.description
-                )
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
-                requestCodes.add(requestCode)
-            } else if (shouldSendImmediateReminder(triggerMillis, event.startTS * 1000L, event.endTS * 1000L, reminder, now) &&
-                markImmediateReminderIfNeeded(notificationKey, reminder.minutes)
-            ) {
-                sendImmediateReminder(eventId, event.title, event.description)
-            }
-        }
-
-        saveRequestCodes(eventId, requestCodes)
+        // Phase 2：单次事件的「普通提醒」已切到新通知链路
+        // （ScheduleNotificationBridge → NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher）。
+        // 此处不再排 EventReminderReceiver 闹钟，避免与新链路双弹；上方的取消/清理与胶囊 early-return 保留不变。
+        // 「错过即时补发(missed-immediate)」已由新链路 ScheduleNotificationBridge.shouldFireMissedImmediate 恢复
+        // （事件创建/更新/reconcile/开机重排时判定补发，带 state!=POSTED 去重），此处无需再做。
     }
 
     fun cancelForEvent(eventId: Long) {
@@ -83,7 +66,7 @@ class ReminderStoreNode(context: Context) {
             val pendingIntent = PendingIntent.getBroadcast(
                 appContext,
                 requestCode,
-                Intent(appContext, EventReminderReceiver::class.java),
+                Intent(appContext, AlarmReceiver::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             alarmManager.cancel(pendingIntent)
@@ -268,16 +251,9 @@ class ReminderStoreNode(context: Context) {
         return if (currentSettings.isLiveCapsuleEnabled) {
             buildCapsuleAlarmSpecs(instanceKey, startMillis, endMillis, currentSettings)
         } else {
-            ReminderPolicy.effectiveReminders(parent, currentSettings).map { reminder ->
-                val marker = reminder.minutes.coerceAtLeast(0)
-                AlarmSpec(
-                    action = NotificationScheduler.ACTION_REMINDER,
-                    triggerMillis = startMillis - marker * 60_000L,
-                    requestCode = buildInstanceRequestCode(instanceKey, NotificationScheduler.ACTION_REMINDER, marker, reminder.type),
-                    marker = marker,
-                    label = reminderLabel(marker)
-                )
-            }
+            // Phase 3：普通重复提醒已由新链路（ScheduleNotificationBridge.submitRecurringWindow）接管，
+            // 旧路不再排，避免与新链路双弹。胶囊重复提醒仍走上面的旧路。
+            emptyList()
         }
     }
 
@@ -406,7 +382,7 @@ class ReminderStoreNode(context: Context) {
     }
 
     private fun cancelRequestCode(requestCode: Int) {
-        cancelBroadcast(requestCode, EventReminderReceiver::class.java, null)
+        cancelBroadcast(requestCode, AlarmReceiver::class.java, null)
         listOf(
             NotificationScheduler.ACTION_REMINDER,
             NotificationScheduler.ACTION_CAPSULE_START,
@@ -464,30 +440,6 @@ class ReminderStoreNode(context: Context) {
 
     private fun buildInstanceRequestCode(instanceKey: String, action: String, marker: Int, type: Int): Int {
         return "$instanceKey:$action:$marker:$type".hashCode()
-    }
-
-    private fun createPendingIntent(requestCode: Int, eventId: Long, title: String, description: String): PendingIntent {
-        val intent = Intent(appContext, EventReminderReceiver::class.java).apply {
-            putExtra(EventReminderReceiver.EXTRA_EVENT_ID, eventId)
-            putExtra(EventReminderReceiver.EXTRA_TITLE, title)
-            putExtra(EventReminderReceiver.EXTRA_DESCRIPTION, description)
-        }
-        return PendingIntent.getBroadcast(
-            appContext,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-    }
-
-    private fun sendImmediateReminder(eventId: Long, title: String, description: String) {
-        if (eventId == 0L) return
-        val intent = Intent(appContext, EventReminderReceiver::class.java).apply {
-            putExtra(EventReminderReceiver.EXTRA_EVENT_ID, eventId)
-            putExtra(EventReminderReceiver.EXTRA_TITLE, title)
-            putExtra(EventReminderReceiver.EXTRA_DESCRIPTION, description)
-        }
-        appContext.sendBroadcast(intent)
     }
 
     private fun cancelDisplayedStandardNotificationsForEvent(eventId: Long) {

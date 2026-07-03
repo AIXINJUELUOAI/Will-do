@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -35,7 +36,8 @@ fun PushSlideLayout(
     sidebar: @Composable () -> Unit,
     bottomBar: @Composable () -> Unit,
     content: @Composable () -> Unit,
-    enableGesture: Boolean = true
+    enableGesture: Boolean = true,
+    contentContainerColor: Color? = null
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -111,7 +113,7 @@ fun PushSlideLayout(
                                 y = 0
                             )
                         }
-                        .background(MaterialTheme.colorScheme.background)
+                        .background(contentContainerColor ?: MaterialTheme.colorScheme.background)
                         .draggable(
                             enabled = enableGesture,
                             state = dragState,

@@ -41,8 +41,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
@@ -50,7 +48,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -90,15 +87,17 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.weather.WeatherApiAdapter
-import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
-import com.antgskds.calendarassistant.core.weather.WeatherCatalogLocation
-import com.antgskds.calendarassistant.core.weather.WeatherCatalogProvince
-import com.antgskds.calendarassistant.core.weather.WeatherLocationCatalog
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
-import com.antgskds.calendarassistant.core.weather.WeatherSyncWorker
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherApiAdapter
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherCatalogLocation
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherCatalogProvince
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherLocationCatalog
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherRepository
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherSyncWorker
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.displayLocationName
+import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -305,11 +304,10 @@ fun WeatherSettingsPage(
         ) {
             Text("天气来源", style = sectionTitleStyle)
 
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     SwitchSettingItem(
@@ -395,11 +393,10 @@ fun WeatherSettingsPage(
 
             Text("显示与刷新", style = sectionTitleStyle)
 
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     SliderSettingItem(
@@ -535,11 +532,10 @@ fun WeatherSettingsPage(
 
             weatherData?.let { data ->
                 Text("当前缓存", style = sectionTitleStyle)
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -746,13 +742,12 @@ private fun WeatherDetailEntryCard(
     onClick: () -> Unit
 ) {
     val haptics = rememberAppHaptics()
-    Card(
+    AppCard(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { haptics.click(); onClick() },
+            .fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        onClick = { haptics.click(); onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -811,7 +806,7 @@ private fun WeatherLocationPickerSheet(
     }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {

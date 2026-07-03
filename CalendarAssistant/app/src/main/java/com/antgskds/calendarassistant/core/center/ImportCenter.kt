@@ -20,19 +20,15 @@ class ImportCenter(
 
     private val smsIngestMutex = Mutex()
 
-    private val defaultDurationMinutes: Int
-        get() = settingsQueryApi.settings.value.defaultEventDurationMinutes
-
-    private val forceInstantCodeTimeToNow: Boolean
-        get() = settingsQueryApi.settings.value.forceInstantCodeTimeToNow
-
     override suspend fun ingestSmsPickup(eventData: RecognitionDraft): Event? = ingestInstantCode(eventData, "sms")
 
     override suspend fun ingestInstantCode(eventData: RecognitionDraft, sourceType: String): Event? = smsIngestMutex.withLock {
+        val settings = settingsQueryApi.settings.value
         val event = convertDraftToEvent(
             eventData,
-            defaultDurationMinutes = defaultDurationMinutes,
-            forceInstantCodeTimeToNow = forceInstantCodeTimeToNow
+            defaultDurationMinutes = settings.defaultEventDurationMinutes,
+            forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow,
+            eventColorPaletteHex = settings.eventColorPaletteHex
         )
 
         val incomingFingerprint = SmsPickupFingerprint.fromDraft(eventData)
@@ -62,7 +58,8 @@ class ImportCenter(
     ): List<Event> {
         if (events.isEmpty()) return emptyList()
 
-        val durationMinutes = defaultDurationMinutes
+        val settings = settingsQueryApi.settings.value
+        val durationMinutes = settings.defaultEventDurationMinutes
         val added = mutableListOf<Event>()
         val knownEvents = scheduleCenter.events.value.toMutableList()
         events.forEach { eventData ->
@@ -72,7 +69,8 @@ class ImportCenter(
                 eventData,
                 sourceImagePath,
                 defaultDurationMinutes = durationMinutes,
-                forceInstantCodeTimeToNow = forceInstantCodeTimeToNow
+                forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow,
+                eventColorPaletteHex = settings.eventColorPaletteHex
             )
             val isDuplicate = knownEvents.any { existing ->
                 val isExpired = existing.endDate.isBefore(LocalDate.now())

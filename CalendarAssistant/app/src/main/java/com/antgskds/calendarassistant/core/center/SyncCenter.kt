@@ -17,35 +17,35 @@ import kotlinx.coroutines.withContext
 class SyncCenter(
     private val calendarCenter: CalendarCenter,
     private val context: Context
-) {
+) : com.antgskds.calendarassistant.core.operation.SyncApi {
     private val appContext = context.applicationContext
     private val config = CalendarConfig.newInstance(appContext)
     private val syncManager = SystemCalendarSyncManager(appContext)
 
-    suspend fun enableCalendarSync(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun enableCalendarSync(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching { calendarCenter.setSyncEnabled(true) }
     }
 
-    suspend fun disableCalendarSync(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun disableCalendarSync(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching { calendarCenter.setSyncEnabled(false) }
     }
 
-    suspend fun manualSync(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun manualSync(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching { calendarCenter.manualSyncNow() }
     }
 
-    suspend fun setSyncedCalendarIds(ids: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun setSyncedCalendarIds(ids: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching { calendarCenter.setSyncedCalendarIds(ids) }
     }
 
-    suspend fun enableCalendarSyncAndSyncNow(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun enableCalendarSyncAndSyncNow(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             calendarCenter.setSyncEnabled(true)
             calendarCenter.manualSyncNow()
         }
     }
 
-    suspend fun updateSyncIntervalSeconds(seconds: Int): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun updateSyncIntervalSeconds(seconds: Int): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             config.syncIntervalSeconds = seconds.coerceIn(1, 300)
             if (config.caldavSync) {
@@ -54,7 +54,7 @@ class SyncCenter(
         }
     }
 
-    fun getSyncStatus(): CalendarSyncManager.SyncStatus {
+    override fun getSyncStatus(): CalendarSyncManager.SyncStatus {
         val hasPerm = hasCalendarPermission()
         val isEnabled = config.caldavSync
         val syncedIds = config.getSyncedCalendarIdsAsList().map { it.toLong() }
@@ -69,7 +69,7 @@ class SyncCenter(
         )
     }
 
-    fun getSelectableSyncCalendars(): List<CalendarManager.CalendarInfo> {
+    override fun getSelectableSyncCalendars(): List<CalendarManager.CalendarInfo> {
         if (!hasCalendarPermission()) return emptyList()
         return try {
             val calendars = syncManager.getCalDAVCalendars("")
@@ -89,7 +89,7 @@ class SyncCenter(
         }
     }
 
-    suspend fun updateSourceCalendars(calendarIds: List<Long>): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun updateSourceCalendars(calendarIds: List<Long>): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             calendarCenter.setSyncedCalendarIds(calendarIds.joinToString(","))
         }

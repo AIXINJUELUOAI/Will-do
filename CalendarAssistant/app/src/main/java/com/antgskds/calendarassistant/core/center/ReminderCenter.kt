@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.center
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import android.content.Context
+import android.util.Log
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
@@ -16,14 +17,18 @@ import com.antgskds.calendarassistant.core.event.events.ScheduleChangeType
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangedEvent
 
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
 import com.antgskds.calendarassistant.store.reminder.ReminderStoreNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.time.LocalDate
 
 class ReminderCenter(
@@ -45,6 +50,9 @@ class ReminderCenter(
     private var pendingFullReminderReconcile = false
     private var reminderReconcileJob: Job? = null
     private var eventSubscriptionsStarted = false
+    private val fullReconcileMutex = Mutex()
+    @Volatile
+    private var rerunFullReminderReconcile = false
     private val reminderNode = ReminderStoreNode(appContext)
 
     fun reconcileAll() {
@@ -54,8 +62,21 @@ class ReminderCenter(
     }
 
     suspend fun reconcileAllNow() {
-        runFullReminderReconcile()
-        refreshCapsuleState()
+        if (!fullReconcileMutex.tryLock()) {
+            rerunFullReminderReconcile = true
+            Log.d(TAG, "full reminder reconcile already running; request coalesced")
+            return
+        }
+
+        try {
+            do {
+                rerunFullReminderReconcile = false
+                runFullReminderReconcile()
+                refreshCapsuleState()
+            } while (rerunFullReminderReconcile)
+        } finally {
+            fullReconcileMutex.unlock()
+        }
     }
 
     fun startEventSubscriptions() {
@@ -85,6 +106,22 @@ class ReminderCenter(
                 .eventsOfType<CapsuleRefreshRequestedEvent>(DomainEventType.CAPSULE_REFRESH_REQUESTED)
                 .collectLatest {
                     capsuleCenter.forceRefresh()
+                }
+        }
+
+        appScope.launch {
+            settingsQueryApi.settings
+                .map { settings ->
+                    ReminderSettingsKey(
+                        advanceReminderEnabled = settings.isAdvanceReminderEnabled,
+                        advanceReminderMinutes = settings.advanceReminderMinutes,
+                        liveCapsuleEnabled = settings.isLiveCapsuleEnabled
+                    )
+                }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    reconcileAllNow()
                 }
         }
     }
@@ -142,7 +179,7 @@ class ReminderCenter(
                 pendingReminderOps.clear()
                 pendingCancellationIds.clear()
                 cancellationIds.forEach { eventId -> cancelEvent(null, eventId) }
-                runFullReminderReconcile()
+                reconcileAllNow()
             } else {
                 val ops = pendingReminderOps.toMap()
                 pendingReminderOps.clear()
@@ -219,10 +256,12 @@ class ReminderCenter(
         val parentMap = activeEvents.filter { it.isRecurring }.associateBy { it.id ?: 0L }
         val liveIds = activeEvents.mapNotNull { it.id }.toSet()
 
-        activeEvents
+        val singleEvents = activeEvents
             .filterNot { it.isRecurring }
-            .forEach(::reconcileEvent)
+        singleEvents.forEach(::reconcileEvent)
 
+        scheduleCenter.submitSingleEvents(singleEvents)
+        scheduleCenter.submitRecurringWindow(displayItems, parentMap)
         reminderNode.refreshForWindow(displayItems, parentMap)
         reminderNode.cancelStaleEvents(liveIds)
     }
@@ -268,6 +307,13 @@ class ReminderCenter(
     }
 
     companion object {
+        private const val TAG = "ReminderCenter"
         private const val NOTIFICATION_WINDOW_DAYS = 7L
     }
+
+    private data class ReminderSettingsKey(
+        val advanceReminderEnabled: Boolean,
+        val advanceReminderMinutes: Int,
+        val liveCapsuleEnabled: Boolean
+    )
 }
