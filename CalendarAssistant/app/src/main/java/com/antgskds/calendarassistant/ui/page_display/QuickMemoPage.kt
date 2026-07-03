@@ -1,6 +1,8 @@
 package com.antgskds.calendarassistant.ui.page_display
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.widget.Toast
@@ -27,7 +29,9 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,8 +59,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Button
@@ -69,6 +76,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +110,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
@@ -110,6 +119,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
@@ -306,7 +316,16 @@ fun QuickMemoDetailPage(
                             viewModel.attachImageToQuickMemo(id, imagePath, onResult)
                         }
                     },
+                    onAttachVoice = { audioPath, durationMs, onResult ->
+                        val id = memo.id
+                        if (id == null) {
+                            onResult(Result.failure(IllegalStateException("随口记不存在")))
+                        } else {
+                            viewModel.attachVoiceToQuickMemo(id, audioPath, durationMs, onResult)
+                        }
+                    },
                     onToggleTodo = { memo.id?.let { viewModel.toggleQuickMemoTodoCompletion(it) } },
+                    onMarkTodo = { memo.id?.let { viewModel.markQuickMemoTodo(it) } },
                     onToggleAudio = { path -> viewModel.toggleAudioPlayback(path) },
                     isPinned = memo.id == pinnedQuickMemoId,
                     onTogglePinned = {
@@ -585,7 +604,9 @@ private fun QuickMemoDetailContent(
     playbackState: AudioPlaybackState,
     onSaveBody: (String) -> Unit,
     onAttachImage: (String, (Result<Unit>) -> Unit) -> Unit,
+    onAttachVoice: (String, Long, (Result<Unit>) -> Unit) -> Unit,
     onToggleTodo: () -> Unit,
+    onMarkTodo: () -> Unit,
     onToggleAudio: (String?) -> Unit,
     isPinned: Boolean,
     onTogglePinned: () -> Unit,
@@ -635,20 +656,99 @@ private fun QuickMemoDetailContent(
             }
         }
     }
+    val audioRecorder = remember(context) { QuickMemoAudioRecorder(context.applicationContext) }
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    var isSavingVoice by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(bodyEditorBounds) {
-                detectTapGestures { offset ->
-                    if (bodyEditorBounds?.contains(offset) != true) {
-                        focusManager.clearFocus(force = true)
+    fun startVoiceRecording() {
+        if (isRecordingVoice || isSavingVoice) return
+        scope.launch {
+            isRecordingVoice = true
+            try {
+                withContext(Dispatchers.IO) { audioRecorder.start() }
+                haptics.confirm()
+                Toast.makeText(context, "正在录音，再点一次保存", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                isRecordingVoice = false
+                withContext(Dispatchers.IO) { audioRecorder.stopAndDiscard() }
+                Toast.makeText(context, e.message ?: "录音失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun stopVoiceRecording() {
+        if (!isRecordingVoice || isSavingVoice) return
+        scope.launch {
+            isSavingVoice = true
+            try {
+                val result = withContext(Dispatchers.IO) { audioRecorder.stop() }
+                isRecordingVoice = false
+                if (result == null || result.durationMs < QuickMemoAudioRecorder.MIN_RECORDING_MS) {
+                    result?.path?.let { path -> withContext(Dispatchers.IO) { runCatching { java.io.File(path).delete() } } }
+                    isSavingVoice = false
+                    Toast.makeText(context, "录音太短", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                onAttachVoice(result.path, result.durationMs) { attachResult ->
+                    isSavingVoice = false
+                    attachResult
+                        .onSuccess { Toast.makeText(context, "已保存语音，正在转写", Toast.LENGTH_SHORT).show() }
+                        .onFailure { error ->
+                            runCatching { java.io.File(result.path).delete() }
+                            Toast.makeText(context, error.message ?: "保存语音失败", Toast.LENGTH_SHORT).show()
+                        }
+                }
+            } catch (e: Exception) {
+                isRecordingVoice = false
+                isSavingVoice = false
+                withContext(Dispatchers.IO) { audioRecorder.stopAndDiscard() }
+                Toast.makeText(context, e.message ?: "录音失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startVoiceRecording()
+        } else {
+            Toast.makeText(context, "需要麦克风权限", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun handleVoiceAction() {
+        if (isRecordingVoice) {
+            stopVoiceRecording()
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startVoiceRecording()
+        } else {
+            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    DisposableEffect(audioRecorder) {
+        onDispose {
+            audioRecorder.stopAndDiscard()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(bodyEditorBounds) {
+                    detectTapGestures { offset ->
+                        if (bodyEditorBounds?.contains(offset) != true) {
+                            focusManager.clearFocus(force = true)
+                        }
                     }
                 }
-            }
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-    ) {
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
         if (isVoice) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Row(
@@ -758,7 +858,7 @@ private fun QuickMemoDetailContent(
         Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -766,55 +866,6 @@ private fun QuickMemoDetailContent(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
-            QuickMemoPinButton(isPinned = isPinned, onClick = { haptics.confirm(); onTogglePinned() })
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                haptics.confirm()
-                imagePickerLauncher.launch("image/*")
-            },
-            enabled = !isAttachingImage,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = when {
-                    isAttachingImage -> "插入中..."
-                    hasImage -> "更换图片"
-                    else -> "插入图片"
-                }
-            )
-        }
-
-        if (isTodo) {
-            Spacer(Modifier.height(32.dp))
-            Surface(
-                onClick = {
-                    haptics.confirm()
-                    onToggleTodo()
-                },
-                modifier = Modifier
-                    .height(metrics.completeButtonHeight),
-                shape = RoundedCornerShape(999.dp),
-                color = if (isCompleted) {
-                    MaterialTheme.colorScheme.surfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                }
-            ) {
-                Box(
-                    modifier = Modifier.padding(horizontal = metrics.completeButtonHorizontalPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isCompleted) "撤销完成状态" else "标记为已完成",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
         }
 
         if (suggestions.isNotEmpty()) {
@@ -833,7 +884,37 @@ private fun QuickMemoDetailContent(
             }
         }
 
+        Spacer(Modifier.height(112.dp))
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+
+        QuickMemoDetailBottomBar(
+            isRecordingVoice = isRecordingVoice,
+            isSavingVoice = isSavingVoice,
+            hasVoice = memo.audioPath?.isNotBlank() == true,
+            isPinned = isPinned,
+            isTodo = isTodo,
+            isCompleted = isCompleted,
+            hasImage = hasImage,
+            isAttachingImage = isAttachingImage,
+            onVoiceClick = {
+                haptics.click()
+                handleVoiceAction()
+            },
+            onPinClick = {
+                haptics.confirm()
+                onTogglePinned()
+            },
+            onTodoClick = {
+                haptics.confirm()
+                if (isTodo) onToggleTodo() else onMarkTodo()
+            },
+            onImageClick = {
+                haptics.confirm()
+                imagePickerLauncher.launch("image/*")
+            },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 @Composable
@@ -847,6 +928,145 @@ private fun QuickMemoTextButton(text: String, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.Bold
     )
+}
+
+@Composable
+private fun QuickMemoDetailBottomBar(
+    isRecordingVoice: Boolean,
+    isSavingVoice: Boolean,
+    hasVoice: Boolean,
+    isPinned: Boolean,
+    isTodo: Boolean,
+    isCompleted: Boolean,
+    hasImage: Boolean,
+    isAttachingImage: Boolean,
+    onVoiceClick: () -> Unit,
+    onPinClick: () -> Unit,
+    onTodoClick: () -> Unit,
+    onImageClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .width(if (isRecordingVoice) 214.dp else 318.dp)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+        ) {
+            if (isRecordingVoice) {
+                Surface(
+                    modifier = Modifier
+                        .width(112.dp)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        FloatingSiriWaveform(
+                            isPlaying = true,
+                            modifier = Modifier
+                                .width(72.dp)
+                                .height(24.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                QuickMemoToolbarChip(
+                    label = if (isSavingVoice) "保存中" else "保存",
+                    selected = true,
+                    enabled = !isSavingVoice,
+                    onClick = onVoiceClick,
+                    modifier = Modifier.height(44.dp)
+                )
+            } else {
+                QuickMemoToolbarChip(
+                    label = if (isPinned) "已挂起" else "挂起",
+                    selected = isPinned,
+                    onClick = onPinClick,
+                    modifier = Modifier.height(44.dp)
+                )
+                QuickMemoToolbarChip(
+                    label = when {
+                        isCompleted -> "撤回"
+                        isTodo -> "完成"
+                        else -> "待办"
+                    },
+                    selected = isTodo,
+                    onClick = onTodoClick,
+                    modifier = Modifier.height(44.dp)
+                )
+                QuickMemoToolbarChip(
+                    label = when {
+                        isAttachingImage -> "插入中"
+                        hasImage -> "换图"
+                        else -> "图片"
+                    },
+                    selected = hasImage,
+                    enabled = !isAttachingImage,
+                    onClick = onImageClick,
+                    modifier = Modifier.height(44.dp)
+                )
+                QuickMemoToolbarChip(
+                    label = if (hasVoice) "重录" else "语音",
+                    selected = false,
+                    enabled = !isSavingVoice,
+                    onClick = onVoiceClick,
+                    modifier = Modifier.height(44.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickMemoToolbarChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer
+    }
+    val contentColor = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+        selected -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = containerColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = contentColor,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable

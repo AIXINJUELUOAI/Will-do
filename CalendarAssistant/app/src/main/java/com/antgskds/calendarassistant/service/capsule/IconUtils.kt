@@ -28,7 +28,7 @@ object IconUtils {
             CapsuleType.OCR_RESULT -> return R.drawable.ic_stat_success
             CapsuleType.MODEL_LOADING -> return R.drawable.ic_model_loading
             CapsuleType.VOICE_TRANSCRIPTION -> return R.drawable.ic_stat_note
-            CapsuleType.TEXT_QUICK_MEMO -> return R.drawable.ic_stat_note
+            CapsuleType.TEXT_QUICK_MEMO -> return R.drawable.ic_stat_quick_memo
             CapsuleType.WEATHER_ALERT -> return if (capsule.eventType == WEATHER_RISK_EVENT_TYPE) {
                 WeatherAlertIconMapper.riskIconRes(
                     title = capsule.display.primaryText,
