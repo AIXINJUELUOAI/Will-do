@@ -62,14 +62,14 @@ import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.widget.CourseWidgetProvider
-import com.antgskds.calendarassistant.widget.CourseWidgetSnapshot
-import com.antgskds.calendarassistant.widget.CourseWidgetSnapshotBuilder
-import com.antgskds.calendarassistant.widget.ScheduleWidgetProvider
-import com.antgskds.calendarassistant.widget.WeatherWidgetProvider
-import com.antgskds.calendarassistant.widget.WidgetAppearanceConfig
-import com.antgskds.calendarassistant.widget.WidgetInstanceConfigStore
-import com.antgskds.calendarassistant.widget.WidgetType
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetSnapshot
+import com.antgskds.calendarassistant.platform.widget.CourseWidgetSnapshotBuilder
+import com.antgskds.calendarassistant.platform.widget.ScheduleWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.WeatherWidgetProvider
+import com.antgskds.calendarassistant.platform.widget.WidgetAppearanceConfig
+import com.antgskds.calendarassistant.platform.widget.WidgetInstanceConfigStore
+import com.antgskds.calendarassistant.platform.widget.WidgetType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -935,7 +935,7 @@ private fun ScheduleDisplayItem.safeComposeColor(fallback: Color): Color {
     return if (color == 0) fallback else Color(color)
 }
 
-private fun com.antgskds.calendarassistant.widget.CourseWidgetItem.safeComposeColor(fallback: Color): Color {
+private fun com.antgskds.calendarassistant.platform.widget.CourseWidgetItem.safeComposeColor(fallback: Color): Color {
     return if (color == 0) fallback else Color(color)
 }
 

@@ -3,7 +3,8 @@ package com.antgskds.calendarassistant.core.content
 enum class ContentSourceType {
     SCHEDULE,
     WEATHER,
-    VOICE_CAPTURE
+    VOICE_CAPTURE,
+    IMAGE_SHARE
 }
 
 interface TimelineItem {

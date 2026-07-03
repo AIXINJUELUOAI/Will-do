@@ -1,0 +1,103 @@
+package com.antgskds.calendarassistant.platform.tile
+
+import android.app.PendingIntent
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.provider.Settings
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
+import android.util.Log
+import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
+
+/**
+ * 快捷设置磁贴服务
+ *
+ * 职责：用户点击通知栏磁贴时触发，调用 [TextAccessibilityService] 进行截图分析。
+ */
+class CaptureTileService : TileService() {
+
+    private val TAG = "CaptureTileDebug"
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    override fun onStartListening() {
+        super.onStartListening()
+        val tile = qsTile ?: return
+
+        tile.state = Tile.STATE_INACTIVE
+        tile.label = "识别事件"
+
+        // 尝试使用专用图标，如果没有则回退
+        try {
+            tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_recognition)
+        } catch (e: Exception) {
+            tile.icon = Icon.createWithResource(this, R.drawable.ic_launcher_foreground)
+        }
+        tile.updateTile()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        Log.e(TAG, ">>> 磁贴被点击了! <<<")
+
+        val tile = qsTile
+        if (tile != null) {
+            tile.state = Tile.STATE_ACTIVE
+            tile.updateTile()
+        }
+
+        serviceScope.launch {
+            var service = TextAccessibilityService.instance
+
+            if (service == null) {
+                AccessibilityGuardian.restoreIfNeeded(this@CaptureTileService)
+                service = TextAccessibilityService.instance
+            }
+
+            if (service != null) {
+                Log.d(TAG, "无障碍服务实例存在，准备调用 startAnalysis")
+
+                service.closeNotificationPanel()
+
+                val delayMs = (applicationContext as App)
+                    .settingsQueryApi
+                    .settings
+                    .value
+                    .screenshotDelayMs
+                    .let(MySettings::normalizeScreenshotDelayMs)
+                service.startAnalysis(delayMs.milliseconds)
+
+                if (tile != null) {
+                    tile.state = Tile.STATE_INACTIVE
+                    tile.updateTile()
+                }
+            } else {
+                Log.e(TAG, "无障碍服务实例为 NULL，发送提示通知")
+                sendEnableServiceNotification()
+
+                if (tile != null) {
+                    tile.state = Tile.STATE_INACTIVE
+                    tile.updateTile()
+                }
+            }
+        }
+    }
+
+    private fun sendEnableServiceNotification() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        (applicationContext as? App)?.notificationCenter?.showAccessibilityServiceDisabledNotification(pendingIntent)
+    }
+}

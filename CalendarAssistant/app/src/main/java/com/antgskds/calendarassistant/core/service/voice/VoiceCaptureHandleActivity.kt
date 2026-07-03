@@ -22,7 +22,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
-import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

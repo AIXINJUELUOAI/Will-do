@@ -52,7 +52,7 @@ import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.motion.PredictiveBottomDialogHost
-import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.ui.theme.resolveEventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -225,6 +225,7 @@ fun AddEventDialog(
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val isEditing = editDraft != null
     val draftKey = editDraft?.hashCode() ?: 0
+    val eventColors = remember(settings.eventColorPaletteHex) { resolveEventColors(settings.eventColorPaletteHex) }
 
     val initialStart = editDraft?.let { LocalDateTime.of(it.startDate, it.startTime) }
         ?: LocalDateTime.now().withSecond(0).withNano(0)
@@ -527,7 +528,7 @@ fun AddEventDialog(
                             val startEpoch = finalStart.atZone(zone).toEpochSecond()
                             val endEpoch = finalEnd.atZone(zone).toEpochSecond()
                             val reminderList = reminders.toList()
-                            val nextColor = if (EventColors.isNotEmpty()) EventColors[currentEventsCount % EventColors.size] else Color.Gray
+                            val nextColor = if (eventColors.isNotEmpty()) eventColors[currentEventsCount % eventColors.size] else Color.Gray
                             val patch = EventPatch(
                                 title = title,
                                 startTS = startEpoch,

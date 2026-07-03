@@ -44,7 +44,7 @@ import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.center.BackupCenter
 import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
-import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
+import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.core.query.EventActionQueryApi
 import com.antgskds.calendarassistant.core.query.DailySummaryQueryApi
@@ -54,7 +54,7 @@ import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
-import com.antgskds.calendarassistant.core.query.WeatherQueryApi
+import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
 import com.antgskds.calendarassistant.data.operation.CapsuleStateManagerCommandApi
 import com.antgskds.calendarassistant.data.operation.WeatherRepositoryOperationApi
 import com.antgskds.calendarassistant.data.query.CapsuleStateManagerQueryApi
@@ -70,6 +70,9 @@ import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
 import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
 import com.antgskds.calendarassistant.data.repository.SettingsRepository
+import com.antgskds.calendarassistant.feature.api.notification.data.SharedPreferencesNotificationRegistryStore
+import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
+import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.core.center.ClipboardCodeCenter
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
@@ -104,7 +107,13 @@ class App : Application() {
     }
 
     val scheduleCenter: ScheduleCenter by lazy {
-        ScheduleCenter(calendarCenter, appScope)
+        ScheduleCenter(
+            calendarCenter = calendarCenter,
+            appScope = appScope,
+            notificationApi = notificationCenter,
+            eventActionQueryApi = eventActionQueryApi,
+            settingsProvider = { settingsQueryApi.settings.value }
+        )
     }
 
     val syncCenter: SyncCenter by lazy {
@@ -137,7 +146,9 @@ class App : Application() {
             recognitionCenter = recognitionCenter,
             settingsQueryApi = settingsQueryApi,
             appContext = applicationContext,
-            notificationCenter = notificationCenter
+            notificationCenter = notificationCenter,
+            capsuleCommandApi = capsuleCommandApi,
+            capsuleQueryApi = capsuleQueryApi
         )
     }
 
@@ -170,7 +181,7 @@ class App : Application() {
     // ══════════════════════════════════════════════════════════════════════
 
     private val weatherRepository by lazy {
-        com.antgskds.calendarassistant.core.weather.WeatherRepository.getInstance(applicationContext)
+        com.antgskds.calendarassistant.feature.weather.domain.WeatherRepository.getInstance(applicationContext)
     }
 
     val weatherQueryApi: WeatherQueryApi by lazy {
@@ -206,6 +217,14 @@ class App : Application() {
         RecognitionCenter(domainEventBus = domainEventBus)
     }
 
+    private val regexAiReviewCoordinator: com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator by lazy {
+        com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator(
+            appContext = applicationContext,
+            scheduleCenter = scheduleCenter,
+            appScope = appScope
+        )
+    }
+
     private val importCenter: ImportCenter by lazy {
         ImportCenter(
             scheduleCenter = scheduleCenter,
@@ -219,7 +238,9 @@ class App : Application() {
             importCenter = importCenter,
             domainEventBus = domainEventBus,
             appScope = appScope,
-            notificationCenter = notificationCenter
+            notificationCenter = notificationCenter,
+            settingsProvider = { settingsQueryApi.settings.value },
+            regexAiReviewCoordinator = regexAiReviewCoordinator
         )
     }
 
@@ -286,7 +307,27 @@ class App : Application() {
         FloatingCenter(appContext = applicationContext, permissionCenter = permissionCenter)
     }
 
-    val notificationCenter: NotificationCenter by lazy { NotificationCenter(applicationContext) }
+    val notificationRegistryStore: SharedPreferencesNotificationRegistryStore by lazy {
+        SharedPreferencesNotificationRegistryStore(applicationContext)
+    }
+
+    val systemAlarmGateway: AndroidSystemAlarmGateway by lazy {
+        AndroidSystemAlarmGateway(applicationContext)
+    }
+
+    val notificationPublisher: AndroidNormalNotificationPublisher by lazy {
+        AndroidNormalNotificationPublisher(applicationContext)
+    }
+
+    val notificationCenter: NotificationCenter by lazy {
+        NotificationCenter(
+            appContext = applicationContext,
+            registryStore = notificationRegistryStore,
+            systemAlarmGateway = systemAlarmGateway,
+            platformPublisher = notificationPublisher,
+            liveCapsuleEnabledProvider = { settingsQueryApi.settings.value.isLiveCapsuleEnabled }
+        )
+    }
 
     val reminderCenter: ReminderCenter by lazy {
         ReminderCenter(
@@ -386,8 +427,8 @@ class App : Application() {
         quickMemoCenter.start()
         AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
         scheduleCenter.onScheduleChanged = {
-            widgetCenter.requestRefresh(com.antgskds.calendarassistant.widget.WidgetType.SCHEDULE)
-            widgetCenter.requestRefresh(com.antgskds.calendarassistant.widget.WidgetType.COURSE)
+            widgetCenter.requestRefresh(com.antgskds.calendarassistant.platform.widget.WidgetType.SCHEDULE)
+            widgetCenter.requestRefresh(com.antgskds.calendarassistant.platform.widget.WidgetType.COURSE)
         }
 
         appScope.launch(Dispatchers.IO) {
@@ -403,6 +444,7 @@ class App : Application() {
         ContentRegistry.register(ContentDefinition(ContentSourceType.SCHEDULE, "日程", true, true))
         ContentRegistry.register(ContentDefinition(ContentSourceType.WEATHER, "天气", true, true))
         ContentRegistry.register(ContentDefinition(ContentSourceType.VOICE_CAPTURE, "语音输入", true, false))
+        ContentRegistry.register(ContentDefinition(ContentSourceType.IMAGE_SHARE, "图片分享", false, false))
 
         // CalDAVUpdateListener 通过 JobScheduler 自动监听系统日历变化
         // 需要在 sync 开启时主动注册一次 content observer job

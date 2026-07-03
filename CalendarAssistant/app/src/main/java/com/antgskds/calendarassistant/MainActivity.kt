@@ -7,12 +7,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.graphics.BitmapFactory
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -21,10 +23,18 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -62,12 +72,17 @@ import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.page_display.NoteEditorScreen
 import com.antgskds.calendarassistant.ui.page_display.QuickMemoDetailPage
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundRootSize
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundWallpaperBitmap
+import com.antgskds.calendarassistant.ui.page_display.settings.shouldUseLightSystemBarsForAppBackground
 import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.widget.WidgetActions
+import com.antgskds.calendarassistant.platform.widget.WidgetActions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private data class PendingWidgetLaunchAction(
     val action: String,
@@ -146,6 +161,7 @@ class MainActivity : ComponentActivity() {
                         noteCenter = app.noteCenter,
                         quickMemoCenter = app.quickMemoCenter,
                         audioPlaybackCenter = app.audioPlaybackCenter,
+                        capsuleQueryApi = app.capsuleQueryApi,
                         settingsQueryApi = app.settingsQueryApi,
                         homeQueryApi = app.homeQueryApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
@@ -154,6 +170,7 @@ class MainActivity : ComponentActivity() {
                         attachmentManager = app.eventAttachmentManager
                     ) as T
                     modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(
+                        appContext = app.applicationContext,
                         scheduleCenter = app.scheduleCenter,
                         backupCenter = app.backupCenter,
                         syncCenter = app.syncCenter,
@@ -221,13 +238,19 @@ class MainActivity : ComponentActivity() {
                 val view = LocalView.current
                 if (!view.isInEditMode) {
                     val bgColor = MaterialTheme.colorScheme.background.toArgb()
+                    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
+                    val lightSystemBars = if (hasAppBackground) {
+                        shouldUseLightSystemBarsForAppBackground(defaultLight = !isDarkTheme)
+                    } else {
+                        !isDarkTheme
+                    }
                     SideEffect {
                         val window = (view.context as Activity).window
                         window.statusBarColor = Color.Transparent.toArgb()
                         window.navigationBarColor = Color.Transparent.toArgb()
                         window.setBackgroundDrawable(ColorDrawable(bgColor))
-                        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
-                        WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !isDarkTheme
+                        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightSystemBars
+                        WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = lightSystemBars
                     }
                 }
 
@@ -329,13 +352,42 @@ class MainActivity : ComponentActivity() {
                     navController.navigate(AppRoutes.quickMemoDetail(pending.memoId)) { launchSingleTop = true }
                 }
 
-                // 最外层容器（包裹 NavHost 和所有弹窗）
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    NavHost(
-                        modifier = Modifier.background(MaterialTheme.colorScheme.background),
-                        navController = navController,
-                        startDestination = AppRoutes.Home
+                val appBackgroundBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+                    initialValue = null,
+                    key1 = settings.appBackgroundImagePath
+                ) {
+                    value = if (settings.appBackgroundImagePath.isBlank()) {
+                        null
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            BitmapFactory.decodeFile(settings.appBackgroundImagePath)?.asImageBitmap()
+                        }
+                    }
+                }
+                var appBackgroundRootSize by remember { mutableStateOf(IntSize.Zero) }
+
+                CompositionLocalProvider(
+                    LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
+                    LocalAppBackgroundRootSize provides appBackgroundRootSize
+                ) {
+                    // 最外层容器（包裹 NavHost 和所有弹窗）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                            .onSizeChanged { appBackgroundRootSize = it }
                     ) {
+                        AppBackgroundLayer(
+                            enabled = settings.appBackgroundImagePath.isNotBlank(),
+                            imageBitmap = appBackgroundBitmap,
+                            blurEnabled = settings.appBackgroundWallpaperBlurEnabled,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        NavHost(
+                            modifier = Modifier.fillMaxSize(),
+                            navController = navController,
+                            startDestination = AppRoutes.Home
+                        ) {
                         composable(
                             route = AppRoutes.Home,
                             enterTransition = { navBackwardEnterTransition() },
@@ -466,7 +518,9 @@ class MainActivity : ComponentActivity() {
                                 viewModel = mainViewModel,
                                 onBack = { navController.popBackStack() },
                                 uiSize = uiState.settings.uiSize,
-                                hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                                hapticEnabled = uiState.settings.hapticFeedbackEnabled,
+                                backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
+                                miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
                             )
                         }
 
@@ -608,10 +662,11 @@ class MainActivity : ComponentActivity() {
                         onConfirm = { cleanupDialogShown = false },
                         onDismiss = { cleanupDialogShown = false }
                     )
+                        }
+                    }
                 }
             }
         }
-    }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -694,5 +749,39 @@ private fun formatLocalModelResidueSize(bytes: Long): String {
         String.format(java.util.Locale.US, "%.2f GB", mib / 1024.0)
     } else {
         String.format(java.util.Locale.US, "%.0f MB", mib)
+    }
+}
+
+@Composable
+private fun AppBackgroundLayer(
+    enabled: Boolean,
+    imageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    blurEnabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (!enabled) return
+    val blurRadiusPx = with(LocalDensity.current) { 28.dp.toPx() }
+    val bitmap = imageBitmap ?: return
+    Box(modifier = modifier) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (blurEnabled) {
+                        Modifier.graphicsLayer {
+                            renderEffect = BlurEffect(
+                                radiusX = blurRadiusPx,
+                                radiusY = blurRadiusPx,
+                                edgeTreatment = TileMode.Clamp
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentScale = ContentScale.Crop
+        )
     }
 }

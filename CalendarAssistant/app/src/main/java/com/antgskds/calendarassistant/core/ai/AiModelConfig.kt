@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.core.ai
 
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.RecognitionMode
 
 data class AiModelConfig(
     val key: String,
@@ -45,4 +46,23 @@ fun MySettings.isRecognitionConfigReady(): Boolean {
 
 fun MySettings.recognitionConfigMissingMessage(): String {
     return activeAiConfig().missingConfigMessage()
+}
+
+fun MySettings.isTextRecognitionConfigReady(): Boolean {
+    return when (RecognitionMode.normalize(recognitionMode)) {
+        RecognitionMode.AI_ONLY -> activeAiConfig().isConfigured()
+        RecognitionMode.REGEX_ONLY -> true
+        RecognitionMode.REGEX_THEN_AI_ON_EMPTY -> true
+        RecognitionMode.REGEX_THEN_AI_REVIEW -> true
+        else -> activeAiConfig().isConfigured()
+    }
+}
+
+fun MySettings.textRecognitionConfigMissingMessage(): String {
+    return when (RecognitionMode.normalize(recognitionMode)) {
+        RecognitionMode.REGEX_ONLY,
+        RecognitionMode.REGEX_THEN_AI_ON_EMPTY,
+        RecognitionMode.REGEX_THEN_AI_REVIEW -> "请先检查正则规则配置"
+        else -> activeAiConfig().missingConfigMessage()
+    }
 }

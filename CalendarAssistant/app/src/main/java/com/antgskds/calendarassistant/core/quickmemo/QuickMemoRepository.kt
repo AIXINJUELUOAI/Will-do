@@ -52,6 +52,27 @@ class QuickMemoRepository(
         )
     }
 
+    suspend fun createImageMemo(
+        imagePath: String,
+        bodyText: String = "",
+        asTodo: Boolean = false
+    ): Long {
+        val now = System.currentTimeMillis()
+        return quickMemoDao.insertQuickMemo(
+            QuickMemoEntity(
+                type = QuickMemoType.IMAGE,
+                bodyText = normalizeBody(bodyText),
+                imagePath = imagePath,
+                transcriptionStatus = QuickMemoTranscriptionStatus.NONE,
+                analysisStatus = QuickMemoAnalysisStatus.NONE,
+                createdAt = now,
+                updatedAt = now,
+                sortRank = nextTopSortRank(),
+                todoState = if (asTodo) QuickMemoTodoState.ACTIVE else QuickMemoTodoState.NONE
+            )
+        )
+    }
+
     suspend fun updateBody(id: Long, bodyText: String) {
         val memo = quickMemoDao.getQuickMemo(id) ?: return
         quickMemoDao.updateQuickMemo(
@@ -60,6 +81,19 @@ class QuickMemoRepository(
                 updatedAt = System.currentTimeMillis()
             )
         )
+    }
+
+    suspend fun attachImage(id: Long, imagePath: String) {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        val oldPath = memo.imagePath?.takeIf { it.isNotBlank() && it != imagePath }
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                type = if (memo.type == QuickMemoType.VOICE) memo.type else QuickMemoType.IMAGE,
+                imagePath = imagePath,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        oldPath?.let { path -> runCatching { File(path).delete() } }
     }
 
     suspend fun updateTranscriptionStatus(id: Long, status: String, bodyText: String? = null) {
@@ -115,6 +149,9 @@ class QuickMemoRepository(
         memo?.audioPath?.takeIf { it.isNotBlank() }?.let { path ->
             runCatching { File(path).delete() }
         }
+        memo?.imagePath?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching { File(path).delete() }
+        }
     }
 
     suspend fun updateSortRanks(ids: List<Long>) {
@@ -149,7 +186,7 @@ class QuickMemoRepository(
     }
 
     private fun normalizeBody(bodyText: String): String {
-        return bodyText.replace("\r\n", "\n").replace('\r', '\n').trim()
+        return bodyText.replace("\r\n", "\n").replace('\r', '\n')
     }
 
     private fun normalizeTodoState(todoState: String): String {

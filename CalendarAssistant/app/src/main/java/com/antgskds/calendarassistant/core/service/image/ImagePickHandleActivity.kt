@@ -4,7 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 
 /**
  * Transparent proxy Activity.

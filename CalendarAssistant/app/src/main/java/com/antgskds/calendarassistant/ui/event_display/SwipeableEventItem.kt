@@ -219,6 +219,7 @@ fun SwipeableEventItem(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
+                            color = if (isExpired) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                             textDecoration = if (isExpired) TextDecoration.LineThrough else null
                         )
 

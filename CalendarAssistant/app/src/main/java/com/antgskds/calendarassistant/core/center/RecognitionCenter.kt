@@ -3,7 +3,6 @@ package com.antgskds.calendarassistant.core.center
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
@@ -16,20 +15,20 @@ import com.antgskds.calendarassistant.data.node.recognition.RecognitionOcrNode
 import com.antgskds.calendarassistant.data.node.recognition.RecognitionTextNode
 class RecognitionCenter(
     private val domainEventBus: DomainEventBus
-) {
-    suspend fun recognizeText(bitmap: Bitmap): String {
+) : com.antgskds.calendarassistant.core.operation.RecognitionApi {
+    override suspend fun recognizeText(bitmap: Bitmap): String {
         return RecognitionOcrNode.recognizeText(bitmap)
     }
 
-    suspend fun parseUserText(
+    override suspend fun parseUserText(
         text: String,
         settings: MySettings,
         context: Context,
-        sourceType: String = "text",
-        sourceId: String = "manual_input",
-        sourceImagePath: String? = null,
-        ingestRequested: Boolean = false,
-        traceId: String = EventIdentity.newTraceId()
+        sourceType: String,
+        sourceId: String,
+        sourceImagePath: String?,
+        ingestRequested: Boolean,
+        traceId: String
     ): AnalysisResult<RecognitionDraft> {
         val result = RecognitionTextNode.parseUserText(text, settings, context)
         when (result) {
@@ -44,7 +43,8 @@ class RecognitionCenter(
                         sourceId = sourceId,
                         candidates = listOf(result.data),
                         sourceImagePath = sourceImagePath,
-                        ingestRequested = ingestRequested
+                        ingestRequested = ingestRequested,
+                        rawText = text,
                     )
                 )
             }
@@ -84,16 +84,16 @@ class RecognitionCenter(
         return result
     }
 
-    suspend fun analyzeTextEvents(
+    override suspend fun analyzeTextEvents(
         text: String,
         settings: MySettings,
         context: Context,
-        sourceType: String = "text_events",
-        sourceId: String = "text_events_input",
-        ingestRequested: Boolean = false,
-        traceId: String = EventIdentity.newTraceId()
+        sourceType: String,
+        sourceId: String,
+        ingestRequested: Boolean,
+        traceId: String
     ): AnalysisResult<List<RecognitionDraft>> {
-        val result = RecognitionProcessor.analyzeTextEvents(text, settings, context)
+        val result = RecognitionTextNode.analyzeTextEvents(text, settings, context)
         when (result) {
             is AnalysisResult.Success -> {
                 domainEventBus.emit(
@@ -106,7 +106,8 @@ class RecognitionCenter(
                         sourceId = sourceId,
                         candidates = result.data,
                         sourceImagePath = null,
-                        ingestRequested = ingestRequested
+                        ingestRequested = ingestRequested,
+                        rawText = text,
                     )
                 )
             }
@@ -130,15 +131,15 @@ class RecognitionCenter(
         return result
     }
 
-    suspend fun analyzeImage(
+    override suspend fun analyzeImage(
         bitmap: Bitmap,
         settings: MySettings,
         context: Context,
-        sourceType: String = "image",
-        sourceId: String = "image_input",
-        sourceImagePath: String? = null,
-        ingestRequested: Boolean = false,
-        traceId: String = EventIdentity.newTraceId()
+        sourceType: String,
+        sourceId: String,
+        sourceImagePath: String?,
+        ingestRequested: Boolean,
+        traceId: String
     ): AnalysisResult<List<RecognitionDraft>> {
         val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context)
         when (result) {

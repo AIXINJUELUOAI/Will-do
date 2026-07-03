@@ -1,6 +1,8 @@
 package com.antgskds.calendarassistant.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
+import com.antgskds.calendarassistant.data.model.eventColorPaletteToArgb
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
@@ -27,6 +29,9 @@ val AppEventColors = listOf(
 fun getNextColor(index: Int): Color = EventColors[index % EventColors.size]
 
 fun getNextAppColor(index: Int): Color = AppEventColors[index % AppEventColors.size]
+
+fun resolveEventColors(paletteHex: List<String>): List<Color> =
+    eventColorPaletteToArgb(paletteHex.ifEmpty { DEFAULT_EVENT_COLOR_PALETTE_HEX }).map { Color(it) }
 
 /**
  * 从 EventColors 中随机获取一个颜色

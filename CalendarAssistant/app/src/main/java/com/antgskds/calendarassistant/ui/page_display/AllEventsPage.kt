@@ -58,7 +58,8 @@ fun AllEventsPage(
     }
 
     // 核心过滤逻辑
-    val filteredItems by remember(uiState.allScheduleItems, searchQuery, today, uiState.timeRefreshToken) {
+    val reverseOrderEnabled = uiState.settings.allEventsListReverseOrder
+    val filteredItems by remember(uiState.allScheduleItems, searchQuery, today, uiState.timeRefreshToken, reverseOrderEnabled) {
         derivedStateOf {
             uiState.allScheduleItems
                 .distinctBy { it.stableKey }
@@ -86,6 +87,8 @@ fun AllEventsPage(
                         }
                         val dateCmp = dateKey(a, aExpired).compareTo(dateKey(b, bExpired))
                         if (dateCmp != 0) dateCmp
+                        // reverse 只反转同日期内的时间次序，过期/日期分组结构保持不变
+                        else if (reverseOrderEnabled) b.startTime.compareTo(a.startTime)
                         else a.startTime.compareTo(b.startTime)
                     }
                 }

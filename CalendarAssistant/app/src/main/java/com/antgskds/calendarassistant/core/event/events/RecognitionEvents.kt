@@ -8,6 +8,7 @@ data class RecognitionCompletedEvent(
     val candidates: List<RecognitionDraft>,
     val sourceImagePath: String? = null,
     val ingestRequested: Boolean = false,
+    val rawText: String? = null,
     val modelName: String? = null,
     val confidence: Float? = null
 )

@@ -10,7 +10,6 @@
 
     <!-- 基础网络与通知 -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -119,38 +118,84 @@
             android:taskAffinity=""
             android:exported="false" />
 
-        <!-- 语音随口记录音 Activity：保持真实可见，避免系统把透明页录音判为后台录音 -->
+        <!-- 系统图片分享入口：由 activity-alias 暴露两个 Sharesheet 目标，入口内不再弹二级菜单 -->
+        <activity
+            android:name=".core.service.image.ImageShareHandleActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="false" />
+
+        <activity-alias
+            android:name=".core.service.image.ImageShareRecognizeActivity"
+            android:targetActivity=".core.service.image.ImageShareHandleActivity"
+            android:label="@string/share_target_recognize_schedule"
+            android:icon="@drawable/ic_share_recognize_schedule"
+            android:exported="true">
+            <meta-data
+                android:name="com.antgskds.calendarassistant.meta.SHARE_MODE"
+                android:value="recognize" />
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".core.service.image.ImageShareQuickMemoActivity"
+            android:targetActivity=".core.service.image.ImageShareHandleActivity"
+            android:label="@string/share_target_create_image_memo"
+            android:icon="@drawable/ic_share_quick_memo"
+            android:exported="true">
+            <meta-data
+                android:name="com.antgskds.calendarassistant.meta.SHARE_MODE"
+                android:value="quick_memo" />
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 语音随口记中转 Activity：用于满足高版本系统麦克风前台服务的前台启动状态要求 -->
         <activity
             android:name=".core.service.voice.VoiceCaptureHandleActivity"
-            android:theme="@style/Theme.CalendarAssistant.VoiceCapture"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
+            android:noHistory="true"
             android:taskAffinity=""
             android:exported="false" />
 
         <activity
-            android:name=".core.service.voice.LocalRecorderTestActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.CalendarAssistant" />
-
-        <activity
-            android:name=".widget.ScheduleWidgetConfigureActivity"
+            android:name=".platform.widget.ScheduleWidgetConfigureActivity"
             android:exported="true"
             android:theme="@style/Theme.CalendarAssistant" />
 
         <activity
-            android:name=".widget.WeatherWidgetConfigureActivity"
+            android:name=".platform.widget.WeatherWidgetConfigureActivity"
             android:exported="true"
             android:theme="@style/Theme.CalendarAssistant" />
 
         <activity
-            android:name=".widget.CourseWidgetConfigureActivity"
+            android:name=".platform.widget.CourseWidgetConfigureActivity"
             android:exported="true"
             android:theme="@style/Theme.CalendarAssistant" />
 
         <!-- 1. 无障碍服务 (截图用) -->
         <service
-            android:name=".service.accessibility.TextAccessibilityService"
+            android:name=".platform.accessibility.TextAccessibilityService"
             android:exported="true"
             android:label="Will do"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
@@ -165,7 +210,7 @@
 
         <!-- 2. 下拉磁贴服务 -->
         <service
-            android:name=".service.tile.CaptureTileService"
+            android:name=".platform.tile.CaptureTileService"
             android:icon="@drawable/ic_qs_recognition"
             android:label="识别日程"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
@@ -177,7 +222,7 @@
 
         <!-- 悬浮窗磁贴服务 -->
         <service
-            android:name=".service.tile.FloatingTileService"
+            android:name=".platform.tile.FloatingTileService"
             android:icon="@drawable/ic_qs_floating"
             android:label="悬浮窗"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
@@ -189,12 +234,12 @@
 
         <!-- 4. 悬浮窗服务 -->
         <service
-            android:name=".service.floating.FloatingScheduleService"
+            android:name=".platform.floating.FloatingScheduleService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
         <service
-            android:name=".service.clipboard.ClipboardCodeMonitorService"
+            android:name=".platform.clipboard.ClipboardCodeMonitorService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -204,11 +249,11 @@
 
         <!-- 4. 侧边栏唤起服务 -->
         <service
-            android:name=".service.floating.EdgeBarService"
+            android:name=".platform.floating.EdgeBarService"
             android:exported="false" />
 
         <!-- 4. 闹钟广播接收器 -->
-        <receiver android:name=".service.receiver.AlarmReceiver" />
+        <receiver android:name=".platform.receiver.AlarmReceiver" />
 
         <!-- Store 层日程提醒接收器（含重复日程实例） -->
         <receiver
@@ -231,14 +276,14 @@
         <!-- 5. 每日汇总接收器 (已修正) -->
         <!-- 这里的 exported=false 是对的，因为我们是用显式 Intent 调用的 -->
         <receiver
-            android:name=".service.receiver.DailySummaryReceiver"
+            android:name=".platform.receiver.DailySummaryReceiver"
             android:enabled="true"
             android:exported="false" />
 
         <!-- 🔥 新增：开机启动接收器 (必须添加) -->
         <!-- exported=true 是必须的，因为要接收系统的 BOOT 广播 -->
         <receiver
-            android:name=".service.receiver.BootReceiver"
+            android:name=".platform.receiver.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -248,17 +293,17 @@
         </receiver>
 
         <receiver
-            android:name=".service.receiver.KeepAliveReceiver"
+            android:name=".platform.receiver.KeepAliveReceiver"
             android:enabled="true"
             android:exported="false" />
 
         <receiver
-            android:name=".service.receiver.ReminderReconcileReceiver"
+            android:name=".platform.receiver.ReminderReconcileReceiver"
             android:enabled="true"
             android:exported="false" />
 
         <receiver
-            android:name=".widget.ScheduleWidgetProvider"
+            android:name=".platform.widget.ScheduleWidgetProvider"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -274,7 +319,7 @@
         </receiver>
 
         <receiver
-            android:name=".widget.WeatherWidgetProvider"
+            android:name=".platform.widget.WeatherWidgetProvider"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -290,7 +335,7 @@
         </receiver>
 
         <receiver
-            android:name=".widget.CourseWidgetProvider"
+            android:name=".platform.widget.CourseWidgetProvider"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -328,7 +373,7 @@
 
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver
-            android:name=".service.receiver.EventActionReceiver"
+            android:name=".platform.receiver.EventActionReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.antgskds.calendarassistant.action.COMPLETE" />
@@ -338,7 +383,7 @@
 
         <!-- 短信自动解析取件码 -->
         <receiver
-            android:name=".service.receiver.SmsReceiver"
+            android:name=".platform.receiver.SmsReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter android:priority="999">
@@ -348,7 +393,7 @@
 
         <!-- 系统短信通知监听（用于 MIUI 等 ROM 对 SMS_RECEIVED 的兜底） -->
         <service
-            android:name=".service.receiver.SmsNotificationListenerService"
+            android:name=".platform.receiver.SmsNotificationListenerService"
             android:enabled="true"
             android:exported="false"
             android:label="短信通知监听"

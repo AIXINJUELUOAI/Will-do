@@ -6,7 +6,7 @@ import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 
 class LocalEventActionQueryApi : EventActionQueryApi {
     override fun isEventStillValid(events: List<Event>, eventId: String): Boolean {

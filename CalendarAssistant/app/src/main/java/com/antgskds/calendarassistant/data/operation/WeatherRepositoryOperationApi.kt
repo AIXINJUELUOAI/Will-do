@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.data.operation
 
-import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
+import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherRepository
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.WeatherData
 

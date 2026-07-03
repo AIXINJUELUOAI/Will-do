@@ -11,8 +11,8 @@ object DensityConfigManager {
      * 保持 1-3 档位，映射为相对于设备原生密度的缩放
      * 
      * 1 (小): 0.75f  - 比设备原生小 25%
-     * 2 (中): 0.85f  - 比设备原生小 15%
-     * 3 (大): 1.0f   - 设备原生 DPI (关键改动)
+     * 2 (中): 0.80f  - 比设备原生小 20%
+     * 3 (大): 0.85f  - 比设备原生小 15%
      */
     fun getScaleFactor(uiSize: Int): Float = when (uiSize) {
         1 -> 0.75f

@@ -15,8 +15,10 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,8 +53,12 @@ import com.antgskds.calendarassistant.ui.page_display.settings.BackupSettingsPag
 import com.antgskds.calendarassistant.ui.page_display.settings.BottomBarEditorPage
 import com.antgskds.calendarassistant.ui.page_display.settings.CourseManagerScreen
 import com.antgskds.calendarassistant.ui.page_display.settings.DonatePage
+import com.antgskds.calendarassistant.ui.page_display.settings.ConfigEditorPage
+import com.antgskds.calendarassistant.ui.page_display.settings.DeveloperPage
 import com.antgskds.calendarassistant.ui.page_display.settings.LaboratoryPage
 import com.antgskds.calendarassistant.ui.page_display.settings.PreferenceSettingsPage
+import com.antgskds.calendarassistant.ui.page_display.settings.RegexRuleEditorPage
+import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleColorSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ThemeSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.TimeTableEditorScreen
@@ -71,6 +77,7 @@ private object SettingsRoutes {
     const val TimeTableManage = "settings_timetable_manage"
     const val SemesterConfig = "settings_semester_config"
     const val Preference = "settings_preference"
+    const val ScheduleColors = "settings_schedule_colors"
     const val Archives = "settings_archives"
     const val Backup = "settings_backup"
     const val AppUpdate = "settings_app_update"
@@ -78,6 +85,9 @@ private object SettingsRoutes {
     const val About = "settings_about"
     const val Donate = "settings_donate"
     const val Laboratory = "settings_laboratory"
+    const val Developer = "settings_developer"
+    const val ConfigEditor = "settings_config_editor"
+    const val RegexRuleEditor = "settings_regex_rule_editor"
     const val BottomBarEditor = "settings_bottom_bar_editor"
     const val WidgetSettings = "settings_widget_settings"
 }
@@ -99,6 +109,7 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.TimeTableManage -> SettingsRoutes.TimeTableManage
         SettingsDestination.SemesterConfig -> SettingsRoutes.SemesterConfig
         SettingsDestination.Preference -> SettingsRoutes.Preference
+        SettingsDestination.ScheduleColors -> SettingsRoutes.ScheduleColors
         SettingsDestination.Archives -> SettingsRoutes.Archives
         SettingsDestination.Backup -> SettingsRoutes.Backup
         SettingsDestination.AppUpdate -> SettingsRoutes.AppUpdate
@@ -106,6 +117,9 @@ private fun SettingsDestination.toSettingsRoute(): String? {
         SettingsDestination.About -> SettingsRoutes.About
         SettingsDestination.Donate -> SettingsRoutes.Donate
         SettingsDestination.Laboratory -> SettingsRoutes.Laboratory
+        SettingsDestination.Developer -> SettingsRoutes.Developer
+        SettingsDestination.ConfigEditor -> SettingsRoutes.ConfigEditor
+        SettingsDestination.RegexRuleEditor -> SettingsRoutes.RegexRuleEditor
         SettingsDestination.BottomBarEditor -> SettingsRoutes.BottomBarEditor
         SettingsDestination.WidgetSettings -> SettingsRoutes.WidgetSettings
         SettingsDestination.Logout -> null
@@ -122,6 +136,7 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.TimeTableManage -> SettingsDestination.TimeTableManage
         SettingsRoutes.SemesterConfig -> SettingsDestination.SemesterConfig
         SettingsRoutes.Preference -> SettingsDestination.Preference
+        SettingsRoutes.ScheduleColors -> SettingsDestination.ScheduleColors
         SettingsRoutes.Archives -> SettingsDestination.Archives
         SettingsRoutes.Backup -> SettingsDestination.Backup
         SettingsRoutes.AppUpdate -> SettingsDestination.AppUpdate
@@ -129,6 +144,9 @@ private fun routeToSettingsDestination(route: String): SettingsDestination {
         SettingsRoutes.About -> SettingsDestination.About
         SettingsRoutes.Donate -> SettingsDestination.Donate
         SettingsRoutes.Laboratory -> SettingsDestination.Laboratory
+        SettingsRoutes.Developer -> SettingsDestination.Developer
+        SettingsRoutes.ConfigEditor -> SettingsDestination.ConfigEditor
+        SettingsRoutes.RegexRuleEditor -> SettingsDestination.RegexRuleEditor
         SettingsRoutes.BottomBarEditor -> SettingsDestination.BottomBarEditor
         SettingsRoutes.WidgetSettings -> SettingsDestination.WidgetSettings
         else -> SettingsDestination.Preference
@@ -144,6 +162,7 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.TimeTableManage -> "作息表管理"
         SettingsDestination.SemesterConfig -> "学期配置"
         SettingsDestination.Preference -> "偏好设置"
+        SettingsDestination.ScheduleColors -> "日程颜色"
         SettingsDestination.Archives -> "归档"
         SettingsDestination.Backup -> "数据备份"
         SettingsDestination.AppUpdate -> "软件更新"
@@ -151,6 +170,9 @@ private fun settingsTitle(destination: SettingsDestination): String {
         SettingsDestination.About -> "关于应用"
         SettingsDestination.Donate -> "捐赠开发者"
         SettingsDestination.Laboratory -> "实验室"
+        SettingsDestination.Developer -> "开发者"
+        SettingsDestination.ConfigEditor -> "配置编辑"
+        SettingsDestination.RegexRuleEditor -> "正则规则"
         SettingsDestination.BottomBarEditor -> "底栏编辑"
         SettingsDestination.WidgetSettings -> "桌面小组件"
         SettingsDestination.Logout -> "退出应用"
@@ -195,19 +217,32 @@ private fun SettingsPageContent(
             0
         }
     }
+    val archivedEvents by mainViewModel.archivedEvents.collectAsState()
+    val archiveCount = remember(destination, archivedEvents) {
+        if (destination == SettingsDestination.Archives) {
+            archivedEvents
+                .filter { it.archivedAt != null }
+                .distinctBy { it.id }
+                .size
+        } else {
+            0
+        }
+    }
     var showClearCoursesConfirm by rememberSaveable(destination) { mutableStateOf(false) }
+    var showClearArchivesConfirm by rememberSaveable(destination) { mutableStateOf(false) }
 
-    when (destination) {
-        SettingsDestination.Archives -> ArchivesPage(
-            viewModel = mainViewModel,
-            onBack = onBack
-        )
-
-        else -> Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0),
                 topBar = {
                     CenterAlignedTopAppBar(
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                            actionIconContentColor = MaterialTheme.colorScheme.onBackground
+                        ),
                         title = { Text(titleOverride ?: settingsTitle(destination)) },
                         navigationIcon = {
                             IconButton(onClick = { haptics.click(); onBack() }) {
@@ -230,6 +265,15 @@ private fun SettingsPageContent(
                                     Icon(
                                         Icons.Default.DeleteSweep,
                                         contentDescription = "清空课程",
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+                            if (destination == SettingsDestination.Archives && archiveCount > 0) {
+                                IconButton(onClick = { haptics.click(); showClearArchivesConfirm = true }) {
+                                    Icon(
+                                        Icons.Default.DeleteSweep,
+                                        contentDescription = "清空归档",
                                         modifier = Modifier.size(28.dp)
                                     )
                                 }
@@ -269,9 +313,14 @@ private fun SettingsPageContent(
                             uiSize = uiSize,
                             onNavigateToBottomBarEditor = { onNavigateTo(SettingsDestination.BottomBarEditor) },
                             onNavigateToWidgetSettings = { onNavigateTo(SettingsDestination.WidgetSettings) },
+                            onNavigateToScheduleColors = { onNavigateTo(SettingsDestination.ScheduleColors) },
                             onNavigateToSemesterConfig = { onNavigateTo(SettingsDestination.SemesterConfig) },
                             onNavigateToCourseManage = { onNavigateTo(SettingsDestination.CourseManage) },
                             onNavigateToTimeTableManage = { onNavigateTo(SettingsDestination.TimeTableManage) }
+                        )
+                        SettingsDestination.ScheduleColors -> ScheduleColorSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize
                         )
                         SettingsDestination.Backup -> BackupSettingsPage(settingsViewModel, mainViewModel, uiSize)
                         SettingsDestination.AppUpdate -> AppUpdatePage(mainViewModel, uiSize)
@@ -284,8 +333,17 @@ private fun SettingsPageContent(
                         SettingsDestination.Laboratory -> LaboratoryPage(
                             uiSize = uiSize,
                             settingsViewModel = settingsViewModel,
-                            mainViewModel = mainViewModel
+                            mainViewModel = mainViewModel,
+                            onNavigateToDeveloper = { onNavigateTo(SettingsDestination.Developer) }
                         )
+                        SettingsDestination.Developer -> DeveloperPage(
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onNavigateToConfig = { onNavigateTo(SettingsDestination.ConfigEditor) },
+                            onNavigateToRegexRules = { onNavigateTo(SettingsDestination.RegexRuleEditor) }
+                        )
+                        SettingsDestination.ConfigEditor -> ConfigEditorPage(uiSize = uiSize)
+                        SettingsDestination.RegexRuleEditor -> RegexRuleEditorPage(uiSize = uiSize)
                         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize
@@ -296,7 +354,7 @@ private fun SettingsPageContent(
                             uiSize = uiSize
                         )
                         SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
-                        SettingsDestination.Archives,
+                        SettingsDestination.Archives -> ArchivesPage(viewModel = mainViewModel)
                         SettingsDestination.Logout -> Unit
                     }
                 }
@@ -319,8 +377,25 @@ private fun SettingsPageContent(
                 modifier = Modifier
                     .padding(bottom = bottomInset)
             )
+
+            PredictiveFloatingActionCard(
+                visible = showClearArchivesConfirm,
+                title = "确认清空",
+                content = "此操作将永久删除 $archiveCount 条归档事件。\n删除后将无法恢复。",
+                confirmText = "删除",
+                dismissText = "取消",
+                isDestructive = true,
+                isLoading = false,
+                predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
+                onConfirm = {
+                    showClearArchivesConfirm = false
+                    mainViewModel.clearAllArchives()
+                },
+                onDismiss = { showClearArchivesConfirm = false },
+                modifier = Modifier
+                    .padding(bottom = bottomInset)
+            )
         }
-    }
 }
 
 @Composable
@@ -377,14 +452,15 @@ fun SettingsDetailScreen(
             else -> onExitSettings()
         }
     }
-
     PushSlideLayout(
         isOpen = isSidebarOpen,
         onOpenChange = { isSidebarOpen = it },
         enableGesture = true,
+        contentContainerColor = MaterialTheme.colorScheme.background,
         sidebar = {
             SettingsSidebar(
                 isDarkMode = settings.isDarkMode,
+                glassMode = false,
                 hasAppUpdate = appUpdateUiState.hasUpdate,
                 onThemeToggle = { isDark -> settingsViewModel.updateDarkMode(isDark) },
                 onNavigate = { destination -> navigateToDestination(destination) }
@@ -486,6 +562,16 @@ fun SettingsDetailScreen(
                             onNavigateTo = { target -> navigateToDestination(target) }
                         )
                     }
+                    settingsPageComposable(SettingsRoutes.ScheduleColors) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.ScheduleColors,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
                     settingsPageComposable(SettingsRoutes.Archives) {
                         SettingsPageContent(
                             destination = SettingsDestination.Archives,
@@ -549,6 +635,36 @@ fun SettingsDetailScreen(
                     settingsPageComposable(SettingsRoutes.Laboratory) {
                         SettingsPageContent(
                             destination = SettingsDestination.Laboratory,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.Developer) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.Developer,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.ConfigEditor) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.ConfigEditor,
+                            mainViewModel = mainViewModel,
+                            settingsViewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            onBack = { handleBackNavigation() },
+                            onNavigateTo = { target -> navigateToDestination(target) }
+                        )
+                    }
+                    settingsPageComposable(SettingsRoutes.RegexRuleEditor) {
+                        SettingsPageContent(
+                            destination = SettingsDestination.RegexRuleEditor,
                             mainViewModel = mainViewModel,
                             settingsViewModel = settingsViewModel,
                             uiSize = uiSize,

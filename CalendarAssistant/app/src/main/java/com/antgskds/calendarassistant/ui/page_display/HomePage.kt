@@ -62,19 +62,21 @@ import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -92,7 +94,7 @@ import kotlin.math.roundToInt
 @Composable
 fun HomePage(
     viewModel: MainViewModel,
-    currentTab: Int,
+    currentPageKey: String,
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
     openCourseRequestId: Long = 0L,
@@ -102,7 +104,7 @@ fun HomePage(
     searchRequestId: Int = 0,
     imageRequestId: Int = 0,
     isSidebarOpen: Boolean = false,
-    onTabChange: (Int) -> Unit = {},
+    onPageChange: (String) -> Unit = {},
     onAddEventClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
@@ -128,7 +130,9 @@ fun HomePage(
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
     var isLegacyNoteMode by rememberSaveable { mutableStateOf(false) }
 
-    val allTabIndex = 1
+    val isTodayPage = currentPageKey == HomeEntryKey.TODAY
+    val isAllPage = currentPageKey == HomeEntryKey.ALL
+    val isNotePage = currentPageKey == HomeEntryKey.NOTE
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -250,7 +254,7 @@ fun HomePage(
     }
 
     // === 核心修改：NestedScrollConnection ===
-    val nestedScrollConnection = remember(currentTab, courseFeatureEnabled) {
+    val nestedScrollConnection = remember(currentPageKey, courseFeatureEnabled) {
         object : NestedScrollConnection {
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -267,7 +271,7 @@ fun HomePage(
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (!courseFeatureEnabled) return Offset.Zero
-                if (currentTab != 0) return Offset.Zero
+                if (!isTodayPage) return Offset.Zero
 
                 val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
                 val isListStationary = consumed.y == 0f
@@ -337,8 +341,8 @@ fun HomePage(
         }
     }
 
-    LaunchedEffect(currentTab) {
-        if (currentTab != 2) {
+    LaunchedEffect(currentPageKey) {
+        if (!isNotePage) {
             isLegacyNoteMode = false
         }
     }
@@ -452,9 +456,9 @@ fun HomePage(
                             isActionExpanded -> onActionExpandedChange(false)
                             isSearchMode -> {
                                 isSearchMode = false
-                                when (currentTab) {
-                                    allTabIndex -> allSearchQuery = ""
-                                    2 -> noteSearchQuery = ""
+                                when {
+                                    isAllPage -> allSearchQuery = ""
+                                    isNotePage -> noteSearchQuery = ""
                                     else -> todaySearchQuery = ""
                                 }
                             }
@@ -464,7 +468,11 @@ fun HomePage(
                 }
         ) {
             Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = if (uiState.settings.appBackgroundImagePath.isNotBlank()) {
+                    Color.Transparent
+                } else {
+                    MaterialTheme.colorScheme.background
+                },
                 contentWindowInsets = WindowInsets(0),
                 topBar = {
                     CenterAlignedTopAppBar(
@@ -476,9 +484,9 @@ fun HomePage(
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                         ),
                         title = {
-                            val title = when (currentTab) {
-                                0 -> "今日日程"
-                                2 -> if (isLegacyNoteMode) "普通便签" else "随口记"
+                            val title = when {
+                                isTodayPage -> "今日日程"
+                                isNotePage -> if (isLegacyNoteMode) "普通便签" else "随口记"
                                 else -> "全部日程"
                             }
                             Text(title)
@@ -492,7 +500,7 @@ fun HomePage(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    val showSearchBar = isSearchMode && !isSidebarOpen && (currentTab == 0 || currentTab == allTabIndex || currentTab == 2)
+                    val showSearchBar = isSearchMode && !isSidebarOpen && (isTodayPage || isAllPage || isNotePage)
                     val searchBarHeight = 64.dp
                     val searchBarOffset = searchBarHeight + 12.dp
                     val contentBottomPadding = if (showSearchBar) {
@@ -501,7 +509,7 @@ fun HomePage(
                         floatingBarContentPadding
                     }
 
-                    if (currentTab == 0) {
+                    if (isTodayPage) {
                         // === 今日视图内容 ===
                         val todayEvents = remember(uiState.currentDateEvents, todaySearchQuery) {
                             if (todaySearchQuery.isBlank()) {
@@ -537,89 +545,127 @@ fun HomePage(
 
                             // 日期卡片
                             item {
-                                val isToday = uiState.selectedDate == uiState.today
-                                val weatherData = uiState.weatherData
-                                val topBaseColor = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                Card(
-                                    modifier = Modifier
-                                        .padding(horizontal = 24.dp)
-                                        .fillMaxWidth()
-                                        .aspectRatio(0.95f)
-                                        .pointerInput(Unit) {
-                                            var totalDrag = 0f
-                                            detectHorizontalDragGestures(
-                                                onDragEnd = {
-                                                    if (totalDrag < -50) viewModel.updateSelectedDate(uiState.selectedDate.plusDays(1))
-                                                    else if (totalDrag > 50) viewModel.updateSelectedDate(uiState.selectedDate.minusDays(1))
-                                                    totalDrag = 0f
-                                                },
-                                                onHorizontalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    totalDrag += dragAmount
+                                val hasAppBackground = uiState.settings.appBackgroundImagePath.isNotBlank()
+                                AppBackgroundStyleTheme(
+                                    enabled = hasAppBackground,
+                                    miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                ) {
+                                    val isToday = uiState.selectedDate == uiState.today
+                                    val weatherData = uiState.weatherData
+                                    val topBaseColor = when {
+                                        hasAppBackground && isToday -> MaterialTheme.colorScheme.primaryContainer
+                                        isToday -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                    val topContentColor = when {
+                                        hasAppBackground && isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        isToday -> MaterialTheme.colorScheme.onPrimary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    val dateCardShape = RoundedCornerShape(16.dp)
+                                    Card(
+                                        modifier = Modifier
+                                            .padding(horizontal = 24.dp)
+                                            .fillMaxWidth()
+                                            .aspectRatio(0.95f)
+                                            .then(
+                                                if (hasAppBackground) {
+                                                    Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
+                                                } else {
+                                                    Modifier
                                                 }
                                             )
-                                        },
-                                    shape = RoundedCornerShape(16.dp),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
-                                            MaterialTheme.colorScheme.surfaceContainerLow
-                                        else MaterialTheme.colorScheme.surface
-                                    )
-                                ) {
-                                    Column(modifier = Modifier.fillMaxSize()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(0.2f)
-                                                .fillMaxWidth()
-                                                .background(topBaseColor)
-                                                .clickable { viewModel.updateSelectedDate(uiState.today) }
-                                        ) {
-                                            if (weatherData != null) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .align(Alignment.CenterStart)
-                                                        .clip(RoundedCornerShape(50))
-                                                        .clickable { haptics.click(); onOpenWeatherDetail() }
-                                                        .padding(horizontal = 22.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Icon(
-                                                        painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
-                                                        contentDescription = weatherData.text.ifBlank { "天气" },
-                                                        modifier = Modifier.size(30.dp),
-                                                        tint = MaterialTheme.colorScheme.onPrimary
-                                                    )
-                                                    Spacer(Modifier.width(10.dp))
-                                                    Text(
-                                                        text = buildString {
-                                                            append(weatherData.temperature.ifBlank { "--" })
-                                                            append("°C")
-                                                            if (weatherData.text.isNotBlank()) {
-                                                                append(" · ")
-                                                                append(weatherData.text)
-                                                            }
-                                                        },
-                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                                        color = MaterialTheme.colorScheme.onPrimary,
-                                                        maxLines = 1
-                                                    )
+                                            .pointerInput(Unit) {
+                                                var totalDrag = 0f
+                                                detectHorizontalDragGestures(
+                                                    onDragEnd = {
+                                                        if (totalDrag < -50) viewModel.updateSelectedDate(uiState.selectedDate.plusDays(1))
+                                                        else if (totalDrag > 50) viewModel.updateSelectedDate(uiState.selectedDate.minusDays(1))
+                                                        totalDrag = 0f
+                                                    },
+                                                    onHorizontalDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        totalDrag += dragAmount
+                                                    }
+                                                )
+                                            },
+                                        shape = dateCardShape,
+                                        elevation = CardDefaults.cardElevation(defaultElevation = if (hasAppBackground) 0.dp else 6.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (hasAppBackground) {
+                                                MaterialTheme.colorScheme.surfaceContainerLow
+                                            } else if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                                MaterialTheme.colorScheme.surfaceContainerLow
+                                            } else {
+                                                MaterialTheme.colorScheme.surface
+                                            },
+                                            contentColor = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(0.2f)
+                                                    .fillMaxWidth()
+                                                    .background(topBaseColor)
+                                                    .clickable { viewModel.updateSelectedDate(uiState.today) }
+                                            ) {
+                                                if (weatherData != null) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .align(Alignment.CenterStart)
+                                                            .clip(RoundedCornerShape(50))
+                                                            .clickable { haptics.click(); onOpenWeatherDetail() }
+                                                            .padding(horizontal = 22.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
+                                                            contentDescription = weatherData.text.ifBlank { "天气" },
+                                                            modifier = Modifier.size(30.dp),
+                                                            tint = topContentColor
+                                                        )
+                                                        Spacer(Modifier.width(10.dp))
+                                                        Text(
+                                                            text = buildString {
+                                                                append(weatherData.temperature.ifBlank { "--" })
+                                                                append("°C")
+                                                                if (weatherData.text.isNotBlank()) {
+                                                                    append(" · ")
+                                                                    append(weatherData.text)
+                                                                }
+                                                            },
+                                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                                            color = topContentColor,
+                                                            maxLines = 1
+                                                        )
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Column(
-                                            modifier = Modifier.weight(0.8f).fillMaxWidth(),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                                                Text(uiState.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE), style = MaterialTheme.typography.titleLarge)
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(LunarCalendarUtils.getLunarDate(uiState.selectedDate), style = MaterialTheme.typography.titleLarge)
-                                            }
-                                            Text(
-                                                text = uiState.selectedDate.dayOfMonth.toString(),
-                                                fontSize = 140.sp, fontWeight = FontWeight.Black, lineHeight = 140.sp,
+                                            Column(
+                                                modifier = Modifier.weight(0.8f).fillMaxWidth(),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                                                    Text(
+                                                        uiState.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(
+                                                        LunarCalendarUtils.getLunarDate(uiState.selectedDate),
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                                Text(
+                                                    text = uiState.selectedDate.dayOfMonth.toString(),
+                                                    fontSize = 140.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    lineHeight = 140.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     modifier = Modifier.clickable(
                                                         interactionSource = remember { MutableInteractionSource() },
                                                         indication = null
@@ -628,7 +674,12 @@ fun HomePage(
                                                         viewModel.updateSelectedDate(uiState.today)
                                                     }
                                                 )
-                                            Text("${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+                                                Text(
+                                                    "${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -681,7 +732,7 @@ fun HomePage(
                                 }
                             }
                         }
-                    } else if (currentTab == allTabIndex) {
+                    } else if (isAllPage) {
                         AllEventsPage(
                             viewModel = viewModel,
                             onEditItem = { onEditItem(it) },
@@ -748,15 +799,15 @@ fun HomePage(
                             contentAlignment = Alignment.BottomCenter
                         ) {
                             OutlinedTextField(
-                                value = when (currentTab) {
-                                    allTabIndex -> allSearchQuery
-                                    2 -> noteSearchQuery
+                                value = when {
+                                    isAllPage -> allSearchQuery
+                                    isNotePage -> noteSearchQuery
                                     else -> todaySearchQuery
                                 },
                                 onValueChange = {
-                                    when (currentTab) {
-                                        allTabIndex -> allSearchQuery = it
-                                        2 -> noteSearchQuery = it
+                                    when {
+                                        isAllPage -> allSearchQuery = it
+                                        isNotePage -> noteSearchQuery = it
                                         else -> todaySearchQuery = it
                                     }
                                 },
@@ -772,9 +823,9 @@ fun HomePage(
                                     },
                                 placeholder = {
                                     Text(
-                                        when (currentTab) {
-                                            allTabIndex -> "搜索标题、备注或地点..."
-                                            2 -> if (isLegacyNoteMode) "搜索便签标题或正文..." else "搜索随口记正文..."
+                                        when {
+                                            isAllPage -> "搜索标题、备注或地点..."
+                                            isNotePage -> if (isLegacyNoteMode) "搜索便签标题或正文..." else "搜索随口记正文..."
                                             else -> "搜索标题、备注或地点..."
                                         }
                                     )

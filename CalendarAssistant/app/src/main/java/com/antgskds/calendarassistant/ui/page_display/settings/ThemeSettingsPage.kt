@@ -1,6 +1,9 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
 import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -35,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -57,7 +61,19 @@ fun ThemeSettingsPage(
     val context = LocalContext.current
     val isCustomTheme = settings.themeColorScheme == ThemeColorScheme.CUSTOM.name
     val selectedUiStyle = UiStyle.fromName(settings.uiStyle)
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
     var isHexFocused by remember { mutableStateOf(false) }
+    var isBackgroundImporting by remember { mutableStateOf(false) }
+    val backgroundImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) {
+            isBackgroundImporting = false
+            return@rememberLauncherForActivityResult
+        }
+        viewModel.importAppBackground(uri) { _, message ->
+            isBackgroundImporting = false
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
     val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val bottomPadding = when {
@@ -100,11 +116,9 @@ fun ThemeSettingsPage(
     ) {
         // 主题模式
         Text("外观", style = sectionTitleStyle)
-        Card(
+        AppBackgroundGlassSurface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 ThemeModeSliderSettingItem(
@@ -118,7 +132,7 @@ fun ThemeSettingsPage(
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (hasAppBackground) 0.25f else 0.5f)
                 )
                 UiStyleSettingItem(
                     selectedStyle = selectedUiStyle,
@@ -129,13 +143,45 @@ fun ThemeSettingsPage(
             }
         }
 
+        Text("背景", style = sectionTitleStyle)
+        AppBackgroundSettingsCard(
+            settings = settings,
+            isImporting = isBackgroundImporting,
+            onPickImage = {
+                isBackgroundImporting = true
+                backgroundImagePicker.launch("image/*")
+            },
+            onClearImage = {
+                viewModel.clearAppBackground()
+                Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show()
+            },
+            glassMode = hasAppBackground,
+            cardTitleStyle = cardTitleStyle,
+            cardSubtitleStyle = cardSubtitleStyle
+        )
+        AppBackgroundImageColorSwitchCard(
+            settings = settings,
+            onImageColorEnabledChange = { enabled ->
+                viewModel.updateAppBackgroundImageColorEnabled(enabled) { _, message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            },
+            glassMode = hasAppBackground,
+            cardTitleStyle = cardTitleStyle,
+            cardSubtitleStyle = cardSubtitleStyle
+        )
+        AppBackgroundWallpaperBlurSwitchCard(
+            settings = settings,
+            onWallpaperBlurEnabledChange = viewModel::updateAppBackgroundWallpaperBlurEnabled,
+            glassMode = hasAppBackground,
+            cardTitleStyle = cardTitleStyle,
+            cardSubtitleStyle = cardSubtitleStyle
+        )
         // 主题颜色
         Text("主题颜色", style = sectionTitleStyle)
-        Card(
+        AppBackgroundGlassSurface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -254,6 +300,140 @@ private fun UiStyleOptionChip(
             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun AppBackgroundSettingsCard(
+    settings: MySettings,
+    isImporting: Boolean,
+    onPickImage: () -> Unit,
+    onClearImage: () -> Unit,
+    glassMode: Boolean,
+    cardTitleStyle: androidx.compose.ui.text.TextStyle,
+    cardSubtitleStyle: androidx.compose.ui.text.TextStyle
+) {
+    val hasImage = settings.appBackgroundImagePath.isNotBlank()
+    AppBackgroundGlassSurface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("主界面壁纸", style = cardTitleStyle)
+                Text(
+                    text = if (hasImage) "已设置图片壁纸" else "选择一张图片作为软件背景",
+                    style = cardSubtitleStyle
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Button(
+                    onClick = onPickImage,
+                    enabled = !isImporting
+                ) {
+                    Text(
+                        text = when {
+                            isImporting -> "导入中..."
+                            hasImage -> "更换图片"
+                            else -> "选择图片"
+                        }
+                    )
+                }
+                if (hasImage) {
+                    TextButton(
+                        onClick = onClearImage,
+                        enabled = !isImporting,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = "清除图片",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppBackgroundImageColorSwitchCard(
+    settings: MySettings,
+    onImageColorEnabledChange: (Boolean) -> Unit,
+    glassMode: Boolean,
+    cardTitleStyle: androidx.compose.ui.text.TextStyle,
+    cardSubtitleStyle: androidx.compose.ui.text.TextStyle
+) {
+    val hasImage = settings.appBackgroundImagePath.isNotBlank()
+    AppBackgroundGlassSurface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("图片取色", style = cardTitleStyle)
+                Text(
+                    text = if (hasImage) "从当前壁纸提取主题色；关闭后恢复系统取色" else "请先选择主界面壁纸",
+                    style = cardSubtitleStyle
+                )
+            }
+            Switch(
+                checked = settings.appBackgroundImageColorEnabled && hasImage,
+                enabled = hasImage,
+                onCheckedChange = onImageColorEnabledChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppBackgroundWallpaperBlurSwitchCard(
+    settings: MySettings,
+    onWallpaperBlurEnabledChange: (Boolean) -> Unit,
+    glassMode: Boolean,
+    cardTitleStyle: androidx.compose.ui.text.TextStyle,
+    cardSubtitleStyle: androidx.compose.ui.text.TextStyle
+) {
+    val hasImage = settings.appBackgroundImagePath.isNotBlank()
+    AppBackgroundGlassSurface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("壁纸模糊", style = cardTitleStyle)
+                Text(
+                    text = if (hasImage) "单独控制背景图片层模糊；不影响玻璃组件的 MIUI 风格测试" else "请先选择主界面壁纸",
+                    style = cardSubtitleStyle
+                )
+            }
+            Switch(
+                checked = settings.appBackgroundWallpaperBlurEnabled && hasImage,
+                enabled = hasImage,
+                onCheckedChange = onWallpaperBlurEnabledChange
+            )
+        }
     }
 }
 

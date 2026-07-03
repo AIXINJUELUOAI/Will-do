@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
-import com.antgskds.calendarassistant.service.floating.EdgeBarService
-import com.antgskds.calendarassistant.service.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.platform.floating.EdgeBarService
+import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 
 class FloatingCenter(
     private val appContext: Context,

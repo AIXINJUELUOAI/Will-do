@@ -16,11 +16,12 @@ import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
-import com.antgskds.calendarassistant.core.operation.WeatherOperationApi
+import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
+import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.query.WeatherQueryApi
+import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -29,6 +30,7 @@ import com.antgskds.calendarassistant.data.model.RemotePrompts
 import com.antgskds.calendarassistant.data.model.RemoteAppUpdateInfo
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
@@ -43,7 +45,7 @@ import com.antgskds.calendarassistant.core.course.CourseMeta
 import com.antgskds.calendarassistant.core.course.calculateSemesterWeek
 import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
 import com.antgskds.calendarassistant.core.model.RecurringMode
-import com.antgskds.calendarassistant.core.weather.hasWeatherConfig
+import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.data.model.Course
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +97,7 @@ class MainViewModel(
     private val noteCenter: NoteCenter,
     private val quickMemoCenter: QuickMemoCenter,
     private val audioPlaybackCenter: AudioPlaybackCenter,
+    private val capsuleQueryApi: CapsuleQueryApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val homeQueryApi: HomeQueryApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
@@ -174,6 +177,7 @@ class MainViewModel(
     val quickMemos: StateFlow<List<QuickMemoEntity>> = quickMemoCenter.quickMemos
     val quickMemoSuggestions: StateFlow<List<QuickMemoSuggestionEntity>> = quickMemoCenter.suggestions
     val audioPlaybackState: StateFlow<AudioPlaybackState> = audioPlaybackCenter.playbackState
+    val capsuleUiState: StateFlow<CapsuleUiState> = capsuleQueryApi.uiState
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _today = MutableStateFlow(LocalDate.now())
@@ -405,8 +409,18 @@ class MainViewModel(
         onCreated(id)
     }
 
+    fun createImageQuickMemo(imagePath: String, bodyText: String = "", asTodo: Boolean = false, onCreated: (Long) -> Unit = {}) = viewModelScope.launch {
+        val id = quickMemoCenter.createImageMemo(imagePath, bodyText, asTodo)
+        onCreated(id)
+    }
+
     fun updateQuickMemoBody(memoId: Long, bodyText: String) = viewModelScope.launch {
         quickMemoCenter.updateBody(memoId, bodyText)
+    }
+
+    fun attachImageToQuickMemo(memoId: Long, imagePath: String, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching { quickMemoCenter.attachImageToMemo(memoId, imagePath) }
+        onResult(result)
     }
 
     fun deleteQuickMemo(memoId: Long, onDeleted: () -> Unit = {}) = viewModelScope.launch {
@@ -420,6 +434,20 @@ class MainViewModel(
 
     fun retryQuickMemoTranscription(memoId: Long) {
         quickMemoCenter.retryTranscription(memoId)
+    }
+
+    fun pinQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            if (!quickMemoCenter.pinQuickMemo(memoId)) error("随口记不可挂起")
+        }
+        onResult(result)
+    }
+
+    fun clearPinnedQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            if (!quickMemoCenter.clearPinnedTextQuickMemo(memoId)) error("当前随口记未挂起")
+        }
+        onResult(result)
     }
 
     fun toggleAudioPlayback(audioPath: String?) {
@@ -438,7 +466,8 @@ class MainViewModel(
             val event = convertDraftToEvent(
                 draft = draft,
                 defaultDurationMinutes = settings.defaultEventDurationMinutes,
-                forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow
+                forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow,
+                eventColorPaletteHex = settings.eventColorPaletteHex
             )
             val eventId = scheduleCenter.addEvent(event)
             quickMemoCenter.markSuggestionCreated(suggestionId, eventId)

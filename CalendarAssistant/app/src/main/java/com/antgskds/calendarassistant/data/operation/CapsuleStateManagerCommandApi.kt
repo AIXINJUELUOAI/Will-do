@@ -29,6 +29,22 @@ class CapsuleStateManagerCommandApi(
         capsuleStateManager.clearOcrCapsule()
     }
 
+    override fun showVoiceTranscription(memoId: Long, title: String, durationMs: Long) {
+        capsuleStateManager.showVoiceTranscription(memoId, title, durationMs)
+    }
+
+    override fun clearVoiceTranscription() {
+        capsuleStateManager.clearVoiceTranscription()
+    }
+
+    override fun showTextQuickMemo(memoId: Long, title: String, durationMs: Long) {
+        capsuleStateManager.showTextQuickMemo(memoId, title, durationMs)
+    }
+
+    override fun clearTextQuickMemo() {
+        capsuleStateManager.clearTextQuickMemo()
+    }
+
     override fun showModelLoading(title: String, content: String) {
         capsuleStateManager.showModelLoading(title, content)
     }

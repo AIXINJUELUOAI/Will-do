@@ -37,6 +37,22 @@ class CapsuleCenter(
         capsuleCommandApi.clearOcrCapsule()
     }
 
+    fun showVoiceTranscription(memoId: Long, title: String, durationMs: Long = 0L) {
+        capsuleCommandApi.showVoiceTranscription(memoId, title, durationMs)
+    }
+
+    fun clearVoiceTranscription() {
+        capsuleCommandApi.clearVoiceTranscription()
+    }
+
+    fun showTextQuickMemo(memoId: Long, title: String, durationMs: Long = 0L) {
+        capsuleCommandApi.showTextQuickMemo(memoId, title, durationMs)
+    }
+
+    fun clearTextQuickMemo() {
+        capsuleCommandApi.clearTextQuickMemo()
+    }
+
     fun showModelLoading(title: String, content: String) {
         capsuleCommandApi.showModelLoading(title, content)
     }

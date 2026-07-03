@@ -63,9 +63,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.weather.WeatherForecastIconMapper
-import com.antgskds.calendarassistant.core.weather.WeatherIconMapper
-import com.antgskds.calendarassistant.core.weather.WeatherWarningText
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherForecastIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherWarningText
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherDailyForecast
 import com.antgskds.calendarassistant.data.model.WeatherData

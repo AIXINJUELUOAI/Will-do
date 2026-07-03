@@ -8,7 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
-import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 

@@ -103,8 +103,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
+import com.antgskds.calendarassistant.core.ai.isTextRecognitionConfigReady
+import com.antgskds.calendarassistant.core.ai.textRecognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
 import com.antgskds.calendarassistant.core.note.NoteEntity
@@ -267,9 +267,9 @@ fun NoteEditorScreen(
     }
 
     fun runAiAnalyze() {
-        if (!settings.isRecognitionConfigReady()) {
+        if (!settings.isTextRecognitionConfigReady()) {
             haptics.error()
-            onShowMessage(settings.recognitionConfigMissingMessage(), ToastType.ERROR)
+            onShowMessage(settings.textRecognitionConfigMissingMessage(), ToastType.ERROR)
             return
         }
         val text = buildString {

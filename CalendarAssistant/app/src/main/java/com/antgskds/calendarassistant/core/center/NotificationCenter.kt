@@ -6,8 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
@@ -22,23 +24,48 @@ import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.NotificationTemplateCenter
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
-import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import com.antgskds.calendarassistant.service.notification.NotificationIds
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.core.util.FlymeUtils
+import com.antgskds.calendarassistant.feature.api.notification.NotificationApi
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationFailureReason
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKey
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationQuery
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationRequest
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationResult
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationSnapshot
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationState
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationTrigger
+import com.antgskds.calendarassistant.feature.api.notification.ports.NotificationRegistryStore
+import com.antgskds.calendarassistant.feature.api.notification.ports.SystemAlarmGateway
+import com.antgskds.calendarassistant.feature.api.notification.ports.PlatformPublisher
+import com.antgskds.calendarassistant.feature.api.notification.model.PlatformNotificationPayload
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationRoute
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.NormalNotificationContent
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.RecognitionNormalDisplay
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.ScheduleNormalDisplay
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.TransportNormalDisplay
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.RecognitionLiveDisplay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class NotificationCenter(
-    private val appContext: Context
-) {
+    private val appContext: Context,
+    private val registryStore: NotificationRegistryStore,
+    private val systemAlarmGateway: SystemAlarmGateway? = null,
+    private val platformPublisher: PlatformPublisher? = null,
+    private val liveCapsuleEnabledProvider: () -> Boolean = { false }
+) : NotificationApi {
     companion object {
         private const val TAG = "NotificationCenter"
         private const val GROUP_CREATED_EVENTS = "calendar_assistant_created_events"
@@ -47,10 +74,9 @@ class NotificationCenter(
         private const val TYPE_RECOGNITION_RESULT = 9
         private const val EVENT_TYPE_RECOGNITION_RESULT = "recognition_result"
         private const val EVENT_TYPE_RECOGNITION_FAILED = "recognition_failed"
-        private const val RESULT_NOTIFICATION_TIMEOUT_MS = 8000L
-        private const val QUICK_MEMO_SUGGESTION_TIMEOUT_MS = 60_000L
-        private const val DAILY_SUMMARY_TIMEOUT_MS = 60_000L
-        private const val RESULT_SHORT_TITLE_MAX_CHARS = 6
+        private const val DEFAULT_RESULT_NOTIFICATION_TIMEOUT_MS = 8000L
+        private const val DEFAULT_QUICK_MEMO_SUGGESTION_TIMEOUT_MS = 60_000L
+        private const val DEFAULT_DAILY_SUMMARY_TIMEOUT_MS = 60_000L
         private const val RESULT_TEXT_MAX_CHARS = 56
         private val RECOGNITION_RESULT_COLOR = Color.rgb(76, 175, 80)
         private val RECOGNITION_FAILED_COLOR = Color.rgb(244, 67, 54)
@@ -59,8 +85,251 @@ class NotificationCenter(
         private const val EVENT_TYPE_DAILY_SUMMARY = "daily_summary"
     }
 
+    // —— 通知时长（Policy Config）：从 settings 读，coerceIn 防坏值，缺省回退 DEFAULT_* ——
+    private fun resultNotificationTimeoutMs(): Long =
+        ((appContext as? App)?.settingsQueryApi?.settings?.value?.resultNotificationTimeoutMs?.toLong()
+            ?: DEFAULT_RESULT_NOTIFICATION_TIMEOUT_MS).coerceIn(1000L, 120_000L)
+
+    private fun quickMemoSuggestionTimeoutMs(): Long =
+        ((appContext as? App)?.settingsQueryApi?.settings?.value?.quickMemoSuggestionTimeoutMs?.toLong()
+            ?: DEFAULT_QUICK_MEMO_SUGGESTION_TIMEOUT_MS).coerceIn(1000L, 120_000L)
+
+    private fun dailySummaryTimeoutMs(): Long =
+        ((appContext as? App)?.settingsQueryApi?.settings?.value?.dailySummaryTimeoutMs?.toLong()
+            ?: DEFAULT_DAILY_SUMMARY_TIMEOUT_MS).coerceIn(1000L, 120_000L)
+
     private val capsuleProvider: ICapsuleProvider by lazy {
         if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
+    }
+
+    override suspend fun create(request: NotificationRequest): NotificationResult {
+        return upsertApiRequest(request)
+    }
+
+    override suspend fun update(request: NotificationRequest): NotificationResult {
+        return upsertApiRequest(request)
+    }
+
+    override suspend fun cancel(key: NotificationKey): NotificationResult {
+        val previous = registryStore.get(key)
+        if (previous != null) {
+            registryStore.delete(key)
+        }
+        systemAlarmGateway?.cancel(key)
+        previous?.notificationId?.let(::cancelNotification)
+        return NotificationResult.Success(key, NotificationState.CANCELLED)
+    }
+
+    override suspend fun cancelAll(keys: Collection<NotificationKey>) {
+        val distinctKeys = keys.distinctBy { it.value }
+        if (distinctKeys.isEmpty()) return
+
+        val removed = registryStore.deleteAll(distinctKeys)
+        distinctKeys.forEach { key -> systemAlarmGateway?.cancel(key) }
+        removed.mapNotNull { it.notificationId }.distinct().forEach(::cancelNotification)
+    }
+
+    override suspend fun get(key: NotificationKey): NotificationSnapshot? {
+        return registryStore.get(key)
+    }
+
+    override suspend fun list(query: NotificationQuery): List<NotificationSnapshot> {
+        return registryStore.list(query)
+    }
+
+    /**
+     * Phase 2 修复：开机 / 升级后从持久化 Registry 重排所有「已排程」通知的系统闹钟。
+     * 安卓重启会清空 AlarmManager；Registry（SharedPreferences）持久化了快照，这里据其 triggerAt
+     * 重新 arm，使单次提醒在重启后仍按时触发（旧链路靠 BootReceiver 重建，迁移后由此承担）。
+     */
+    suspend fun rescheduleAllAlarms() {
+        val scheduled = registryStore.list(NotificationQuery(state = NotificationState.SCHEDULED))
+        Log.d("WillDoNotify", "boot reschedule: ${scheduled.size} scheduled snapshots")
+        scheduled.forEach { snapshot -> syncSystemAlarm(snapshot) }
+    }
+
+    override suspend fun trigger(trigger: NotificationTrigger): NotificationResult {
+        return when (trigger) {
+            // Phase 2：ByKey / Due 现在真正发布——普通单次提醒已从旧链路切到新链路。
+            // 发布前做胶囊门控与时效校验（见 publishOrSuppress）。
+            is NotificationTrigger.ByKey -> publishOrSuppress(trigger.key)
+            is NotificationTrigger.Due -> {
+                val now = trigger.nowEpochMillis ?: System.currentTimeMillis()
+                val due = list(NotificationQuery(dueAtOrBeforeEpochMillis = now, limit = 1)).firstOrNull()
+                    ?: return NotificationResult.Failure(reason = NotificationFailureReason.NOT_FOUND)
+                publishOrSuppress(due.key)
+            }
+            // Debug：开发者预览/强制触发（Phase 1 起即真实发布）。
+            is NotificationTrigger.Debug -> publishForDebug(trigger.key)
+        }
+    }
+
+    /**
+     * Phase 2：到点触发时发布（或在胶囊开启时抑制）一条通知。
+     * - 胶囊门控（fire-time，与旧 EventReminderReceiver 对齐）：isLiveCapsuleEnabled 时
+     *   不发普通通知，置 READY 并取消闹钟（胶囊负责展示）。
+     * - 防御性时效校验：事件已结束（metadata.endTS 已过）则取消，不发过期提醒。
+     * - 否则走真实发布器（publishSnapshot 置 POSTED）。
+     */
+    private suspend fun publishOrSuppress(key: NotificationKey): NotificationResult {
+        if (liveCapsuleEnabledProvider()) {
+            Log.d("WillDoNotify", "fire key=${key.value} -> SUPPRESSED_CAPSULE")
+            return markSnapshotReady(key, cancelAlarm = true)
+        }
+        val snapshot = registryStore.get(key)
+        if (snapshot == null) {
+            Log.d("WillDoNotify", "fire key=${key.value} -> NOT_FOUND")
+            return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
+        }
+        val endMillis = snapshot.metadata["endTS"]?.toLongOrNull()?.times(1000L)
+        if (endMillis != null && endMillis <= System.currentTimeMillis()) {
+            Log.d("WillDoNotify", "fire key=${key.value} -> EXPIRED endTS=$endMillis")
+            registryStore.delete(key)
+            systemAlarmGateway?.cancel(key)
+            snapshot.notificationId?.let(::cancelNotification)
+            return NotificationResult.Success(key, NotificationState.EXPIRED)
+        }
+        Log.d("WillDoNotify", "fire key=${key.value} -> PUBLISH offset=${snapshot.offsetMinutes}")
+        val readied = snapshot.copy(
+            state = NotificationState.READY,
+            updatedAtEpochMillis = System.currentTimeMillis(),
+            version = snapshot.version + 1L
+        )
+        registryStore.upsert(readied)
+        return publishSnapshot(readied)
+    }
+
+    /**
+     * Phase 1 开发者预览/强制触发：把快照置为 READY 后通过真实发布器发布。
+     * 刻意复用「快照 → payload → publisher.publish」真实路径，不另起测试专用 builder，
+     * 确保预览验证到的就是真实发布器。ByKey/Due 在本阶段不会走到这里。
+     */
+    private suspend fun publishForDebug(key: NotificationKey): NotificationResult {
+        return publishReadySnapshot(key)
+    }
+
+    private suspend fun publishReadySnapshot(key: NotificationKey): NotificationResult {
+        val previous = registryStore.get(key)
+            ?: return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
+        val readied = previous.copy(
+            state = NotificationState.READY,
+            updatedAtEpochMillis = System.currentTimeMillis(),
+            version = previous.version + 1L
+        )
+        registryStore.upsert(readied)
+        return publishSnapshot(readied)
+    }
+
+    private suspend fun publishSnapshot(snapshot: NotificationSnapshot): NotificationResult {
+        val publisher = platformPublisher ?: return NotificationResult.Failure(
+            snapshot.key, NotificationFailureReason.PUBLISH_FAILED, "PlatformPublisher 未装配"
+        )
+        val payload = PlatformNotificationPayload(
+            key = snapshot.key,
+            notificationId = snapshot.notificationId ?: snapshot.key.value.hashCode(),
+            smallIconResId = snapshot.smallIconResId,
+            route = NotificationRoute.NORMAL,
+            display = snapshot.display,
+            behavior = snapshot.behavior,
+            tapTarget = snapshot.tapTarget,
+            actions = snapshot.actions,
+            channelKey = snapshot.channelKey,
+            category = snapshot.category
+        )
+        val result = publisher.publish(payload)
+        if (result is NotificationResult.Success) {
+            registryStore.upsert(
+                snapshot.copy(
+                    state = NotificationState.POSTED,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                    version = snapshot.version + 1L
+                )
+            )
+        }
+        return result
+    }
+
+    private suspend fun upsertApiRequest(request: NotificationRequest): NotificationResult {
+        val state = resolveApiState(request)
+        if (state == NotificationState.CANCELLED || state == NotificationState.EXPIRED) {
+            registryStore.delete(request.key)
+            systemAlarmGateway?.cancel(request.key)
+            request.notificationId?.let(::cancelNotification)
+            return NotificationResult.Success(request.key, state)
+        }
+
+        val previous = registryStore.get(request.key)
+        val snapshot = request.toSnapshot(
+            state = state,
+            updatedAt = System.currentTimeMillis(),
+            version = (previous?.version ?: 0L) + 1L
+        )
+        registryStore.upsert(snapshot)
+        syncSystemAlarm(snapshot)
+        return NotificationResult.Success(request.key, state)
+    }
+
+    private suspend fun markSnapshotReady(key: NotificationKey, cancelAlarm: Boolean): NotificationResult {
+        val previous = registryStore.get(key)
+            ?: return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
+
+        val snapshot = previous.copy(
+            state = NotificationState.READY,
+            updatedAtEpochMillis = System.currentTimeMillis(),
+            version = previous.version + 1L
+        )
+        registryStore.upsert(snapshot)
+        if (cancelAlarm) {
+            systemAlarmGateway?.cancel(key)
+        }
+        return NotificationResult.Success(snapshot.key, snapshot.state)
+    }
+
+    private suspend fun syncSystemAlarm(snapshot: NotificationSnapshot) {
+        val triggerAt = snapshot.behavior.triggerAtEpochMillis
+        if (snapshot.state == NotificationState.SCHEDULED && triggerAt != null) {
+            systemAlarmGateway?.schedule(snapshot.key, triggerAt, snapshot.behavior.allowWhileIdle)
+        } else {
+            systemAlarmGateway?.cancel(snapshot.key)
+        }
+    }
+
+    private fun resolveApiState(request: NotificationRequest): NotificationState {
+        val now = System.currentTimeMillis()
+        val endMillis = request.metadata["endTS"]?.toLongOrNull()?.times(1000L)
+        if (endMillis != null && endMillis <= now) return NotificationState.EXPIRED
+        val triggerAt = request.behavior.triggerAtEpochMillis
+        return when {
+            triggerAt == null -> NotificationState.READY
+            triggerAt <= now -> NotificationState.CANCELLED
+            else -> NotificationState.SCHEDULED
+        }
+    }
+
+    private fun NotificationRequest.toSnapshot(
+        state: NotificationState,
+        updatedAt: Long,
+        version: Long
+    ): NotificationSnapshot {
+        return NotificationSnapshot(
+            key = key,
+            kind = kind,
+            state = state,
+            route = route,
+            display = display,
+            notificationId = notificationId,
+            smallIconResId = smallIconResId,
+            scheduleInstanceKey = scheduleInstanceKey,
+            offsetMinutes = offsetMinutes,
+            channelKey = channelKey,
+            category = category,
+            behavior = behavior,
+            tapTarget = tapTarget,
+            actions = actions,
+            updatedAtEpochMillis = updatedAt,
+            version = version,
+            metadata = metadata
+        )
     }
 
     fun showCreatedEventResultNotifications(sourceType: String, events: List<Event>) {
@@ -109,6 +378,7 @@ class NotificationCenter(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val primaryTitle = compactResultTitle("识别失败", display.reason)
+        val normalContent = RecognitionNormalDisplay.failure(display.reason, display.suggestion)
         val notification = buildRecognitionResultNotification(
             notificationId = notificationId,
             shortText = "识别失败",
@@ -119,7 +389,8 @@ class NotificationCenter(
             color = RECOGNITION_FAILED_COLOR,
             iconResId = R.drawable.ic_stat_error,
             pendingIntent = pendingIntent,
-            groupKey = null
+            groupKey = null,
+            normalContent = normalContent
         )
         manager.notify(notificationId, notification)
         scheduleResultNotificationTimeout(manager, notificationId)
@@ -149,6 +420,7 @@ class NotificationCenter(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val contentLines = quickMemoSuggestionContentLines(draft)
+        val normalContent = RecognitionNormalDisplay.quickMemoSuggestion(draft.title, contentLines)
         val actionSpec = CapsuleActionSpec(
             label = "添加",
             receiverAction = EventActionReceiver.ACTION_CREATE_QUICK_MEMO_SUGGESTION,
@@ -166,12 +438,13 @@ class NotificationCenter(
             iconResId = R.drawable.ic_stat_success,
             pendingIntent = pendingIntent,
             groupKey = null,
-            endMillis = System.currentTimeMillis() + QUICK_MEMO_SUGGESTION_TIMEOUT_MS,
+            endMillis = System.currentTimeMillis() + quickMemoSuggestionTimeoutMs(),
             actionSpec = actionSpec,
-            actionPendingIntent = pendingAction
+            actionPendingIntent = pendingAction,
+            normalContent = normalContent
         )
         manager.notify(notificationId, notification)
-        scheduleResultNotificationTimeout(manager, notificationId, QUICK_MEMO_SUGGESTION_TIMEOUT_MS)
+        scheduleResultNotificationTimeout(manager, notificationId, quickMemoSuggestionTimeoutMs())
     }
 
     fun showDailySummaryNotification(payload: DailySummaryPayload, isMorning: Boolean) {
@@ -193,11 +466,11 @@ class NotificationCenter(
 
         val settings = (appContext as? App)?.settingsQueryApi?.settings?.value
         val notification = if (settings?.isLiveCapsuleEnabled == true) {
-            val display = NotificationTemplateCenter.composeBody(
-                headerTitle = payload.title,
-                shortText = payload.shortTitle,
-                fullBodyLines = payload.fullLines,
-                compactBodyLines = payload.compactLines,
+            val display = NotificationTemplateCenter.composeDailySchedule(
+                title = payload.title,
+                shortTitle = payload.shortTitle,
+                fullLines = payload.fullLines,
+                compactLines = payload.compactLines,
                 templateMode = settings.liveNotificationTemplateMode
             )
             val item = CapsuleUiState.Active.CapsuleItem(
@@ -210,7 +483,7 @@ class NotificationCenter(
                 description = payload.content,
                 color = DAILY_SUMMARY_COLOR,
                 startMillis = System.currentTimeMillis(),
-                endMillis = System.currentTimeMillis() + DAILY_SUMMARY_TIMEOUT_MS,
+                endMillis = System.currentTimeMillis() + dailySummaryTimeoutMs(),
                 display = display
             )
             capsuleProvider.buildNotification(
@@ -234,7 +507,7 @@ class NotificationCenter(
 
         manager.notify(notificationId, notification)
         if (settings?.isLiveCapsuleEnabled == true) {
-            scheduleResultNotificationTimeout(manager, notificationId, DAILY_SUMMARY_TIMEOUT_MS)
+            scheduleResultNotificationTimeout(manager, notificationId, dailySummaryTimeoutMs())
         }
     }
 
@@ -266,12 +539,12 @@ class NotificationCenter(
         }
 
         val contentLines = recognitionSuccessContentLines(event)
-        val content = contentLines.joinToString("\n").ifBlank { formatEventTime(event) }
+        val normalContent = RecognitionNormalDisplay.success(title, contentLines, formatEventTime(event))
         return NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_stat_success)
-            .setContentTitle(compactResultTitle("识别成功", title))
-            .setContentText(contentLines.firstOrNull() ?: content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setContentTitle(normalContent.title)
+            .setContentText(normalContent.contentText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(normalContent.bigText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setGroup(GROUP_CREATED_EVENTS)
@@ -293,16 +566,15 @@ class NotificationCenter(
         groupKey: String?,
         endMillis: Long? = null,
         actionSpec: CapsuleActionSpec? = null,
-        actionPendingIntent: PendingIntent? = null
+        actionPendingIntent: PendingIntent? = null,
+        normalContent: NormalNotificationContent? = null
     ): Notification {
         val settings = (appContext as? App)?.settingsQueryApi?.settings?.value
         if (settings?.isLiveCapsuleEnabled == true) {
-            val display = CapsuleDisplayModel(
-                shortText = compactResultText(shortText, RESULT_SHORT_TITLE_MAX_CHARS),
-                primaryText = title,
-                secondaryText = contentLines.getOrNull(0),
-                tertiaryText = contentLines.getOrNull(1),
-                expandedText = contentLines.joinToString("\n").ifBlank { null },
+            val display = RecognitionLiveDisplay.eventResult(
+                shortText = shortText,
+                title = title,
+                contentLines = contentLines,
                 action = actionSpec
             )
             val item = CapsuleUiState.Active.CapsuleItem(
@@ -315,7 +587,7 @@ class NotificationCenter(
                 description = description,
                 color = color,
                 startMillis = System.currentTimeMillis(),
-                endMillis = endMillis ?: System.currentTimeMillis() + RESULT_NOTIFICATION_TIMEOUT_MS,
+                endMillis = endMillis ?: System.currentTimeMillis() + resultNotificationTimeoutMs(),
                 display = display
             )
             return capsuleProvider.buildNotification(
@@ -327,12 +599,17 @@ class NotificationCenter(
             }
         }
 
-        val content = contentLines.joinToString("\n").ifBlank { "点击查看详情" }
+        val fallbackContent = contentLines.joinToString("\n").ifBlank { RecognitionNormalDisplay.fallbackDetail() }
+        val displayContent = normalContent ?: NormalNotificationContent(
+            title = title,
+            contentText = contentLines.firstOrNull() ?: fallbackContent,
+            bigText = fallbackContent
+        )
         return NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
             .setSmallIcon(iconResId ?: R.drawable.ic_notification_small)
-            .setContentTitle(title)
-            .setContentText(contentLines.firstOrNull() ?: content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setContentTitle(displayContent.title)
+            .setContentText(displayContent.contentText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayContent.bigText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .also { builder -> groupKey?.let { builder.setGroup(it) } }
@@ -347,28 +624,24 @@ class NotificationCenter(
     }
 
     private fun recognitionSuccessContentLines(event: Event): List<String> {
-        val description = cleanResultText(stripSourceImageMarkers(event.description))
-        val location = cleanResultText(event.location)
-        val time = cleanResultText(formatEventTime(event))
-        return listOfNotNull(time, description ?: location)
+        return RecognitionNormalDisplay.resultLines(
+            time = formatEventTime(event),
+            description = stripSourceImageMarkers(event.description),
+            location = event.location
+        )
     }
 
     private fun quickMemoSuggestionContentLines(draft: RecognitionDraft): List<String> {
-        val time = cleanResultText(formatDraftTime(draft))
-        val description = cleanResultText(draft.description)
-        val location = cleanResultText(draft.location)
-        return listOfNotNull(time, description ?: location)
+        return RecognitionNormalDisplay.resultLines(
+            time = formatDraftTime(draft),
+            description = draft.description,
+            location = draft.location
+        )
     }
 
     private fun compactResultTitle(status: String, detail: String): String {
         val cleanDetail = cleanResultTitleDetail(detail)
         return if (cleanDetail.isBlank()) status else "$status|$cleanDetail"
-    }
-
-    private fun compactResultText(value: String, maxChars: Int): String {
-        val clean = value.trim()
-        if (clean.length <= maxChars) return clean
-        return if (maxChars <= 3) clean.take(maxChars) else clean.take(maxChars - 3) + "..."
     }
 
     private fun cleanResultTitleDetail(value: String): String {
@@ -397,7 +670,7 @@ class NotificationCenter(
     }
 
     private fun scheduleResultNotificationTimeout(manager: NotificationManager, notificationId: Int) {
-        scheduleResultNotificationTimeout(manager, notificationId, RESULT_NOTIFICATION_TIMEOUT_MS)
+        scheduleResultNotificationTimeout(manager, notificationId, resultNotificationTimeoutMs())
     }
 
     private fun scheduleResultNotificationTimeout(
@@ -410,7 +683,7 @@ class NotificationCenter(
         }, timeoutMs)
     }
 
-    fun showStandardNotificationForEvent(event: Event, label: String = "日程开始") {
+    fun showStandardNotificationForEvent(event: Event, label: String = ScheduleNormalDisplay.startLabel()) {
         val channelId = App.CHANNEL_ID_POPUP
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notificationId = event.id?.let { NotificationIds.standardReminder(it) }
@@ -441,7 +714,7 @@ class NotificationCenter(
             label = label,
             actionText = actionText
         )
-        val contentText = presentation?.contentText ?: if (label.isNotEmpty()) label else "点击查看详情"
+        val contentText = ScheduleNormalDisplay.reminderContent(presentation?.contentText, label)
 
         val builder = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
@@ -478,6 +751,137 @@ class NotificationCenter(
         }
 
         manager.notify(notificationId, builder.build())
+    }
+
+    fun showPickupInitialNotification(event: Event) {
+        val eventId = event.id ?: return
+        val notificationId = NotificationIds.pickupInitial(eventId)
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val completeIntent = Intent(appContext, EventActionReceiver::class.java).apply {
+            action = EventActionReceiver.ACTION_COMPLETE
+            putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId.toString())
+        }
+        val pendingComplete = PendingIntent.getBroadcast(
+            appContext,
+            notificationId + 1,
+            completeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val model = EventTimelinePresenter.present(appContext, event).renderModel
+        val content = ScheduleNormalDisplay.pickupInitialContent(
+            title = model.title,
+            subtitle = model.subtitle,
+            detail = model.detail,
+            description = stripSourceImageMarkers(event.description)
+        )
+        val notification = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
+            .setStyle(NotificationCompat.BigTextStyle()
+                .setBigContentTitle(content.title)
+                .bigText(content.bigText)
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setAutoCancel(false)
+            .setOngoing(true)
+            .addAction(R.drawable.ic_notification_small, ScheduleNormalDisplay.pickupDoneAction(), pendingComplete)
+            .build()
+
+        manager.notify(notificationId, notification)
+    }
+
+    fun showAccessibilityServiceDisabledNotification(pendingIntent: PendingIntent) {
+        val content = SystemNormalDisplay.accessibilityServiceDisabled()
+        val notification = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(2001, notification)
+    }
+
+    fun showFloatingPermissionDeniedNotification(notificationId: Int = 2002, durationMs: Long = resultNotificationTimeoutMs()) {
+        val content = SystemNormalDisplay.floatingPermissionDenied()
+        val settingsIntent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${appContext.packageName}")
+        ).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            appContext,
+            notificationId,
+            settingsIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(notificationId, notification)
+        scheduleResultNotificationTimeout(manager, notificationId, durationMs)
+    }
+
+    fun showRecognitionStatusNotification(
+        notificationId: Int,
+        content: NormalNotificationContent,
+        isProgress: Boolean,
+        autoLaunch: Boolean,
+        durationMs: Long? = null
+    ) {
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tapIntent = Intent(appContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            appContext,
+            notificationId,
+            tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val smallIcon = when {
+            content.title.contains("分析") || content.title.contains("识别") -> IconUtils.getScanningIcon()
+            content.title.contains("已添加") || content.title.contains("添加了") || content.title.contains("新增") -> IconUtils.getSuccessIcon()
+            else -> R.drawable.ic_notification_small
+        }
+
+        val builder = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
+            .setSmallIcon(smallIcon)
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        if (autoLaunch || !isProgress) builder.setContentIntent(pendingIntent)
+        if (isProgress) {
+            builder.setProgress(0, 0, true)
+            builder.setOngoing(true)
+        }
+        manager.notify(notificationId, builder.build())
+        if (!isProgress) {
+            scheduleResultNotificationTimeout(manager, notificationId, durationMs ?: resultNotificationTimeoutMs())
+        }
+    }
+
+    fun cancelNotification(notificationId: Int) {
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(notificationId)
     }
 
     fun showStandardNotification(
@@ -523,11 +927,19 @@ class NotificationCenter(
             label = label,
             actionText = actionText
         )
-        val contentText = presentation?.contentText ?: if (label.isNotEmpty()) label else "点击查看详情"
+        val contentText = ScheduleNormalDisplay.reminderContent(presentation?.contentText, label)
+        val displayTitle = if (matchedEvent != null && TransportNormalDisplay.isTransportRule(effectiveRuleId)) {
+            TransportNormalDisplay.title(
+                renderedTitle = EventTimelinePresenter.present(appContext, matchedEvent).title,
+                fallbackTitle = title
+            )
+        } else {
+            title
+        }
 
         val builder = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle(title)
+            .setContentTitle(displayTitle)
             .setContentText(contentText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -568,7 +980,8 @@ class NotificationCenter(
         channelId: String = App.CHANNEL_ID_POPUP,
         smallIcon: Int = R.drawable.ic_notification_small,
         ongoing: Boolean = false,
-        autoCancel: Boolean = true
+        autoCancel: Boolean = true,
+        timeoutMs: Long? = null
     ) {
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val tapIntent = Intent(appContext, MainActivity::class.java).apply {
@@ -590,8 +1003,20 @@ class NotificationCenter(
             .setContentIntent(pendingIntent)
             .setOngoing(ongoing)
             .setAutoCancel(autoCancel)
+        if (timeoutMs != null) builder.setTimeoutAfter(timeoutMs)
 
         manager.notify(notificationId, builder.build())
+    }
+
+    fun publishPlainNotification(request: NotificationRequest): NotificationResult {
+        return runBlocking(Dispatchers.IO) {
+            val created = create(request)
+            if (created is NotificationResult.Failure) {
+                created
+            } else {
+                publishReadySnapshot(request.key)
+            }
+        }
     }
 
     private fun formatEventTime(event: Event): String {
@@ -608,7 +1033,7 @@ class NotificationCenter(
         return when {
             start.isNotBlank() && end.isNotBlank() -> "$start - $end"
             start.isNotBlank() -> start
-            else -> "点击创建事件"
+            else -> RecognitionNormalDisplay.fallbackCreateEvent()
         }
     }
 
@@ -619,10 +1044,11 @@ class NotificationCenter(
     }
 
     private fun showCreatedEventsGroupSummary(manager: NotificationManager, count: Int) {
+        val content = RecognitionNormalDisplay.createdEventsSummary(count)
         val notification = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle("识别成功")
-            .setContentText("已识别 $count 个日程")
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setGroup(GROUP_CREATED_EVENTS)
             .setGroupSummary(true)
@@ -633,10 +1059,11 @@ class NotificationCenter(
     }
 
     private fun showQuickMemoSuggestionsGroupSummary(manager: NotificationManager) {
+        val content = RecognitionNormalDisplay.quickMemoSuggestionsSummary()
         val notification = NotificationCompat.Builder(appContext, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle("识别到日程")
-            .setContentText("随口记中发现可创建的日程")
+            .setContentTitle(content.title)
+            .setContentText(content.contentText)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setGroup(GROUP_QUICK_MEMO_SUGGESTIONS)
             .setGroupSummary(true)

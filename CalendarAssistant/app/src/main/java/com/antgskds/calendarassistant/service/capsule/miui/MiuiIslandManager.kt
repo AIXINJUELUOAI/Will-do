@@ -8,27 +8,23 @@ import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.core.util.OsUtils
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
-import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.capsule.IconUtils
-import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
-import com.antgskds.calendarassistant.xposed.MiuiIslandAction
-import com.antgskds.calendarassistant.xposed.MiuiIslandDispatcher
-import com.antgskds.calendarassistant.xposed.MiuiIslandRequest
-import com.antgskds.calendarassistant.xposed.XposedModuleStatus
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveNotificationTemplate
+import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveTemplateKind
+import com.antgskds.calendarassistant.platform.xposed.MiuiIslandAction
+import com.antgskds.calendarassistant.platform.xposed.MiuiIslandDispatcher
+import com.antgskds.calendarassistant.platform.xposed.MiuiIslandRequest
+import com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus
 
 object MiuiIslandManager {
     private const val TAG = "MiuiIslandManager"
     private const val MAX_TIMEOUT_SECS = 3600
     private const val MIN_TIMEOUT_SECS = 5
-    private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     @Volatile private var lastRequestKey: String? = null
     @Volatile private var lastNotifId: Int? = null
@@ -99,8 +95,8 @@ object MiuiIslandManager {
     }
 
     private fun isCapsuleActive(item: CapsuleUiState.Active.CapsuleItem, now: Long): Boolean {
-        val extraMillis = if (item.type == CapsuleStateManager.TYPE_PICKUP ||
-            item.type == CapsuleStateManager.TYPE_PICKUP_EXPIRED
+        val extraMillis = if (item.type == CapsuleType.PICKUP ||
+            item.type == CapsuleType.PICKUP_EXPIRED
         ) {
             5 * 60 * 1000L
         } else {
@@ -116,33 +112,32 @@ object MiuiIslandManager {
     ): MiuiIslandRequest {
         val display = item.display
         val useShortTitle = useShortTitleForIsland(item)
-        val title = buildIslandTitle(display, useShortTitle)
         val actionsPayload = buildActions(context, item)
         val actions = actionsPayload.actions
-        val templateType = resolveTemplateType(item, display, actions)
-        val content = buildContent(display, templateType, useShortTitle)
+        val template = XiaomiLiveNotificationTemplate.create(
+            display = display,
+            useShortTitle = useShortTitle,
+            hasActions = actions.isNotEmpty(),
+            forceTextIcon = useTextIconOnlyTemplate(item),
+            summaryStatus = buildSummaryStatus(item),
+            startMillis = item.startMillis,
+            endMillis = item.endMillis
+        )
+        val templateType = template.templateKind.toMiuiTemplateType()
         val (iconLight, iconDark) = buildEventIcons(context, item)
         val appIcon = buildAppIcon(context)
         val contentIntent = createContentPendingIntent(context, item)
         val timeout = computeTimeout(item)
         val highlightColor = formatHighlightColor(item.color)
-        val tagText = null
-        val hintTitle = if (templateType == MiuiIslandRequest.TEMPLATE_TEXT_ICON_ACTION) {
-            buildHintTitle(item, display)
-        } else {
-            null
-        }
-        val summaryStatus = buildSummaryStatus(item)
-        val summaryTitle = buildSummaryTitle(display)
 
         return MiuiIslandRequest(
-            title = title,
-            content = content,
+            title = template.title,
+            content = template.content,
             icon = iconLight,
             iconDark = iconDark,
             appIcon = appIcon,
-            summaryStatus = summaryStatus,
-            summaryTitle = summaryTitle,
+            summaryStatus = template.summaryStatus,
+            summaryTitle = template.summaryTitle,
             notifId = item.notifId,
             timeoutSecs = timeout,
             firstFloat = isNewTarget,
@@ -153,64 +148,37 @@ object MiuiIslandManager {
             contentIntent = contentIntent,
             actions = actions,
             templateType = templateType,
-            tagText = tagText,
-            hintTitle = hintTitle,
+            tagText = template.tagText,
+            hintTitle = template.hintTitle,
             actionTitle = actionsPayload.actionTitle,
             actionIntentUri = actionsPayload.actionIntentUri,
         )
     }
 
-    private fun buildIslandTitle(display: CapsuleDisplayModel, useShortTitle: Boolean): String {
-        return if (useShortTitle) {
-            display.shortText.ifBlank { display.primaryText }
-        } else {
-            display.primaryText.ifBlank { display.shortText }
-        }
-    }
-
-    private fun buildContent(
-        display: CapsuleDisplayModel,
-        templateType: Int,
-        usePrimaryDetailFallback: Boolean
-    ): String {
-        val candidates = listOf(
-            display.secondaryText,
-            display.tertiaryText,
-            display.expandedText?.lineSequence()?.firstOrNull()
-        )
-        val filtered = candidates.mapNotNull { sanitizeLine(it) }
-            .let { values ->
-                if (templateType == MiuiIslandRequest.TEMPLATE_TEXT_ICON_ACTION) {
-                    values.filterNot { isTimeRange(it) }
-                } else {
-                    values
-                }
-            }
-        val content = filtered
-            .distinct()
-            .joinToString(" · ")
-            .ifBlank {
-                if (usePrimaryDetailFallback) {
-                    primaryDetail(display.primaryText) ?: display.primaryText
-                } else {
-                    display.primaryText
-                }
-            }
-        return truncate(content, 42)
-    }
-
     private fun useShortTitleForIsland(item: CapsuleUiState.Active.CapsuleItem): Boolean {
         return when (item.type) {
-            CapsuleStateManager.TYPE_WEATHER_ALERT,
-            CapsuleStateManager.TYPE_OCR_PROGRESS,
-            CapsuleStateManager.TYPE_OCR_RESULT,
-            CapsuleStateManager.TYPE_MODEL_LOADING -> true
+            CapsuleType.WEATHER_ALERT,
+            CapsuleType.OCR_PROGRESS,
+            CapsuleType.OCR_RESULT,
+            CapsuleType.MODEL_LOADING,
+            CapsuleType.TEXT_QUICK_MEMO -> true
             else -> false
         }
     }
 
-    private fun primaryDetail(primaryText: String): String? {
-        return sanitizeLine(primaryText.substringAfter('|', missingDelimiterValue = ""))
+    private fun useTextIconOnlyTemplate(item: CapsuleUiState.Active.CapsuleItem): Boolean {
+        return when (item.type) {
+            CapsuleType.OCR_PROGRESS,
+            CapsuleType.OCR_RESULT -> true
+            else -> false
+        }
+    }
+
+    private fun XiaomiLiveTemplateKind.toMiuiTemplateType(): Int {
+        return when (this) {
+            XiaomiLiveTemplateKind.TEXT_ICON -> MiuiIslandRequest.TEMPLATE_TEXT_ICON
+            XiaomiLiveTemplateKind.TEXT_ICON_ACTION -> MiuiIslandRequest.TEMPLATE_TEXT_ICON_ACTION
+        }
     }
 
     private fun buildEventIcons(
@@ -313,67 +281,14 @@ object MiuiIslandManager {
         ).joinToString("::")
     }
 
-    private fun resolveTemplateType(
-        item: CapsuleUiState.Active.CapsuleItem,
-        display: CapsuleDisplayModel,
-        actions: List<MiuiIslandAction>
-    ): Int {
-        return when (item.type) {
-            CapsuleStateManager.TYPE_OCR_PROGRESS,
-            CapsuleStateManager.TYPE_OCR_RESULT -> MiuiIslandRequest.TEMPLATE_TEXT_ICON
-            else -> if (display.action != null && actions.isNotEmpty()) {
-                MiuiIslandRequest.TEMPLATE_TEXT_ICON_ACTION
-            } else {
-                MiuiIslandRequest.TEMPLATE_TEXT_ICON
-            }
-        }
-    }
-
-    private fun resolveTagText(item: CapsuleUiState.Active.CapsuleItem): String {
-        return when (item.eventType) {
-            EventTags.TRAIN -> "火车"
-            EventTags.TAXI -> "用车"
-            EventTags.PICKUP -> if (isFoodPickup(item.description)) "取餐" else "取件"
-            EventTags.GENERAL -> "日程"
-            EventTags.COURSE, "__removed_course__" -> "课程"
-            else -> when (item.type) {
-                CapsuleStateManager.TYPE_PICKUP,
-                CapsuleStateManager.TYPE_PICKUP_EXPIRED -> if (isFoodPickup(item.description)) "取餐" else "取件"
-                else -> "日程"
-            }
-        }
-    }
-
-    private fun buildHintTitle(
-        item: CapsuleUiState.Active.CapsuleItem,
-        display: CapsuleDisplayModel
-    ): String {
-        val timeRange = formatTimeRange(item)
-        if (timeRange != null) return timeRange
-        val candidate = display.tertiaryText
-            ?: display.secondaryText
-            ?: display.primaryText
-        return truncate(sanitizeLine(candidate) ?: display.primaryText, 18)
-    }
-
-    private fun formatTimeRange(item: CapsuleUiState.Active.CapsuleItem): String? {
-        if (item.startMillis <= 0 || item.endMillis <= 0) return null
-        return try {
-            val zone = ZoneId.systemDefault()
-            val start = Instant.ofEpochMilli(item.startMillis).atZone(zone).toLocalTime()
-            val end = Instant.ofEpochMilli(item.endMillis).atZone(zone).toLocalTime()
-            "${start.format(TIME_FORMATTER)}-${end.format(TIME_FORMATTER)}"
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     private fun buildSummaryStatus(item: CapsuleUiState.Active.CapsuleItem): String {
         return when (item.type) {
-            CapsuleStateManager.TYPE_OCR_RESULT -> "已完成"
-            CapsuleStateManager.TYPE_WEATHER_ALERT -> "天气提醒"
-            CapsuleStateManager.TYPE_OCR_PROGRESS,
-            CapsuleStateManager.TYPE_NETWORK_SPEED -> "进行中"
+            CapsuleType.OCR_RESULT -> "已完成"
+            CapsuleType.WEATHER_ALERT -> "天气提醒"
+            CapsuleType.VOICE_TRANSCRIPTION -> "语音转写"
+            CapsuleType.TEXT_QUICK_MEMO -> "随口记"
+            CapsuleType.OCR_PROGRESS,
+            CapsuleType.NETWORK_SPEED -> "进行中"
             else -> {
                 when (item.eventType) {
                     RuleMatchingEngine.RULE_PICKUP -> if (isFoodPickup(item.description)) "待取餐" else "待取件"
@@ -395,28 +310,7 @@ object MiuiIslandManager {
         return if (now < item.startMillis) "即将进行" else "进行中"
     }
 
-    private fun buildSummaryTitle(display: CapsuleDisplayModel): String {
-        val raw = display.shortText.ifBlank { display.primaryText }
-        val clean = sanitizeLine(raw) ?: raw
-        return truncate(clean, 18)
-    }
-
     private fun isFoodPickup(description: String?): Boolean {
         return description?.startsWith("【取餐】") == true
-    }
-
-    private fun isTimeRange(value: String): Boolean {
-        val text = value.trim()
-        return Regex("\\d{1,2}:\\d{2}(-\\d{1,2}:\\d{2})?").containsMatchIn(text)
-    }
-
-    private fun sanitizeLine(value: String?): String? {
-        val clean = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return clean.replace("\n", " ").replace("\r", " ")
-    }
-
-    private fun truncate(text: String, max: Int): String {
-        if (text.length <= max) return text
-        return text.take(max - 3) + "..."
     }
 }

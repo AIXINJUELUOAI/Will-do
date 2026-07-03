@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.data.query
 
-import com.antgskds.calendarassistant.core.query.WeatherQueryApi
-import com.antgskds.calendarassistant.core.weather.WeatherRepository
+import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherRepository
 import com.antgskds.calendarassistant.data.model.WeatherData
 import kotlinx.coroutines.flow.StateFlow
 

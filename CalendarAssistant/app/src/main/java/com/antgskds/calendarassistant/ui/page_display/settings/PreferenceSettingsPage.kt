@@ -27,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
@@ -36,24 +35,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStatus
-import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStore
-import com.antgskds.calendarassistant.service.floating.EdgeBarService
-import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
-import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
+import com.antgskds.calendarassistant.platform.floating.EdgeBarService
+import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -62,6 +54,7 @@ fun PreferenceSettingsPage(
     uiSize: Int = 2,
     onNavigateToBottomBarEditor: () -> Unit = {},
     onNavigateToWidgetSettings: () -> Unit = {},
+    onNavigateToScheduleColors: () -> Unit = {},
     onNavigateToSemesterConfig: () -> Unit = {},
     onNavigateToCourseManage: () -> Unit = {},
     onNavigateToTimeTableManage: () -> Unit = {}
@@ -79,7 +72,9 @@ fun PreferenceSettingsPage(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showSourceCalendarSheet by remember { mutableStateOf(false) }
     var showEventDurationPicker by remember { mutableStateOf(false) }
-    var asrModelStatus by remember { mutableStateOf(QuickMemoAsrModelStore.status(context)) }
+    var showRecognitionModePicker by remember { mutableStateOf(false) }
+    var showDailySummaryMorningTimePicker by remember { mutableStateOf(false) }
+    var showDailySummaryEveningTimePicker by remember { mutableStateOf(false) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -109,10 +104,6 @@ fun PreferenceSettingsPage(
             ?: Settings.canDrawOverlays(context)
     }
 
-    fun refreshAsrModelStatus() {
-        asrModelStatus = QuickMemoAsrModelStore.status(context)
-    }
-
     LaunchedEffect(Unit) {
         refreshOverlayPermission()
     }
@@ -121,7 +112,6 @@ fun PreferenceSettingsPage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshOverlayPermission()
-                refreshAsrModelStatus()
                 viewModel.refreshSyncStatus()
                 viewModel.refreshSyncCalendars()
             }
@@ -213,22 +203,6 @@ fun PreferenceSettingsPage(
         } else if (!SmsNotificationListenerService.isEnabled(context)) {
             Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
             SmsNotificationListenerService.requestEnable(context)
-        }
-    }
-
-    val asrModelImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                QuickMemoAsrModelStore.importModelFile(context, uri)
-            }
-            refreshAsrModelStatus()
-            result.fold(
-                onSuccess = { fileName -> showToast("已导入 $fileName", ToastType.SUCCESS) },
-                onFailure = { error -> showToast(error.message ?: "模型导入失败", ToastType.ERROR) }
-            )
         }
     }
 
@@ -589,26 +563,6 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    ActionSettingItem(
-                        title = "语音转写模型",
-                        subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),
-                        value = if (asrModelStatus.ready) "更换" else "导入",
-                        enabled = true,
-                        onClick = { asrModelImportLauncher.launch(arrayOf("*/*")) },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle,
-                        cardValueStyle = cardValueStyle
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
                     SwitchSettingItem(
                         title = "短信自动解析取件码",
                         subtitle = "监听短信自动识别快递取件码并入库",
@@ -659,7 +613,7 @@ fun PreferenceSettingsPage(
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     SwitchSettingItem(
                         title = "每日提醒",
-                        subtitle = "早06:00和晚22:00推送日程汇总",
+                        subtitle = "今日 ${formatMinuteOfDay(settings.dailySummaryMorningMinuteOfDay)}，明日 ${formatMinuteOfDay(settings.dailySummaryEveningMinuteOfDay)}",
                         checked = settings.isDailySummaryEnabled,
                         onCheckedChange = { isChecked ->
                             viewModel.updatePreference(dailySummary = isChecked)
@@ -670,6 +624,43 @@ fun PreferenceSettingsPage(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+
+                    AnimatedVisibility(
+                        visible = settings.isDailySummaryEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            DailySummaryTimeSettingItem(
+                                title = "今日提醒时间",
+                                subtitle = "推送今日日程汇总",
+                                minuteOfDay = settings.dailySummaryMorningMinuteOfDay,
+                                onClick = { showDailySummaryMorningTimePicker = true },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            DailySummaryTimeSettingItem(
+                                title = "明日预告时间",
+                                subtitle = "推送明日日程预告",
+                                minuteOfDay = settings.dailySummaryEveningMinuteOfDay,
+                                onClick = { showDailySummaryEveningTimePicker = true },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                                cardValueStyle = cardValueStyle
+                            )
+                        }
+                    }
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
                         thickness = 0.5.dp,
@@ -795,6 +786,20 @@ fun PreferenceSettingsPage(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    RecognitionModeSettingItem(
+                        mode = settings.recognitionMode,
+                        onClick = { showRecognitionModePicker = true },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
                     SwitchSettingItem(
                         title = "使用多模态AI",
                         subtitle = "开启后图片识别将使用多模态模型",
@@ -947,6 +952,21 @@ fun PreferenceSettingsPage(
                         subtitle = "所有识别日程都按该时长生成结束时间",
                         durationMinutes = settings.defaultEventDurationMinutes,
                         onClick = { showEventDurationPicker = true },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    ActionSettingItem(
+                        title = "日程颜色",
+                        subtitle = "自定义新建和识别日程使用的色盘",
+                        value = "${settings.eventColorPaletteHex.size} 个",
+                        enabled = true,
+                        onClick = onNavigateToScheduleColors,
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
@@ -1115,122 +1135,61 @@ fun PreferenceSettingsPage(
                 }
             )
         }
+
+        if (showRecognitionModePicker) {
+            RecognitionModePickerDialog(
+                selectedMode = settings.recognitionMode,
+                onDismiss = { showRecognitionModePicker = false },
+                onConfirm = { mode ->
+                    viewModel.updatePreference(recognitionMode = mode)
+                    showRecognitionModePicker = false
+                }
+            )
+        }
+
+        if (showDailySummaryMorningTimePicker) {
+            DailySummaryTimePickerDialog(
+                selectedMinuteOfDay = settings.dailySummaryMorningMinuteOfDay,
+                onDismiss = { showDailySummaryMorningTimePicker = false },
+                title = "今日提醒时间",
+                onConfirm = { minuteOfDay ->
+                    viewModel.updateDailySummaryTimes(
+                        morningMinuteOfDay = minuteOfDay,
+                        onUpdated = { app?.runtimeCenter?.scheduleDailySummary() }
+                    )
+                    showDailySummaryMorningTimePicker = false
+                }
+            )
+        }
+
+        if (showDailySummaryEveningTimePicker) {
+            DailySummaryTimePickerDialog(
+                selectedMinuteOfDay = settings.dailySummaryEveningMinuteOfDay,
+                onDismiss = { showDailySummaryEveningTimePicker = false },
+                title = "明日预告时间",
+                onConfirm = { minuteOfDay ->
+                    viewModel.updateDailySummaryTimes(
+                        eveningMinuteOfDay = minuteOfDay,
+                        onUpdated = { app?.runtimeCenter?.scheduleDailySummary() }
+                    )
+                    showDailySummaryEveningTimePicker = false
+                }
+            )
+        }
     }
     }
 }
 
-// ... SwitchSettingItem 保持不变 ...
-@Composable
-fun SwitchSettingItem(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle
-) {
-    val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = cardTitleStyle)
-            Text(subtitle, style = cardSubtitleStyle)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                haptics.selection()
-                onCheckedChange(it)
-            }
-        )
-    }
+private fun formatMinuteOfDay(minuteOfDay: Int): String {
+    val safeMinuteOfDay = MySettings.normalizeDailySummaryMinuteOfDay(minuteOfDay)
+    return "%02d:%02d".format(safeMinuteOfDay / 60, safeMinuteOfDay % 60)
 }
 
-@Composable
-private fun SideChoiceSettingItem(
-    title: String,
-    subtitle: String,
-    selectedSide: String,
-    onSideSelected: (String) -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle
-) {
-    val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = cardTitleStyle)
-            Text(subtitle, style = cardSubtitleStyle)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val isLeft = selectedSide == "LEFT"
-            if (isLeft) {
-                Button(onClick = { haptics.selection(); onSideSelected("LEFT") }) {
-                    Text("左侧")
-                }
-            } else {
-                OutlinedButton(onClick = { haptics.selection(); onSideSelected("LEFT") }) {
-                    Text("左侧")
-                }
-            }
+// SwitchSettingItem 已抽至 SettingsRowComponents.kt（公共组件，同包，无需改 import）
 
-            if (isLeft) {
-                OutlinedButton(onClick = { haptics.selection(); onSideSelected("RIGHT") }) {
-                    Text("右侧")
-                }
-            } else {
-                Button(onClick = { haptics.selection(); onSideSelected("RIGHT") }) {
-                    Text("右侧")
-                }
-            }
-        }
-    }
-}
+// SideChoiceSettingItem 已抽至 SettingsRowComponents.kt
 
-@Composable
-private fun ActionSettingItem(
-    title: String,
-    subtitle: String,
-    value: String,
-    icon: ImageVector? = null,
-    enabled: Boolean,
-    hapticOnClick: Boolean = true,
-    onClick: () -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle,
-    cardValueStyle: TextStyle
-) {
-    val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) {
-                if (hapticOnClick) haptics.selection()
-                onClick()
-            }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = cardTitleStyle)
-            Text(subtitle, style = cardSubtitleStyle)
-        }
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Text(value, style = cardValueStyle)
-        }
-    }
-}
+// ActionSettingItem 已抽至 SettingsRowComponents.kt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1386,272 +1345,13 @@ private fun buildCalendarMetaLine(
     }
 }
 
-private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): String {
-    return when {
-        status.ready -> "已导入本地模型，可离线转写"
-        !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
-        !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
-        else -> "缺少 tokens.txt"
-    }
-}
+// SliderSettingItem 已抽至 SettingsRowComponents.kt
 
-// ... SliderSettingItem 修复并优化 ...
-@Composable
-fun SliderSettingItem(
-    title: String,
-    subtitle: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle,
-    cardValueStyle: TextStyle,
-    showValueAsNumber: Boolean = false, // 新增参数
-    valueUnit: String = "ms"            // 新增参数
-) {
-    HapticValueChangeEffect(valueKey = sliderHapticBucket(value, valueRange, steps))
-    // 根据 showValueAsNumber 决定显示逻辑
-    val displayValue = if (showValueAsNumber) {
-        "${value.toInt()}$valueUnit"
-    } else {
-        // 旧逻辑：界面大小
-        val sizeLabels = mapOf(1f to "小", 2f to "中", 3f to "大")
-        sizeLabels[value] ?: ""
-    }
+// VolumeLongPressSettingItem 已抽至 SettingsRowComponents.kt
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = cardTitleStyle)
-                Text(subtitle, style = cardSubtitleStyle)
-            }
-            // 显示动态数值
-            Text(
-                text = displayValue,
-                style = cardValueStyle
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps
-        )
-    }
-}
+// AdvanceReminderSettingItem 已抽至 SettingsRowComponents.kt
 
-@Composable
-fun VolumeLongPressSettingItem(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    action: Int,
-    onCheckedChange: (Boolean) -> Unit,
-    onActionChange: (Int) -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle
-) {
-    val normalizedAction = action.coerceIn(1, 3)
-    HapticValueChangeEffect(valueKey = normalizedAction)
-    val haptics = rememberAppHaptics()
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = cardTitleStyle)
-                Text(subtitle, style = cardSubtitleStyle)
-            }
-            Switch(
-                checked = checked,
-                onCheckedChange = {
-                    haptics.selection()
-                    onCheckedChange(it)
-                }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = checked,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "识屏", style = cardSubtitleStyle)
-                    Text(text = "悬浮窗", style = cardSubtitleStyle)
-                    Text(text = "语音", style = cardSubtitleStyle)
-                }
-                Slider(
-                    value = normalizedAction.toFloat(),
-                    onValueChange = { onActionChange(it.roundToInt().coerceIn(1, 3)) },
-                    valueRange = 1f..3f,
-                    steps = 1
-                )
-            }
-        }
-    }
-}
-
-// ... AdvanceReminderSettingItem 保持不变 ...
-@Composable
-fun AdvanceReminderSettingItem(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    minutes: Int,
-    onCheckedChange: (Boolean) -> Unit,
-    onMinutesChange: (Int) -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle
-) {
-    HapticValueChangeEffect(valueKey = minutes)
-    val haptics = rememberAppHaptics()
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        // 主行：开关 + 标题 + 副标题
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = cardTitleStyle)
-                Text(subtitle, style = cardSubtitleStyle)
-            }
-            Switch(
-                checked = checked,
-                onCheckedChange = {
-                    haptics.selection()
-                    onCheckedChange(it)
-                }
-            )
-        }
-
-        // 展开区：三档滑块（30/45/60分钟）
-        AnimatedVisibility(
-            visible = checked,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                // 标签行 - 添加与滑块轨道相同的 padding 以对齐节点
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp), // 与滑块轨道 padding 匹配
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "30分钟", style = cardSubtitleStyle)
-                    Text(text = "45分钟", style = cardSubtitleStyle)
-                    Text(text = "60分钟", style = cardSubtitleStyle)
-                }
-                Slider(
-                    value = minutes.toFloat(),
-                    onValueChange = { onMinutesChange(it.toInt()) },
-                    valueRange = 30f..60f,
-                    steps = 1 // 30, 45, 60 三个离散值
-                )
-            }
-        }
-    }
-}
-
-private data class EventDurationOption(
-    val minutes: Int,
-    val label: String
-)
-
-private val EVENT_DURATION_OPTIONS = listOf(
-    EventDurationOption(60, "1小时"),
-    EventDurationOption(120, "2小时"),
-    EventDurationOption(180, "3小时"),
-    EventDurationOption(360, "6小时"),
-    EventDurationOption(1440, "24小时"),
-    EventDurationOption(-1, "今天结束")
-)
-
-private fun formatEventDuration(minutes: Int): String {
-    return EVENT_DURATION_OPTIONS.firstOrNull { it.minutes == minutes }?.label ?: "1小时"
-}
-
-@Composable
-fun EventDurationSettingItem(
-    title: String,
-    subtitle: String,
-    durationMinutes: Int,
-    onClick: () -> Unit,
-    cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle,
-    cardValueStyle: TextStyle
-) {
-    ActionSettingItem(
-        title = title,
-        subtitle = subtitle,
-        value = formatEventDuration(durationMinutes),
-        enabled = true,
-        onClick = onClick,
-        cardTitleStyle = cardTitleStyle,
-        cardSubtitleStyle = cardSubtitleStyle,
-        cardValueStyle = cardValueStyle
-    )
-}
-
-@Composable
-private fun EventDurationPickerDialog(
-    selectedDuration: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
-) {
-    val defaultIndex = EVENT_DURATION_OPTIONS.indexOfFirst { it.minutes == selectedDuration }
-        .takeIf { it >= 0 } ?: 0
-    var selectedIndex by remember(selectedDuration) { mutableIntStateOf(defaultIndex) }
-    val haptics = rememberAppHaptics()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { CenteredDialogTitle("日程默认持续时间") },
-        text = {
-            WheelPicker(
-                items = EVENT_DURATION_OPTIONS.map { it.label },
-                initialIndex = defaultIndex,
-                onSelectionChanged = { selectedIndex = it }
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { haptics.confirm(); onConfirm(EVENT_DURATION_OPTIONS[selectedIndex].minutes) }) {
-                Text("确定")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { haptics.click(); onDismiss() }) {
-                Text("取消")
-            }
-        },
-        shape = RoundedCornerShape(28.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp
-    )
-}
+// EventDuration 簇（行/选择对话框/选项/格式化）已抽至 SettingsRowComponents.kt
 
 @Composable
 fun FloatingEventRangeSlider(

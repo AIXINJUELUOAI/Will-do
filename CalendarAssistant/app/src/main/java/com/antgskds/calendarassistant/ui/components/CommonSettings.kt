@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import java.time.YearMonth
 // 【关键修复】引用新位置的 NotificationScheduler
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 
