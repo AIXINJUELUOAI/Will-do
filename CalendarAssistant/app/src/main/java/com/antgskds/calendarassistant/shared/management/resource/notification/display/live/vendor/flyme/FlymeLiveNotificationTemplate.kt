@@ -96,7 +96,7 @@ object FlymeLiveNotificationTemplate {
             CapsuleType.OCR_RESULT -> R.drawable.ic_stat_success
             CapsuleType.MODEL_LOADING -> R.drawable.ic_model_loading
             CapsuleType.VOICE_TRANSCRIPTION -> R.drawable.ic_stat_note
-            CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_note
+            CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_quick_memo
             CapsuleType.WEATHER_ALERT -> WeatherAlertIconMapper.iconRes(eventType)
             else -> {
                 val payload = RuleMatchingEngine.resolvePayload(null, eventType)

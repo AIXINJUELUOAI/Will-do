@@ -117,6 +117,14 @@ class QuickMemoCenter(
         repository.attachImage(id, imagePath)
     }
 
+    suspend fun attachVoiceToMemo(id: Long, audioPath: String, durationMs: Long): Boolean = withContext(Dispatchers.IO) {
+        val attached = repository.attachVoice(id, audioPath, durationMs)
+        if (attached) {
+            processVoiceMemoAsync(id)
+        }
+        attached
+    }
+
     suspend fun pinQuickMemo(id: Long): Boolean = withContext(Dispatchers.IO) {
         val memo = repository.getQuickMemo(id) ?: return@withContext false
         val text = memo.displayTextForCapsule().takeIf { it.isNotBlank() } ?: return@withContext false
@@ -168,6 +176,8 @@ class QuickMemoCenter(
     fun processVoiceMemoAsync(id: Long) {
         appScope.launch(Dispatchers.IO) {
             if (!tryBeginTranscription(id)) return@launch
+            var restartForNewAudio = false
+            var transcribingAudioPath: String? = null
             try {
                 val memo = repository.getQuickMemo(id) ?: return@launch
                 val audioPath = memo.audioPath?.takeIf { it.isNotBlank() }
@@ -175,9 +185,14 @@ class QuickMemoCenter(
                     repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     return@launch
                 }
+                transcribingAudioPath = audioPath
                 repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.PROCESSING)
                 when (val result = withTimeout(TRANSCRIPTION_TIMEOUT_MS) { speechTranscriber.transcribe(audioPath) }) {
                     is TranscriptionResult.Success -> {
+                        if (!isCurrentAudioPath(id, audioPath)) {
+                            restartForNewAudio = true
+                            return@launch
+                        }
                         val text = result.text.trim()
                         if (text.isBlank()) {
                             repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
@@ -187,17 +202,33 @@ class QuickMemoCenter(
                         }
                     }
                     is TranscriptionResult.Failure -> {
+                        if (!isCurrentAudioPath(id, audioPath)) {
+                            restartForNewAudio = true
+                            return@launch
+                        }
                         Log.w(TAG, "语音转写失败: ${result.message}")
                         repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     }
                 }
             } catch (e: Exception) {
+                val audioPath = transcribingAudioPath
+                if (audioPath != null && !isCurrentAudioPath(id, audioPath)) {
+                    restartForNewAudio = true
+                    return@launch
+                }
                 Log.e(TAG, "处理语音随口记失败", e)
                 repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
             } finally {
                 finishTranscription(id)
+                if (restartForNewAudio) {
+                    processVoiceMemoAsync(id)
+                }
             }
         }
+    }
+
+    private suspend fun isCurrentAudioPath(id: Long, audioPath: String): Boolean {
+        return repository.getQuickMemo(id)?.audioPath == audioPath
     }
 
     private fun tryBeginTranscription(id: Long): Boolean = synchronized(activeTranscriptionIds) {

@@ -423,6 +423,13 @@ class MainViewModel(
         onResult(result)
     }
 
+    fun attachVoiceToQuickMemo(memoId: Long, audioPath: String, durationMs: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            if (!quickMemoCenter.attachVoiceToMemo(memoId, audioPath, durationMs)) error("随口记不存在")
+        }
+        onResult(result)
+    }
+
     fun deleteQuickMemo(memoId: Long, onDeleted: () -> Unit = {}) = viewModelScope.launch {
         quickMemoCenter.deleteQuickMemo(memoId)
         onDeleted()
@@ -430,6 +437,10 @@ class MainViewModel(
 
     fun toggleQuickMemoTodoCompletion(memoId: Long) = viewModelScope.launch {
         quickMemoCenter.toggleTodoCompletion(memoId)
+    }
+
+    fun markQuickMemoTodo(memoId: Long) = viewModelScope.launch {
+        quickMemoCenter.markTodoActive(memoId)
     }
 
     fun retryQuickMemoTranscription(memoId: Long) {
