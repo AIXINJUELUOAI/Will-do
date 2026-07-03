@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.NavHost
@@ -46,6 +47,7 @@ import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.settings.AboutPage
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.page_display.settings.AppUpdatePage
 import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage
@@ -209,6 +211,8 @@ private fun SettingsPageContent(
 ) {
     val uiState by mainViewModel.uiState.collectAsState()
     val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
+    val hasAppBackground = uiState.settings.appBackgroundImagePath.isNotBlank()
+    val pageContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val courseCount = remember(destination, uiState.rawEvents, uiState.settings) {
         if (destination == SettingsDestination.CourseManage) {
@@ -233,12 +237,12 @@ private fun SettingsPageContent(
 
     Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = pageContainerColor,
                 contentWindowInsets = WindowInsets(0),
                 topBar = {
                     CenterAlignedTopAppBar(
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
+                            containerColor = pageContainerColor,
                             titleContentColor = MaterialTheme.colorScheme.onBackground,
                             navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
                             actionIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -409,6 +413,7 @@ fun SettingsDetailScreen(
 ) {
     val settings by settingsViewModel.settings.collectAsState()
     val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
     val settingsNavController = rememberNavController()
     val initialDestination = remember(destinationStr) { parseSettingsDestination(destinationStr) }
     val initialRoute = remember(destinationStr) {
@@ -452,22 +457,26 @@ fun SettingsDetailScreen(
             else -> onExitSettings()
         }
     }
-    PushSlideLayout(
-        isOpen = isSidebarOpen,
-        onOpenChange = { isSidebarOpen = it },
-        enableGesture = true,
-        contentContainerColor = MaterialTheme.colorScheme.background,
-        sidebar = {
-            SettingsSidebar(
-                isDarkMode = settings.isDarkMode,
-                glassMode = false,
-                hasAppUpdate = appUpdateUiState.hasUpdate,
-                onThemeToggle = { isDark -> settingsViewModel.updateDarkMode(isDark) },
-                onNavigate = { destination -> navigateToDestination(destination) }
-            )
-        },
-        bottomBar = {},
-        content = {
+    AppBackgroundStyleTheme(
+        enabled = hasAppBackground,
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+    ) {
+        PushSlideLayout(
+            isOpen = isSidebarOpen,
+            onOpenChange = { isSidebarOpen = it },
+            enableGesture = true,
+            contentContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background,
+            sidebar = {
+                SettingsSidebar(
+                    isDarkMode = settings.isDarkMode,
+                    glassMode = hasAppBackground,
+                    hasAppUpdate = appUpdateUiState.hasUpdate,
+                    onThemeToggle = { isDark -> settingsViewModel.updateDarkMode(isDark) },
+                    onNavigate = { destination -> navigateToDestination(destination) }
+                )
+            },
+            bottomBar = {},
+            content = {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -695,8 +704,9 @@ fun SettingsDetailScreen(
                 }
 
             }
-        }
-    )
+            }
+        )
+    }
 
     BackHandler(enabled = isSidebarOpen || !settings.predictiveBackEnabled) {
         handleBackNavigation()

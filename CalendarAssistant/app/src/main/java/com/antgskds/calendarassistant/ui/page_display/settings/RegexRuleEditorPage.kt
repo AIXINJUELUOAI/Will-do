@@ -13,8 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +35,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.rule.RegexScheduleRecognizer
 import com.antgskds.calendarassistant.core.rule.RegexScheduleRule
 import com.antgskds.calendarassistant.core.rule.RegexScheduleRulePrefs
+import com.antgskds.calendarassistant.ui.components.AppCard
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -98,11 +97,10 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -158,11 +156,10 @@ private fun RegexRuleCard(
     rule: RegexScheduleRule,
     onRuleChange: (RegexScheduleRule) -> Unit
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),

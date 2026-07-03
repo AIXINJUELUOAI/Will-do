@@ -65,6 +65,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
 import com.antgskds.calendarassistant.calendar.models.Event
@@ -546,6 +547,8 @@ fun HomePage(
                             // 日期卡片
                             item {
                                 val hasAppBackground = uiState.settings.appBackgroundImagePath.isNotBlank()
+                                val themePrimary = MaterialTheme.colorScheme.primary
+                                val themeOnPrimary = MaterialTheme.colorScheme.onPrimary
                                 AppBackgroundStyleTheme(
                                     enabled = hasAppBackground,
                                     miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
@@ -553,17 +556,15 @@ fun HomePage(
                                     val isToday = uiState.selectedDate == uiState.today
                                     val weatherData = uiState.weatherData
                                     val topBaseColor = when {
-                                        hasAppBackground && isToday -> MaterialTheme.colorScheme.primaryContainer
-                                        isToday -> MaterialTheme.colorScheme.primary
+                                        isToday -> themePrimary
                                         else -> MaterialTheme.colorScheme.surfaceVariant
                                     }
                                     val topContentColor = when {
-                                        hasAppBackground && isToday -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        isToday -> MaterialTheme.colorScheme.onPrimary
+                                        isToday -> themeOnPrimary
                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     }
                                     val dateCardShape = RoundedCornerShape(16.dp)
-                                    Card(
+                                    AppCard(
                                         modifier = Modifier
                                             .padding(horizontal = 24.dp)
                                             .fillMaxWidth()
@@ -885,7 +886,7 @@ fun HomePage(
 
 @Composable
 private fun PermissionWarningCard(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)), onClick = onClick) {
+    AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)), onClick = onClick) {
         Row(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.error)
             Spacer(Modifier.width(12.dp))

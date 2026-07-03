@@ -66,6 +66,8 @@ object HelperCatalog {
 
         // —— 横切支撑 ——
         HelperEntry("背景模式样式支持", Chain.SUPPORT, "ui/page_display/settings/SettingsBackgroundStyleSupport", "背景壁纸模式下的页面颜色映射"),
+        HelperEntry("应用公共 UI 组件", Chain.SUPPORT, "ui/components/AppUiComponents", "Material 默认路径下的卡片、弹窗和底部弹层外壳"),
+        HelperEntry("应用玻璃表面占位", Chain.SUPPORT, "ui/components/AppGlassSurface", "统一表面组件的磨砂后端占位，当前运行态默认禁用"),
         HelperEntry("小组件渲染支持", Chain.SUPPORT, "platform/widget/WidgetRenderingSupport", "桌面小组件 RemoteViews 渲染辅助"),
     )
 }

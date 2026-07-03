@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +47,7 @@ import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.hasConfiguredSemesterAnchor
 import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.ui.components.AppCard
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -214,7 +214,7 @@ private fun CourseCard(
     val span = (endNode - startNode + 1)
     val height = nodeHeight * span - 4.dp
 
-    Card(
+    AppCard(
         modifier = Modifier
             .offset(x = xOffset, y = yOffset)
             .width(colWidthDp)

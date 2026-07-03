@@ -12,8 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -36,6 +34,8 @@ import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigControl
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigDomain
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigItem
+import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 
 /**
  * 配置编辑页 —— 完全由 [ConfigCatalog] 驱动。
@@ -80,13 +80,7 @@ fun ConfigEditorPage(uiSize: Int = 2) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            AppSettingsCard {
                     ConfigCatalog.visibleDomains()
                         .filter { it != ConfigDomain.VOICE }
                         .forEachIndexed { index, d ->
@@ -110,7 +104,6 @@ fun ConfigEditorPage(uiSize: Int = 2) {
                             )
                         )
                         }
-                }
             }
         } else {
             Text(
@@ -152,8 +145,8 @@ private fun ConfigItemControl(
     currentSettings: MySettings,
     onPick: (MySettings) -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    AppCard(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {

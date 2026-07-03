@@ -24,8 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +48,7 @@ import com.antgskds.calendarassistant.data.model.eventColorHexToArgb
 import com.antgskds.calendarassistant.data.model.normalizeEventColorHex
 import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -95,11 +94,10 @@ fun ScheduleColorSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("当前色盘", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -155,11 +153,10 @@ fun ScheduleColorSettingsPage(
         }
 
         Text("默认配色", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),

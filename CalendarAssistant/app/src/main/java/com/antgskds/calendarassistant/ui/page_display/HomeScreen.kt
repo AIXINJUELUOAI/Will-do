@@ -45,6 +45,7 @@ import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.dialogs.*
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -396,19 +397,24 @@ fun HomeScreen(
             enableGesture = !isScheduleExpanded, // 课表展开时禁用侧边栏手势
             contentContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background,
             sidebar = {
-                SettingsSidebar(
-                    isDarkMode = settings.isDarkMode,
-                    glassMode = false,
-                    hasAppUpdate = appUpdateUiState.hasUpdate,
-                    onThemeToggle = { isDark ->
-                        settingsViewModel.updateDarkMode(isDark)
-                    },
-                    onNavigate = { destination ->
-                        // 关闭侧边栏并触发导航
-                        isSidebarOpen = false
-                        onNavigateToSettings(destination)
-                    }
-                )
+                AppBackgroundStyleTheme(
+                    enabled = hasAppBackground,
+                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+                ) {
+                    SettingsSidebar(
+                        isDarkMode = settings.isDarkMode,
+                        glassMode = hasAppBackground,
+                        hasAppUpdate = appUpdateUiState.hasUpdate,
+                        onThemeToggle = { isDark ->
+                            settingsViewModel.updateDarkMode(isDark)
+                        },
+                        onNavigate = { destination ->
+                            // 关闭侧边栏并触发导航
+                            isSidebarOpen = false
+                            onNavigateToSettings(destination)
+                        }
+                    )
+                }
             },
             bottomBar = {},
             content = {

@@ -27,6 +27,8 @@ import com.antgskds.calendarassistant.core.center.ParsedCourseImport
 import com.antgskds.calendarassistant.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -493,7 +495,7 @@ private fun CourseImportConfirmSheet(
     onConfirm: () -> Unit
 ) {
     val haptics = rememberAppHaptics()
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
@@ -524,7 +526,7 @@ private fun CourseImportConfirmSheet(
                 if (currentSemesterStartDate.isNotBlank() && parsed.semesterStartDate != null &&
                     currentSemesterStartDate != parsed.semesterStartDate
                 ) {
-                    Card(
+                    AppCard(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -597,7 +599,7 @@ private fun CourseImportConfirmSheet(
 
 @Composable
 private fun ImportSummaryCard(parsed: ParsedCourseImport, cardValueStyle: TextStyle) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -724,7 +726,7 @@ private fun BackupOptionsSheet(
         if (normalizedOptions != options) onOptionsChange(normalizedOptions)
     }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
@@ -842,7 +844,7 @@ fun BackupCard(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),

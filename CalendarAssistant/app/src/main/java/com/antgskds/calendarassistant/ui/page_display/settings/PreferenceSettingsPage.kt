@@ -37,6 +37,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.platform.floating.EdgeBarService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
+import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
+import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
@@ -228,13 +230,7 @@ fun PreferenceSettingsPage(
         ) {
             // ================== 显示板块 ==================
             Text("显示", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SliderSettingItem(
                         title = "界面大小",
                         subtitle = "调整界面缩放（相对于设备原生大小）",
@@ -337,7 +333,6 @@ fun PreferenceSettingsPage(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
-                }
             }
 
             AnimatedVisibility(
@@ -345,13 +340,7 @@ fun PreferenceSettingsPage(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                SettingsCard {
                         FloatingEventRangeSlider(
                             title = "悬浮窗日程范围",
                             subtitle = when (settings.floatingEventRange) {
@@ -520,19 +509,12 @@ fun PreferenceSettingsPage(
                                 }
                             }
                         }
-                    }
                 }
             }
 
             // ================== 操作板块 ==================
             Text("操作", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SwitchSettingItem(
                         title = "触感反馈",
                         subtitle = "点击、长按和滑动到阈值时提供轻微反馈",
@@ -599,18 +581,11 @@ fun PreferenceSettingsPage(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
-                }
             }
 
             // ================== 通知板块 ==================
             Text("通知", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SwitchSettingItem(
                         title = "每日提醒",
                         subtitle = "今日 ${formatMinuteOfDay(settings.dailySummaryMorningMinuteOfDay)}，明日 ${formatMinuteOfDay(settings.dailySummaryEveningMinuteOfDay)}",
@@ -773,19 +748,12 @@ fun PreferenceSettingsPage(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                }
             }
 
 
             // ================== AI 板块 ==================
             Text("AI", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     RecognitionModeSettingItem(
                         mode = settings.recognitionMode,
                         onClick = { showRecognitionModePicker = true },
@@ -829,18 +797,11 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                }
             }
 
             // ================== 日程板块 ==================
             Text("日程", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SwitchSettingItem(
                         title = "日历同步",
                         subtitle = "将课程和日程同步到系统日历",
@@ -971,18 +932,11 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
                     )
-                }
             }
 
             // ================== 课表板块 ==================
             Text("课表", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SwitchSettingItem(
                         title = "启用课表功能",
                         subtitle = "关闭后无法在主页下滑进入课表",
@@ -1055,19 +1009,12 @@ fun PreferenceSettingsPage(
                             )
                         }
                     }
-                }
             }
 
             // ================== 截图板块 (新) ==================
             // 注意：现在它在 Column 内部，位于“日程”卡片之后
             Text("截图", style = sectionTitleStyle)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            SettingsCard {
                     SliderSettingItem(
                         title = "截图延迟",
                         subtitle = "截图与分析之间的等待时间",
@@ -1081,7 +1028,6 @@ fun PreferenceSettingsPage(
                         showValueAsNumber = true, // 开启数字显示
                         valueUnit = "ms"
                     )
-                }
             }
 
         } // <--- Column 结束在这里，确保所有板块都在里面
@@ -1185,6 +1131,11 @@ private fun formatMinuteOfDay(minuteOfDay: Int): String {
     return "%02d:%02d".format(safeMinuteOfDay / 60, safeMinuteOfDay % 60)
 }
 
+@Composable
+private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    AppSettingsCard(content = content)
+}
+
 // SwitchSettingItem 已抽至 SettingsRowComponents.kt（公共组件，同包，无需改 import）
 
 // SideChoiceSettingItem 已抽至 SettingsRowComponents.kt
@@ -1209,7 +1160,7 @@ private fun SourceCalendarPickerSheet(
         }
     }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
