@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -60,6 +58,7 @@ import com.antgskds.calendarassistant.data.model.WidgetScheduleSnapshot
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
 import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.CourseWidgetProvider
@@ -119,11 +118,10 @@ fun WidgetSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("实时预览", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
                 modifier = Modifier
@@ -180,11 +178,10 @@ fun WidgetSettingsPage(
         }
 
         Text("默认显示设置", style = sectionTitleStyle)
-        Card(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 WidgetThemeModeSetting(

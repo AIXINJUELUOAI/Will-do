@@ -20,13 +20,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -48,6 +45,9 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.developer.DebugAction
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
+import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
@@ -357,18 +357,6 @@ fun DeveloperPage(
                 )
             }
 
-            Text(text = "外观实验", style = sectionTitleStyle)
-            SettingsCard {
-                SwitchSettingItem(
-                    title = "MIUI 风格测试",
-                    subtitle = "导入主界面壁纸后生效；打开后玻璃组件切换为 MIUI 深/浅模糊态，壁纸是否模糊在主题页单独控制。",
-                    checked = settings.appBackgroundMiuiBlurTestEnabled,
-                    onCheckedChange = { settingsViewModel.updateAppBackgroundMiuiBlurTestEnabled(it) },
-                    cardTitleStyle = cardTitleStyle,
-                    cardSubtitleStyle = cardSubtitleStyle
-                )
-            }
-
             Text(text = "通知与日志", style = sectionTitleStyle)
             DeveloperOptionsCard(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
@@ -607,13 +595,10 @@ private fun DisabledDeveloperCard(
     message: String,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Text(
             text = message,
@@ -720,7 +705,7 @@ private fun LogExportSheet(
         )
     }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
@@ -826,7 +811,7 @@ private fun DebugActionSelectSheet(
         spec.actions.filter { it.id in selectedIds }
     }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
@@ -920,14 +905,7 @@ private fun liveTemplateModeLabel(mode: String): String {
 /** 偏好设置页同款卡片容器：16dp 圆角、surfaceContainerLow 底色、无阴影、内部上下 8dp。 */
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {
-    AppBackgroundGlassSurface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            content()
-        }
-    }
+    AppSettingsCard { content() }
 }
 
 /** 偏好设置页同款行间分隔线。 */

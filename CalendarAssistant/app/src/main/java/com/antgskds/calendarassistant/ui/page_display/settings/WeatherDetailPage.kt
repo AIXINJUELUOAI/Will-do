@@ -33,8 +33,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +70,7 @@ import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.model.displayLocationName
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -125,7 +124,15 @@ fun WeatherDetailScreen(
     uiSize: Int = 2,
     onBack: () -> Unit
 ) {
+    val app = LocalContext.current.applicationContext as App
+    val settings by app.settingsQueryApi.settings.collectAsState()
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
+    val pageContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
     val haptics = rememberAppHaptics()
+    AppBackgroundStyleTheme(
+        enabled = hasAppBackground,
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+    ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -140,12 +147,12 @@ fun WeatherDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = pageContainerColor
                 )
             )
         },
         contentWindowInsets = WindowInsets(0),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = pageContainerColor
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -154,6 +161,7 @@ fun WeatherDetailScreen(
         ) {
             WeatherDetailPage(uiSize = uiSize)
         }
+    }
     }
 }
 
@@ -168,11 +176,10 @@ private fun SectionTitle(title: String) {
 
 @Composable
 private fun WeatherDetailCurrentCard(data: WeatherData?) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         if (data == null) {
             Text(
@@ -180,7 +187,7 @@ private fun WeatherDetailCurrentCard(data: WeatherData?) {
                 modifier = Modifier.padding(18.dp),
                 style = MaterialTheme.typography.titleMedium
             )
-            return@Card
+            return@AppCard
         }
 
         Column(
@@ -248,11 +255,10 @@ private fun CurrentMetric(label: String, value: String, modifier: Modifier = Mod
 
 @Composable
 private fun WeatherWarningsCard(alerts: List<WeatherAlertData>, risks: List<WeatherRiskAlert>) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             alerts.take(3).forEachIndexed { index, alert ->
@@ -402,11 +408,10 @@ private fun CompactDivider() {
 
 @Composable
 private fun HourlyTemperatureChart(hours: List<WeatherHourlyForecast>) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         if (hours.isEmpty()) {
             Text(
@@ -415,7 +420,7 @@ private fun HourlyTemperatureChart(hours: List<WeatherHourlyForecast>) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            return@Card
+            return@AppCard
         }
 
         val points = hours.take(24)
@@ -586,11 +591,10 @@ private fun HourlyChartMarker(
 
 @Composable
 private fun DailyForecastList(days: List<WeatherDailyForecast>) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         if (days.isEmpty()) {
             Text(
@@ -599,7 +603,7 @@ private fun DailyForecastList(days: List<WeatherDailyForecast>) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            return@Card
+            return@AppCard
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

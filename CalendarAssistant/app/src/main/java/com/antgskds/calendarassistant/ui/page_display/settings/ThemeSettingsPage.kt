@@ -40,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
+import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -116,11 +118,7 @@ fun ThemeSettingsPage(
     ) {
         // 主题模式
         Text("外观", style = sectionTitleStyle)
-        AppBackgroundGlassSurface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        AppSettingsCard {
                 ThemeModeSliderSettingItem(
                     title = "主题模式",
                     subtitle = "选择主题模式",
@@ -140,7 +138,6 @@ fun ThemeSettingsPage(
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
-            }
         }
 
         Text("背景", style = sectionTitleStyle)
@@ -179,9 +176,10 @@ fun ThemeSettingsPage(
         )
         // 主题颜色
         Text("主题颜色", style = sectionTitleStyle)
-        AppBackgroundGlassSurface(
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -314,9 +312,10 @@ private fun AppBackgroundSettingsCard(
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
     val hasImage = settings.appBackgroundImagePath.isNotBlank()
-    AppBackgroundGlassSurface(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
             modifier = Modifier
@@ -374,9 +373,10 @@ private fun AppBackgroundImageColorSwitchCard(
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
     val hasImage = settings.appBackgroundImagePath.isNotBlank()
-    AppBackgroundGlassSurface(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
             modifier = Modifier
@@ -410,9 +410,10 @@ private fun AppBackgroundWallpaperBlurSwitchCard(
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
     val hasImage = settings.appBackgroundImagePath.isNotBlank()
-    AppBackgroundGlassSurface(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
             modifier = Modifier

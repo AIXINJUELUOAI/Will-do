@@ -266,14 +266,15 @@ fun QuickMemoDetailPage(
     val haptics = rememberAppHaptics(hapticEnabled)
 
     AppBackgroundStyleTheme(enabled = backgroundMode, miuiBlurEnabled = miuiBlurEnabled) {
+        val pageContainerColor = if (backgroundMode) Color.Transparent else MaterialTheme.colorScheme.background
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = pageContainerColor,
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
+                        containerColor = pageContainerColor,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                     ),
@@ -294,7 +295,7 @@ fun QuickMemoDetailPage(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                color = MaterialTheme.colorScheme.background
+                color = pageContainerColor
             ) {
                 if (memo == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

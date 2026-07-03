@@ -14,6 +14,7 @@ import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.antgskds.calendarassistant.data.model.RecognitionMode
+import com.antgskds.calendarassistant.ui.components.AppAlertDialog
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import androidx.compose.animation.AnimatedVisibility
@@ -383,7 +384,7 @@ fun EventDurationPickerDialog(
     var selectedIndex by remember(selectedDuration) { mutableIntStateOf(defaultIndex) }
     val haptics = rememberAppHaptics()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle("日程默认持续时间") },
         text = {
@@ -453,7 +454,7 @@ fun DailySummaryTimePickerDialog(
     var selectedMinute by remember(selectedMinuteOfDay) { mutableIntStateOf(initialMinute) }
     val haptics = rememberAppHaptics()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = {
@@ -555,7 +556,7 @@ fun RecognitionModePickerDialog(
     var selectedIndex by remember(selectedMode) { mutableIntStateOf(defaultIndex) }
     val haptics = rememberAppHaptics()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle("识别模式") },
         text = {

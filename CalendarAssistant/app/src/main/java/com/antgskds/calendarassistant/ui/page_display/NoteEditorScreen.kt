@@ -66,7 +66,6 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,8 +114,10 @@ import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.core.note.NoteTextStyle
 import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.components.PlainNoteEditor
 import com.antgskds.calendarassistant.ui.components.PlainNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType
@@ -150,6 +151,8 @@ fun NoteEditorScreen(
     val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
+    val pageContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
     val savedTitle = initialNote?.title.orEmpty()
     val savedDocument = initialNote?.document() ?: NoteDocument()
     val editorController = remember(editorSessionKey) { PlainNoteEditorController() }
@@ -352,26 +355,30 @@ fun NoteEditorScreen(
         }
     }
 
+    AppBackgroundStyleTheme(
+        enabled = hasAppBackground,
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+    ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(pageContainerColor)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
                 .align(Alignment.TopCenter)
-                .background(MaterialTheme.colorScheme.background)
+                .background(pageContainerColor)
         )
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = pageContainerColor,
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
+                        containerColor = pageContainerColor,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
                         actionIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -544,6 +551,7 @@ fun NoteEditorScreen(
         onDismiss = { pendingDelete = false },
         modifier = Modifier.padding(bottom = 24.dp + bottomInset)
     )
+    }
 
 }
 
@@ -566,7 +574,7 @@ private fun NoteExportChoiceCard(
         exit = fadeOut(animationSpec = tween(120)) + slideOutVertically(animationSpec = tween(160)) { it / 4 },
         modifier = modifier
     ) {
-        Card(
+        AppCard(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
@@ -758,7 +766,7 @@ private fun NoteEditorFloatingToolbar(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Card(
+                    AppCard(
                         shape = CircleShape,
                         colors = CardDefaults.cardColors(containerColor = barColor),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),

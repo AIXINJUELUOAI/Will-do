@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundGlassSurface
 import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
 
 // 统一高度设定为 68dp
@@ -189,13 +188,14 @@ fun IntegratedFloatingBar(
         content: @Composable () -> Unit
     ) {
         if (backgroundMode) {
-            AppBackgroundGlassSurface(
-                enabled = true,
-                miuiBlurEnabled = miuiBlurEnabled,
+            AppCard(
                 modifier = modifier,
                 shape = shape,
-                content = content
-            )
+                containerColor = containerColor,
+                shadowElevation = 0.dp,
+            ) {
+                content()
+            }
         } else {
             Card(
                 shape = shape,

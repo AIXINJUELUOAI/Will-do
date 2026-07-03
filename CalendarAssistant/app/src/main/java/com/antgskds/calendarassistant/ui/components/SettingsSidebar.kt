@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundGlassSurface
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -258,23 +257,10 @@ private fun SidebarGlassCard(
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
-    if (glassMode) {
-        AppBackgroundGlassSurface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = shape
-        ) {
-            content()
-        }
-        return
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
+    AppCard(
+        containerColor = if (glassMode) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = shape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         content()
