@@ -29,7 +29,7 @@ fun FloatingScheduleScreen(
     expandSide: String,
     onClose: () -> Unit,
     onManualInput: (String, () -> Unit) -> Unit,
-    onPickImageRequest: (() -> Unit) -> Unit,
+    onPickImageRequest: (Boolean, () -> Unit) -> Unit,
     onUpdateEvent: (Event, () -> Unit) -> Unit,
     onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit,
     onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit,

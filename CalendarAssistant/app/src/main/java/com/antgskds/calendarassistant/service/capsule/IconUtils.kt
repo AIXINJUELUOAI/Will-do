@@ -4,8 +4,9 @@ import android.content.Context
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.core.weather.WeatherAlertIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 
 object IconUtils {
@@ -22,11 +23,13 @@ object IconUtils {
 
         // 特殊类型直接返回
         when (capsule.type) {
-            CapsuleStateManager.TYPE_NETWORK_SPEED -> return R.drawable.ic_stat_net
-            CapsuleStateManager.TYPE_OCR_PROGRESS -> return R.drawable.ic_stat_scan
-            CapsuleStateManager.TYPE_OCR_RESULT -> return R.drawable.ic_stat_success
-            CapsuleStateManager.TYPE_MODEL_LOADING -> return R.drawable.ic_model_loading
-            CapsuleStateManager.TYPE_WEATHER_ALERT -> return if (capsule.eventType == WEATHER_RISK_EVENT_TYPE) {
+            CapsuleType.NETWORK_SPEED -> return R.drawable.ic_stat_net
+            CapsuleType.OCR_PROGRESS -> return R.drawable.ic_stat_scan
+            CapsuleType.OCR_RESULT -> return R.drawable.ic_stat_success
+            CapsuleType.MODEL_LOADING -> return R.drawable.ic_model_loading
+            CapsuleType.VOICE_TRANSCRIPTION -> return R.drawable.ic_stat_note
+            CapsuleType.TEXT_QUICK_MEMO -> return R.drawable.ic_stat_note
+            CapsuleType.WEATHER_ALERT -> return if (capsule.eventType == WEATHER_RISK_EVENT_TYPE) {
                 WeatherAlertIconMapper.riskIconRes(
                     title = capsule.display.primaryText,
                     weatherText = capsule.display.secondaryText.orEmpty(),

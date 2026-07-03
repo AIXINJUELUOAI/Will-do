@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
@@ -23,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,6 +38,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundGlassSurface
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -55,6 +58,7 @@ enum class SettingsDestination {
     AI,                // 模型配置
     Weather,           // 天气设置
     Preference,        // 偏好设置
+    ScheduleColors,    // 日程颜色（从偏好设置入口进入）
     Archives,          // 日程归档
     Backup,            // 数据备份
     AppUpdate,         // 软件更新
@@ -67,6 +71,9 @@ enum class SettingsDestination {
 
     // 实验室
     Laboratory,        // 实验室功能
+    Developer,         // 开发者页（从实验室入口进入）
+    ConfigEditor,      // 配置编辑页（从开发者页入口进入）
+    RegexRuleEditor,   // 正则规则编辑页（从开发者页入口进入）
     BottomBarEditor,   // 底栏编辑（从偏好设置入口进入）
     WidgetSettings     // 桌面小组件（从偏好设置入口进入）
 }
@@ -75,6 +82,7 @@ enum class SettingsDestination {
 fun SettingsSidebar(
     modifier: Modifier = Modifier,
     isDarkMode: Boolean = false,
+    glassMode: Boolean = false,
     hasAppUpdate: Boolean = false,
     onThemeToggle: (Boolean) -> Unit = {},
     onNavigate: (SettingsDestination) -> Unit = {}
@@ -164,7 +172,7 @@ fun SettingsSidebar(
         modifier = modifier
             .fillMaxHeight()
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(if (glassMode) Color.Transparent else MaterialTheme.colorScheme.background)
             .nestedScroll(rubberBandConnection)
     ) {
         Column(
@@ -181,6 +189,7 @@ fun SettingsSidebar(
             // 第一块：顶部操作卡片（退出、主题切换、关于）
             SidebarTopActionsCard(
                 isDarkMode = isDarkMode,
+                glassMode = glassMode,
                 hasAppUpdate = hasAppUpdate,
                 onThemeNavigate = { onNavigate(SettingsDestination.Theme) },
                 onAbout = { onNavigate(SettingsDestination.About) },
@@ -188,16 +197,16 @@ fun SettingsSidebar(
             )
 
             // 第二块：课表管理卡片
-            SidebarScheduleCard(onNavigate)
+            SidebarScheduleCard(glassMode, onNavigate)
 
             // 第三块：其他设置卡片
-            SidebarOtherSettingsCard(onNavigate)
+            SidebarOtherSettingsCard(glassMode, onNavigate)
 
             // 第四块：实验室卡片
-            SidebarLaboratoryCard(onNavigate)
+            SidebarLaboratoryCard(glassMode, onNavigate)
 
             // 第五块：数据管理卡片（日程归档、数据备份）
-            SidebarDataManagementCard(onNavigate)
+            SidebarDataManagementCard(glassMode, onNavigate)
 
             // 为浮动底栏预留空间，避免底部板块被遮挡
             Spacer(modifier = Modifier.height(IntegratedFloatingBarVisualHeight + 16.dp))
@@ -209,16 +218,13 @@ fun SettingsSidebar(
 @Composable
 private fun SidebarTopActionsCard(
     isDarkMode: Boolean,
+    glassMode: Boolean,
     hasAppUpdate: Boolean,
     onThemeNavigate: () -> Unit,
     onAbout: () -> Unit,
     onAppUpdate: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 主题设置
             SidebarActionItem(
@@ -243,6 +249,35 @@ private fun SidebarTopActionsCard(
                 showBadge = hasAppUpdate
             )
         }
+    }
+}
+
+@Composable
+private fun SidebarGlassCard(
+    glassMode: Boolean,
+    content: @Composable () -> Unit
+) {
+    val shape = RoundedCornerShape(16.dp)
+    if (glassMode) {
+        AppBackgroundGlassSurface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = shape
+        ) {
+            content()
+        }
+        return
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        content()
     }
 }
 
@@ -282,7 +317,8 @@ private fun SidebarActionItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
             )
             if (showBadge) {
                 Spacer(modifier = Modifier.width(6.dp))
@@ -297,7 +333,7 @@ private fun SidebarActionItem(
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = Color.Gray.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -306,12 +342,8 @@ private fun SidebarActionItem(
 
 // 第二块：课表管理卡片
 @Composable
-private fun SidebarScheduleCard(onNavigate: (SettingsDestination) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+    SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 课表管理
             SidebarActionItem(
@@ -340,12 +372,8 @@ private fun SidebarScheduleCard(onNavigate: (SettingsDestination) -> Unit) {
 
 // 第三块：其他设置卡片
 @Composable
-private fun SidebarOtherSettingsCard(onNavigate: (SettingsDestination) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+    SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 模型配置
             SidebarActionItem(
@@ -373,12 +401,8 @@ private fun SidebarOtherSettingsCard(onNavigate: (SettingsDestination) -> Unit) 
 
 // 第四块：实验室卡片
 @Composable
-private fun SidebarLaboratoryCard(onNavigate: (SettingsDestination) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun SidebarLaboratoryCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+    SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 实验室
             SidebarActionItem(
@@ -393,12 +417,8 @@ private fun SidebarLaboratoryCard(onNavigate: (SettingsDestination) -> Unit) {
 
 // 第五块：数据管理卡片
 @Composable
-private fun SidebarDataManagementCard(onNavigate: (SettingsDestination) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun SidebarDataManagementCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+    SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 日程归档
             SidebarActionItem(

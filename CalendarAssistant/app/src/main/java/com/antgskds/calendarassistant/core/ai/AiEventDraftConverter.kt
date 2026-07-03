@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
+import com.antgskds.calendarassistant.data.model.eventColorPaletteToArgb
 import com.antgskds.calendarassistant.ui.theme.AppEventColors
 import java.time.Instant
 import java.time.LocalTime
@@ -19,7 +20,8 @@ fun convertDraftToEvent(
     draft: RecognitionDraft,
     sourceImagePath: String? = null,
     defaultDurationMinutes: Int = 60,
-    forceInstantCodeTimeToNow: Boolean = false
+    forceInstantCodeTimeToNow: Boolean = false,
+    eventColorPaletteHex: List<String> = emptyList()
 ): Event {
     val resolvedTag = inferEventTagFromDescription(draft.description, draft.tag.ifBlank { EventTags.GENERAL })
     val resolvedStartTs = resolveStartTs(draft.startTS, resolvedTag, forceInstantCodeTimeToNow)
@@ -34,7 +36,7 @@ fun convertDraftToEvent(
         description = mergeSourceImageMarker(draft.description, sourceImagePath),
         timeZone = draft.timeZone,
         tag = resolvedTag,
-        color = randomRecognizedEventColor()
+        color = randomRecognizedEventColor(eventColorPaletteHex)
     )
 }
 
@@ -71,6 +73,7 @@ private fun resolveEndTs(startTs: Long, defaultDurationMinutes: Int): Long {
     }
 }
 
-private fun randomRecognizedEventColor(): Int = AppEventColors.random().toArgb()
+private fun randomRecognizedEventColor(eventColorPaletteHex: List<String>): Int =
+    eventColorPaletteToArgb(eventColorPaletteHex).ifEmpty { AppEventColors.map { it.toArgb() } }.random()
 
 const val END_OF_DAY_DURATION = -1

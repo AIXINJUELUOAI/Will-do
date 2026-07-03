@@ -111,6 +111,9 @@ object RecognitionRuleCatalog {
     private val localPromptRules = rules.filter { it.includeInLocalPrompt }
     private val instantCodeTags = setOf(EventTags.PICKUP, EventTags.FOOD, EventTags.TICKET, EventTags.SENDER)
 
+    /** 已登记的事件类型（tag 到中文名），供注册总览只读展示。 */
+    fun registeredTypes(): List<Pair<String, String>> = rules.map { it.tag to it.promptName }
+
     fun normalizeKnownTag(raw: String?): String? {
         val key = normalizeKey(raw.orEmpty())
         if (key.isBlank()) return null

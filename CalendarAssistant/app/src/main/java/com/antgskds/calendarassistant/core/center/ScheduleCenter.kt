@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.core.center
 
+import android.util.Log
 import com.antgskds.calendarassistant.core.undo.UndoManager
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
@@ -13,9 +14,12 @@ import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
 import com.antgskds.calendarassistant.calendar.models.isTransit
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationResult
+import com.antgskds.calendarassistant.core.query.EventActionQueryApi
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
+import com.antgskds.calendarassistant.feature.api.notification.NotificationApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +36,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class ScheduleCenter(
     private val calendarCenter: CalendarCenter,
-    private val appScope: CoroutineScope
+    private val appScope: CoroutineScope,
+    private val notificationApi: NotificationApi? = null,
+    private val eventActionQueryApi: EventActionQueryApi? = null,
+    private val settingsProvider: () -> MySettings = { MySettings() }
 ) {
     var onScheduleChanged: (() -> Unit)? = null
 
@@ -51,6 +58,21 @@ class ScheduleCenter(
     private val _pendingItemStates = MutableStateFlow<Map<String, PendingItemState>>(emptyMap())
     val pendingItemStates: StateFlow<Map<String, PendingItemState>> = _pendingItemStates.asStateFlow()
     private val statusOperationInFlight = AtomicBoolean(false)
+    private val notificationBridge: ScheduleNotificationBridge? = notificationApi?.let {
+        ScheduleNotificationBridge(it, settingsProvider, eventActionQueryApi)
+    }
+
+    suspend fun submitSingleEvents(events: List<Event>) {
+        notificationBridge?.submitSingleEvents(events)
+    }
+
+    /** Phase 3：把重复事件窗口内的实例转发给新通知链路（由 ReminderCenter 全量重排时调用）。 */
+    suspend fun submitRecurringWindow(
+        items: List<ScheduleDisplayItem>,
+        parentEvents: Map<Long, Event>
+    ) {
+        notificationBridge?.submitRecurringWindow(items, parentEvents)
+    }
 
     private data class StateUndoSnapshot(
         val action: ActionTarget,
@@ -89,26 +111,32 @@ class ScheduleCenter(
 
     suspend fun addEvent(event: Event): Long = withContext(Dispatchers.IO) {
         val id = calendarCenter.createEvent(event)
+        notificationBridge?.onEventCreated(event.copy(id = id))
         refreshEvents()
         id
     }
 
-    suspend fun updateEvent(event: Event) {
+    suspend fun updateEvent(event: Event) = withContext(Dispatchers.IO) {
         val eventId = event.id
+        val existing = eventId?.let { calendarCenter.getEvent(it) }
+        val normalized = existing?.let { normalizeActiveWindowEdit(it, event, "updateEvent") } ?: event
         if (eventId != null && eventId >= 0) {
             _events.value = _events.value.map { current ->
-                if (current.id == eventId) event else current
+                if (current.id == eventId) normalized else current
             }
         }
 
-        withContext(Dispatchers.IO) {
-            calendarCenter.updateEvent(event)
-            refreshEvents()
+        calendarCenter.updateEvent(normalized)
+        dispatchNotificationAfterUserEdit(existing, normalized)
+        refreshEvents()
+        if (existing?.archivedAt != null && normalized.archivedAt == null) {
+            refreshArchivedEvents()
         }
     }
 
     suspend fun deleteEvent(eventId: Long) = withContext(Dispatchers.IO) {
         calendarCenter.deleteEvent(eventId)
+        notificationBridge?.onEventDeleted(eventId)
         refreshEvents()
     }
 
@@ -120,7 +148,7 @@ class ScheduleCenter(
         undoManager.submit(UndoManager.PendingAction(
             id = "delete-$eventId",
             label = "已删除「${event.title}」",
-            commitAction = { withContext(Dispatchers.IO) { calendarCenter.deleteEvent(eventId) } },
+            commitAction = { withContext(Dispatchers.IO) { calendarCenter.deleteEvent(eventId); notificationBridge?.onEventDeleted(eventId) } },
             rollbackAction = { refreshEvents() }
         ))
     }
@@ -326,6 +354,7 @@ class ScheduleCenter(
     suspend fun addEventFromPatch(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long = withContext(Dispatchers.IO) {
         val event = patchToNewEvent(patch)
         val id = calendarCenter.createEvent(event)
+        notificationBridge?.onEventCreated(event.copy(id = id))
         refreshEvents()
         id
     }
@@ -340,9 +369,13 @@ class ScheduleCenter(
      */
     suspend fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.data.model.EventPatch) = withContext(Dispatchers.IO) {
         val existing = calendarCenter.getEvent(eventId) ?: return@withContext
-        val merged = applyPatchToEvent(existing, patch)
+        val merged = normalizeActiveWindowEdit(existing, applyPatchToEvent(existing, patch), "updateSingleFromPatch")
         calendarCenter.updateEvent(merged)
+        dispatchNotificationAfterUserEdit(existing, merged)
         refreshEvents()
+        if (existing.archivedAt != null && merged.archivedAt == null) {
+            refreshArchivedEvents()
+        }
     }
 
     /**
@@ -657,6 +690,7 @@ class ScheduleCenter(
     private fun applyPatchToEvent(existing: Event, patch: com.antgskds.calendarassistant.data.model.EventPatch): Event {
         val shouldReactivate = (existing.state == STATE_COMPLETED || existing.state == STATE_CHECKED_IN) &&
             patch.endTS >= System.currentTimeMillis() / 1000L
+        val shouldRestoreArchived = existing.archivedAt != null && patch.endTS >= System.currentTimeMillis() / 1000L
         return existing.copy(
             title = patch.title,
             startTS = patch.startTS,
@@ -669,8 +703,50 @@ class ScheduleCenter(
             reminder1Minutes = patch.reminder1Minutes,
             reminder2Minutes = patch.reminder2Minutes,
             reminder3Minutes = patch.reminder3Minutes,
-            state = if (shouldReactivate) STATE_PENDING else existing.state
+            state = if (shouldReactivate) STATE_PENDING else existing.state,
+            archivedAt = if (shouldRestoreArchived) null else existing.archivedAt
         )
+    }
+
+    private fun hasTimeWindowChanged(before: Event, after: Event): Boolean {
+        return before.startTS != after.startTS || before.endTS != after.endTS
+    }
+
+    private suspend fun dispatchNotificationAfterUserEdit(before: Event?, after: Event) {
+        val shouldReissue = before != null && (
+            hasTimeWindowChanged(before, after) ||
+                before.state != after.state ||
+                before.archivedAt != after.archivedAt
+            )
+        if (shouldReissue) {
+            notificationBridge?.onEventTimeEdited(after)
+        } else {
+            notificationBridge?.onEventUpdated(after)
+        }
+    }
+
+    private fun normalizeActiveWindowEdit(existing: Event, candidate: Event, source: String): Event {
+        val nowSec = System.currentTimeMillis() / 1000L
+        val timeWindowChanged = hasTimeWindowChanged(existing, candidate)
+        val endsInActiveWindow = candidate.endTS >= nowSec
+        val wasInactive = existing.endTS < nowSec || existing.state != STATE_PENDING || existing.archivedAt != null
+        val carriesInactiveState = candidate.state != STATE_PENDING || candidate.archivedAt != null
+        val shouldRestoreActive = endsInActiveWindow && timeWindowChanged && (wasInactive || carriesInactiveState)
+        val normalized = if (shouldRestoreActive) {
+            candidate.copy(state = STATE_PENDING, archivedAt = null)
+        } else {
+            candidate
+        }
+        if (shouldRestoreActive || timeWindowChanged || existing.state != normalized.state || existing.archivedAt != normalized.archivedAt) {
+            Log.d(
+                "WillDoNotify",
+                "active-window-edit source=$source id=${existing.id} restored=$shouldRestoreActive " +
+                    "timeChanged=$timeWindowChanged now=$nowSec " +
+                    "beforeStart=${existing.startTS} beforeEnd=${existing.endTS} beforeState=${existing.state} beforeArchived=${existing.archivedAt} " +
+                    "afterStart=${normalized.startTS} afterEnd=${normalized.endTS} afterState=${normalized.state} afterArchived=${normalized.archivedAt}"
+            )
+        }
+        return normalized
     }
 
     // ── 内部 ──────────────────────────────────────────────────────

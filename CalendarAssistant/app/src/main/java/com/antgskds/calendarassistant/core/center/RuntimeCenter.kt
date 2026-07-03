@@ -4,11 +4,11 @@ import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.service.receiver.DailySummaryReceiver
-import com.antgskds.calendarassistant.service.receiver.KeepAliveReceiver
-import com.antgskds.calendarassistant.service.receiver.ReminderReconcileReceiver
-import com.antgskds.calendarassistant.service.receiver.SmsNotificationListenerService
-import com.antgskds.calendarassistant.service.clipboard.ClipboardCodeMonitorService
+import com.antgskds.calendarassistant.platform.receiver.DailySummaryReceiver
+import com.antgskds.calendarassistant.platform.receiver.KeepAliveReceiver
+import com.antgskds.calendarassistant.platform.receiver.ReminderReconcileReceiver
+import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
+import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest

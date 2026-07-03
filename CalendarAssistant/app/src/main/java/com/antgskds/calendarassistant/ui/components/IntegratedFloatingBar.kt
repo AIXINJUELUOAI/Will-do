@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundGlassSurface
+import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp
@@ -80,9 +83,15 @@ fun IntegratedFloatingBar(
     onSearchClick: () -> Unit,
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
+    backgroundMode: Boolean = false,
+    miuiBlurEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val haptics = rememberAppHaptics()
+    val backgroundPalette = rememberAppBackgroundStylePalette(
+        enabled = backgroundMode,
+        miuiBlurEnabled = miuiBlurEnabled
+    )
     val rotation by animateFloatAsState(
         targetValue = if (isExpanded) 45f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -91,16 +100,36 @@ fun IntegratedFloatingBar(
 
     val mdBlend = 1.0f
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val navBg = lerp(HydrogenBg, if (isDark) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, mdBlend)
-    val navIndicator = lerp(HydrogenIndicator, MaterialTheme.colorScheme.secondaryContainer, mdBlend)
-    val navContent = lerp(HydrogenContent, MaterialTheme.colorScheme.onSurfaceVariant, mdBlend)
-    val fabBg = lerp(HydrogenFab, MaterialTheme.colorScheme.primary, mdBlend)
-    val fabIcon = lerp(HydrogenFabIcon, MaterialTheme.colorScheme.onPrimary, mdBlend)
+    val navBg = if (backgroundMode) {
+        backgroundPalette.surface
+    } else {
+        lerp(HydrogenBg, if (isDark) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, mdBlend)
+    }
+    val navIndicator = if (backgroundMode) {
+        backgroundPalette.accent
+    } else {
+        lerp(HydrogenIndicator, MaterialTheme.colorScheme.secondaryContainer, mdBlend)
+    }
+    val navContent = if (backgroundMode) {
+        backgroundPalette.content
+    } else {
+        lerp(HydrogenContent, MaterialTheme.colorScheme.onSurfaceVariant, mdBlend)
+    }
+    val fabBg = if (backgroundMode) {
+        backgroundPalette.surfaceStrong
+    } else {
+        lerp(HydrogenFab, MaterialTheme.colorScheme.primary, mdBlend)
+    }
+    val fabIcon = if (backgroundMode) {
+        backgroundPalette.content
+    } else {
+        lerp(HydrogenFabIcon, MaterialTheme.colorScheme.onPrimary, mdBlend)
+    }
 
     val navShape = CircleShape
     val fabShape = RoundedCornerShape(22.dp)
-    val navElevation = 6.dp
-    val fabElevation = 6.dp
+    val navElevation = if (backgroundMode) 0.dp else 6.dp
+    val fabElevation = if (backgroundMode) 0.dp else 6.dp
     val navHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val navItemWidth = 72.dp
@@ -151,6 +180,34 @@ fun IntegratedFloatingBar(
     }
     val currentTabClick = { onPageClick(effectiveSelectedKey) }
 
+    @Composable
+    fun FloatingContainer(
+        modifier: Modifier,
+        shape: androidx.compose.ui.graphics.Shape,
+        containerColor: Color,
+        elevation: Dp,
+        content: @Composable () -> Unit
+    ) {
+        if (backgroundMode) {
+            AppBackgroundGlassSurface(
+                enabled = true,
+                miuiBlurEnabled = miuiBlurEnabled,
+                modifier = modifier,
+                shape = shape,
+                content = content
+            )
+        } else {
+            Card(
+                shape = shape,
+                colors = CardDefaults.cardColors(containerColor = containerColor),
+                elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+                modifier = modifier
+            ) {
+                content()
+            }
+        }
+    }
+
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -164,13 +221,13 @@ fun IntegratedFloatingBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Card(
-                shape = navShape,
-                colors = CardDefaults.cardColors(containerColor = navBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = navElevation),
+            FloatingContainer(
                 modifier = Modifier
                     .height(navHeight)
-                    .width(navWidth)
+                    .width(navWidth),
+                shape = navShape,
+                containerColor = navBg,
+                elevation = navElevation
             ) {
                 if (isExpanded) {
                     Box(
@@ -228,13 +285,13 @@ fun IntegratedFloatingBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Card(
-                shape = fabShape,
-                colors = CardDefaults.cardColors(containerColor = fabBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = fabElevation),
+            FloatingContainer(
                 modifier = Modifier
                     .height(fabSize)
-                    .width(actionWidth)
+                    .width(actionWidth),
+                shape = fabShape,
+                containerColor = fabBg,
+                elevation = fabElevation
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),

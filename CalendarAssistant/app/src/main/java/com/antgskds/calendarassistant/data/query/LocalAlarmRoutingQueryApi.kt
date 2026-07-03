@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.core.query.AlarmRoute
 import com.antgskds.calendarassistant.core.query.AlarmRouteDecision
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
-import com.antgskds.calendarassistant.service.notification.NotificationScheduler
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
 
 class LocalAlarmRoutingQueryApi : AlarmRoutingQueryApi {
     override fun resolveRoute(action: String?): AlarmRouteDecision {

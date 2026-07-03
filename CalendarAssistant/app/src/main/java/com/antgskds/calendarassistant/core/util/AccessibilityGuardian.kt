@@ -4,7 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 object AccessibilityGuardian {
     private const val TAG = "AccessibilityGuardian"
 
-    private const val SERVICE_CLASS = "com.antgskds.calendarassistant.service.accessibility.TextAccessibilityService"
+    private const val SERVICE_CLASS = "com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService"
     private const val CHECK_COOLDOWN_MS = 15000L
     private const val BACKGROUND_CHECK_COOLDOWN_MS = 30 * 60 * 1000L
     private const val RESTORE_SETTLE_DELAY_MS = 400L

@@ -11,7 +11,7 @@ import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
 import com.antgskds.calendarassistant.service.capsule.NotificationTemplateCenter
-import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -156,12 +156,12 @@ internal object EventPresentationInternals {
         templateMode: String = LiveNotificationTemplateMode.AUTO
     ): CapsuleDisplayModel {
         return when (model.ruleId) {
-            RuleMatchingEngine.RULE_TRAIN -> composeTrainCapsule(model, event, isExpired)
-            RuleMatchingEngine.RULE_TAXI -> composeTaxiCapsule(model, event, isExpired)
-            RuleMatchingEngine.RULE_PICKUP, RuleMatchingEngine.RULE_FOOD -> composePickupCapsule(model, event, isExpired)
-            RuleMatchingEngine.RULE_FLIGHT -> composeFlightCapsule(model, event, isExpired)
-            RuleMatchingEngine.RULE_TICKET -> composeTicketCapsule(model, event, isExpired)
-            RuleMatchingEngine.RULE_SENDER -> composeSenderCapsule(model, event, isExpired)
+            RuleMatchingEngine.RULE_TRAIN -> composeTrainCapsule(model, event, isExpired, templateMode)
+            RuleMatchingEngine.RULE_TAXI -> composeTaxiCapsule(model, event, isExpired, templateMode)
+            RuleMatchingEngine.RULE_PICKUP, RuleMatchingEngine.RULE_FOOD -> composePickupCapsule(model, event, isExpired, templateMode)
+            RuleMatchingEngine.RULE_FLIGHT -> composeFlightCapsule(model, event, isExpired, templateMode)
+            RuleMatchingEngine.RULE_TICKET -> composeTicketCapsule(model, event, isExpired, templateMode)
+            RuleMatchingEngine.RULE_SENDER -> composeSenderCapsule(model, event, isExpired, templateMode)
             else -> composeGeneralCapsule(model, event, isExpired, templateMode)
         }
     }
@@ -183,9 +183,8 @@ internal object EventPresentationInternals {
         val action = if (events.any { !it.isCompleted && !computeIsExpired(it, LocalDateTime.now()) }) {
             CapsuleActionSpec(label = "已取", receiverAction = EventActionReceiver.ACTION_COMPLETE_SCHEDULE)
         } else null
-        return CapsuleDisplayModel(
-            shortText = primaryText,
-            primaryText = primaryText,
+        return NotificationTemplateCenter.composeScheduleActionItem(
+            title = primaryText,
             secondaryText = secondaryText,
             expandedText = expandedText,
             tapOpensPickupList = true,
@@ -309,85 +308,114 @@ internal object EventPresentationInternals {
         return Triple(title, location ?: desc, if (location != null && desc != null && desc != location) desc else null)
     }
 
-    private fun composeTrainCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTrainCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val info = parseTransport(event)
         val secondaryText = formatTrainSubtitle(info.subDisplay, event.location)
         val action = if (!info.isCheckedIn && !isExpired) CapsuleActionSpec("已检票", EventActionReceiver.ACTION_CHECKIN) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeTransportTrain(
+            title = model.title,
             secondaryText = secondaryText,
-            expandedText = secondaryText,
+            templateMode = templateMode,
             action = action
         )
     }
 
-    private fun composeTaxiCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTaxiCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val info = parseTransport(event)
         val secondaryText = formatTaxiSubtitle(event, info) ?: "网约车"
         val expandedText = joinLines(secondaryText, sanitize(event.location))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已用车", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeScheduleActionItem(
+            title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            templateMode = templateMode,
             action = action
         )
     }
 
-    private fun composePickupCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composePickupCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已取", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeScheduleActionItem(
+            title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
             tapOpensPickupList = true,
+            templateMode = templateMode,
             action = action
         )
     }
 
-    private fun composeFlightCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeFlightCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val secondaryText = model.subtitle
         val expandedText = joinLines(secondaryText, sanitize(event.location))
         val action = if (!event.isCheckedIn && !event.isCompleted && !isExpired) CapsuleActionSpec("已登机", EventActionReceiver.ACTION_CHECKIN) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeTransportFlight(
+            title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            templateMode = templateMode,
             action = action
         )
     }
 
-    private fun composeTicketCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeTicketCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已取", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeScheduleActionItem(
+            title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            templateMode = templateMode,
             action = action
         )
     }
 
-    private fun composeSenderCapsule(model: EventRenderModel, event: Event, isExpired: Boolean): CapsuleDisplayModel {
+    private fun composeSenderCapsule(
+        model: EventRenderModel,
+        event: Event,
+        isExpired: Boolean,
+        templateMode: String
+    ): CapsuleDisplayModel {
         val info = parsePickupInfo(event)
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已寄件", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return CapsuleDisplayModel(
-            shortText = model.title,
-            primaryText = model.title,
+        return NotificationTemplateCenter.composeScheduleActionItem(
+            title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            templateMode = templateMode,
             action = action
         )
     }

@@ -48,6 +48,7 @@ data class AppBackupQuickMemoDto(
     val type: String = "TEXT",
     val bodyText: String = "",
     val audioFileName: String? = null,
+    val imageFileName: String? = null,
     val audioDurationMs: Long = 0L,
     val transcriptionStatus: String = "NONE",
     val analysisStatus: String = "NONE",

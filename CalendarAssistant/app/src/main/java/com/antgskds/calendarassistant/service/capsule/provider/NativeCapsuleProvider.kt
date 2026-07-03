@@ -12,7 +12,7 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 
 class NativeCapsuleProvider : ICapsuleProvider {
     companion object {

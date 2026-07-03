@@ -26,6 +26,16 @@ object ImageImportUtils {
         return File(imagesDir, "$prefix$timestamp.$extension")
     }
 
+    fun createQuickMemoImageFile(
+        context: Context,
+        extension: String = "jpg"
+    ): File {
+        val imagesDir = File(context.filesDir, "quick_memos/images")
+        if (!imagesDir.exists()) imagesDir.mkdirs()
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        return File(imagesDir, "IMAGE_$timestamp.$extension")
+    }
+
     fun copyUriToFile(context: Context, uri: Uri, dest: File): Boolean {
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->

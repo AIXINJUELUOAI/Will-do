@@ -41,32 +41,6 @@
             android:scaleType="centerInside"
             tools:src="@drawable/ic_weather_sunny" />
 
-        <TextView
-            android:id="@+id/widget_weather_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/widget_weather_location"
-            android:layout_marginTop="8dp"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textSize="42sp"
-            android:textStyle="bold"
-            tools:text="17°" />
-
-        <TextView
-            android:id="@+id/widget_weather_subtitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/widget_weather_title"
-            android:layout_marginTop="4dp"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textSize="13sp"
-            tools:text="雾 16° / 24°" />
-
         <FrameLayout
             android:id="@+id/widget_weather_alert_container"
             android:layout_width="match_parent"
@@ -92,5 +66,42 @@
                 android:textSize="12sp"
                 tools:text="雾 16° / 24°" />
         </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_weather_info_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_above="@id/widget_weather_alert_container"
+            android:layout_below="@id/widget_weather_location"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:clipChildren="true"
+            android:clipToPadding="true"
+            android:gravity="bottom|start"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_weather_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textSize="38sp"
+                android:textStyle="bold"
+                tools:text="17°" />
+
+            <TextView
+                android:id="@+id/widget_weather_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textSize="13sp"
+                tools:text="雾 16° / 24°" />
+        </LinearLayout>
     </RelativeLayout>
 </FrameLayout>

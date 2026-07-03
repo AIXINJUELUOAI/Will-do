@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
 object QuickMemoType {
     const val TEXT = "TEXT"
     const val VOICE = "VOICE"
+    const val IMAGE = "IMAGE"
 }
 
 object QuickMemoTranscriptionStatus {
@@ -63,6 +64,8 @@ data class QuickMemoEntity(
     val bodyText: String = "",
     @ColumnInfo(name = "audio_path")
     val audioPath: String? = null,
+    @ColumnInfo(name = "image_path")
+    val imagePath: String? = null,
     @ColumnInfo(name = "audio_duration_ms")
     val audioDurationMs: Long = 0L,
     @ColumnInfo(name = "transcription_status")
@@ -83,6 +86,7 @@ data class QuickMemoEntity(
     val todoCompletedAt: Long? = null
 ) {
     val isVoice: Boolean get() = type == QuickMemoType.VOICE
+    val isImage: Boolean get() = type == QuickMemoType.IMAGE
     val isTodo: Boolean get() = todoState == QuickMemoTodoState.ACTIVE || todoState == QuickMemoTodoState.COMPLETED
     val isTodoCompleted: Boolean get() = todoState == QuickMemoTodoState.COMPLETED
 }
