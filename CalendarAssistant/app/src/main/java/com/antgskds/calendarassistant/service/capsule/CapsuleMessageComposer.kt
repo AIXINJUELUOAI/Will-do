@@ -45,6 +45,10 @@ object CapsuleMessageComposer {
         )
     }
 
+    fun composeQuickMemoRecording(title: String, content: String): CapsuleDisplayModel {
+        return SystemLiveDisplay.quickMemoRecording(title, content)
+    }
+
     fun composeWeatherAlert(
         locationName: String,
         alert: WeatherAlertData,

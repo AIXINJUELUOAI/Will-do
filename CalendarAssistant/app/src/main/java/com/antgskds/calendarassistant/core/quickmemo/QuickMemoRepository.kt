@@ -171,12 +171,25 @@ class QuickMemoRepository(
     suspend fun deleteQuickMemo(id: Long) {
         val memo = quickMemoDao.getQuickMemo(id)
         quickMemoDao.deleteQuickMemoById(id)
-        memo?.audioPath?.takeIf { it.isNotBlank() }?.let { path ->
-            runCatching { File(path).delete() }
-        }
-        memo?.imagePath?.takeIf { it.isNotBlank() }?.let { path ->
-            runCatching { File(path).delete() }
-        }
+        memo?.let { deleteMemoFiles(listOf(it)) }
+    }
+
+    suspend fun clearAllQuickMemos(): Int {
+        val memos = quickMemoDao.getAllQuickMemos()
+        if (memos.isEmpty()) return 0
+        quickMemoDao.deleteAllQuickMemoData()
+        deleteMemoFiles(memos)
+        return memos.size
+    }
+
+    private fun deleteMemoFiles(memos: List<QuickMemoEntity>) {
+        memos
+            .flatMap { memo -> listOfNotNull(memo.audioPath, memo.imagePath) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .forEach { path ->
+                runCatching { File(path).delete() }
+            }
     }
 
     suspend fun updateSortRanks(ids: List<Long>) {

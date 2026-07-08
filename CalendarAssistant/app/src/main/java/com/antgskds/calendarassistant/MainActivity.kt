@@ -520,7 +520,8 @@ class MainActivity : ComponentActivity() {
                                 uiSize = uiState.settings.uiSize,
                                 hapticEnabled = uiState.settings.hapticFeedbackEnabled,
                                 backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
-                                miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+                                miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                                cardAlphaPercent = settings.appBackgroundCardAlphaPercent
                             )
                         }
 
@@ -701,10 +702,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        val app = application as App
         if (::mainViewModel.isInitialized) {
             mainViewModel.refreshData()
         }
-        (application as App).localModelResidueCenter.checkForResidue()
+        app.runtimeCenter.startEdgeBarIfNeeded()
+        app.localModelResidueCenter.checkForResidue()
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
     }
 
@@ -716,19 +719,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupDynamicShortcuts() {
-        val shortcutIntent = Intent(this, com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
+        fun shortcutIntent(actionName: String) = Intent(this, com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity::class.java).apply {
+            action = actionName
             flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
         }
 
-        val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "quick_capture")
+        val quickCaptureShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "quick_capture")
             .setShortLabel(getString(R.string.shortcut_quick_recognition))
             .setLongLabel(getString(R.string.shortcut_quick_recognition_long))
             .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_qs_quick_recognition))
-            .setIntent(shortcutIntent)
+            .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_QUICK_CAPTURE))
+            .setRank(0)
             .build()
 
-        ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+        val floatingShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "open_floating")
+            .setShortLabel(getString(R.string.shortcut_open_floating))
+            .setLongLabel(getString(R.string.shortcut_open_floating_long))
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_stat_event))
+            .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_OPEN_FLOATING))
+            .setRank(1)
+            .build()
+
+        val quickMemoShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "open_floating_quick_memo")
+            .setShortLabel(getString(R.string.shortcut_open_quick_memo))
+            .setLongLabel(getString(R.string.shortcut_open_quick_memo_long))
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_stat_quickmemo))
+            .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_OPEN_FLOATING_NOTE))
+            .setRank(2)
+            .build()
+
+        ShortcutManagerCompat.setDynamicShortcuts(this, listOf(quickCaptureShortcut, floatingShortcut, quickMemoShortcut))
     }
 
     companion object {

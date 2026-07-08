@@ -38,6 +38,9 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         clipboardCodeRecognitionEnabled: Boolean?,
         voiceInputEnabled: Boolean?,
         floatingVoiceLongPressEnabled: Boolean?,
+        floatingTextQuickMemoAutoPinEnabled: Boolean?,
+        voiceQuickMemoAutoPinEnabled: Boolean?,
+        appBackgroundCardAlphaPercent: Int?,
         widgetThemeMode: Int?,
         widgetBackgroundAlpha: Float?,
         developerOptionsUnlocked: Boolean?,
@@ -87,6 +90,17 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
         if (voiceInputEnabled != null) updated = updated.copy(voiceInputEnabled = voiceInputEnabled)
         if (floatingVoiceLongPressEnabled != null) updated = updated.copy(floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled)
+        if (floatingTextQuickMemoAutoPinEnabled != null) {
+            updated = updated.copy(floatingTextQuickMemoAutoPinEnabled = floatingTextQuickMemoAutoPinEnabled)
+        }
+        if (voiceQuickMemoAutoPinEnabled != null) {
+            updated = updated.copy(voiceQuickMemoAutoPinEnabled = voiceQuickMemoAutoPinEnabled)
+        }
+        if (appBackgroundCardAlphaPercent != null) {
+            updated = updated.copy(
+                appBackgroundCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(appBackgroundCardAlphaPercent)
+            )
+        }
         if (widgetThemeMode != null) updated = updated.copy(widgetThemeMode = widgetThemeMode.coerceIn(0, 2))
         if (widgetBackgroundAlpha != null) updated = updated.copy(widgetBackgroundAlpha = widgetBackgroundAlpha.coerceIn(0.6f, 1f))
         if (developerOptionsUnlocked != null) updated = updated.copy(developerOptionsUnlocked = developerOptionsUnlocked)

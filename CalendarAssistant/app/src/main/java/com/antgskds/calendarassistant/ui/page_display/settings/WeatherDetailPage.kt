@@ -131,7 +131,8 @@ fun WeatherDetailScreen(
     val haptics = rememberAppHaptics()
     AppBackgroundStyleTheme(
         enabled = hasAppBackground,
-        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
     ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),

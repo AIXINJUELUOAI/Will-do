@@ -41,6 +41,18 @@ interface QuickMemoDao {
     @Query("DELETE FROM quick_memos WHERE id = :id")
     suspend fun deleteQuickMemoById(id: Long)
 
+    @Query("DELETE FROM quick_memo_suggestions")
+    suspend fun deleteAllSuggestions()
+
+    @Query("DELETE FROM quick_memos")
+    suspend fun deleteAllQuickMemos()
+
+    @Transaction
+    suspend fun deleteAllQuickMemoData() {
+        deleteAllSuggestions()
+        deleteAllQuickMemos()
+    }
+
     @Query("UPDATE quick_memos SET sort_rank = :sortRank WHERE id = :id")
     suspend fun updateSortRank(id: Long, sortRank: Long)
 

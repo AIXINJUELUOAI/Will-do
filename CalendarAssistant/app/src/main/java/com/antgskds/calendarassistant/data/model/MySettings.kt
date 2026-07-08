@@ -140,6 +140,10 @@ data class MySettings(
 
     // 【实验室】悬浮窗已呼出后，长按音量+是否允许进入语音输入；默认保留旧行为
     val floatingVoiceLongPressEnabled: Boolean = true,
+    // 【实验室】悬浮窗文本随口记保存后同步挂到实况通知；默认关闭，避免意外打扰
+    val floatingTextQuickMemoAutoPinEnabled: Boolean = false,
+    // 【实验室】语音随口记转写完成后同步挂到实况通知；默认关闭，避免意外打扰
+    val voiceQuickMemoAutoPinEnabled: Boolean = false,
 
     // 首页入口配置（第 2~4 位，第一位固定侧边栏）
     val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE),
@@ -173,6 +177,7 @@ data class MySettings(
     val appBackgroundImageColorEnabled: Boolean = false,
     val appBackgroundMiuiBlurTestEnabled: Boolean = false,
     val appBackgroundWallpaperBlurEnabled: Boolean = false,
+    val appBackgroundCardAlphaPercent: Int = APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     val appBackgroundScrimAlphaPercent: Int = 0, // 旧设置兼容字段；主界面背景不再叠加蒙层
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
@@ -262,6 +267,9 @@ data class MySettings(
         const val DAILY_SUMMARY_MAX_MINUTE_OF_DAY = 1439
         const val DAILY_SUMMARY_DEFAULT_MORNING_MINUTE_OF_DAY = 6 * 60
         const val DAILY_SUMMARY_DEFAULT_EVENING_MINUTE_OF_DAY = 22 * 60
+        const val APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT = 0
+        const val APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT = 100
+        const val APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT = 66
 
         fun normalizeScreenshotDelayMs(delayMs: Long): Long {
             return delayMs.coerceIn(SCREENSHOT_DELAY_MIN_MS, SCREENSHOT_DELAY_MAX_MS)
@@ -273,6 +281,13 @@ data class MySettings(
 
         fun normalizeRecognitionMode(mode: Int): Int {
             return RecognitionMode.normalize(mode)
+        }
+
+        fun normalizeAppBackgroundCardAlphaPercent(alphaPercent: Int): Int {
+            return alphaPercent.coerceIn(
+                APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
+                APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT
+            )
         }
     }
 }

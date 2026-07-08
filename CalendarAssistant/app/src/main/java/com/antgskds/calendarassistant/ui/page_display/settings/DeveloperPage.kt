@@ -45,6 +45,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.developer.DebugAction
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
@@ -110,6 +111,7 @@ fun DeveloperPage(
     val normalNotificationActions = remember {
         actions(
             listOf(
+                "test-normal-double-action",
                 "test-daily-today",
                 "test-daily-tomorrow",
                 "weather-alert-normal-heat",
@@ -130,6 +132,9 @@ fun DeveloperPage(
     val liveNotificationActions = remember {
         actions(
             listOf(
+                "test-live-double-action",
+                "test-live-daily-today",
+                "test-live-daily-tomorrow",
                 "test-capsule-ocr",
                 "test-capsule-recognition-1",
                 "test-capsule-recognition-2",
@@ -163,6 +168,8 @@ fun DeveloperPage(
                     "create-recurring",
                     "weather-alert",
                     "weather-risk",
+                    "test-normal-double-action",
+                    "test-live-double-action",
                     "test-plain-schedule",
                     "test-plain-pickup",
                     "test-plain-course",
@@ -269,14 +276,16 @@ fun DeveloperPage(
         description: String,
         actions: List<DebugAction>,
         confirmText: String,
-        requiresConfirm: Boolean
+        requiresConfirm: Boolean,
+        defaultSelected: Boolean = true
     ) {
         quickActionSheet = QuickActionSheetSpec(
             title = title,
             description = description,
             actions = actions,
             confirmText = confirmText,
-            requiresConfirm = requiresConfirm
+            requiresConfirm = requiresConfirm,
+            defaultSelected = defaultSelected
         )
     }
 
@@ -359,8 +368,12 @@ fun DeveloperPage(
 
             Text(text = "通知与日志", style = sectionTitleStyle)
             DeveloperOptionsCard(
+                appBackgroundCardAlphaPercent = settings.appBackgroundCardAlphaPercent,
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 onOpenLogExportSheet = { showLogExportSheet = true },
+                onAppBackgroundCardAlphaPercentChange = { alphaPercent ->
+                    settingsViewModel.updatePreference(appBackgroundCardAlphaPercent = alphaPercent)
+                },
                 onLiveNotificationTemplateModeChange = { mode ->
                     settingsViewModel.updatePreference(liveNotificationTemplateMode = mode)
                     app?.capsuleCenter?.forceRefresh()
@@ -392,17 +405,18 @@ fun DeveloperPage(
                 RowDivider()
                 ActionSettingItem(
                     title = "普通通知测试",
-                    subtitle = "每日提醒、明日预告和各类天气普通通知",
+                    subtitle = "双按钮、每日提醒、明日预告和各类天气普通通知",
                     value = "",
                     icon = Icons.Default.ChevronRight,
                     enabled = normalNotificationActions.isNotEmpty(),
                     onClick = {
                         openQuickActionSheet(
                             title = "普通通知测试",
-                            description = "勾选要触发的每日提醒、明日预告或普通天气通知。",
+                            description = "勾选要触发的双按钮、每日提醒、明日预告或普通天气通知。",
                             actions = normalNotificationActions,
                             confirmText = "触发",
-                            requiresConfirm = false
+                            requiresConfirm = false,
+                            defaultSelected = false
                         )
                     },
                     cardTitleStyle = cardTitleStyle,
@@ -412,17 +426,18 @@ fun DeveloperPage(
                 RowDivider()
                 ActionSettingItem(
                     title = "实况通知测试",
-                    subtitle = "胶囊状态、识别结果、模型加载、网速和各类天气实况",
+                    subtitle = "双按钮、每日提醒、胶囊状态、识别结果、模型加载、网速和各类天气实况",
                     value = "",
                     icon = Icons.Default.ChevronRight,
                     enabled = liveNotificationActions.isNotEmpty(),
                     onClick = {
                         openQuickActionSheet(
                             title = "实况通知测试",
-                            description = "勾选要触发的实况通知。天气项只走实况形态，普通形态请在普通通知测试中触发。",
+                            description = "勾选要触发的实况通知。每日提醒需开启实况胶囊开关才会以实况形态显示。",
                             actions = liveNotificationActions,
                             confirmText = "触发",
-                            requiresConfirm = false
+                            requiresConfirm = false,
+                            defaultSelected = false
                         )
                     },
                     cardTitleStyle = cardTitleStyle,
@@ -610,8 +625,10 @@ private fun DisabledDeveloperCard(
 
 @Composable
 private fun DeveloperOptionsCard(
+    appBackgroundCardAlphaPercent: Int,
     liveNotificationTemplateMode: String,
     onOpenLogExportSheet: () -> Unit,
+    onAppBackgroundCardAlphaPercentChange: (Int) -> Unit,
     onLiveNotificationTemplateModeChange: (String) -> Unit
 ) {
     val haptics = rememberAppHaptics()
@@ -622,7 +639,58 @@ private fun DeveloperOptionsCard(
     val modes = LiveNotificationTemplateMode.ALL
     val normalizedMode = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode)
     val selectedIndex = modes.indexOf(normalizedMode).takeIf { it >= 0 } ?: 0
+    val normalizedCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(appBackgroundCardAlphaPercent)
     SettingsCard {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "壁纸卡片透明度",
+                style = titleStyle,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "控制导入背景图片后卡片和底栏的玻璃表面透明度；普通主题不受影响。",
+                style = subtitleStyle
+            )
+            Text(
+                text = "当前：$normalizedCardAlphaPercent%",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Slider(
+                value = normalizedCardAlphaPercent.toFloat(),
+                onValueChange = { value ->
+                    val nextPercent = value.roundToInt().coerceIn(
+                        MySettings.APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
+                        MySettings.APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT
+                    )
+                    if (nextPercent != normalizedCardAlphaPercent) {
+                        haptics.selection()
+                        onAppBackgroundCardAlphaPercentChange(nextPercent)
+                    }
+                },
+                valueRange = MySettings.APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT.toFloat()..MySettings.APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT.toFloat(),
+                steps = 0
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "更通透",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "更实",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        RowDivider()
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -787,7 +855,8 @@ private data class QuickActionSheetSpec(
     val description: String,
     val actions: List<DebugAction>,
     val confirmText: String,
-    val requiresConfirm: Boolean
+    val requiresConfirm: Boolean,
+    val defaultSelected: Boolean
 )
 
 private data class DebugActionBatch(
@@ -805,7 +874,7 @@ private fun DebugActionSelectSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptics = rememberAppHaptics()
     var selectedIds by remember(spec) {
-        mutableStateOf(spec.actions.map { it.id }.toSet())
+        mutableStateOf(if (spec.defaultSelected) spec.actions.map { it.id }.toSet() else emptySet())
     }
     val selectedActions = remember(spec, selectedIds) {
         spec.actions.filter { it.id in selectedIds }

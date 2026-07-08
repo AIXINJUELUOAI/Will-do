@@ -486,18 +486,4 @@ class App : Application() {
         )
         smsObserver?.register()
     }
-
-    private fun currentProcessName(): String {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return getProcessName().orEmpty()
-        }
-        return runCatching {
-            val pid = android.os.Process.myPid()
-            val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            manager.runningAppProcesses
-                ?.firstOrNull { it.pid == pid }
-                ?.processName
-                .orEmpty()
-        }.getOrDefault("")
-    }
 }

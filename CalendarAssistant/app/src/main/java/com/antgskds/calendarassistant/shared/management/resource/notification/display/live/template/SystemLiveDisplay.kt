@@ -48,6 +48,17 @@ object SystemLiveDisplay {
         )
     }
 
+    fun quickMemoRecording(title: String, content: String): CapsuleDisplayModel {
+        val primary = cleanTitle(title) ?: "录音中：00:00"
+        val secondary = cleanTitle(content) ?: "松开保存"
+        return CapsuleDisplayModel(
+            shortText = primary,
+            primaryText = primary,
+            secondaryText = secondary,
+            expandedText = secondary
+        )
+    }
+
     private fun compactPrimaryTitle(shortTitle: String, detailTitle: String?): String {
         val short = compactShortTitle(shortTitle)
         val detail = compactTitleDetail(detailTitle, PRIMARY_TITLE_MAX_CHARS - short.length - 1)

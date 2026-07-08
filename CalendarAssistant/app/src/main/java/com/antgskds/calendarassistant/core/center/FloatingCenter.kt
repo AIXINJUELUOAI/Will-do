@@ -19,10 +19,14 @@ class FloatingCenter(
         return permissionCenter.canDrawOverlays(context)
     }
 
-    fun startFloatingService(): Boolean {
+    fun startFloatingService(initialInputMode: String? = null): Boolean {
         if (!canDrawOverlays()) return false
         return try {
-            appContext.startService(Intent(appContext, FloatingScheduleService::class.java))
+            appContext.startService(Intent(appContext, FloatingScheduleService::class.java).apply {
+                if (initialInputMode != null) {
+                    putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, initialInputMode)
+                }
+            })
             true
         } catch (e: Exception) {
             Log.e(TAG, "Start floating service failed", e)

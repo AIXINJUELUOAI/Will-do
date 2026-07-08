@@ -93,6 +93,8 @@ fun HomeScreen(
     val settings by settingsViewModel.settings.collectAsState()
     val uiState by mainViewModel.uiState.collectAsState()
     val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
+    val quickMemos by mainViewModel.quickMemos.collectAsState()
+    val quickMemoCount = quickMemos.size
 
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
@@ -201,6 +203,7 @@ fun HomeScreen(
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var selectedNoteAction by remember { mutableStateOf<NoteEntity?>(null) }
     var selectedQuickMemoAction by remember { mutableStateOf<QuickMemoEntity?>(null) }
+    var showClearQuickMemosConfirm by remember { mutableStateOf(false) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -214,6 +217,10 @@ fun HomeScreen(
             showAddEventDialog = true
         }
         pendingAddDialog = false
+    }
+
+    LaunchedEffect(quickMemoCount) {
+        if (quickMemoCount <= 0) showClearQuickMemosConfirm = false
     }
 
     fun beginEdit(event: Event) {
@@ -399,7 +406,8 @@ fun HomeScreen(
             sidebar = {
                 AppBackgroundStyleTheme(
                     enabled = hasAppBackground,
-                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                    cardAlphaPercent = settings.appBackgroundCardAlphaPercent
                 ) {
                     SettingsSidebar(
                         isDarkMode = settings.isDarkMode,
@@ -438,6 +446,8 @@ fun HomeScreen(
                         onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
                         onRequestDeleteNote = { note -> selectedNoteAction = note },
                         onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
+                        onRequestClearQuickMemos = { showClearQuickMemosConfirm = true },
+                        quickMemoCount = quickMemoCount,
                         onOpenQuickMemoDetail = onOpenQuickMemoDetail,
                         onScheduleExpandedChange = { isScheduleExpanded = it },
                         onScheduleProgressChange = { scheduleProgress = it },
@@ -479,6 +489,7 @@ fun HomeScreen(
             },
             backgroundMode = hasAppBackground,
             miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+            cardAlphaPercent = settings.appBackgroundCardAlphaPercent,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -505,6 +516,25 @@ fun HomeScreen(
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = onConfirmClipboardPrompt,
             onDismiss = onDismissClipboardPrompt,
+            modifier = Modifier
+                .padding(bottom = cardFloatingBarOffset + 16.dp)
+        )
+
+        PredictiveFloatingActionCard(
+            visible = showClearQuickMemosConfirm && quickMemoCount > 0,
+            title = "确认清空",
+            content = "此操作将永久删除 $quickMemoCount 条随口记。\n删除后将无法恢复。",
+            confirmText = "删除",
+            dismissText = "取消",
+            isDestructive = true,
+            isLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = {
+                selectedQuickMemoAction = null
+                showClearQuickMemosConfirm = false
+                mainViewModel.clearAllQuickMemos()
+            },
+            onDismiss = { showClearQuickMemosConfirm = false },
             modifier = Modifier
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )

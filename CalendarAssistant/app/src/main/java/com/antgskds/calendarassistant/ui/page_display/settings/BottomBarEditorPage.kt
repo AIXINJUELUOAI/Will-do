@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.Icon
@@ -66,27 +65,19 @@ fun getHomeEntryIcon(key: String): Painter {
         HomeEntryKey.SIDEBAR -> painterResource(R.drawable.floatingbar_menu)
         HomeEntryKey.TODAY -> painterResource(R.drawable.floatingbar_today)
         HomeEntryKey.ALL -> painterResource(R.drawable.floatingbar_all)
+        HomeEntryKey.NOTE -> painterResource(R.drawable.ic_stat_quickmemo)
         else -> painterResource(R.drawable.floatingbar_today)
     }
 }
 
 @Composable
 private fun HomeEntryIcon(key: String, modifier: Modifier, tint: androidx.compose.ui.graphics.Color) {
-    if (key == HomeEntryKey.NOTE) {
-        Icon(
-            imageVector = Icons.Outlined.StickyNote2,
-            contentDescription = null,
-            tint = tint,
-            modifier = modifier
-        )
-    } else {
-        Icon(
-            painter = getHomeEntryIcon(key),
-            contentDescription = null,
-            tint = tint,
-            modifier = modifier
-        )
-    }
+    Icon(
+        painter = getHomeEntryIcon(key),
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

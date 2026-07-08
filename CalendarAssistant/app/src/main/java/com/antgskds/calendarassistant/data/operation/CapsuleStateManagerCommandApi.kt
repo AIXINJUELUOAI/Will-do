@@ -4,6 +4,7 @@ import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 
 class CapsuleStateManagerCommandApi(
@@ -21,8 +22,13 @@ class CapsuleStateManagerCommandApi(
         capsuleStateManager.showOcrProgress(title, content)
     }
 
-    override fun showOcrResult(title: String, content: String, durationMs: Long) {
-        capsuleStateManager.showOcrResult(title, content, durationMs)
+    override fun showOcrResult(
+        title: String,
+        content: String,
+        durationMs: Long,
+        actions: List<CapsuleActionSpec>
+    ) {
+        capsuleStateManager.showOcrResult(title, content, durationMs, actions)
     }
 
     override fun clearOcrCapsule() {
@@ -43,6 +49,14 @@ class CapsuleStateManagerCommandApi(
 
     override fun clearTextQuickMemo() {
         capsuleStateManager.clearTextQuickMemo()
+    }
+
+    override fun showQuickMemoRecording(title: String, content: String) {
+        capsuleStateManager.showQuickMemoRecording(title, content)
+    }
+
+    override fun clearQuickMemoRecording() {
+        capsuleStateManager.clearQuickMemoRecording()
     }
 
     override fun showModelLoading(title: String, content: String) {

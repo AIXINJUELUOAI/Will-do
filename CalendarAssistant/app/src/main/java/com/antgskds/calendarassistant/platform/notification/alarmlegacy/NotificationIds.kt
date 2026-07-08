@@ -15,6 +15,7 @@ object NotificationIds {
     const val DAILY_SUMMARY_MORNING = 0x51A15
     const val DAILY_SUMMARY_EVENING = 0x51A16
     const val IMAGE_SHARE_RECOGNITION_STATUS = 0x51A17
+    const val QUICK_MEMO_RECORDING_CAPSULE = 0x51A18
 
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"

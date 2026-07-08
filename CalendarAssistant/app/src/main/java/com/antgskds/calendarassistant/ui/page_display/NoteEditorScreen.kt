@@ -357,7 +357,8 @@ fun NoteEditorScreen(
 
     AppBackgroundStyleTheme(
         enabled = hasAppBackground,
-        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
     ) {
     Box(
         modifier = modifier

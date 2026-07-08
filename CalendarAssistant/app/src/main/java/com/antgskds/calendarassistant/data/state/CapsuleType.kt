@@ -21,4 +21,5 @@ object CapsuleType {
     const val WEATHER_ALERT = 8
     const val VOICE_TRANSCRIPTION = 9
     const val TEXT_QUICK_MEMO = 10
+    const val QUICK_MEMO_RECORDING = 11
 }

@@ -105,6 +105,21 @@ object ConfigCatalog {
             set = { s, v -> s.copy(appBackgroundWallpaperBlurEnabled = v != 0) },
         ),
         ConfigItem(
+            domain = ConfigDomain.APPEARANCE,
+            kind = ConfigKind.USER_SETTING,
+            key = "appearance.background.card_alpha_percent",
+            label = "壁纸卡片透明度",
+            description = "导入背景图片后，控制卡片和底栏玻璃表面的透明度百分比。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.IntInput(
+                min = MySettings.APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
+                max = MySettings.APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT,
+                unitLabel = " %"
+            ),
+            get = { it.appBackgroundCardAlphaPercent },
+            set = { s, v -> s.copy(appBackgroundCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(v)) },
+        ),
+        ConfigItem(
             domain = ConfigDomain.RECOGNITION,
             kind = ConfigKind.USER_SETTING,
             key = "recognition.user.mode",
@@ -260,6 +275,28 @@ object ConfigCatalog {
             control = ConfigControl.Toggle,
             get = { if (it.floatingVoiceLongPressEnabled) 1 else 0 },
             set = { s, v -> s.copy(floatingVoiceLongPressEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating_text_quick_memo.auto_pin_enabled",
+            label = "悬浮窗文本随口记同步挂起",
+            description = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.Toggle,
+            get = { if (it.floatingTextQuickMemoAutoPinEnabled) 1 else 0 },
+            set = { s, v -> s.copy(floatingTextQuickMemoAutoPinEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.quick_memo.auto_pin_enabled",
+            label = "语音随口记同步挂起",
+            description = "语音随口记转写完成后，自动挂到实况通知；需开启实况通知。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.Toggle,
+            get = { if (it.voiceQuickMemoAutoPinEnabled) 1 else 0 },
+            set = { s, v -> s.copy(voiceQuickMemoAutoPinEnabled = v != 0) },
         ),
         // —— 天气预测风险阈值（软件自算的 WeatherRiskAlert，非官方 API 预警）——
         ConfigItem(

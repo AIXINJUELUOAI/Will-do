@@ -1,2 +1,2 @@
-com.antgskds.calendarassistant.xposed.SelfHook
-com.antgskds.calendarassistant.xposed.MiuiIslandDispatcherHook
+com.antgskds.calendarassistant.platform.xposed.SelfHook
+com.antgskds.calendarassistant.platform.xposed.MiuiIslandDispatcherHook

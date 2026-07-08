@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.data.model.MySettings
 import kotlin.math.roundToInt
 
 data class AppBackgroundStylePalette(
@@ -54,22 +55,31 @@ val LocalAppBackgroundWallpaperBitmap = staticCompositionLocalOf<ImageBitmap?> {
 val LocalAppBackgroundRootSize = staticCompositionLocalOf { IntSize.Zero }
 val LocalAppBackgroundStyleEnabled = staticCompositionLocalOf { false }
 val LocalAppBackgroundMiuiBlurEnabled = staticCompositionLocalOf { false }
+val LocalAppBackgroundCardAlphaPercent = staticCompositionLocalOf {
+    MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
+}
 
 @Composable
 fun AppBackgroundStyleTheme(
     enabled: Boolean,
     miuiBlurEnabled: Boolean = false,
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     content: @Composable () -> Unit
 ) {
+    val normalizedCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent)
     CompositionLocalProvider(
         LocalAppBackgroundStyleEnabled provides enabled,
-        LocalAppBackgroundMiuiBlurEnabled provides (enabled && miuiBlurEnabled)
+        LocalAppBackgroundMiuiBlurEnabled provides (enabled && miuiBlurEnabled),
+        LocalAppBackgroundCardAlphaPercent provides normalizedCardAlphaPercent
     ) {
         if (!enabled) {
             content()
         } else {
             MaterialTheme(
-                colorScheme = MaterialTheme.colorScheme.appBackgroundColorScheme(miuiBlurEnabled),
+                colorScheme = MaterialTheme.colorScheme.appBackgroundColorScheme(
+                    miuiBlurEnabled = miuiBlurEnabled,
+                    cardAlphaPercent = normalizedCardAlphaPercent
+                ),
                 typography = MaterialTheme.typography,
                 shapes = MaterialTheme.shapes,
                 content = content
@@ -82,15 +92,22 @@ fun AppBackgroundStyleTheme(
 fun SettingsBackgroundStyleTheme(
     enabled: Boolean,
     miuiBlurEnabled: Boolean = false,
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     content: @Composable () -> Unit
 ) {
-    AppBackgroundStyleTheme(enabled = enabled, miuiBlurEnabled = miuiBlurEnabled, content = content)
+    AppBackgroundStyleTheme(
+        enabled = enabled,
+        miuiBlurEnabled = miuiBlurEnabled,
+        cardAlphaPercent = cardAlphaPercent,
+        content = content
+    )
 }
 
 @Composable
 fun rememberAppBackgroundStylePalette(
     enabled: Boolean = true,
-    miuiBlurEnabled: Boolean = false
+    miuiBlurEnabled: Boolean = false,
+    cardAlphaPercent: Int? = null
 ): AppBackgroundStylePalette {
     if (!enabled) {
         val scheme = MaterialTheme.colorScheme
@@ -108,10 +125,22 @@ fun rememberAppBackgroundStylePalette(
     }
 
     val dark = MaterialTheme.colorScheme.isCurrentThemeDarkGlass()
+    val effectiveCardAlphaPercent = cardAlphaPercent
+        ?.let(MySettings::normalizeAppBackgroundCardAlphaPercent)
+        ?: LocalAppBackgroundCardAlphaPercent.current
     return if (dark) {
         AppBackgroundStylePalette(
-            surface = Color.Black.copy(alpha = if (miuiBlurEnabled) 0.34f else 0.54f),
-            surfaceStrong = Color.Black.copy(alpha = if (miuiBlurEnabled) 0.44f else 0.62f),
+            surface = Color.Black.copy(
+                alpha = appBackgroundSurfaceAlpha(effectiveCardAlphaPercent, dark = true, miuiBlurEnabled = miuiBlurEnabled)
+            ),
+            surfaceStrong = Color.Black.copy(
+                alpha = appBackgroundSurfaceAlpha(
+                    effectiveCardAlphaPercent,
+                    dark = true,
+                    miuiBlurEnabled = miuiBlurEnabled,
+                    strong = true
+                )
+            ),
             content = Color.White,
             secondaryContent = Color.White.copy(alpha = 0.74f),
             accent = Color.White.copy(alpha = 0.18f),
@@ -122,8 +151,17 @@ fun rememberAppBackgroundStylePalette(
         )
     } else {
         AppBackgroundStylePalette(
-            surface = Color.White.copy(alpha = if (miuiBlurEnabled) 0.46f else 0.66f),
-            surfaceStrong = Color.White.copy(alpha = if (miuiBlurEnabled) 0.58f else 0.76f),
+            surface = Color.White.copy(
+                alpha = appBackgroundSurfaceAlpha(effectiveCardAlphaPercent, dark = false, miuiBlurEnabled = miuiBlurEnabled)
+            ),
+            surfaceStrong = Color.White.copy(
+                alpha = appBackgroundSurfaceAlpha(
+                    effectiveCardAlphaPercent,
+                    dark = false,
+                    miuiBlurEnabled = miuiBlurEnabled,
+                    strong = true
+                )
+            ),
             content = Color(0xFF15171C),
             secondaryContent = Color(0xFF15171C).copy(alpha = 0.68f),
             accent = Color.Black.copy(alpha = 0.08f),
@@ -133,6 +171,25 @@ fun rememberAppBackgroundStylePalette(
             blurRadius = 28.dp
         )
     }
+}
+
+fun appBackgroundSurfaceAlpha(
+    cardAlphaPercent: Int,
+    dark: Boolean,
+    miuiBlurEnabled: Boolean,
+    strong: Boolean = false
+): Float {
+    val offset = when {
+        dark && miuiBlurEnabled && strong -> -0.22f
+        dark && miuiBlurEnabled -> -0.32f
+        dark && strong -> -0.04f
+        dark -> -0.12f
+        miuiBlurEnabled && strong -> -0.08f
+        miuiBlurEnabled -> -0.20f
+        strong -> 0.10f
+        else -> 0f
+    }
+    return appBackgroundAlphaWithOffset(cardAlphaPercent, offset)
 }
 
 fun Modifier.appBackgroundGlass(
@@ -243,42 +300,39 @@ private fun AppBackgroundBlurredBackdrop(
     }
 }
 
-private fun ColorScheme.appBackgroundColorScheme(miuiBlurEnabled: Boolean): ColorScheme {
+private fun ColorScheme.appBackgroundColorScheme(
+    miuiBlurEnabled: Boolean,
+    cardAlphaPercent: Int
+): ColorScheme {
     return if (isCurrentThemeDarkGlass()) {
-        darkAppBackgroundColorScheme(miuiBlurEnabled)
+        darkAppBackgroundColorScheme(miuiBlurEnabled, cardAlphaPercent)
     } else {
-        lightAppBackgroundColorScheme(miuiBlurEnabled)
+        lightAppBackgroundColorScheme(miuiBlurEnabled, cardAlphaPercent)
     }
 }
 
-private fun ColorScheme.darkAppBackgroundColorScheme(miuiBlurEnabled: Boolean): ColorScheme {
+private fun ColorScheme.darkAppBackgroundColorScheme(
+    miuiBlurEnabled: Boolean,
+    cardAlphaPercent: Int
+): ColorScheme {
     val primaryText = Color.White
     val secondaryText = Color.White.copy(alpha = 0.74f)
-    val lowAlpha = if (miuiBlurEnabled) 0.34f else 0.54f
-    val normalAlpha = if (miuiBlurEnabled) 0.38f else 0.58f
-    val highAlpha = if (miuiBlurEnabled) 0.44f else 0.62f
-    val highestAlpha = if (miuiBlurEnabled) 0.50f else 0.66f
+    val surfaceAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.28f else 0.16f)
+    val variantAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.36f else -0.18f)
+    val lowestAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.48f else -0.44f)
+    val lowAlpha = appBackgroundSurfaceAlpha(cardAlphaPercent, dark = true, miuiBlurEnabled = miuiBlurEnabled)
+    val normalAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.28f else -0.08f)
+    val highAlpha = appBackgroundSurfaceAlpha(cardAlphaPercent, dark = true, miuiBlurEnabled = miuiBlurEnabled, strong = true)
+    val highestAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.16f else 0f)
 
     return copy(
-        primary = primaryText,
-        onPrimary = Color.Black,
-        primaryContainer = Color.White.copy(alpha = 0.18f),
-        onPrimaryContainer = primaryText,
-        secondary = Color.White.copy(alpha = 0.82f),
-        onSecondary = Color.Black,
-        secondaryContainer = Color.White.copy(alpha = 0.14f),
-        onSecondaryContainer = primaryText,
-        tertiary = Color.White.copy(alpha = 0.82f),
-        onTertiary = Color.Black,
-        tertiaryContainer = Color.White.copy(alpha = 0.14f),
-        onTertiaryContainer = primaryText,
         background = Color.Transparent,
         onBackground = primaryText,
-        surface = Color.Black.copy(alpha = if (miuiBlurEnabled) 0.38f else 0.82f),
+        surface = Color.Black.copy(alpha = surfaceAlpha),
         onSurface = primaryText,
-        surfaceVariant = Color.Black.copy(alpha = if (miuiBlurEnabled) 0.30f else 0.48f),
+        surfaceVariant = Color.Black.copy(alpha = variantAlpha),
         onSurfaceVariant = secondaryText,
-        surfaceContainerLowest = Color.Black.copy(alpha = if (miuiBlurEnabled) 0.18f else 0.22f),
+        surfaceContainerLowest = Color.Black.copy(alpha = lowestAlpha),
         surfaceContainerLow = Color.Black.copy(alpha = lowAlpha),
         surfaceContainer = Color.Black.copy(alpha = normalAlpha),
         surfaceContainerHigh = Color.Black.copy(alpha = highAlpha),
@@ -287,43 +341,32 @@ private fun ColorScheme.darkAppBackgroundColorScheme(miuiBlurEnabled: Boolean): 
         outlineVariant = Color.White.copy(alpha = if (miuiBlurEnabled) 0.26f else 0.18f),
         inverseSurface = Color.White,
         inverseOnSurface = Color.Black,
-        inversePrimary = Color.Black,
-        scrim = Color.Black,
-        error = Color(0xFFFFB4AB),
-        onError = Color(0xFF690005),
-        errorContainer = Color(0xFF93000A),
-        onErrorContainer = Color(0xFFFFDAD6)
+        scrim = Color.Black
     )
 }
 
-private fun ColorScheme.lightAppBackgroundColorScheme(miuiBlurEnabled: Boolean): ColorScheme {
+private fun ColorScheme.lightAppBackgroundColorScheme(
+    miuiBlurEnabled: Boolean,
+    cardAlphaPercent: Int
+): ColorScheme {
     val primaryText = Color(0xFF15171C)
     val secondaryText = primaryText.copy(alpha = 0.68f)
-    val lowAlpha = if (miuiBlurEnabled) 0.46f else 0.66f
-    val normalAlpha = if (miuiBlurEnabled) 0.52f else 0.72f
-    val highAlpha = if (miuiBlurEnabled) 0.60f else 0.78f
-    val highestAlpha = if (miuiBlurEnabled) 0.68f else 0.84f
+    val surfaceAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.08f else 0.16f)
+    val variantAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.26f else -0.08f)
+    val lowestAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.36f else -0.28f)
+    val lowAlpha = appBackgroundSurfaceAlpha(cardAlphaPercent, dark = false, miuiBlurEnabled = miuiBlurEnabled)
+    val normalAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.14f else 0.06f)
+    val highAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) -0.06f else 0.12f)
+    val highestAlpha = appBackgroundAlphaWithOffset(cardAlphaPercent, if (miuiBlurEnabled) 0.02f else 0.18f)
 
     return copy(
-        primary = primaryText,
-        onPrimary = Color.White,
-        primaryContainer = Color.White.copy(alpha = 0.70f),
-        onPrimaryContainer = primaryText,
-        secondary = primaryText.copy(alpha = 0.82f),
-        onSecondary = Color.White,
-        secondaryContainer = Color.White.copy(alpha = 0.58f),
-        onSecondaryContainer = primaryText,
-        tertiary = primaryText.copy(alpha = 0.82f),
-        onTertiary = Color.White,
-        tertiaryContainer = Color.White.copy(alpha = 0.58f),
-        onTertiaryContainer = primaryText,
         background = Color.Transparent,
         onBackground = primaryText,
-        surface = Color.White.copy(alpha = if (miuiBlurEnabled) 0.58f else 0.82f),
+        surface = Color.White.copy(alpha = surfaceAlpha),
         onSurface = primaryText,
-        surfaceVariant = Color.White.copy(alpha = if (miuiBlurEnabled) 0.40f else 0.58f),
+        surfaceVariant = Color.White.copy(alpha = variantAlpha),
         onSurfaceVariant = secondaryText,
-        surfaceContainerLowest = Color.White.copy(alpha = if (miuiBlurEnabled) 0.30f else 0.38f),
+        surfaceContainerLowest = Color.White.copy(alpha = lowestAlpha),
         surfaceContainerLow = Color.White.copy(alpha = lowAlpha),
         surfaceContainer = Color.White.copy(alpha = normalAlpha),
         surfaceContainerHigh = Color.White.copy(alpha = highAlpha),
@@ -332,17 +375,17 @@ private fun ColorScheme.lightAppBackgroundColorScheme(miuiBlurEnabled: Boolean):
         outlineVariant = Color.White.copy(alpha = if (miuiBlurEnabled) 0.42f else 0.30f),
         inverseSurface = Color(0xFF15171C),
         inverseOnSurface = Color.White,
-        inversePrimary = Color.White,
-        scrim = Color.Black,
-        error = Color(0xFFBA1A1A),
-        onError = Color.White,
-        errorContainer = Color(0xFFFFDAD6),
-        onErrorContainer = Color(0xFF410002)
+        scrim = Color.Black
     )
 }
 
+private fun appBackgroundAlphaWithOffset(cardAlphaPercent: Int, offset: Float): Float {
+    val base = MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent) / 100f
+    return (base + offset).coerceIn(0f, 1f)
+}
+
 private fun ColorScheme.isCurrentThemeDarkGlass(): Boolean {
-    return background.luminance() < 0.5f
+    return surface.luminance() < 0.5f
 }
 
 fun shouldUseLightSystemBarsForAppBackground(defaultLight: Boolean): Boolean {

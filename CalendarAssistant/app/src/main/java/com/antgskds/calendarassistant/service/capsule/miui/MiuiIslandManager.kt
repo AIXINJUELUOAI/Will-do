@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.service.capsule.miui
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
@@ -161,6 +162,7 @@ object MiuiIslandManager {
             CapsuleType.OCR_PROGRESS,
             CapsuleType.OCR_RESULT,
             CapsuleType.MODEL_LOADING,
+            CapsuleType.QUICK_MEMO_RECORDING,
             CapsuleType.TEXT_QUICK_MEMO -> true
             else -> false
         }
@@ -188,7 +190,7 @@ object MiuiIslandManager {
         val iconResId = IconUtils.getSmallIconForCapsule(context, item)
         val bitmap = CapsuleUiUtils.drawableToBitmap(context, iconResId)
         if (bitmap != null) {
-            val icon = Icon.createWithBitmap(bitmap)
+            val icon = Icon.createWithBitmap(CapsuleUiUtils.tintBitmap(bitmap, Color.WHITE))
             return icon to icon
         }
         val fallback = Icon.createWithResource(context, iconResId)
@@ -210,25 +212,34 @@ object MiuiIslandManager {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): ActionPayload {
-        val action = item.display.action ?: return emptyActionPayload()
-        val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
-            this.action = action.receiverAction
-            if (action.extraLongKey != null && action.extraLongValue != null) {
-                putExtra(action.extraLongKey, action.extraLongValue)
-            } else {
-                putExtra(EventActionReceiver.EXTRA_EVENT_ID, item.id)
+        val actionSpecs = item.display.effectiveActions
+        if (actionSpecs.isEmpty()) return emptyActionPayload()
+
+        var firstActionIntentUri: String? = null
+        val actions = actionSpecs.mapIndexed { index, action ->
+            val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
+                this.action = action.receiverAction
+                if (action.extraLongKey != null && action.extraLongValue != null) {
+                    putExtra(action.extraLongKey, action.extraLongValue)
+                } else {
+                    putExtra(EventActionReceiver.EXTRA_EVENT_ID, item.id)
+                }
             }
+            if (index == 0) {
+                firstActionIntentUri = broadcastIntent.toUri(Intent.URI_INTENT_SCHEME)
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                item.id.hashCode() xor action.receiverAction.hashCode() xor index,
+                broadcastIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            MiuiIslandAction(action.label, pendingIntent)
         }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            item.id.hashCode() + 11,
-            broadcastIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         return ActionPayload(
-            actions = listOf(MiuiIslandAction(action.label, pendingIntent)),
-            actionTitle = action.label,
-            actionIntentUri = broadcastIntent.toUri(Intent.URI_INTENT_SCHEME)
+            actions = actions,
+            actionTitle = actions.firstOrNull()?.title,
+            actionIntentUri = firstActionIntentUri
         )
     }
 
@@ -287,6 +298,7 @@ object MiuiIslandManager {
             CapsuleType.WEATHER_ALERT -> "天气提醒"
             CapsuleType.VOICE_TRANSCRIPTION -> "语音转写"
             CapsuleType.TEXT_QUICK_MEMO -> "随口记"
+            CapsuleType.QUICK_MEMO_RECORDING -> "录音中"
             CapsuleType.OCR_PROGRESS,
             CapsuleType.NETWORK_SPEED -> "进行中"
             else -> {

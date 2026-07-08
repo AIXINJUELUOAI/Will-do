@@ -52,6 +52,7 @@ class QuickMemoCenter(
     private val _suggestions = MutableStateFlow<List<QuickMemoSuggestionEntity>>(emptyList())
     val suggestions: StateFlow<List<QuickMemoSuggestionEntity>> = _suggestions.asStateFlow()
     private val activeTranscriptionIds = mutableSetOf<Long>()
+    private val autoPinAfterTranscriptionIds = mutableSetOf<Long>()
 
     fun start() {
         appScope.launch(Dispatchers.IO) {
@@ -85,9 +86,13 @@ class QuickMemoCenter(
         audioPath: String,
         durationMs: Long,
         bodyText: String = "",
-        asTodo: Boolean = false
+        asTodo: Boolean = false,
+        autoPinOnTranscriptionSuccess: Boolean = false
     ): Long = withContext(Dispatchers.IO) {
         val id = repository.createVoiceMemo(audioPath, durationMs, bodyText, asTodo)
+        if (autoPinOnTranscriptionSuccess) {
+            markAutoPinAfterTranscription(id)
+        }
         processVoiceMemoAsync(id)
         id
     }
@@ -161,6 +166,11 @@ class QuickMemoCenter(
         repository.deleteQuickMemo(id)
     }
 
+    suspend fun clearAllQuickMemos(): Int = withContext(Dispatchers.IO) {
+        capsuleCommandApi?.clearTextQuickMemo()
+        repository.clearAllQuickMemos()
+    }
+
     suspend fun getSuggestion(id: Long): QuickMemoSuggestionEntity? = withContext(Dispatchers.IO) {
         repository.getSuggestion(id)
     }
@@ -199,6 +209,7 @@ class QuickMemoCenter(
                         } else {
                             repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.SUCCESS, text)
                             analyzeTextForSuggestions(id, text)
+                            maybeAutoPinVoiceMemoAfterTranscription(id)
                         }
                     }
                     is TranscriptionResult.Failure -> {
@@ -207,6 +218,7 @@ class QuickMemoCenter(
                             return@launch
                         }
                         Log.w(TAG, "语音转写失败: ${result.message}")
+                        clearAutoPinAfterTranscription(id)
                         repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     }
                 }
@@ -217,9 +229,13 @@ class QuickMemoCenter(
                     return@launch
                 }
                 Log.e(TAG, "处理语音随口记失败", e)
+                clearAutoPinAfterTranscription(id)
                 repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
             } finally {
                 finishTranscription(id)
+                if (!restartForNewAudio) {
+                    clearAutoPinAfterTranscription(id)
+                }
                 if (restartForNewAudio) {
                     processVoiceMemoAsync(id)
                 }
@@ -237,6 +253,25 @@ class QuickMemoCenter(
 
     private fun finishTranscription(id: Long) = synchronized(activeTranscriptionIds) {
         activeTranscriptionIds.remove(id)
+    }
+
+    private fun markAutoPinAfterTranscription(id: Long) = synchronized(autoPinAfterTranscriptionIds) {
+        autoPinAfterTranscriptionIds.add(id)
+    }
+
+    private fun consumeAutoPinAfterTranscription(id: Long): Boolean = synchronized(autoPinAfterTranscriptionIds) {
+        autoPinAfterTranscriptionIds.remove(id)
+    }
+
+    private fun clearAutoPinAfterTranscription(id: Long) = synchronized(autoPinAfterTranscriptionIds) {
+        autoPinAfterTranscriptionIds.remove(id)
+    }
+
+    private suspend fun maybeAutoPinVoiceMemoAfterTranscription(id: Long) {
+        if (!consumeAutoPinAfterTranscription(id)) return
+        if (settingsQueryApi?.settings?.value?.isLiveCapsuleEnabled != true) return
+        runCatching { pinQuickMemo(id) }
+            .onFailure { Log.w(TAG, "语音随口记自动挂起失败", it) }
     }
 
     private fun refreshPinnedTextQuickMemo(memo: QuickMemoEntity) {

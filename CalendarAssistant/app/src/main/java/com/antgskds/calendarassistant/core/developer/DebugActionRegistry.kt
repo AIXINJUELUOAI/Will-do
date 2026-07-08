@@ -7,6 +7,7 @@ import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationBehavior
+import com.antgskds.calendarassistant.feature.api.notification.model.NotificationAction
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationDisplaySnapshot
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKey
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKind
@@ -18,6 +19,8 @@ import com.antgskds.calendarassistant.feature.api.notification.model.Notificatio
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.query.DailySummaryPayload
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.ScheduleNormalDisplay
 import java.time.LocalDate
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureDisplay
@@ -93,6 +96,9 @@ object DebugActionRegistry {
         DebugAction("test-plain-course", "测试普通通知·课程", CATEGORY_NOTIFICATION) { app ->
             firePlainSample(app, "course", "调试·课程", "高等数学即将开始，地点：教学楼 A203。", R.drawable.ic_stat_course)
         },
+        DebugAction("test-normal-double-action", "测试普通通知·双按钮", CATEGORY_NOTIFICATION) { app ->
+            fireNormalDoubleAction(app)
+        },
         DebugAction("test-daily-today", "测试每日提醒·今日", CATEGORY_NOTIFICATION) { app ->
             fireDailySummary(app, isMorning = true)
         },
@@ -112,6 +118,13 @@ object DebugActionRegistry {
         DebugAction("test-capsule-recognition-fail", "测试胶囊·识别失败", CATEGORY_CAPSULE) { app -> fireRecognitionFailure(app) },
         DebugAction("test-capsule-model-loading", "测试胶囊·模型加载", CATEGORY_CAPSULE) { app -> fireModelLoading(app) },
         DebugAction("test-capsule-network-speed", "测试胶囊·网速", CATEGORY_CAPSULE) { app -> fireNetworkSpeed(app) },
+        DebugAction("test-live-double-action", "测试实况通知·双按钮", CATEGORY_CAPSULE) { app -> fireLiveDoubleAction(app) },
+        DebugAction("test-live-daily-today", "测试实况通知·每日提醒今日", CATEGORY_CAPSULE) { app ->
+            fireDailySummary(app, isMorning = true, requireLive = true)
+        },
+        DebugAction("test-live-daily-tomorrow", "测试实况通知·每日提醒明日", CATEGORY_CAPSULE) { app ->
+            fireDailySummary(app, isMorning = false, requireLive = true)
+        },
         DebugAction("test-capsule-clear", "测试胶囊·清除", CATEGORY_CAPSULE) { app -> clearTestCapsules(app) },
         // —— 事件（写入持久化数据，标 dangerous）——
         DebugAction("create-recurring", "建测试事件：每日重复", CATEGORY_EVENT, dangerous = true) { app ->
@@ -625,7 +638,72 @@ object DebugActionRegistry {
         Log.d(DEBUG_TAG, "plain test fired: $title")
     }
 
-    private fun fireDailySummary(app: App, isMorning: Boolean) {
+    private fun fireNormalDoubleAction(app: App) {
+        val result = app.notificationCenter.publishPlainNotification(
+            NotificationRequest(
+                key = NotificationKey.debug("normal-double-action"),
+                kind = NotificationKind.DEBUG,
+                display = NotificationDisplaySnapshot(
+                    shortText = "双按钮测试",
+                    primaryText = "调试·普通通知双按钮",
+                    secondaryText = "用于验证普通通知是否同时展示两个操作按钮。",
+                    expandedText = "这条通知通过新通知链路发布，包含两个调试动作按钮。点击按钮只记录日志，不修改数据。"
+                ),
+                route = NotificationRoute.NORMAL,
+                notificationId = testNotificationId("normal_double_action"),
+                smallIconResId = R.drawable.ic_notification_small,
+                channelKey = App.CHANNEL_ID_POPUP,
+                category = "debug",
+                behavior = NotificationBehavior(timeoutAfterMillis = 60_000L),
+                tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME),
+                actions = debugNotificationActions("normal"),
+                source = "debug_normal_double_action"
+            )
+        )
+        Log.d(DEBUG_TAG, "normal double-action result=$result")
+    }
+
+    private fun fireLiveDoubleAction(app: App) {
+        if (!liveCapsuleReady(app)) return
+        app.capsuleCenter.showOcrResult(
+            title = "调试·实况双按钮",
+            content = "用于验证实况通知是否同时展示两个操作按钮。",
+            durationMs = 60_000L,
+            actions = debugCapsuleActions()
+        )
+        Log.d(DEBUG_TAG, "live double-action fired")
+    }
+
+    private fun debugNotificationActions(source: String): List<NotificationAction> {
+        return listOf(
+            NotificationAction(
+                key = EventActionReceiver.ACTION_DEBUG_PRIMARY,
+                label = "按钮一",
+                payload = mapOf("debug_source" to source, "debug_button" to "primary")
+            ),
+            NotificationAction(
+                key = EventActionReceiver.ACTION_DEBUG_SECONDARY,
+                label = "按钮二",
+                payload = mapOf("debug_source" to source, "debug_button" to "secondary")
+            )
+        )
+    }
+
+    private fun debugCapsuleActions(): List<CapsuleActionSpec> {
+        return listOf(
+            CapsuleActionSpec(
+                label = "按钮一",
+                receiverAction = EventActionReceiver.ACTION_DEBUG_PRIMARY
+            ),
+            CapsuleActionSpec(
+                label = "按钮二",
+                receiverAction = EventActionReceiver.ACTION_DEBUG_SECONDARY
+            )
+        )
+    }
+
+    private fun fireDailySummary(app: App, isMorning: Boolean, requireLive: Boolean = false) {
+        if (requireLive && !liveCapsuleReady(app)) return
         val settings = app.settingsQueryApi.settings.value
         val payload = app.dailySummaryQueryApi.buildPayload(
             isMorning = isMorning,

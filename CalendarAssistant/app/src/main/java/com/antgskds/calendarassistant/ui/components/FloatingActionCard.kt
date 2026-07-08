@@ -79,13 +79,14 @@ fun FloatingActionCardSurface(
     actionContent: (@Composable RowScope.() -> Unit)? = null
 ) {
     val haptics = rememberAppHaptics()
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1f)
 
     AppCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 24.dp),
         shape = RoundedCornerShape(24.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = containerColor,
         shadowElevation = 8.dp
     ) {
         if (actionContent != null && actionsBelowContent) {

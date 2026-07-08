@@ -145,6 +145,28 @@ fun LaboratoryPage(
                 }
             )
 
+            LaboratorySwitchCard(
+                title = "悬浮窗文本随口记同步挂起",
+                subtitle = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知",
+                checked = settings!!.floatingTextQuickMemoAutoPinEnabled,
+                onCheckedChange = { enabled ->
+                    settingsViewModel?.updatePreference(
+                        floatingTextQuickMemoAutoPinEnabled = enabled
+                    )
+                }
+            )
+
+            LaboratorySwitchCard(
+                title = "语音随口记同步挂起",
+                subtitle = "语音随口记转写完成后，自动挂到实况通知；需开启实况通知",
+                checked = settings!!.voiceQuickMemoAutoPinEnabled,
+                onCheckedChange = { enabled ->
+                    settingsViewModel?.updatePreference(
+                        voiceQuickMemoAutoPinEnabled = enabled
+                    )
+                }
+            )
+
             LaboratoryActionCard(
                 title = "语音转写模型",
                 subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),

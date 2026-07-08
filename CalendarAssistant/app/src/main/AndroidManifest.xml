@@ -152,7 +152,7 @@
             android:name=".core.service.image.ImageShareQuickMemoActivity"
             android:targetActivity=".core.service.image.ImageShareHandleActivity"
             android:label="@string/share_target_create_image_memo"
-            android:icon="@drawable/ic_share_quick_memo"
+            android:icon="@drawable/ic_stat_quickmemo"
             android:exported="true">
             <meta-data
                 android:name="com.antgskds.calendarassistant.meta.SHARE_MODE"
@@ -250,7 +250,8 @@
         <!-- 4. 侧边栏唤起服务 -->
         <service
             android:name=".platform.floating.EdgeBarService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".platform.receiver.AlarmReceiver" />
