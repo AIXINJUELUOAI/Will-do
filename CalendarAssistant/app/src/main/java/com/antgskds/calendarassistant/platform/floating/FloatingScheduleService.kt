@@ -72,6 +72,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
@@ -111,6 +112,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val ACTION_FLOATING_SHOWN = "com.antgskds.calendarassistant.floating.action.SHOWN"
         const val ACTION_FLOATING_HIDDEN = "com.antgskds.calendarassistant.floating.action.HIDDEN"
         const val EXTRA_IMAGE_URI = "extra_image_uri"
+        const val EXTRA_INITIAL_INPUT_MODE = "extra_initial_input_mode"
+        const val INPUT_MODE_SCHEDULE = "schedule"
+        const val INPUT_MODE_NOTE = "note"
         const val EXTRA_VOICE_AUDIO_PATH = "extra_voice_audio_path"
         const val EXTRA_VOICE_DURATION_MS = "extra_voice_duration_ms"
         const val EXTRA_VOICE_ERROR_MESSAGE = "extra_voice_error_message"
@@ -137,6 +141,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val voiceCaptureState = MutableStateFlow(QuickMemoVoiceCaptureState())
     private val recentVoiceMemoId = MutableStateFlow<Long?>(null)
+    private val requestedInputMode = MutableStateFlow(FloatingInputMode.SCHEDULE to 0L)
     private val audioRecorder by lazy { QuickMemoAudioRecorder(applicationContext) }
     private var voiceConfirmJob: Job? = null
     private var recentVoiceMemoJob: Job? = null
@@ -304,7 +309,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingScheduleService)
             setViewTreeSavedStateRegistryOwner(this@FloatingScheduleService)
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
 
             // 【修复关闭按钮重叠问题】
             // 在悬浮窗模式下，Compose 有时无法自动获取 statusBarsPadding。
@@ -335,6 +340,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val quickMemos by quickMemoCenter.quickMemos.collectAsState()
                 val currentVoiceCaptureState by voiceCaptureState.collectAsState()
                 val currentRecentVoiceMemoId by recentVoiceMemoId.collectAsState()
+                val currentRequestedInputMode by requestedInputMode.collectAsState()
                 val audioPlaybackState by audioPlaybackCenter.playbackState.collectAsState()
                 val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
                 val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
@@ -429,6 +435,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         weatherForecastRange = settings.floatingWeatherForecastRange,
                         expandSide = settings.floatingExpandSide,
+                        initialMode = currentRequestedInputMode.first,
+                        initialModeRequestKey = currentRequestedInputMode.second,
                         hapticEnabled = settings.hapticFeedbackEnabled,
                         onClose = { requestClose() },
                         onManualInput = { text, isQuickMemo, onComplete ->
@@ -799,7 +807,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         )
         val content = SystemNormalDisplay.voiceCaptureRunning()
         return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
-            .setSmallIcon(R.drawable.ic_notification_small)
+            .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(content.title)
             .setContentText(content.contentText)
             .setContentIntent(pendingIntent)
@@ -847,11 +855,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     tempAudioPath = audioPath,
                     durationMs = durationMs
                 )
+                val settings = settingsQueryApi.settings.value
                 val memoId = withContext(Dispatchers.IO) {
                     quickMemoCenter.createVoiceMemo(
                         audioPath = audioPath,
                         durationMs = durationMs,
-                        asTodo = asTodo
+                        asTodo = asTodo,
+                        autoPinOnTranscriptionSuccess = settings.voiceQuickMemoAutoPinEnabled
                     )
                 }
                 if (!closeAfterSave) showRecentVoiceMemo(memoId)
@@ -887,8 +897,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 Toast.makeText(applicationContext, "请先开启实况通知", Toast.LENGTH_SHORT).show()
             }
             else -> {
-                app.capsuleCommandApi.showVoiceTranscription(memoId = memoId, title = title)
-                clearRecentVoiceMemo(memoId)
+                serviceScope.launch {
+                    val pinned = runCatching { quickMemoCenter.pinQuickMemo(memoId) }
+                    if (pinned.getOrDefault(false)) {
+                        clearRecentVoiceMemo(memoId)
+                    } else {
+                        Toast.makeText(applicationContext, pinned.exceptionOrNull()?.message ?: "挂起失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
@@ -1063,9 +1079,10 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val settings = settingsQueryApi.settings.value
                 if (isQuickMemo) {
                     val clean = text.trim()
-                    withContext(Dispatchers.IO) {
+                    val memoId = withContext(Dispatchers.IO) {
                         quickMemoCenter.createTextMemo(clean)
                     }
+                    maybePinFloatingTextQuickMemo(memoId, settings.isLiveCapsuleEnabled, settings.floatingTextQuickMemoAutoPinEnabled)
                 } else {
                     val traceId = EventIdentity.newTraceId("floating")
                     val result = withContext(Dispatchers.IO) {
@@ -1094,6 +1111,24 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 Toast.makeText(applicationContext, "分析失败：${e.message ?: "unknown"}", Toast.LENGTH_SHORT).show()
                 onComplete()
             }
+        }
+    }
+
+    private suspend fun maybePinFloatingTextQuickMemo(
+        memoId: Long,
+        liveCapsuleEnabled: Boolean,
+        autoPinEnabled: Boolean
+    ) {
+        if (!autoPinEnabled) return
+        if (!liveCapsuleEnabled) {
+            Toast.makeText(applicationContext, "已保存，实况通知未开启，未挂起", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pinned = runCatching { quickMemoCenter.pinQuickMemo(memoId) }
+        if (pinned.getOrDefault(false)) {
+            Toast.makeText(applicationContext, "已保存并挂到实况通知", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(applicationContext, pinned.exceptionOrNull()?.message ?: "已保存，挂起失败", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1172,6 +1207,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
+        applyRequestedInputMode(intent)
         when (intent?.action) {
             ACTION_IMAGE_PICKED -> {
                 showFloatingWindow()
@@ -1230,6 +1266,15 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         showFloatingWindow()
         return START_NOT_STICKY
+    }
+
+    private fun applyRequestedInputMode(intent: Intent?) {
+        val mode = when (intent?.getStringExtra(EXTRA_INITIAL_INPUT_MODE)) {
+            INPUT_MODE_NOTE -> FloatingInputMode.NOTE
+            INPUT_MODE_SCHEDULE -> FloatingInputMode.SCHEDULE
+            else -> return
+        }
+        requestedInputMode.value = mode to (requestedInputMode.value.second + 1L)
     }
 
     override fun onDestroy() {

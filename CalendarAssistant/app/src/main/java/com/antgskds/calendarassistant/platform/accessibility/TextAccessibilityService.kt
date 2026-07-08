@@ -108,6 +108,7 @@ class TextAccessibilityService : AccessibilityService() {
         subscribeKeyFilterSettings()
         subscribeRecognitionFailedEvents()
         subscribeIngestEvents()
+        app.runtimeCenter.startEdgeBarIfNeeded()
         Log.d(TAG, "无障碍服务已连接")
     }
 

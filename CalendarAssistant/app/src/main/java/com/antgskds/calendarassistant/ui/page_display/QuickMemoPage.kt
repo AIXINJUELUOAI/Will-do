@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,6 +52,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -95,6 +97,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.ContentScale
@@ -121,10 +124,15 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarShadowPadding
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -248,7 +256,8 @@ fun QuickMemoDetailPage(
     uiSize: Int = 2,
     hapticEnabled: Boolean = true,
     backgroundMode: Boolean = false,
-    miuiBlurEnabled: Boolean = false
+    miuiBlurEnabled: Boolean = false,
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
 ) {
     val quickMemos by viewModel.quickMemos.collectAsState()
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
@@ -265,7 +274,11 @@ fun QuickMemoDetailPage(
     }
     val haptics = rememberAppHaptics(hapticEnabled)
 
-    AppBackgroundStyleTheme(enabled = backgroundMode, miuiBlurEnabled = miuiBlurEnabled) {
+    AppBackgroundStyleTheme(
+        enabled = backgroundMode,
+        miuiBlurEnabled = miuiBlurEnabled,
+        cardAlphaPercent = cardAlphaPercent
+    ) {
         val pageContainerColor = if (backgroundMode) Color.Transparent else MaterialTheme.colorScheme.background
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -342,7 +355,9 @@ fun QuickMemoDetailPage(
                         }
                     },
                     uiSize = uiSize,
-                    hapticEnabled = hapticEnabled
+                    hapticEnabled = hapticEnabled,
+                    backgroundMode = backgroundMode,
+                    miuiBlurEnabled = miuiBlurEnabled
                 )
             }
         }
@@ -614,7 +629,9 @@ private fun QuickMemoDetailContent(
     onRetryTranscription: () -> Unit,
     onCreateSuggestion: (QuickMemoSuggestionEntity) -> Unit,
     uiSize: Int = 2,
-    hapticEnabled: Boolean
+    hapticEnabled: Boolean,
+    backgroundMode: Boolean,
+    miuiBlurEnabled: Boolean
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
     val context = LocalContext.current
@@ -914,6 +931,8 @@ private fun QuickMemoDetailContent(
                 haptics.confirm()
                 imagePickerLauncher.launch("image/*")
             },
+            backgroundMode = backgroundMode,
+            miuiBlurEnabled = miuiBlurEnabled,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
@@ -945,84 +964,132 @@ private fun QuickMemoDetailBottomBar(
     onPinClick: () -> Unit,
     onTodoClick: () -> Unit,
     onImageClick: () -> Unit,
+    backgroundMode: Boolean,
+    miuiBlurEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val backgroundPalette = rememberAppBackgroundStylePalette(
+        enabled = backgroundMode,
+        miuiBlurEnabled = miuiBlurEnabled
+    )
+    val barHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
+    val itemWidth = 72.dp
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val containerColor = if (backgroundMode) {
+        backgroundPalette.surface
+    } else if (isDark) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val indicatorColor = if (backgroundMode) {
+        backgroundPalette.accent
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer
+    }
+    val contentColor = if (backgroundMode) {
+        backgroundPalette.content
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val disabledColor = if (backgroundMode) {
+        backgroundPalette.secondaryContent.copy(alpha = 0.46f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+    }
+
     Surface(
         modifier = modifier
             .navigationBarsPadding()
             .imePadding()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp
+            .padding(horizontal = 16.dp)
+            .padding(bottom = IntegratedFloatingBarShadowPadding)
+            .height(barHeight),
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        shadowElevation = if (backgroundMode) 0.dp else 6.dp
     ) {
         Row(
-            modifier = Modifier
-                .width(if (isRecordingVoice) 214.dp else 318.dp)
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             if (isRecordingVoice) {
-                Surface(
+                Box(
                     modifier = Modifier
-                        .width(112.dp)
-                        .height(44.dp),
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
+                        .fillMaxHeight()
+                        .width(itemWidth * 3f)
+                        .padding(vertical = 4.dp, horizontal = 4.dp)
+                        .clip(CircleShape)
+                        .background(indicatorColor),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        FloatingSiriWaveform(
-                            isPlaying = true,
-                            modifier = Modifier
-                                .width(72.dp)
-                                .height(24.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    FloatingSiriWaveform(
+                        isPlaying = true,
+                        modifier = Modifier
+                            .width(128.dp)
+                            .height(24.dp),
+                        color = contentColor
+                    )
                 }
-                QuickMemoToolbarChip(
-                    label = if (isSavingVoice) "保存中" else "保存",
-                    selected = true,
+                QuickMemoActionButton(
+                    icon = Icons.Rounded.Check,
+                    contentDescription = if (isSavingVoice) "保存中" else "保存",
+                    isActive = true,
                     enabled = !isSavingVoice,
-                    onClick = onVoiceClick,
-                    modifier = Modifier.height(44.dp)
+                    width = itemWidth,
+                    indicatorColor = indicatorColor,
+                    contentColor = contentColor,
+                    disabledColor = disabledColor,
+                    onClick = onVoiceClick
                 )
             } else {
-                QuickMemoToolbarChip(
-                    label = if (isPinned) "已挂起" else "挂起",
-                    selected = isPinned,
+                QuickMemoActionButton(
+                    icon = Icons.Rounded.PushPin,
+                    contentDescription = if (isPinned) "取消挂起" else "挂起",
+                    isActive = isPinned,
+                    width = itemWidth,
+                    indicatorColor = indicatorColor,
+                    contentColor = contentColor,
+                    disabledColor = disabledColor,
                     onClick = onPinClick,
-                    modifier = Modifier.height(44.dp)
                 )
-                QuickMemoToolbarChip(
-                    label = when {
+                QuickMemoActionButton(
+                    icon = Icons.Rounded.CheckCircle,
+                    contentDescription = when {
                         isCompleted -> "撤回"
                         isTodo -> "完成"
-                        else -> "待办"
+                        else -> "设为待办"
                     },
-                    selected = isTodo,
+                    isActive = isTodo,
+                    width = itemWidth,
+                    indicatorColor = indicatorColor,
+                    contentColor = contentColor,
+                    disabledColor = disabledColor,
                     onClick = onTodoClick,
-                    modifier = Modifier.height(44.dp)
                 )
-                QuickMemoToolbarChip(
-                    label = when {
-                        isAttachingImage -> "插入中"
-                        hasImage -> "换图"
-                        else -> "图片"
-                    },
-                    selected = hasImage,
+                QuickMemoActionButton(
+                    icon = Icons.Rounded.Image,
+                    contentDescription = if (hasImage) "换图" else "插入图片",
+                    isActive = hasImage,
                     enabled = !isAttachingImage,
+                    width = itemWidth,
+                    indicatorColor = indicatorColor,
+                    contentColor = contentColor,
+                    disabledColor = disabledColor,
                     onClick = onImageClick,
-                    modifier = Modifier.height(44.dp)
                 )
-                QuickMemoToolbarChip(
-                    label = if (hasVoice) "重录" else "语音",
-                    selected = false,
+                QuickMemoActionButton(
+                    icon = Icons.Rounded.Mic,
+                    contentDescription = if (hasVoice) "重录" else "语音",
+                    isActive = hasVoice,
                     enabled = !isSavingVoice,
+                    width = itemWidth,
+                    indicatorColor = indicatorColor,
+                    contentColor = contentColor,
+                    disabledColor = disabledColor,
                     onClick = onVoiceClick,
-                    modifier = Modifier.height(44.dp)
                 )
             }
         }
@@ -1030,42 +1097,42 @@ private fun QuickMemoDetailBottomBar(
 }
 
 @Composable
-private fun QuickMemoToolbarChip(
-    label: String,
-    selected: Boolean,
+private fun QuickMemoActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    isActive: Boolean,
     enabled: Boolean = true,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    width: Dp,
+    indicatorColor: Color,
+    contentColor: Color,
+    disabledColor: Color,
+    onClick: () -> Unit
 ) {
-    val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-    } else {
-        MaterialTheme.colorScheme.secondaryContainer
-    }
-    val contentColor = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
-        selected -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier,
-        shape = RoundedCornerShape(999.dp),
-        color = containerColor
+    val tintColor = if (enabled) contentColor else disabledColor
+
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(width),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            color = if (isActive) indicatorColor else Color.Transparent,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 4.dp, horizontal = 4.dp)
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = contentColor,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(28.dp),
+                    tint = tintColor
+                )
+            }
         }
     }
 }

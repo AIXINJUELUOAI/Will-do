@@ -42,6 +42,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
+import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
@@ -66,6 +67,7 @@ fun ThemeSettingsPage(
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
     var isHexFocused by remember { mutableStateOf(false) }
     var isBackgroundImporting by remember { mutableStateOf(false) }
+    var showBackgroundActions by remember { mutableStateOf(false) }
     val backgroundImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) {
             isBackgroundImporting = false
@@ -108,6 +110,7 @@ fun ThemeSettingsPage(
     )
 
     CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -144,14 +147,7 @@ fun ThemeSettingsPage(
         AppBackgroundSettingsCard(
             settings = settings,
             isImporting = isBackgroundImporting,
-            onPickImage = {
-                isBackgroundImporting = true
-                backgroundImagePicker.launch("image/*")
-            },
-            onClearImage = {
-                viewModel.clearAppBackground()
-                Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show()
-            },
+            onOpenActions = { showBackgroundActions = true },
             glassMode = hasAppBackground,
             cardTitleStyle = cardTitleStyle,
             cardSubtitleStyle = cardSubtitleStyle
@@ -212,7 +208,8 @@ fun ThemeSettingsPage(
                         columns = GridCells.Fixed(4),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.height(320.dp).padding(top = 16.dp)
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
+                        modifier = Modifier.height(348.dp).padding(top = 20.dp)
                     ) {
                         items(ThemeColorScheme.entries.filter { it != ThemeColorScheme.CUSTOM }) { scheme ->
                             ThemeColorSchemeItem(
@@ -241,6 +238,63 @@ fun ThemeSettingsPage(
                 }
             }
         }
+    }
+
+        PredictiveFloatingActionCard(
+            visible = showBackgroundActions,
+            title = "主界面壁纸",
+            content = if (hasAppBackground) "管理当前壁纸" else "选择一张图片作为软件背景",
+            confirmText = "",
+            dismissText = "",
+            isLoading = isBackgroundImporting,
+            allowDismissWhileLoading = false,
+            predictiveBackEnabled = settings.predictiveBackEnabled,
+            onConfirm = {},
+            onDismiss = { if (!isBackgroundImporting) showBackgroundActions = false },
+            modifier = Modifier.align(Alignment.BottomCenter),
+            actionContent = {
+                TextButton(
+                    onClick = {
+                        showBackgroundActions = false
+                        viewModel.clearAppBackground()
+                        Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = hasAppBackground && !isBackgroundImporting,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(
+                        text = "清除壁纸",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Button(
+                    onClick = {
+                        showBackgroundActions = false
+                        isBackgroundImporting = true
+                        backgroundImagePicker.launch("image/*")
+                    },
+                    enabled = !isBackgroundImporting,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    if (isBackgroundImporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "更换壁纸",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        )
     }
     }
 }
@@ -305,13 +359,13 @@ private fun UiStyleOptionChip(
 private fun AppBackgroundSettingsCard(
     settings: MySettings,
     isImporting: Boolean,
-    onPickImage: () -> Unit,
-    onClearImage: () -> Unit,
+    onOpenActions: () -> Unit,
     glassMode: Boolean,
     cardTitleStyle: androidx.compose.ui.text.TextStyle,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
 ) {
     val hasImage = settings.appBackgroundImagePath.isNotBlank()
+    val haptics = rememberAppHaptics()
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -320,6 +374,7 @@ private fun AppBackgroundSettingsCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(enabled = !isImporting) { haptics.click(); onOpenActions() }
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -331,34 +386,20 @@ private fun AppBackgroundSettingsCard(
                     style = cardSubtitleStyle
                 )
             }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (isImporting) 0.56f else 1f))
+                    .defaultMinSize(minWidth = 64.dp, minHeight = 40.dp)
+                    .padding(horizontal = 18.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Button(
-                    onClick = onPickImage,
-                    enabled = !isImporting
-                ) {
-                    Text(
-                        text = when {
-                            isImporting -> "导入中..."
-                            hasImage -> "更换图片"
-                            else -> "选择图片"
-                        }
-                    )
-                }
-                if (hasImage) {
-                    TextButton(
-                        onClick = onClearImage,
-                        enabled = !isImporting,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = "清除图片",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
+                Text(
+                    text = if (isImporting) "导入中" else "管理",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

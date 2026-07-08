@@ -6,6 +6,10 @@
     <!-- 快捷方式 -->
     <string name="shortcut_quick_recognition">一键识屏</string>
     <string name="shortcut_quick_recognition_long">一键屏幕识别</string>
+    <string name="shortcut_open_floating">打开悬浮窗</string>
+    <string name="shortcut_open_floating_long">打开日程悬浮窗</string>
+    <string name="shortcut_open_quick_memo">随口记悬浮窗</string>
+    <string name="shortcut_open_quick_memo_long">打开随口记悬浮窗</string>
     <string name="shortcut_disabled">无障碍服务未开启</string>
     <string name="share_target_recognize_schedule">识别为日程</string>
     <string name="share_target_create_image_memo">创建图片随口记</string>

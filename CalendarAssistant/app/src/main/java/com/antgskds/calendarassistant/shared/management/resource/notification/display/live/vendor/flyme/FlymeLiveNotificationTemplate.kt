@@ -18,7 +18,7 @@ data class FlymeLiveNotificationContent(
     val smallIconResId: Int,
     val remoteViews: RemoteViews,
     val tapOpensPickupList: Boolean,
-    val action: CapsuleActionSpec?
+    val actions: List<CapsuleActionSpec>
 )
 
 object FlymeLiveNotificationTemplate {
@@ -50,7 +50,7 @@ object FlymeLiveNotificationTemplate {
             smallIconResId = if (iconResId != 0) iconResId else R.drawable.ic_notification_small,
             remoteViews = remoteViews,
             tapOpensPickupList = display.tapOpensPickupList,
-            action = display.action
+            actions = display.effectiveActions
         )
     }
 
@@ -95,8 +95,9 @@ object FlymeLiveNotificationTemplate {
             CapsuleType.OCR_PROGRESS -> R.drawable.ic_stat_scan
             CapsuleType.OCR_RESULT -> R.drawable.ic_stat_success
             CapsuleType.MODEL_LOADING -> R.drawable.ic_model_loading
-            CapsuleType.VOICE_TRANSCRIPTION -> R.drawable.ic_stat_note
-            CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_quick_memo
+            CapsuleType.VOICE_TRANSCRIPTION -> R.drawable.ic_stat_quickmemo
+            CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_quickmemo
+            CapsuleType.QUICK_MEMO_RECORDING -> R.drawable.ic_stat_recording
             CapsuleType.WEATHER_ALERT -> WeatherAlertIconMapper.iconRes(eventType)
             else -> {
                 val payload = RuleMatchingEngine.resolvePayload(null, eventType)

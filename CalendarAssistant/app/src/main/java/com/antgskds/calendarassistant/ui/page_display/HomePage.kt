@@ -78,6 +78,7 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualH
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.ui.page_display.settings.appBackgroundSurfaceAlpha
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +114,8 @@ fun HomePage(
     onCreateNote: () -> Unit = {},
     onRequestDeleteNote: (NoteEntity) -> Unit = {},
     onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
+    onRequestClearQuickMemos: () -> Unit = {},
+    quickMemoCount: Int = 0,
     onOpenQuickMemoDetail: (Long) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
@@ -492,7 +495,17 @@ fun HomePage(
                             }
                             Text(title)
                         },
-                        actions = {}
+                        actions = {
+                            if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
+                                IconButton(onClick = { haptics.click(); onRequestClearQuickMemos() }) {
+                                    Icon(
+                                        Icons.Default.DeleteSweep,
+                                        contentDescription = "清空随口记",
+                                        modifier = Modifier.size(topBarIconSize)
+                                    )
+                                }
+                            }
+                        }
                     )
                 },
             ) { innerPadding ->
@@ -551,7 +564,8 @@ fun HomePage(
                                 val themeOnPrimary = MaterialTheme.colorScheme.onPrimary
                                 AppBackgroundStyleTheme(
                                     enabled = hasAppBackground,
-                                    miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                    miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled,
+                                    cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent
                                 ) {
                                     val isToday = uiState.selectedDate == uiState.today
                                     val weatherData = uiState.weatherData
@@ -562,6 +576,16 @@ fun HomePage(
                                     val topContentColor = when {
                                         isToday -> themeOnPrimary
                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    val topBarColor = if (hasAppBackground) {
+                                        val glassAlpha = appBackgroundSurfaceAlpha(
+                                            cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent,
+                                            dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
+                                            miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                        )
+                                        topBaseColor.copy(alpha = glassAlpha)
+                                    } else {
+                                        topBaseColor
                                     }
                                     val dateCardShape = RoundedCornerShape(16.dp)
                                     AppCard(
@@ -608,7 +632,7 @@ fun HomePage(
                                                 modifier = Modifier
                                                     .weight(0.2f)
                                                     .fillMaxWidth()
-                                                    .background(topBaseColor)
+                                                    .background(topBarColor)
                                                     .clickable { viewModel.updateSelectedDate(uiState.today) }
                                             ) {
                                                 if (weatherData != null) {

@@ -30,6 +30,8 @@ class EventActionReceiver : BroadcastReceiver() {
         const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
         const val ACTION_CREATE_QUICK_MEMO_SUGGESTION = "com.antgskds.calendarassistant.action.CREATE_QUICK_MEMO_SUGGESTION"
         const val ACTION_CLEAR_TEXT_QUICK_MEMO = "com.antgskds.calendarassistant.action.CLEAR_TEXT_QUICK_MEMO"
+        const val ACTION_DEBUG_PRIMARY = "com.antgskds.calendarassistant.action.DEBUG_PRIMARY"
+        const val ACTION_DEBUG_SECONDARY = "com.antgskds.calendarassistant.action.DEBUG_SECONDARY"
         const val EXTRA_EVENT_ID = "event_id"
         const val EXTRA_SUGGESTION_ID = "suggestion_id"
         const val EXTRA_QUICK_MEMO_ID = "quick_memo_id"
@@ -44,6 +46,9 @@ class EventActionReceiver : BroadcastReceiver() {
         Log.d(TAG, "receive action=${intent.action} eventId=${intent.getStringExtra(EXTRA_EVENT_ID)}")
 
         when (intent.action) {
+            ACTION_DEBUG_PRIMARY, ACTION_DEBUG_SECONDARY -> {
+                Log.d(TAG, "debug notification action clicked action=${intent.action}")
+            }
             ACTION_CLEAR_TEXT_QUICK_MEMO -> {
                 val memoId = intent.getLongExtra(EXTRA_QUICK_MEMO_ID, -1L).takeIf { it > 0L }
                     ?: run {

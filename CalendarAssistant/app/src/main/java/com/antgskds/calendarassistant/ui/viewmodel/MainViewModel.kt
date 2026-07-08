@@ -435,6 +435,12 @@ class MainViewModel(
         onDeleted()
     }
 
+    fun clearAllQuickMemos(onCleared: (Int) -> Unit = {}) = viewModelScope.launch {
+        audioPlaybackCenter.stop()
+        val clearedCount = quickMemoCenter.clearAllQuickMemos()
+        onCleared(clearedCount)
+    }
+
     fun toggleQuickMemoTodoCompletion(memoId: Long) = viewModelScope.launch {
         quickMemoCenter.toggleTodoCompletion(memoId)
     }

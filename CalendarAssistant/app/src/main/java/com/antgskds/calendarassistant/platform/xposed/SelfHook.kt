@@ -14,6 +14,7 @@ class SelfHook : IXposedHookLoadPackage {
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != "com.antgskds.calendarassistant") return
+        if (lpparam.processName != lpparam.packageName) return
         try {
             val statusClass = lpparam.classLoader
                 .loadClass("com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus")

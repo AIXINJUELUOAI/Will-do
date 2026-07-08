@@ -27,12 +27,7 @@
 -keep class * extends com.google.gson.reflect.TypeToken { *; }
 
 # Xposed loads hook entry classes by the fully qualified names listed in assets/xposed_init.
--keep class com.antgskds.calendarassistant.xposed.SelfHook { *; }
--keep class com.antgskds.calendarassistant.xposed.MiuiIslandDispatcherHook { *; }
--keep class com.antgskds.calendarassistant.xposed.XposedModuleStatus { *; }
--keep class com.antgskds.calendarassistant.xposed.MiuiIslandDispatcher { *; }
--keep class com.antgskds.calendarassistant.xposed.MiuiIslandRequest { *; }
--keep class com.antgskds.calendarassistant.xposed.MiuiIslandAction { *; }
+-keep class com.antgskds.calendarassistant.platform.xposed.** { *; }
 
 # Xposed API is compileOnly and provided by the framework at runtime.
 -dontwarn de.robv.android.xposed.**

@@ -46,6 +46,7 @@ class RuntimeCenter(
         scheduleReminderReconcile()
         startPeriodicSync()
         restoreSmsNotificationListenerIfNeeded()
+        startEdgeBarIfNeeded()
         startClipboardCodeMonitoring()
     }
 
@@ -96,7 +97,7 @@ class RuntimeCenter(
     fun startEdgeBarIfNeeded() {
         try {
             val settings = settingsQueryApi.settings.value
-            if (settings.edgeBarEnabled && permissionCenter.canDrawOverlays(appContext)) {
+            if (settings.isFloatingWindowEnabled && settings.edgeBarEnabled && permissionCenter.canDrawOverlays(appContext)) {
                 floatingCenter.startEdgeBarServiceIfPermitted()
             }
         } catch (e: Exception) {

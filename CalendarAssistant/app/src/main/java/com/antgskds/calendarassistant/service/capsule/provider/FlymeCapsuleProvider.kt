@@ -95,7 +95,9 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             )
         )
 
-        content.action?.let { addAction(builder, context, item.id, it) }
+        content.actions.forEachIndexed { index, action ->
+            addAction(builder, context, item.id, action, index)
+        }
 
         return builder.build()
     }
@@ -123,7 +125,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         builder: Notification.Builder,
         context: Context,
         eventId: String,
-        action: CapsuleActionSpec
+        action: CapsuleActionSpec,
+        index: Int
     ) {
         val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
             this.action = action.receiverAction
@@ -135,7 +138,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            eventId.hashCode() + 3,
+            eventId.hashCode() xor action.receiverAction.hashCode() xor index,
             broadcastIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

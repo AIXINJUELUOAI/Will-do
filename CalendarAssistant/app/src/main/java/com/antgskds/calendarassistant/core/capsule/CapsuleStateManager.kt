@@ -31,6 +31,7 @@ import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
@@ -74,12 +75,14 @@ class CapsuleStateManager(
         const val TYPE_WEATHER_ALERT = CapsuleType.WEATHER_ALERT
         const val TYPE_VOICE_TRANSCRIPTION = CapsuleType.VOICE_TRANSCRIPTION
         const val TYPE_TEXT_QUICK_MEMO = CapsuleType.TEXT_QUICK_MEMO
+        const val TYPE_QUICK_MEMO_RECORDING = CapsuleType.QUICK_MEMO_RECORDING
 
         private const val OCR_PROGRESS_ID = "OCR_PROGRESS"
         private const val OCR_RESULT_ID = "OCR_RESULT"
         private const val MODEL_LOADING_ID = "MODEL_LOADING"
         private const val VOICE_TRANSCRIPTION_ID_PREFIX = "VOICE_TRANSCRIPTION_"
         private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
+        private const val QUICK_MEMO_RECORDING_ID = "QUICK_MEMO_RECORDING"
         private const val WEATHER_CAPSULE_ID_PREFIX = "WEATHER_"
         private const val OCR_NOTIF_ID = 88886
         private const val MODEL_LOADING_NOTIF_ID = 88885
@@ -89,6 +92,7 @@ class CapsuleStateManager(
         private const val EVENT_TYPE_MODEL_LOADING = "model_loading"
         private const val EVENT_TYPE_VOICE_TRANSCRIPTION = "voice_transcription"
         private const val EVENT_TYPE_TEXT_QUICK_MEMO = "text_quick_memo"
+        private const val EVENT_TYPE_QUICK_MEMO_RECORDING = "quick_memo_recording"
         private const val EVENT_TYPE_WEATHER_ALERT = "weather_alert"
         private const val EVENT_TYPE_WEATHER_RISK = "weather_risk"
         private val DEFAULT_PICKUP_CAPSULE_COLOR = android.graphics.Color.rgb(180, 195, 161)
@@ -124,7 +128,8 @@ class CapsuleStateManager(
         val modelLoading: OcrCapsuleState?,
         val weather: List<OcrCapsuleState>,
         val voiceTranscription: OcrCapsuleState?,
-        val textQuickMemo: OcrCapsuleState?
+        val textQuickMemo: OcrCapsuleState?,
+        val quickMemoRecording: OcrCapsuleState?
     )
 
     private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
@@ -132,6 +137,7 @@ class CapsuleStateManager(
     private val weatherCapsuleState = MutableStateFlow<List<OcrCapsuleState>>(emptyList())
     private val voiceTranscriptionCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
     private val textQuickMemoCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private val quickMemoRecordingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
     private var ocrAutoClearJob: Job? = null
     private var modelLoadingAutoClearJob: Job? = null
     private var voiceTranscriptionAutoClearJob: Job? = null
@@ -203,9 +209,14 @@ class CapsuleStateManager(
         return durationMinutes.toLong().coerceIn(1L, 24 * 60L) * 60_000L
     }
 
-    fun showOcrResult(title: String, content: String, durationMs: Long = ocrResultTimeoutMs()) {
+    fun showOcrResult(
+        title: String,
+        content: String,
+        durationMs: Long = ocrResultTimeoutMs(),
+        actions: List<CapsuleActionSpec> = emptyList()
+    ) {
         val now = System.currentTimeMillis()
-        val display = CapsuleMessageComposer.composeOcrResult(title, content)
+        val display = CapsuleMessageComposer.composeOcrResult(title, content).copy(actions = actions)
         updateOcrCapsule(
             OcrCapsuleState(
                 id = OCR_RESULT_ID,
@@ -285,6 +296,31 @@ class CapsuleStateManager(
         textQuickMemoAutoClearJob?.cancel()
         textQuickMemoAutoClearJob = null
         textQuickMemoCapsuleState.value = null
+    }
+
+    fun showQuickMemoRecording(title: String, content: String = "松开保存") {
+        val cleanTitle = title.trim().takeIf { it.isNotEmpty() } ?: "录音中：00:00"
+        val cleanContent = content.trim().takeIf { it.isNotEmpty() } ?: "松开保存"
+        val now = System.currentTimeMillis()
+        val display = CapsuleMessageComposer.composeQuickMemoRecording(cleanTitle, cleanContent)
+        quickMemoRecordingCapsuleState.value = OcrCapsuleState(
+            id = QUICK_MEMO_RECORDING_ID,
+            notifId = NotificationIds.QUICK_MEMO_RECORDING_CAPSULE,
+            type = TYPE_QUICK_MEMO_RECORDING,
+            eventType = EVENT_TYPE_QUICK_MEMO_RECORDING,
+            title = display.primaryText,
+            content = cleanContent,
+            description = cleanContent,
+            color = android.graphics.Color.parseColor("#7C4DFF"),
+            startMillis = now,
+            endMillis = now + 60_000L,
+            display = display,
+            expiresAt = null
+        )
+    }
+
+    fun clearQuickMemoRecording() {
+        quickMemoRecordingCapsuleState.value = null
     }
 
     fun showModelLoading(title: String, content: String) {
@@ -475,7 +511,7 @@ class CapsuleStateManager(
             Pair(events, settings)
         }
 
-        val capsuleTransientCombine = combine(
+        val baseTransientCombine = combine(
             ocrCapsuleState,
             modelLoadingCapsuleState,
             weatherCapsuleState,
@@ -487,8 +523,16 @@ class CapsuleStateManager(
                 modelLoading = modelLoadingCapsule,
                 weather = weatherCapsules,
                 voiceTranscription = voiceTranscriptionCapsule,
-                textQuickMemo = textQuickMemoCapsule
+                textQuickMemo = textQuickMemoCapsule,
+                quickMemoRecording = null
             )
+        }
+
+        val capsuleTransientCombine = combine(
+            baseTransientCombine,
+            quickMemoRecordingCapsuleState
+        ) { transient, quickMemoRecording ->
+            transient.copy(quickMemoRecording = quickMemoRecording)
         }
 
         return combine(baseCombine, networkSpeedState, capsuleTransientCombine) { (events, settings), networkSpeed, transient ->
@@ -547,6 +591,15 @@ class CapsuleStateManager(
             }
         }
 
+        val activeQuickMemoRecordingCapsule = transient.quickMemoRecording?.let { state ->
+            if (state.expiresAt != null && nowMillis >= state.expiresAt) {
+                clearQuickMemoRecording()
+                null
+            } else {
+                state
+            }
+        }
+
         val activeWeatherCapsules = transient.weather.filter { state ->
             state.expiresAt == null || nowMillis < state.expiresAt
         }
@@ -554,8 +607,11 @@ class CapsuleStateManager(
             weatherCapsuleState.value = activeWeatherCapsules
         }
 
-        if ((activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null) && settings.isLiveCapsuleEnabled) {
+        if ((activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null || activeQuickMemoRecordingCapsule != null) && settings.isLiveCapsuleEnabled) {
             val transientItems = buildList {
+                activeQuickMemoRecordingCapsule?.let { state ->
+                    add(createTransientCapsuleItem(state))
+                }
                 activeOcrCapsule?.let { state ->
                     add(createTransientCapsuleItem(state))
                 }

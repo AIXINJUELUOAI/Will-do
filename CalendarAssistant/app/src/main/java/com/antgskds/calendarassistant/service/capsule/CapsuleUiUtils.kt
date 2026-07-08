@@ -9,6 +9,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 
@@ -51,5 +52,10 @@ object CapsuleUiUtils {
         }
         canvas.drawBitmap(source, 0f, 0f, paint)
         return bitmap
+    }
+
+    fun tintedIconFromDrawable(context: Context, @DrawableRes drawableId: Int, color: Int): Icon? {
+        val bitmap = drawableToBitmap(context, drawableId) ?: return null
+        return Icon.createWithBitmap(tintBitmap(bitmap, color))
     }
 }

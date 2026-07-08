@@ -54,7 +54,7 @@ object XiaomiLiveNotificationTemplate {
         forceTextIcon: Boolean
     ): XiaomiLiveTemplateKind {
         if (forceTextIcon) return XiaomiLiveTemplateKind.TEXT_ICON
-        return if (display.action != null && hasActions) {
+        return if (display.effectiveActions.isNotEmpty() && hasActions) {
             XiaomiLiveTemplateKind.TEXT_ICON_ACTION
         } else {
             XiaomiLiveTemplateKind.TEXT_ICON

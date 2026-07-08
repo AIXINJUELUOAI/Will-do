@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
 
@@ -84,12 +84,14 @@ fun IntegratedFloatingBar(
     onEditClick: () -> Unit,
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     modifier: Modifier = Modifier
 ) {
     val haptics = rememberAppHaptics()
     val backgroundPalette = rememberAppBackgroundStylePalette(
         enabled = backgroundMode,
-        miuiBlurEnabled = miuiBlurEnabled
+        miuiBlurEnabled = miuiBlurEnabled,
+        cardAlphaPercent = cardAlphaPercent
     )
     val rotation by animateFloatAsState(
         targetValue = if (isExpanded) 45f else 0f,
@@ -160,15 +162,16 @@ fun IntegratedFloatingBar(
     val menuIcon = painterResource(R.drawable.floatingbar_menu)
     val todayIcon = painterResource(R.drawable.floatingbar_today)
     val allIcon = painterResource(R.drawable.floatingbar_all)
+    val quickMemoIcon = painterResource(R.drawable.ic_stat_quickmemo)
 
     fun painterIconForPageKey(key: String): Painter? = when (key) {
         HomeEntryKey.TODAY -> todayIcon
         HomeEntryKey.ALL -> allIcon
+        HomeEntryKey.NOTE -> quickMemoIcon
         else -> null
     }
 
     fun vectorIconForPageKey(key: String): ImageVector? = when (key) {
-        HomeEntryKey.NOTE -> Icons.Outlined.StickyNote2
         else -> null
     }
 

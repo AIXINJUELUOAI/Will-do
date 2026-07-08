@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +13,7 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
+import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 
 class NativeCapsuleProvider : ICapsuleProvider {
@@ -34,7 +36,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
         }
 
         val iconRes = if (iconResId != 0) iconResId else R.drawable.ic_notification_small
-        val icon = Icon.createWithResource(context, iconRes)
+        val icon = CapsuleUiUtils.tintedIconFromDrawable(context, iconRes, Color.WHITE)
+            ?: Icon.createWithResource(context, iconRes)
 
         builder.setSmallIcon(icon)
             .setContentTitle(display.primaryText)
@@ -66,7 +69,9 @@ class NativeCapsuleProvider : ICapsuleProvider {
             builder.setShortCriticalText(collapsedShortText)
         }
 
-        display.action?.let { addAction(builder, context, item.id, it) }
+        display.effectiveActions.forEachIndexed { index, action ->
+            addAction(builder, context, item.id, action, index)
+        }
 
         return builder.build()
     }
@@ -93,7 +98,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
         builder: Notification.Builder,
         context: Context,
         eventId: String,
-        action: CapsuleActionSpec
+        action: CapsuleActionSpec,
+        index: Int
     ) {
         val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
             this.action = action.receiverAction
@@ -105,7 +111,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            eventId.hashCode() + 3,
+            eventId.hashCode() xor action.receiverAction.hashCode() xor index,
             broadcastIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

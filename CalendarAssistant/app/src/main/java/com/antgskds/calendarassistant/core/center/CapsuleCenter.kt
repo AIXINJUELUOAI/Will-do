@@ -5,6 +5,7 @@ import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
 
 class CapsuleCenter(
@@ -29,8 +30,13 @@ class CapsuleCenter(
         capsuleCommandApi.showOcrProgress(title, content)
     }
 
-    fun showOcrResult(title: String, content: String, durationMs: Long = 8000L) {
-        capsuleCommandApi.showOcrResult(title, content, durationMs)
+    fun showOcrResult(
+        title: String,
+        content: String,
+        durationMs: Long = 8000L,
+        actions: List<CapsuleActionSpec> = emptyList()
+    ) {
+        capsuleCommandApi.showOcrResult(title, content, durationMs, actions)
     }
 
     fun clearOcrCapsule() {
