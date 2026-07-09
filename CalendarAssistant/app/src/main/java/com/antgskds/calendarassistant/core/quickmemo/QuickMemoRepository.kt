@@ -100,6 +100,21 @@ class QuickMemoRepository(
         oldPath?.let { path -> runCatching { File(path).delete() } }
     }
 
+    suspend fun removeImage(id: Long): Boolean {
+        val memo = quickMemoDao.getQuickMemo(id) ?: return false
+        val oldPath = memo.imagePath?.takeIf { it.isNotBlank() } ?: return false
+        val nextType = if (memo.type == QuickMemoType.IMAGE) QuickMemoType.TEXT else memo.type
+        quickMemoDao.updateQuickMemo(
+            memo.copy(
+                type = nextType,
+                imagePath = null,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        runCatching { File(oldPath).delete() }
+        return true
+    }
+
     suspend fun attachVoice(id: Long, audioPath: String, durationMs: Long): Boolean {
         val memo = quickMemoDao.getQuickMemo(id) ?: return false
         val oldPath = memo.audioPath?.takeIf { it.isNotBlank() && it != audioPath }

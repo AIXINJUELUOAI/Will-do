@@ -61,11 +61,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Button
@@ -89,6 +90,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -98,6 +100,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.ContentScale
@@ -132,6 +135,7 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarShadowPadding
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
 import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.Instant
@@ -167,6 +171,9 @@ fun QuickMemoPage(
     val quickMemos by viewModel.quickMemos.collectAsState()
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
     val playbackState by viewModel.audioPlaybackState.collectAsState()
+    val capsuleUiState by viewModel.capsuleUiState.collectAsState()
+    val pinnedQuickMemoId = remember(capsuleUiState) { activeTextQuickMemoId(capsuleUiState) }
+    val context = LocalContext.current
     val metrics = quickMemoUiMetrics(uiSize)
     val bottomSafePadding = 112.dp + extraBottomPadding
     val filteredMemos = remember(quickMemos, searchQuery) {
@@ -196,7 +203,7 @@ fun QuickMemoPage(
             ) {
                 Text(
                     text = if (searchQuery.isBlank()) "还没有随口记" else "未找到相关随口记",
-                    color = MaterialTheme.colorScheme.secondary
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = if (searchQuery.isBlank()) {
@@ -205,7 +212,7 @@ fun QuickMemoPage(
                         "换个关键词试试，搜索会匹配随口记正文。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
                 )
             }
         }
@@ -223,7 +230,7 @@ fun QuickMemoPage(
                     modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 16.dp),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
             items(memos, key = { it.id ?: it.hashCode().toLong() }) { memo ->
@@ -231,7 +238,19 @@ fun QuickMemoPage(
                     memo = memo,
                     suggestions = memo.id?.let { suggestionsByMemo[it] }.orEmpty(),
                     playbackState = playbackState,
+                    isPinned = memo.id == pinnedQuickMemoId,
                     onToggleTodo = { memo.id?.let { viewModel.toggleQuickMemoTodoCompletion(it) } },
+                    onToggleTodoMode = {
+                        memo.id?.let { id ->
+                            if (memo.isTodo) viewModel.removeQuickMemoTodo(id) else viewModel.markQuickMemoTodo(id)
+                        }
+                    },
+                    onTogglePinned = {
+                        memo.id?.let { id ->
+                            toggleQuickMemoPinned(viewModel, id, memo.id == pinnedQuickMemoId, context)
+                        }
+                    },
+                    onDelete = { onPendingDeleteChange(memo) },
                     onToggleAudio = { path -> viewModel.toggleAudioPlayback(path) },
                     onOpenDetail = { memo.id?.let(onOpenDetail) },
                     onLongPress = { onPendingDeleteChange(memo) },
@@ -330,6 +349,14 @@ fun QuickMemoDetailPage(
                             viewModel.attachImageToQuickMemo(id, imagePath, onResult)
                         }
                     },
+                    onRemoveImage = { onResult ->
+                        val id = memo.id
+                        if (id == null) {
+                            onResult(Result.failure(IllegalStateException("随口记不存在")))
+                        } else {
+                            viewModel.removeImageFromQuickMemo(id, onResult)
+                        }
+                    },
                     onAttachVoice = { audioPath, durationMs, onResult ->
                         val id = memo.id
                         if (id == null) {
@@ -370,7 +397,11 @@ private fun QuickMemoListItem(
     memo: QuickMemoEntity,
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
+    isPinned: Boolean,
     onToggleTodo: () -> Unit,
+    onToggleTodoMode: () -> Unit,
+    onTogglePinned: () -> Unit,
+    onDelete: () -> Unit,
     onToggleAudio: (String?) -> Unit,
     onOpenDetail: () -> Unit,
     onLongPress: () -> Unit,
@@ -387,13 +418,20 @@ private fun QuickMemoListItem(
     val isVoice = memo.type == QuickMemoType.VOICE
     val isImage = memo.type == QuickMemoType.IMAGE
     val isPlaying = memo.audioPath != null && playbackState.audioPath == memo.audioPath && playbackState.isPlaying
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val warmLine = Color(0xFFF2B705)
     val accentColor = when {
         isCompleted -> MaterialTheme.colorScheme.outlineVariant
         isTodo -> warmLine
         else -> MaterialTheme.colorScheme.primary
     }
-    val contentColor = if (isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    val contentColor = if (isCompleted) secondaryTextColor else primaryTextColor
     val bodyText = memo.bodyText.ifBlank {
         when {
             isVoice -> voiceFallbackText(memo)
@@ -402,28 +440,77 @@ private fun QuickMemoListItem(
         }
     }
     val offsetX = remember(memo.id) { Animatable(0f) }
-    val actionWidthPx = with(density) { 80.dp.toPx() }
+    val actionButtonSize = when (uiSize) {
+        1 -> 48.dp
+        2 -> 52.dp
+        else -> 56.dp
+    }
+    val actionMenuWidth = when (uiSize) {
+        1 -> 170.dp
+        2 -> 185.dp
+        else -> 200.dp
+    }
+    val actionWidthPx = with(density) { actionMenuWidth.toPx() }
+    val revealedActionWidth = with(density) { (-offsetX.value).coerceIn(0f, actionWidthPx).toDp() }
+    val revealProgress = (-offsetX.value / actionWidthPx).coerceIn(0f, 1f)
+    val voicePlayButtonAlpha = (1f - revealProgress * 1.35f).coerceIn(0f, 1f)
     val swipeSpec = spring<Float>(dampingRatio = 0.82f, stiffness = 620f)
+    var thresholdHapticPlayed by remember(memo.id) { mutableStateOf(false) }
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        if (isTodo && offsetX.value < -1f) {
-            Row(
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        if (offsetX.value < -1f) {
+            Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .padding(end = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                    .width(revealedActionWidth)
+                    .fillMaxHeight()
+                    .clipToBounds(),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                QuickMemoActionPill(
-                    text = if (isCompleted) "撤回" else "完成待办",
-                    filled = true,
-                    alpha = ((-offsetX.value) / actionWidthPx).coerceIn(0f, 1f),
-                    onClick = {
-                        haptics.confirm()
-                        onToggleTodo()
-                        scope.launch { offsetX.animateTo(0f, swipeSpec) }
-                    }
-                )
+                Row(
+                    modifier = Modifier
+                        .width(actionMenuWidth)
+                        .fillMaxHeight()
+                        .padding(end = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    QuickMemoSwipeActionIcon(
+                        icon = Icons.Rounded.NotificationsActive,
+                        contentDescription = if (isPinned) "取消实况挂起" else "挂到实况",
+                        backgroundColor = MaterialTheme.colorScheme.primary,
+                        size = actionButtonSize,
+                        onClick = {
+                            haptics.confirm()
+                            onTogglePinned()
+                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
+                        }
+                    )
+                    QuickMemoSwipeActionIcon(
+                        icon = if (isTodo) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
+                        contentDescription = if (isTodo) "转普通" else "转待办",
+                        backgroundColor = warmLine,
+                        size = actionButtonSize,
+                        onClick = {
+                            haptics.confirm()
+                            onToggleTodoMode()
+                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
+                        }
+                    )
+                    QuickMemoSwipeActionIcon(
+                        icon = Icons.Rounded.Delete,
+                        contentDescription = "删除",
+                        backgroundColor = MaterialTheme.colorScheme.error,
+                        size = actionButtonSize,
+                        onClick = {
+                            haptics.longPress()
+                            onDelete()
+                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
+                        }
+                    )
+                }
             }
         }
 
@@ -431,36 +518,42 @@ private fun QuickMemoListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .then(
-                    if (isTodo) {
-                        Modifier.pointerInput(memo.id, isCompleted) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    scope.launch {
-                                        if (-offsetX.value >= actionWidthPx * 0.4f) {
-                                            offsetX.animateTo(-actionWidthPx, swipeSpec)
-                                        } else {
-                                            offsetX.animateTo(0f, swipeSpec)
-                                        }
-                                    }
-                                },
-                                onDragCancel = { scope.launch { offsetX.animateTo(0f, swipeSpec) } },
-                                onHorizontalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    scope.launch {
-                                        val next = (offsetX.value + dragAmount).coerceIn(-actionWidthPx - 32f, 0f)
-                                        offsetX.snapTo(next)
-                                    }
+                .pointerInput(memo.id, isCompleted, isPinned, isTodo) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                if (-offsetX.value >= actionWidthPx * 0.28f) {
+                                    if (!thresholdHapticPlayed) haptics.threshold()
+                                    thresholdHapticPlayed = true
+                                    offsetX.animateTo(-actionWidthPx, swipeSpec)
+                                } else {
+                                    thresholdHapticPlayed = false
+                                    offsetX.animateTo(0f, swipeSpec)
                                 }
-                            )
+                            }
+                        },
+                        onDragCancel = { scope.launch { thresholdHapticPlayed = false; offsetX.animateTo(0f, swipeSpec) } },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            scope.launch {
+                                val next = (offsetX.value + dragAmount).coerceIn(-actionWidthPx - 32f, 0f)
+                                if (!thresholdHapticPlayed && -next >= actionWidthPx * 0.5f) {
+                                    haptics.threshold()
+                                    thresholdHapticPlayed = true
+                                } else if (-next < actionWidthPx * 0.28f) {
+                                    thresholdHapticPlayed = false
+                                }
+                                offsetX.snapTo(next)
+                            }
                         }
-                    } else Modifier
-                )
+                    )
+                }
                 .combinedClickable(
                     onClick = {
                         haptics.click()
                         if (offsetX.value < -1f) {
                             scope.launch { offsetX.animateTo(0f, swipeSpec) }
+                            thresholdHapticPlayed = false
                         } else {
                             onOpenDetail()
                         }
@@ -496,10 +589,12 @@ private fun QuickMemoListItem(
                         Spacer(Modifier.width(14.dp))
                         FloatingVoicePlayButton(
                             isPlaying = isPlaying,
+                            enabled = voicePlayButtonAlpha > 0.18f,
                             onClick = {
                                 haptics.click()
                                 onToggleAudio(memo.audioPath)
                             },
+                            modifier = Modifier.alpha(voicePlayButtonAlpha),
                             buttonSize = metrics.listPlayButtonSize,
                             iconSize = metrics.listPlayIconSize,
                             containerColor = if (isCompleted) {
@@ -542,7 +637,7 @@ private fun QuickMemoListItem(
                         Text(
                             text = formatQuickMemoTime(memo.createdAt),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = secondaryTextColor
                         )
                         if (suggestions.isNotEmpty()) {
                             Spacer(Modifier.width(10.dp))
@@ -588,7 +683,7 @@ private fun QuickMemoListItem(
                             Text(
                                 text = formatQuickMemoTime(memo.createdAt),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = secondaryTextColor
                             )
                             if (suggestions.isNotEmpty()) {
                                 Spacer(Modifier.width(10.dp))
@@ -620,6 +715,7 @@ private fun QuickMemoDetailContent(
     playbackState: AudioPlaybackState,
     onSaveBody: (String) -> Unit,
     onAttachImage: (String, (Result<Unit>) -> Unit) -> Unit,
+    onRemoveImage: ((Result<Unit>) -> Unit) -> Unit,
     onAttachVoice: (String, Long, (Result<Unit>) -> Unit) -> Unit,
     onToggleTodo: () -> Unit,
     onMarkTodo: () -> Unit,
@@ -641,6 +737,7 @@ private fun QuickMemoDetailContent(
     var draftBody by remember(memo.id, memo.updatedAt) { mutableStateOf(memo.bodyText) }
     var bodyEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var isAttachingImage by remember { mutableStateOf(false) }
+    var isImageSelected by remember(memo.id, memo.imagePath) { mutableStateOf(false) }
     val isTodo = memo.todoState == QuickMemoTodoState.ACTIVE || memo.todoState == QuickMemoTodoState.COMPLETED
     val isCompleted = memo.todoState == QuickMemoTodoState.COMPLETED
     val isVoice = memo.type == QuickMemoType.VOICE
@@ -677,6 +774,9 @@ private fun QuickMemoDetailContent(
     val audioRecorder = remember(context) { QuickMemoAudioRecorder(context.applicationContext) }
     var isRecordingVoice by remember { mutableStateOf(false) }
     var isSavingVoice by remember { mutableStateOf(false) }
+    var recordAudioGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+    }
 
     fun startVoiceRecording() {
         if (isRecordingVoice || isSavingVoice) return
@@ -728,6 +828,7 @@ private fun QuickMemoDetailContent(
     val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        recordAudioGranted = granted
         if (granted) {
             startVoiceRecording()
         } else {
@@ -740,7 +841,8 @@ private fun QuickMemoDetailContent(
             stopVoiceRecording()
             return
         }
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+        recordAudioGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (recordAudioGranted) {
             startVoiceRecording()
         } else {
             recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -799,6 +901,25 @@ private fun QuickMemoDetailContent(
         if (hasImage) {
             QuickMemoImagePreview(
                 imagePath = memo.imagePath,
+                selected = isImageSelected,
+                onLongPress = {
+                    haptics.longPress()
+                    isImageSelected = true
+                },
+                onDismissSelection = { isImageSelected = false },
+                onDelete = {
+                    haptics.warning()
+                    onRemoveImage { result ->
+                        result
+                            .onSuccess {
+                                isImageSelected = false
+                                Toast.makeText(context, "已删除图片", Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure { error ->
+                                Toast.makeText(context, error.message ?: "删除图片失败", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth(),
                 cornerRadius = 24.dp,
@@ -806,6 +927,13 @@ private fun QuickMemoDetailContent(
                 contentScale = ContentScale.Fit
             )
             Spacer(Modifier.height(24.dp))
+        }
+
+        if (!recordAudioGranted) {
+            QuickMemoRecordPermissionCard(
+                onGrantClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+            )
+            Spacer(Modifier.height(20.dp))
         }
 
         Row(
@@ -937,6 +1065,45 @@ private fun QuickMemoDetailContent(
         )
     }
 }
+
+@Composable
+private fun QuickMemoRecordPermissionCard(onGrantClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Mic,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(28.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "需要录音权限",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "开启后才能在随口记里录音和转写。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                )
+            }
+            Button(onClick = onGrantClick) {
+                Text("授权")
+            }
+        }
+    }
+}
+
 @Composable
 private fun QuickMemoTextButton(text: String, onClick: () -> Unit) {
     Text(
@@ -997,6 +1164,16 @@ private fun QuickMemoDetailBottomBar(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
     }
+    val todoIndicatorColor = when {
+        isCompleted -> MaterialTheme.colorScheme.surfaceVariant
+        isTodo -> Color(0xFFF2B705).copy(alpha = 0.24f)
+        else -> indicatorColor
+    }
+    val todoContentColor = when {
+        isCompleted -> MaterialTheme.colorScheme.outline
+        isTodo -> Color(0xFF8A6500)
+        else -> contentColor
+    }
 
     Surface(
         modifier = modifier
@@ -1046,8 +1223,8 @@ private fun QuickMemoDetailBottomBar(
                 )
             } else {
                 QuickMemoActionButton(
-                    icon = Icons.Rounded.PushPin,
-                    contentDescription = if (isPinned) "取消挂起" else "挂起",
+                    icon = Icons.Rounded.NotificationsActive,
+                    contentDescription = if (isPinned) "取消实况挂起" else "挂到实况",
                     isActive = isPinned,
                     width = itemWidth,
                     indicatorColor = indicatorColor,
@@ -1064,8 +1241,8 @@ private fun QuickMemoDetailBottomBar(
                     },
                     isActive = isTodo,
                     width = itemWidth,
-                    indicatorColor = indicatorColor,
-                    contentColor = contentColor,
+                    indicatorColor = todoIndicatorColor,
+                    contentColor = todoContentColor,
                     disabledColor = disabledColor,
                     onClick = onTodoClick,
                 )
@@ -1256,6 +1433,32 @@ private fun QuickMemoTodoMark(done: Boolean, onClick: () -> Unit) {
                 Text("✓", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = accent)
             }
         }
+    }
+}
+
+@Composable
+private fun QuickMemoSwipeActionIcon(
+    icon: ImageVector,
+    contentDescription: String,
+    backgroundColor: Color,
+    size: Dp,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .padding(4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor.copy(alpha = 0.15f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = backgroundColor,
+            modifier = Modifier.size(22.dp)
+        )
     }
 }
 
@@ -1735,6 +1938,7 @@ private fun quickMemoWaveformWidth(durationMs: Long, minWidth: Dp, maxWidth: Dp)
 @Composable
 private fun FloatingVoicePlayButton(
     isPlaying: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     buttonSize: Dp = 34.dp,
@@ -1744,6 +1948,7 @@ private fun FloatingVoicePlayButton(
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(999.dp),
         color = containerColor,
         modifier = modifier.size(buttonSize)
@@ -1786,7 +1991,11 @@ private fun QuickMemoImagePreview(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 18.dp,
     preserveAspectRatio: Boolean = false,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    selected: Boolean = false,
+    onLongPress: () -> Unit = {},
+    onDismissSelection: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
     val bitmap = remember(imagePath) { decodeQuickMemoPreviewBitmap(imagePath) }
     val shape = RoundedCornerShape(cornerRadius)
@@ -1801,7 +2010,11 @@ private fun QuickMemoImagePreview(
                         .fillMaxWidth()
                         .height(targetHeight),
                     shape = shape,
-                    contentScale = contentScale
+                    contentScale = contentScale,
+                    selected = selected,
+                    onLongPress = onLongPress,
+                    onDismissSelection = onDismissSelection,
+                    onDelete = onDelete
                 )
             }
         } else {
@@ -1809,7 +2022,11 @@ private fun QuickMemoImagePreview(
                 bitmap = bitmap,
                 modifier = modifier,
                 shape = shape,
-                contentScale = contentScale
+                contentScale = contentScale,
+                selected = selected,
+                onLongPress = onLongPress,
+                onDismissSelection = onDismissSelection,
+                onDelete = onDelete
             )
         }
     } else {
@@ -1829,16 +2046,25 @@ private fun QuickMemoImagePreview(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun QuickMemoImageBox(
     bitmap: Bitmap,
     modifier: Modifier,
     shape: RoundedCornerShape,
-    contentScale: ContentScale
+    contentScale: ContentScale,
+    selected: Boolean = false,
+    onLongPress: () -> Unit = {},
+    onDismissSelection: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
+            .combinedClickable(
+                onClick = { if (selected) onDismissSelection() },
+                onLongClick = onLongPress
+            ),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -1847,6 +2073,32 @@ private fun QuickMemoImageBox(
             modifier = Modifier.fillMaxSize(),
             contentScale = contentScale
         )
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = 0.36f))
+            )
+            Surface(
+                onClick = onDelete,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(34.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.error,
+                shadowElevation = 6.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "删除图片",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

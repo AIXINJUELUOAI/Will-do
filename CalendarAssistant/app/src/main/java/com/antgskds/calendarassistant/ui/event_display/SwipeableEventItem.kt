@@ -35,6 +35,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -76,6 +77,13 @@ fun SwipeableEventItem(
     val density = LocalDensity.current
     val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
     val haptics = rememberAppHaptics(hapticEnabled)
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -219,7 +227,7 @@ fun SwipeableEventItem(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (isExpired) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                            color = if (isExpired) secondaryTextColor else primaryTextColor,
                             textDecoration = if (isExpired) TextDecoration.LineThrough else null
                         )
 
@@ -258,7 +266,7 @@ fun SwipeableEventItem(
                             Text(
                                 text = displayDescription,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = secondaryTextColor,
                                 maxLines = 2
                             )
                         }

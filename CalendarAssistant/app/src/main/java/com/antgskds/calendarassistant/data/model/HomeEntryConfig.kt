@@ -21,6 +21,20 @@ fun sanitizeHomeBottomItems(raw: List<String>): List<String> {
     return listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE)
 }
 
+fun visibleHomeBottomItems(raw: List<String>, quickMemoEnabled: Boolean): List<String> {
+    val sanitized = sanitizeHomeBottomItems(raw)
+    val visible = if (quickMemoEnabled) {
+        sanitized
+    } else {
+        sanitized.filterNot { it == HomeEntryKey.NOTE }
+    }
+    return visible.ifEmpty { listOf(HomeEntryKey.TODAY) }
+}
+
+fun isHomeEntryAvailable(key: String, quickMemoEnabled: Boolean): Boolean {
+    return key != HomeEntryKey.NOTE || quickMemoEnabled
+}
+
 fun sanitizeHomeStartPageKey(raw: String, bottomItems: List<String>): String {
     val normalized = raw.trim().lowercase()
     return if (normalized in bottomItems) normalized else bottomItems.firstOrNull() ?: HomeEntryKey.TODAY

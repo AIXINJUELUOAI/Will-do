@@ -38,6 +38,7 @@ import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -65,10 +66,17 @@ fun NoteCard(
     val previewText = remember(document) { buildNotePreview(document.paragraphs) }
     val updatedLabel = remember(note.updatedAt) { formatNoteUpdatedText(note.updatedAt) }
     val isCompleted = document.allTodosCompleted()
-    val titleColor = if (isCompleted) {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
     } else {
-        MaterialTheme.colorScheme.onSurface
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val titleColor = if (isCompleted) {
+        primaryTextColor.copy(alpha = 0.62f)
+    } else {
+        primaryTextColor
     }
 
     Column(
@@ -141,7 +149,7 @@ fun NoteCard(
                     Text(
                         text = "+$remainingTaskCount 项",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryTextColor,
                         maxLines = 1
                     )
                 }
@@ -150,7 +158,7 @@ fun NoteCard(
             Text(
                 text = previewText ?: "空白便签",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondaryTextColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -160,7 +168,7 @@ fun NoteCard(
             text = updatedLabel,
             modifier = Modifier.padding(top = 10.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+            color = secondaryTextColor.copy(alpha = 0.58f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -168,13 +176,19 @@ fun NoteCard(
         HorizontalDivider(
             modifier = Modifier.padding(top = 18.dp),
             thickness = 0.6.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            color = if (usesWallpaperText) {
+                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.20f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            }
         )
     }
 }
 
 @Composable
 private fun NoteTaskPreviewRow(task: NoteParagraph, onToggle: () -> Unit) {
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -185,9 +199,9 @@ private fun NoteTaskPreviewRow(task: NoteParagraph, onToggle: () -> Unit) {
             text = styledPreviewText(task),
             style = MaterialTheme.typography.bodyMedium,
             color = if (task.checked) {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                primaryTextColor.copy(alpha = 0.62f)
             } else {
-                MaterialTheme.colorScheme.onSurface
+                primaryTextColor
             },
             textDecoration = if (task.checked) TextDecoration.LineThrough else null,
             maxLines = 1,

@@ -73,6 +73,7 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
+import com.antgskds.calendarassistant.ui.floating.PickupQrFloatingCard
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
@@ -105,6 +106,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val ACTION_PREPARE_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.PREPARE_VOICE_CAPTURE"
         const val ACTION_START_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.START_VOICE_CAPTURE"
         const val ACTION_STOP_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.STOP_VOICE_CAPTURE"
+        const val ACTION_SHOW_PICKUP_QR_CARD = "com.antgskds.calendarassistant.floating.action.SHOW_PICKUP_QR_CARD"
         const val ACTION_VOICE_CAPTURE_RECORDING = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_RECORDING"
         const val ACTION_VOICE_CAPTURE_COMPLETED = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_COMPLETED"
         const val ACTION_VOICE_CAPTURE_TOO_SHORT = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_TOO_SHORT"
@@ -118,6 +120,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val EXTRA_VOICE_AUDIO_PATH = "extra_voice_audio_path"
         const val EXTRA_VOICE_DURATION_MS = "extra_voice_duration_ms"
         const val EXTRA_VOICE_ERROR_MESSAGE = "extra_voice_error_message"
+        const val EXTRA_PICKUP_EVENT_ID = "extra_pickup_event_id"
 
         @Volatile var isShowing: Boolean = false
             private set
@@ -142,6 +145,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private val voiceCaptureState = MutableStateFlow(QuickMemoVoiceCaptureState())
     private val recentVoiceMemoId = MutableStateFlow<Long?>(null)
     private val requestedInputMode = MutableStateFlow(FloatingInputMode.SCHEDULE to 0L)
+    private val pickupQrEventId = MutableStateFlow<Long?>(null)
     private val audioRecorder by lazy { QuickMemoAudioRecorder(applicationContext) }
     private var voiceConfirmJob: Job? = null
     private var recentVoiceMemoJob: Job? = null
@@ -341,9 +345,13 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val currentVoiceCaptureState by voiceCaptureState.collectAsState()
                 val currentRecentVoiceMemoId by recentVoiceMemoId.collectAsState()
                 val currentRequestedInputMode by requestedInputMode.collectAsState()
+                val currentPickupQrEventId by pickupQrEventId.collectAsState()
                 val audioPlaybackState by audioPlaybackCenter.playbackState.collectAsState()
                 val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
                 val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
+                val pickupQrEvent = currentPickupQrEventId?.let { eventId ->
+                    events.firstOrNull { it.id == eventId && it.codeQrPayload.isNotBlank() }
+                }
 
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
@@ -374,7 +382,19 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     customThemeColorHex = settings.customThemeColorHex
                 ) {
                     val floatingContent: @androidx.compose.runtime.Composable () -> Unit = {
-                        when (UiStyle.fromName(settings.uiStyle)) {
+                        if (pickupQrEvent != null) {
+                            PickupQrFloatingCard(
+                                event = pickupQrEvent,
+                                onClose = { requestClose() },
+                                onComplete = {
+                                    val eventId = pickupQrEvent.id
+                                    if (eventId != null) {
+                                        scheduleCenter.completeItem(ScheduleDisplayItem.ActionTarget.Single(eventId))
+                                    }
+                                    requestClose()
+                                }
+                            )
+                        } else when (UiStyle.fromName(settings.uiStyle)) {
                             UiStyle.MIUI -> com.antgskds.calendarassistant.miui.floating.FloatingScheduleScreen(
                                 scheduleItems = scheduleItems,
                                 weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
@@ -1209,7 +1229,16 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
         applyRequestedInputMode(intent)
         when (intent?.action) {
+            ACTION_SHOW_PICKUP_QR_CARD -> {
+                val eventId = intent.getLongExtra(EXTRA_PICKUP_EVENT_ID, -1L).takeIf { it > 0L }
+                if (eventId == null) return START_NOT_STICKY
+                pickupQrEventId.value = eventId
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                showFloatingWindow()
+                return START_NOT_STICKY
+            }
             ACTION_IMAGE_PICKED -> {
+                pickupQrEventId.value = null
                 showFloatingWindow()
                 val uriStr = intent.getStringExtra(EXTRA_IMAGE_URI)
                 if (uriStr.isNullOrBlank()) {
@@ -1220,20 +1249,24 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 return START_NOT_STICKY
             }
             ACTION_IMAGE_PICK_CANCELLED -> {
+                pickupQrEventId.value = null
                 showFloatingWindow()
                 finishPendingImagePick()
                 return START_NOT_STICKY
             }
             ACTION_PREPARE_VOICE_CAPTURE -> {
+                pickupQrEventId.value = null
                 detachFloatingWindowForVoice()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_RECORDING -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceRecording()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_COMPLETED -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceCompleted(
                     path = intent.getStringExtra(EXTRA_VOICE_AUDIO_PATH),
@@ -1242,27 +1275,32 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_TOO_SHORT -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceTooShort()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_ERROR -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceError(intent.getStringExtra(EXTRA_VOICE_ERROR_MESSAGE).orEmpty())
                 return START_NOT_STICKY
             }
             ACTION_START_VOICE_CAPTURE -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 startVoiceCapture()
                 return START_NOT_STICKY
             }
             ACTION_STOP_VOICE_CAPTURE -> {
+                pickupQrEventId.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 stopVoiceCapture()
                 return START_NOT_STICKY
             }
         }
 
+        pickupQrEventId.value = null
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         showFloatingWindow()
         return START_NOT_STICKY

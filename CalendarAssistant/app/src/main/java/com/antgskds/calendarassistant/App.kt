@@ -304,7 +304,11 @@ class App : Application() {
     }
 
     val floatingCenter: FloatingCenter by lazy {
-        FloatingCenter(appContext = applicationContext, permissionCenter = permissionCenter)
+        FloatingCenter(
+            appContext = applicationContext,
+            permissionCenter = permissionCenter,
+            settingsQueryApi = settingsQueryApi
+        )
     }
 
     val notificationRegistryStore: SharedPreferencesNotificationRegistryStore by lazy {
@@ -443,7 +447,7 @@ class App : Application() {
         // 注册内容源
         ContentRegistry.register(ContentDefinition(ContentSourceType.SCHEDULE, "日程", true, true))
         ContentRegistry.register(ContentDefinition(ContentSourceType.WEATHER, "天气", true, true))
-        ContentRegistry.register(ContentDefinition(ContentSourceType.VOICE_CAPTURE, "语音输入", true, false))
+        ContentRegistry.register(ContentDefinition(ContentSourceType.VOICE_CAPTURE, "随口记", true, false))
         ContentRegistry.register(ContentDefinition(ContentSourceType.IMAGE_SHARE, "图片分享", false, false))
 
         // CalDAVUpdateListener 通过 JobScheduler 自动监听系统日历变化

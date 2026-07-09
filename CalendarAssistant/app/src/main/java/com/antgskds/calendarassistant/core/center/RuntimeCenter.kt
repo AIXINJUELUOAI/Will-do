@@ -100,6 +100,9 @@ class RuntimeCenter(
             if (settings.isFloatingWindowEnabled && settings.edgeBarEnabled && permissionCenter.canDrawOverlays(appContext)) {
                 floatingCenter.startEdgeBarServiceIfPermitted()
             }
+            if (settings.isFloatingWindowEnabled && settings.floatingBallEnabled && permissionCenter.canDrawOverlays(appContext)) {
+                floatingCenter.startFloatingBallServiceIfPermitted()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Start edge bar failed", e)
         }

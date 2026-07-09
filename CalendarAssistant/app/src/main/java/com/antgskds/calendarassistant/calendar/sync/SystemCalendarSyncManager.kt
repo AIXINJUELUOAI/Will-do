@@ -456,7 +456,8 @@ class SystemCalendarSyncManager(private val context: Context) {
                                 type = base?.type ?: 0,
                                 state = base?.state ?: STATE_PENDING,
                                 tag = inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL),
-                                archivedAt = base?.archivedAt
+                                archivedAt = base?.archivedAt,
+                                codeQrPayload = base?.codeQrPayload.orEmpty()
                             )
                             db.eventsDao().insertOrUpdate(exceptionEvent)
                         } else {
@@ -504,7 +505,8 @@ class SystemCalendarSyncManager(private val context: Context) {
                     type = base?.type ?: 0,
                     state = base?.state ?: STATE_PENDING,
                     tag = inferEventTagFromDescription(description, base?.tag ?: TAG_GENERAL),
-                    archivedAt = base?.archivedAt
+                    archivedAt = base?.archivedAt,
+                    codeQrPayload = base?.codeQrPayload.orEmpty()
                 )
 
                 val matchedUnbound = if (base == null) {
@@ -522,6 +524,7 @@ class SystemCalendarSyncManager(private val context: Context) {
                         color = if (matchedUnbound.color != 0) matchedUnbound.color else event.color,
                         location = matchedUnbound.location.ifBlank { event.location },
                         description = if (matchedUnbound.description.length >= event.description.length) matchedUnbound.description else event.description,
+                        codeQrPayload = matchedUnbound.codeQrPayload.ifBlank { event.codeQrPayload },
                         tag = inferEventTagFromDescription(event.description, matchedUnbound.tag),
                         lastUpdated = System.currentTimeMillis()
                     )

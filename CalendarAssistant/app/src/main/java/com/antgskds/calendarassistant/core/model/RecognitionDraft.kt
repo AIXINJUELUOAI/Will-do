@@ -7,5 +7,6 @@ data class RecognitionDraft(
     val location: String = "",
     val description: String = "",
     val timeZone: String = "",
-    val tag: String = "general"
+    val tag: String = "general",
+    val qrPayload: String = ""
 )

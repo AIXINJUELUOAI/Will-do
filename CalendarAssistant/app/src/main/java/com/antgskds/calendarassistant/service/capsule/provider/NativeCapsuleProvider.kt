@@ -11,6 +11,8 @@ import android.os.Bundle
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
+import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
@@ -27,7 +29,9 @@ class NativeCapsuleProvider : ICapsuleProvider {
         iconResId: Int
     ): Notification {
         val display = item.display
-        val collapsedShortText = collapseShortText(display.shortText)
+        val collapsedShortText = collapseShortText(
+            if (item.type == CapsuleType.QUICK_MEMO_RECORDING) display.primaryText else display.shortText
+        )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, App.CHANNEL_ID_LIVE)
         } else {
@@ -49,9 +53,15 @@ class NativeCapsuleProvider : ICapsuleProvider {
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
 
-        builder.setContentText(display.secondaryText ?: " ")
+        builder.setContentText(
+            if (item.type == CapsuleType.QUICK_MEMO_RECORDING) " " else display.secondaryText ?: " "
+        )
 
-        val expandedText = display.expandedText ?: display.secondaryText ?: " "
+        val expandedText = if (item.type == CapsuleType.QUICK_MEMO_RECORDING) {
+            " "
+        } else {
+            display.expandedText ?: display.secondaryText ?: " "
+        }
         builder.setStyle(
             Notification.BigTextStyle()
                 .setBigContentTitle(display.primaryText)
@@ -80,9 +90,12 @@ class NativeCapsuleProvider : ICapsuleProvider {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): PendingIntent {
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
+        val tapEventId = item.display.tapEventId?.toLongOrNull()
+        val tapIntent = Intent(context, if (tapEventId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (item.display.tapOpensPickupList) {
+            if (tapEventId != null) {
+                putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (item.display.tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }
         }

@@ -45,7 +45,6 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.developer.DebugAction
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
-import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
@@ -368,12 +367,8 @@ fun DeveloperPage(
 
             Text(text = "通知与日志", style = sectionTitleStyle)
             DeveloperOptionsCard(
-                appBackgroundCardAlphaPercent = settings.appBackgroundCardAlphaPercent,
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 onOpenLogExportSheet = { showLogExportSheet = true },
-                onAppBackgroundCardAlphaPercentChange = { alphaPercent ->
-                    settingsViewModel.updatePreference(appBackgroundCardAlphaPercent = alphaPercent)
-                },
                 onLiveNotificationTemplateModeChange = { mode ->
                     settingsViewModel.updatePreference(liveNotificationTemplateMode = mode)
                     app?.capsuleCenter?.forceRefresh()
@@ -625,10 +620,8 @@ private fun DisabledDeveloperCard(
 
 @Composable
 private fun DeveloperOptionsCard(
-    appBackgroundCardAlphaPercent: Int,
     liveNotificationTemplateMode: String,
     onOpenLogExportSheet: () -> Unit,
-    onAppBackgroundCardAlphaPercentChange: (Int) -> Unit,
     onLiveNotificationTemplateModeChange: (String) -> Unit
 ) {
     val haptics = rememberAppHaptics()
@@ -639,58 +632,7 @@ private fun DeveloperOptionsCard(
     val modes = LiveNotificationTemplateMode.ALL
     val normalizedMode = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode)
     val selectedIndex = modes.indexOf(normalizedMode).takeIf { it >= 0 } ?: 0
-    val normalizedCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(appBackgroundCardAlphaPercent)
     SettingsCard {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "壁纸卡片透明度",
-                style = titleStyle,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "控制导入背景图片后卡片和底栏的玻璃表面透明度；普通主题不受影响。",
-                style = subtitleStyle
-            )
-            Text(
-                text = "当前：$normalizedCardAlphaPercent%",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Slider(
-                value = normalizedCardAlphaPercent.toFloat(),
-                onValueChange = { value ->
-                    val nextPercent = value.roundToInt().coerceIn(
-                        MySettings.APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
-                        MySettings.APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT
-                    )
-                    if (nextPercent != normalizedCardAlphaPercent) {
-                        haptics.selection()
-                        onAppBackgroundCardAlphaPercentChange(nextPercent)
-                    }
-                },
-                valueRange = MySettings.APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT.toFloat()..MySettings.APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT.toFloat(),
-                steps = 0
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "更通透",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "更实",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        RowDivider()
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)

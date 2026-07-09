@@ -23,6 +23,12 @@ fun localProperty(name: String): String {
         .removeSurrounding("\"")
 }
 
+fun signingProperty(name: String): String {
+    return (providers.gradleProperty(name).orNull ?: localProperty(name))
+        .trim()
+        .removeSurrounding("\"")
+}
+
 fun escapeBuildConfigString(value: String): String {
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 }
@@ -35,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 85
+        versionCode = 86
         versionName = "2.1.5 Beta3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -60,10 +66,31 @@ android {
         )
     }
 
+    signingConfigs {
+        val releaseStoreFile = signingProperty("RELEASE_STORE_FILE")
+        val releaseStorePassword = signingProperty("RELEASE_STORE_PASSWORD")
+        val releaseKeyAlias = signingProperty("RELEASE_KEY_ALIAS")
+        val releaseKeyPassword = signingProperty("RELEASE_KEY_PASSWORD")
+        if (
+            releaseStoreFile.isNotBlank() &&
+            releaseStorePassword.isNotBlank() &&
+            releaseKeyAlias.isNotBlank() &&
+            releaseKeyPassword.isNotBlank()
+        ) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -126,6 +153,10 @@ dependencies {
 
     // === ML Kit (OCR 识别) ===
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // === QR 码生成 ===
+    implementation("com.google.zxing:core:3.5.3")
 
     // === 离线语音转写 ===
     implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.21")

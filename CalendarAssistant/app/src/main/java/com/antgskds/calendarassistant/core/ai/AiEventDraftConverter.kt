@@ -36,6 +36,7 @@ fun convertDraftToEvent(
         description = mergeSourceImageMarker(draft.description, sourceImagePath),
         timeZone = draft.timeZone,
         tag = resolvedTag,
+        codeQrPayload = draft.qrPayload,
         color = randomRecognizedEventColor(eventColorPaletteHex)
     )
 }

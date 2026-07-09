@@ -14,6 +14,7 @@ data class CapsuleDisplayModel(
     val tertiaryText: String? = null,
     val expandedText: String? = null,
     val tapOpensPickupList: Boolean = false,
+    val tapEventId: String? = null,
     val action: CapsuleActionSpec? = null,
     val actions: List<CapsuleActionSpec> = emptyList()
 ) {

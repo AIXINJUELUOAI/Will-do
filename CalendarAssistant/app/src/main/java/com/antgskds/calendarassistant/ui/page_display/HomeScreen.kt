@@ -33,6 +33,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
@@ -78,6 +79,8 @@ fun HomeScreen(
     settingsViewModel: SettingsViewModel,
     pickupTimestamp: Long = 0L, // 【修改 1】参数改为 Long
     openCourseRequestId: Long = 0L,
+    openEventId: Long? = null,
+    openEventRequestId: Long = 0L,
     selectedPageKey: String = HomeEntryKey.TODAY,
     clipboardPrompt: ClipboardCodePrompt? = null,
     onConfirmClipboardPrompt: () -> Unit = {},
@@ -166,8 +169,11 @@ fun HomeScreen(
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
 
-    val homeBottomItems = remember(settings.homeBottomItems) {
+    val storedHomeBottomItems = remember(settings.homeBottomItems) {
         sanitizeHomeBottomItems(settings.homeBottomItems)
+    }
+    val homeBottomItems = remember(storedHomeBottomItems, settings.voiceInputEnabled) {
+        visibleHomeBottomItems(storedHomeBottomItems, quickMemoEnabled = settings.voiceInputEnabled)
     }
     val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
         sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -175,11 +181,12 @@ fun HomeScreen(
 
     val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
 
-    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey) {
-        if (homeBottomItems != settings.homeBottomItems || homeStartPageKey != settings.homeStartPageKey) {
+    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, storedHomeBottomItems) {
+        val storedStartPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, storedHomeBottomItems)
+        if (storedHomeBottomItems != settings.homeBottomItems || storedStartPage != settings.homeStartPageKey) {
             settingsViewModel.updatePreference(
-                homeBottomItems = homeBottomItems,
-                homeStartPageKey = homeStartPageKey
+                homeBottomItems = storedHomeBottomItems,
+                homeStartPageKey = storedStartPage
             )
         }
     }
@@ -208,6 +215,7 @@ fun HomeScreen(
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
     var addDialogRequestId by remember { mutableIntStateOf(0) }
+    var lastOpenEventRequestId by remember { mutableLongStateOf(0L) }
     val dialogDelayMs = 240L
 
     LaunchedEffect(pendingAddDialog) {
@@ -286,6 +294,18 @@ fun HomeScreen(
             editingVirtualCourse = null
             recurringEditSession = null
         }
+    }
+
+    LaunchedEffect(openEventRequestId, openEventId, uiState.rawEvents) {
+        val eventId = openEventId ?: return@LaunchedEffect
+        if (openEventRequestId == 0L || openEventRequestId == lastOpenEventRequestId) return@LaunchedEffect
+        val event = uiState.rawEvents.firstOrNull { it.id == eventId } ?: return@LaunchedEffect
+        lastOpenEventRequestId = openEventRequestId
+        if (event.codeQrPayload.isNotBlank() && app.floatingCenter.startPickupQrCard(eventId)) {
+            return@LaunchedEffect
+        }
+        onSelectedPageKeyChange(HomeEntryKey.ALL)
+        beginEdit(event)
     }
 
     /**
@@ -392,7 +412,12 @@ fun HomeScreen(
             bottomInset
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
 
-    Box(modifier = Modifier) {
+    AppBackgroundStyleTheme(
+        enabled = hasAppBackground,
+        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
+    ) {
+        Box(modifier = Modifier) {
         BackHandler(enabled = isSidebarOpen) {
             isSidebarOpen = false
         }
@@ -404,25 +429,19 @@ fun HomeScreen(
             enableGesture = !isScheduleExpanded, // 课表展开时禁用侧边栏手势
             contentContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background,
             sidebar = {
-                AppBackgroundStyleTheme(
-                    enabled = hasAppBackground,
-                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
-                    cardAlphaPercent = settings.appBackgroundCardAlphaPercent
-                ) {
-                    SettingsSidebar(
-                        isDarkMode = settings.isDarkMode,
-                        glassMode = hasAppBackground,
-                        hasAppUpdate = appUpdateUiState.hasUpdate,
-                        onThemeToggle = { isDark ->
-                            settingsViewModel.updateDarkMode(isDark)
-                        },
-                        onNavigate = { destination ->
-                            // 关闭侧边栏并触发导航
-                            isSidebarOpen = false
-                            onNavigateToSettings(destination)
-                        }
-                    )
-                }
+                SettingsSidebar(
+                    isDarkMode = settings.isDarkMode,
+                    glassMode = hasAppBackground,
+                    hasAppUpdate = appUpdateUiState.hasUpdate,
+                    onThemeToggle = { isDark ->
+                        settingsViewModel.updateDarkMode(isDark)
+                    },
+                    onNavigate = { destination ->
+                        // 关闭侧边栏并触发导航
+                        isSidebarOpen = false
+                        onNavigateToSettings(destination)
+                    }
+                )
             },
             bottomBar = {},
             content = {
@@ -662,6 +681,7 @@ fun HomeScreen(
                 UniversalToast(message = snackbarData.visuals.message, type = currentToastType)
             }
         )
+        }
     }
 
     // --- 全局弹窗处理 (仅保留日常操作) ---

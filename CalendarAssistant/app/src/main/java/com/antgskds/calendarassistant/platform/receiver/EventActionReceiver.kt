@@ -118,7 +118,7 @@ class EventActionReceiver : BroadcastReceiver() {
                         if (eventIdStr == CapsuleStateManager.AGGREGATE_PICKUP_ID) {
                             // 聚合取件完成：完成所有活跃的取件事件
                             val pickups = scheduleCenter.events.value.filter {
-                                it.tag == EventTags.PICKUP && !it.isCompleted
+                                it.tag in setOf(EventTags.PICKUP, EventTags.FOOD, EventTags.TICKET, EventTags.SENDER) && !it.isCompleted
                             }
                             pickups.forEach { event ->
                                 val id = event.id ?: return@forEach

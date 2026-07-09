@@ -1,8 +1,11 @@
 package com.antgskds.calendarassistant.data.query
 
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
+import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
+import com.antgskds.calendarassistant.data.model.FloatingEntryStyle
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 
@@ -30,6 +33,16 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         selectedLocalModelId: String?,
         floatingEventRange: Int?,
         floatingExpandSide: String?,
+        quickMemoRecordingDisplayMode: Int?,
+        floatingEntryStyle: Int?,
+        floatingBallEnabled: Boolean?,
+        floatingBallXPercent: Float?,
+        floatingBallYPercent: Float?,
+        floatingBallSizeDp: Int?,
+        floatingBallAlpha: Float?,
+        floatingBallSingleTapAction: Int?,
+        floatingBallDoubleTapAction: Int?,
+        floatingBallLongPressAction: Int?,
         volumeUpLongPressEnabled: Boolean?,
         volumeUpLongPressAction: Int?,
         smsMonitoring: Boolean?,
@@ -82,6 +95,28 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (selectedLocalModelId != null) updated = updated.copy(selectedLocalModelId = selectedLocalModelId)
         if (floatingEventRange != null) updated = updated.copy(floatingEventRange = floatingEventRange)
         if (floatingExpandSide != null) updated = updated.copy(floatingExpandSide = sanitizeFloatingSide(floatingExpandSide))
+        if (quickMemoRecordingDisplayMode != null) {
+            updated = updated.copy(
+                quickMemoRecordingDisplayMode = QuickMemoRecordingDisplayMode.normalize(quickMemoRecordingDisplayMode)
+            )
+        }
+        if (floatingEntryStyle != null) {
+            updated = updated.copy(floatingEntryStyle = FloatingEntryStyle.normalize(floatingEntryStyle))
+        }
+        if (floatingBallEnabled != null) updated = updated.copy(floatingBallEnabled = floatingBallEnabled)
+        if (floatingBallXPercent != null) updated = updated.copy(floatingBallXPercent = floatingBallXPercent.coerceIn(0f, 100f))
+        if (floatingBallYPercent != null) updated = updated.copy(floatingBallYPercent = floatingBallYPercent.coerceIn(0f, 100f))
+        if (floatingBallSizeDp != null) updated = updated.copy(floatingBallSizeDp = floatingBallSizeDp.coerceIn(40, 80))
+        if (floatingBallAlpha != null) updated = updated.copy(floatingBallAlpha = floatingBallAlpha.coerceIn(0.2f, 1f))
+        if (floatingBallSingleTapAction != null) {
+            updated = updated.copy(floatingBallSingleTapAction = FloatingBallGestureAction.normalize(floatingBallSingleTapAction))
+        }
+        if (floatingBallDoubleTapAction != null) {
+            updated = updated.copy(floatingBallDoubleTapAction = FloatingBallGestureAction.normalize(floatingBallDoubleTapAction))
+        }
+        if (floatingBallLongPressAction != null) {
+            updated = updated.copy(floatingBallLongPressAction = FloatingBallGestureAction.normalize(floatingBallLongPressAction))
+        }
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
         if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction.coerceIn(1, 3))
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)

@@ -3,6 +3,11 @@ package com.antgskds.calendarassistant.ui.page_display.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,8 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +46,7 @@ import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStatus
 import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStore
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -118,60 +125,30 @@ fun LaboratoryPage(
     ) {
         if (settings != null) {
             Text(
-                text = "语音输入",
+                text = "随口记",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
 
-            LaboratorySwitchCard(
-                title = "语音输入",
-                subtitle = "总开关。关闭后长按音量+和悬浮窗入口都不能启动语音输入",
-                checked = settings!!.voiceInputEnabled,
-                onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(
-                        voiceInputEnabled = enabled
-                    )
-                }
-            )
-
-            LaboratorySwitchCard(
-                title = "悬浮窗长按语音输入",
-                subtitle = "控制悬浮窗已呼出后，再次长按音量+是否进入语音输入",
-                checked = settings!!.floatingVoiceLongPressEnabled,
-                onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(
-                        floatingVoiceLongPressEnabled = enabled
-                    )
-                }
-            )
-
-            LaboratorySwitchCard(
-                title = "悬浮窗文本随口记同步挂起",
-                subtitle = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知",
-                checked = settings!!.floatingTextQuickMemoAutoPinEnabled,
-                onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(
-                        floatingTextQuickMemoAutoPinEnabled = enabled
-                    )
-                }
-            )
-
-            LaboratorySwitchCard(
-                title = "语音随口记同步挂起",
-                subtitle = "语音随口记转写完成后，自动挂到实况通知；需开启实况通知",
-                checked = settings!!.voiceQuickMemoAutoPinEnabled,
-                onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(
-                        voiceQuickMemoAutoPinEnabled = enabled
-                    )
-                }
-            )
-
-            LaboratoryActionCard(
-                title = "语音转写模型",
-                subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),
-                buttonText = if (asrModelStatus.ready) "更换模型" else "导入模型",
-                onClick = { asrModelImportLauncher.launch(arrayOf("*/*")) }
+            LaboratoryQuickMemoCard(
+                settings = settings!!,
+                asrModelStatus = asrModelStatus,
+                onVoiceInputEnabledChange = { enabled ->
+                    settingsViewModel?.updatePreference(voiceInputEnabled = enabled)
+                },
+                onFloatingLongPressChange = { enabled ->
+                    settingsViewModel?.updatePreference(floatingVoiceLongPressEnabled = enabled)
+                },
+                onRecordingDisplayModeChange = { mode ->
+                    settingsViewModel?.updatePreference(quickMemoRecordingDisplayMode = mode)
+                },
+                onTextAutoPinChange = { enabled ->
+                    settingsViewModel?.updatePreference(floatingTextQuickMemoAutoPinEnabled = enabled)
+                },
+                onVoiceAutoPinChange = { enabled ->
+                    settingsViewModel?.updatePreference(voiceQuickMemoAutoPinEnabled = enabled)
+                },
+                onImportAsrModel = { asrModelImportLauncher.launch(arrayOf("*/*")) }
             )
 
             Text(
@@ -254,40 +231,193 @@ fun LaboratoryPage(
 }
 
 @Composable
+private fun LaboratoryQuickMemoCard(
+    settings: MySettings,
+    asrModelStatus: QuickMemoAsrModelStatus,
+    onVoiceInputEnabledChange: (Boolean) -> Unit,
+    onFloatingLongPressChange: (Boolean) -> Unit,
+    onRecordingDisplayModeChange: (Int) -> Unit,
+    onTextAutoPinChange: (Boolean) -> Unit,
+    onVoiceAutoPinChange: (Boolean) -> Unit,
+    onImportAsrModel: () -> Unit
+) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            LaboratorySwitchRow(
+                title = "随口记",
+                subtitle = "总开关。关闭后长按音量+和悬浮窗入口都不能启动随口记录音",
+                checked = settings.voiceInputEnabled,
+                onCheckedChange = onVoiceInputEnabledChange
+            )
+
+            AnimatedVisibility(
+                visible = settings.voiceInputEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    LaboratoryDivider()
+                    LaboratorySwitchRow(
+                        title = "悬浮窗长按随口记",
+                        subtitle = "控制悬浮窗已呼出后，再次长按音量+是否进入随口记录音",
+                        checked = settings.floatingVoiceLongPressEnabled,
+                        onCheckedChange = onFloatingLongPressChange
+                    )
+                    LaboratoryDivider()
+                    LaboratoryTwoOptionRow(
+                        title = "录音展示",
+                        subtitle = if (settings.quickMemoRecordingDisplayMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
+                            "所有入口录音时使用悬浮窗"
+                        } else {
+                            "所有入口录音时使用实况通知"
+                        },
+                        selectedValue = QuickMemoRecordingDisplayMode.normalize(settings.quickMemoRecordingDisplayMode),
+                        firstValue = QuickMemoRecordingDisplayMode.LIVE_CAPSULE,
+                        firstLabel = "实况通知",
+                        secondValue = QuickMemoRecordingDisplayMode.FLOATING_WINDOW,
+                        secondLabel = "悬浮窗",
+                        onValueSelected = onRecordingDisplayModeChange
+                    )
+                    LaboratoryDivider()
+                    LaboratorySwitchRow(
+                        title = "悬浮窗文本随口记同步挂起",
+                        subtitle = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知",
+                        checked = settings.floatingTextQuickMemoAutoPinEnabled,
+                        onCheckedChange = onTextAutoPinChange
+                    )
+                    LaboratoryDivider()
+                    LaboratorySwitchRow(
+                        title = "语音随口记同步挂起",
+                        subtitle = "语音随口记转写完成后，自动挂到实况通知；需开启实况通知",
+                        checked = settings.voiceQuickMemoAutoPinEnabled,
+                        onCheckedChange = onVoiceAutoPinChange
+                    )
+                    LaboratoryDivider()
+                    LaboratoryActionRow(
+                        title = "语音转写模型",
+                        subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),
+                        buttonText = if (asrModelStatus.ready) "更换模型" else "导入模型",
+                        onClick = onImportAsrModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LaboratoryDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
+}
+
+@Composable
 private fun LaboratorySwitchCard(
     title: String,
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val haptics = rememberAppHaptics()
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        LaboratorySwitchRow(
+            title = title,
+            subtitle = subtitle,
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun LaboratorySwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val haptics = rememberAppHaptics()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = { haptics.selection(); onCheckedChange(it) }
+        )
+    }
+}
+
+@Composable
+private fun LaboratoryTwoOptionRow(
+    title: String,
+    subtitle: String,
+    selectedValue: Int,
+    firstValue: Int,
+    firstLabel: String,
+    secondValue: Int,
+    secondLabel: String,
+    onValueSelected: (Int) -> Unit
+) {
+    val haptics = rememberAppHaptics()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (selectedValue == firstValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
+                    Text(firstLabel)
                 }
-                Switch(
-                    checked = checked,
-                    onCheckedChange = { haptics.selection(); onCheckedChange(it) }
-                )
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
+                    Text(firstLabel)
+                }
+            }
+            if (selectedValue == secondValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
+                    Text(secondLabel)
+                }
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
+                    Text(secondLabel)
+                }
             }
         }
     }
@@ -299,6 +429,39 @@ private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): Stri
         !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
         !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
         else -> "缺少 tokens.txt"
+    }
+}
+
+@Composable
+private fun LaboratoryActionRow(
+    title: String,
+    subtitle: String,
+    buttonText: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Button(onClick = onClick) {
+            Text(buttonText)
+        }
     }
 }
 
@@ -315,35 +478,12 @@ private fun LaboratoryActionCard(
         shape = RoundedCornerShape(16.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f).padding(end = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Button(onClick = onClick) {
-                    Text(buttonText)
-                }
-            }
-        }
+        LaboratoryActionRow(
+            title = title,
+            subtitle = subtitle,
+            buttonText = buttonText,
+            onClick = onClick
+        )
     }
 }
 

@@ -135,10 +135,10 @@ data class MySettings(
     // 【实验室】剪贴板码类识别
     val clipboardCodeRecognitionEnabled: Boolean = false,
 
-    // 【实验室】语音输入总开关
+    // 【实验室】随口记总开关
     val voiceInputEnabled: Boolean = false,
 
-    // 【实验室】悬浮窗已呼出后，长按音量+是否允许进入语音输入；默认保留旧行为
+    // 【实验室】悬浮窗已呼出后，长按音量+是否允许进入随口记录音；默认保留旧行为
     val floatingVoiceLongPressEnabled: Boolean = true,
     // 【实验室】悬浮窗文本随口记保存后同步挂到实况通知；默认关闭，避免意外打扰
     val floatingTextQuickMemoAutoPinEnabled: Boolean = false,
@@ -179,6 +179,7 @@ data class MySettings(
     val appBackgroundWallpaperBlurEnabled: Boolean = false,
     val appBackgroundCardAlphaPercent: Int = APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     val appBackgroundScrimAlphaPercent: Int = 0, // 旧设置兼容字段；主界面背景不再叠加蒙层
+    val appBackgroundAverageLuminance: Float = -1f,
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
     val uiSize: Int = 2,
@@ -195,6 +196,7 @@ data class MySettings(
     val isFloatingWindowEnabled: Boolean = false,
     val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
     val floatingExpandSide: String = "RIGHT", // 悬浮窗展开方向：LEFT/RIGHT
+    val quickMemoRecordingDisplayMode: Int = QuickMemoRecordingDisplayMode.LIVE_CAPSULE,
 
     // 天气配置
     val weatherEnabled: Boolean = false,
@@ -242,7 +244,7 @@ data class MySettings(
 
     // 长按音量+动作
     val volumeUpLongPressEnabled: Boolean = false,
-    val volumeUpLongPressAction: Int = 1, // 1=识屏, 2=悬浮窗, 3=语音输入
+    val volumeUpLongPressAction: Int = 1, // 1=识屏, 2=悬浮窗, 3=随口记
 
     // 侧边栏唤起
     val edgeBarEnabled: Boolean = false,
@@ -251,6 +253,17 @@ data class MySettings(
     val edgeBarWidthDp: Int = 8,
     val edgeBarHeightDp: Int = 120,
     val edgeBarAlpha: Float = 0.4f,
+    val floatingEntryStyle: Int = FloatingEntryStyle.EDGE_BAR,
+
+    // 悬浮球入口（独立于侧边栏）
+    val floatingBallEnabled: Boolean = false,
+    val floatingBallXPercent: Float = 86f,
+    val floatingBallYPercent: Float = 50f,
+    val floatingBallSizeDp: Int = 56,
+    val floatingBallAlpha: Float = 0.9f,
+    val floatingBallSingleTapAction: Int = FloatingBallGestureAction.OPEN_QUICK_MEMO,
+    val floatingBallDoubleTapAction: Int = FloatingBallGestureAction.QUICK_RECOGNITION,
+    val floatingBallLongPressAction: Int = FloatingBallGestureAction.QUICK_MEMO_RECORDING,
 
     // 捐赠状态
     val hasDonated: Boolean = false,
@@ -288,6 +301,55 @@ data class MySettings(
                 APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
                 APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT
             )
+        }
+    }
+}
+
+object QuickMemoRecordingDisplayMode {
+    const val LIVE_CAPSULE = 0
+    const val FLOATING_WINDOW = 1
+
+    fun normalize(value: Int): Int {
+        return if (value == FLOATING_WINDOW) FLOATING_WINDOW else LIVE_CAPSULE
+    }
+}
+
+object FloatingEntryStyle {
+    const val EDGE_BAR = 0
+    const val FLOATING_BALL = 1
+
+    fun normalize(value: Int): Int {
+        return if (value == FLOATING_BALL) FLOATING_BALL else EDGE_BAR
+    }
+}
+
+object FloatingBallGestureAction {
+    const val NONE = 0
+    const val OPEN_FLOATING_SCHEDULE = 1
+    const val OPEN_QUICK_MEMO = 2
+    const val QUICK_RECOGNITION = 3
+    const val QUICK_MEMO_RECORDING = 4
+    const val OPEN_APP_HOME = 5
+
+    val ALL = listOf(
+        NONE,
+        OPEN_FLOATING_SCHEDULE,
+        OPEN_QUICK_MEMO,
+        QUICK_RECOGNITION,
+        QUICK_MEMO_RECORDING,
+        OPEN_APP_HOME
+    )
+
+    fun normalize(value: Int): Int = if (value in ALL) value else NONE
+
+    fun label(value: Int): String {
+        return when (normalize(value)) {
+            OPEN_FLOATING_SCHEDULE -> "打开日程"
+            OPEN_QUICK_MEMO -> "随口记"
+            QUICK_RECOGNITION -> "快速识屏"
+            QUICK_MEMO_RECORDING -> "随口记录音"
+            OPEN_APP_HOME -> "打开首页"
+            else -> "无操作"
         }
     }
 }

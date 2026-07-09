@@ -92,11 +92,13 @@ class BackupCenter(
         val exportItems = if (normalized.includeAttachments) buildAttachmentExportItems() else emptyList()
         val quickMemoAudioExportItems = if (normalized.includeQuickMemos) buildQuickMemoAudioExportItems() else emptyList()
         val quickMemoImageExportItems = if (normalized.includeQuickMemos) buildQuickMemoImageExportItems() else emptyList()
+        val backgroundExportItem = if (normalized.includeSettings) buildAppBackgroundExportItem() else null
         val backupData = buildBackupData(
             options = normalized,
             attachmentDtos = exportItems.map { it.dto },
             quickMemoAudioFileNames = quickMemoAudioExportItems.associate { it.backupKey to it.fileName },
-            quickMemoImageFileNames = quickMemoImageExportItems.associate { it.backupKey to it.fileName }
+            quickMemoImageFileNames = quickMemoImageExportItems.associate { it.backupKey to it.fileName },
+            appBackgroundImageFileName = backgroundExportItem?.fileName
         )
         appContext.contentResolver.openOutputStream(uri)?.use { output ->
             ZipOutputStream(output.buffered()).use { zip ->
@@ -119,6 +121,13 @@ class BackupCenter(
                 quickMemoImageExportItems.forEach { item ->
                     if (item.file.exists()) {
                         zip.putNextEntry(ZipEntry("quick_memos/images/${item.fileName}"))
+                        item.file.inputStream().use { input -> input.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                }
+                backgroundExportItem?.let { item ->
+                    if (item.file.exists()) {
+                        zip.putNextEntry(ZipEntry("settings/background/${item.fileName}"))
                         item.file.inputStream().use { input -> input.copyTo(zip) }
                         zip.closeEntry()
                     }
@@ -159,6 +168,10 @@ class BackupCenter(
                                 } else if (safeName.startsWith("quick_memos/images/")) {
                                     val imageDir = File(tempDir, QUICK_MEMO_IMAGE_IMPORT_DIR).apply { mkdirs() }
                                     val file = File(imageDir, File(safeName).name)
+                                    file.outputStream().use { output -> zip.copyTo(output) }
+                                } else if (safeName.startsWith("settings/background/")) {
+                                    val backgroundDir = File(tempDir, APP_BACKGROUND_IMPORT_DIR).apply { mkdirs() }
+                                    val file = File(backgroundDir, File(safeName).name)
                                     file.outputStream().use { output -> zip.copyTo(output) }
                                 }
                             }
@@ -202,7 +215,8 @@ class BackupCenter(
         options: AppBackupOptions,
         attachmentDtos: List<AppBackupAttachmentDto> = if (options.includeAttachments) buildAttachmentDtos() else emptyList(),
         quickMemoAudioFileNames: Map<String, String> = emptyMap(),
-        quickMemoImageFileNames: Map<String, String> = emptyMap()
+        quickMemoImageFileNames: Map<String, String> = emptyMap(),
+        appBackgroundImageFileName: String? = null
     ): AppBackupData {
         val eventsJson = if (options.includeEvents) legacyDataMigrationCoordinator.exportEventsData() else null
         val quickMemoData = if (options.includeQuickMemos) {
@@ -214,6 +228,7 @@ class BackupCenter(
             eventsJson = eventsJson,
             settings = if (options.includeSettings) settingsQueryApi.settings.value else null,
             promptsJson = if (options.includePrompts) AiPrompts.exportToJson(appContext) else null,
+            appBackgroundImageFileName = appBackgroundImageFileName,
             attachments = attachmentDtos,
             quickMemos = quickMemoData.memos,
             quickMemoSuggestions = quickMemoData.suggestions
@@ -222,6 +237,16 @@ class BackupCenter(
 
     private fun buildAttachmentDtos(): List<AppBackupAttachmentDto> {
         return buildAttachmentExportItems().map { it.dto }
+    }
+
+    private fun buildAppBackgroundExportItem(): AppBackgroundExportItem? {
+        val path = settingsQueryApi.settings.value.appBackgroundImagePath.takeIf { it.isNotBlank() } ?: return null
+        val file = File(path)
+        if (!file.exists() || !file.isFile) return null
+        return AppBackgroundExportItem(
+            fileName = "app_background_${file.name}",
+            file = file
+        )
     }
 
     private fun allStoredEvents() = (db.eventsDao().getAllEventsOrTasks() + db.eventsDao().getArchivedEvents())
@@ -262,7 +287,7 @@ class BackupCenter(
             null
         }
         if (options.includeSettings && data.settings != null) {
-            settingsOperationApi.updateSettings(data.settings)
+            settingsOperationApi.updateSettings(restoreAppBackgroundSetting(data.settings, data.appBackgroundImageFileName, attachmentsDir))
         }
         val promptsImported = if (options.includePrompts && !data.promptsJson.isNullOrBlank()) {
             AiPrompts.importFromJson(appContext, data.promptsJson)
@@ -461,6 +486,29 @@ class BackupCenter(
         return targetFile.absolutePath
     }
 
+    private fun restoreAppBackgroundSetting(
+        settings: com.antgskds.calendarassistant.data.model.MySettings,
+        fileName: String?,
+        tempDir: File?
+    ): com.antgskds.calendarassistant.data.model.MySettings {
+        if (fileName.isNullOrBlank() || tempDir == null) {
+            return settings.copy(appBackgroundImagePath = "", appBackgroundEnabled = false)
+        }
+        val sourceFile = File(File(tempDir, APP_BACKGROUND_IMPORT_DIR), File(fileName).name)
+        if (!sourceFile.exists() || !sourceFile.isFile) {
+            return settings.copy(appBackgroundImagePath = "", appBackgroundEnabled = false)
+        }
+        val targetDir = File(appContext.filesDir, APP_BACKGROUND_STORE_DIR).apply { mkdirs() }
+        val targetFile = uniqueFile(targetDir, sourceFile.name)
+        sourceFile.inputStream().use { input ->
+            targetFile.outputStream().use { output -> input.copyTo(output) }
+        }
+        return settings.copy(
+            appBackgroundEnabled = true,
+            appBackgroundImagePath = targetFile.absolutePath
+        )
+    }
+
     private fun uniqueFile(directory: File, fileName: String): File {
         val cleanName = File(fileName).name.ifBlank { "quick_memo_file" }
         val dotIndex = cleanName.lastIndexOf('.')
@@ -510,6 +558,11 @@ class BackupCenter(
         val file: File
     )
 
+    private data class AppBackgroundExportItem(
+        val fileName: String,
+        val file: File
+    )
+
     private data class QuickMemoBackupData(
         val memos: List<AppBackupQuickMemoDto> = emptyList(),
         val suggestions: List<AppBackupQuickMemoSuggestionDto> = emptyList()
@@ -520,6 +573,8 @@ class BackupCenter(
         const val QUICK_MEMO_IMAGE_IMPORT_DIR = "quick_memo_image"
         const val QUICK_MEMO_AUDIO_STORE_DIR = "quick_memos/audio"
         const val QUICK_MEMO_IMAGE_STORE_DIR = "quick_memos/images"
+        const val APP_BACKGROUND_IMPORT_DIR = "app_background"
+        const val APP_BACKGROUND_STORE_DIR = "theme/background"
     }
 
     suspend fun fetchWakeUpShareImport(shareText: String): Result<ParsedCourseImport> = runCatching {

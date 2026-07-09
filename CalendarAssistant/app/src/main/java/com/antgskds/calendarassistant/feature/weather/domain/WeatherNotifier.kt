@@ -16,6 +16,7 @@ import com.antgskds.calendarassistant.feature.api.notification.model.Notificatio
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationRoute
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationTapTarget
 import com.antgskds.calendarassistant.feature.api.notification.model.NotificationTapTargetType
+import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.WeatherNormalDisplay
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -105,7 +106,10 @@ class WeatherNotifier(context: Context) {
             channelKey = App.CHANNEL_ID_WEATHER,
             category = "weather",
             behavior = NotificationBehavior(timeoutAfterMillis = timeoutMs),
-            tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME),
+            tapTarget = NotificationTapTarget(
+                type = NotificationTapTargetType.APP_HOME,
+                payload = mapOf(WidgetActions.EXTRA_WIDGET_ACTION to WidgetActions.ACTION_OPEN_WEATHER)
+            ),
             source = source
         )
     }

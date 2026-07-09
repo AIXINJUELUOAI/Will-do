@@ -19,6 +19,7 @@ import android.os.IBinder
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -30,6 +31,7 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorGenerator
@@ -70,6 +72,7 @@ class EdgeBarService : Service() {
     private var edgeVoiceStarting = false
     private var edgeVoiceRecording = false
     private var edgeVoiceStopRequested = false
+    private var edgeVoiceUsingFloatingWindow = false
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -159,12 +162,8 @@ class EdgeBarService : Service() {
         val heightPx = dpToPx(settings.edgeBarHeightDp.toFloat())
         params.width = widthPx
         params.height = heightPx
-        params.gravity = if (settings.edgeBarSide == SIDE_LEFT) {
-            Gravity.TOP or Gravity.START
-        } else {
-            Gravity.TOP or Gravity.END
-        }
-        params.x = 0
+        params.gravity = Gravity.TOP or Gravity.START
+        params.x = computeX(settings.edgeBarSide, widthPx)
         params.y = computeY(settings.edgeBarYPercent, heightPx)
 
         view.background = buildBackground(settings, widthPx, heightPx)
@@ -220,12 +219,8 @@ class EdgeBarService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = if (settings.edgeBarSide == SIDE_LEFT) {
-                Gravity.TOP or Gravity.START
-            } else {
-                Gravity.TOP or Gravity.END
-            }
-            x = 0
+            gravity = Gravity.TOP or Gravity.START
+            x = computeX(settings.edgeBarSide, widthPx)
             y = computeY(settings.edgeBarYPercent, heightPx)
         }
     }
@@ -275,6 +270,7 @@ class EdgeBarService : Service() {
                     longPressJob = serviceScope.launch {
                         delay(LONG_PRESS_MS)
                         voiceCaptureTriggered = startEdgeVoiceCapture(settings)
+                        if (voiceCaptureTriggered) performHaptic(HapticFeedbackConstants.LONG_PRESS)
                     }
                     true
                 }
@@ -309,6 +305,7 @@ class EdgeBarService : Service() {
                     val isRightSide = settings.edgeBarSide != SIDE_LEFT
                     val directionOk = if (isRightSide) dx < 0 else dx > 0
                     if (shouldTrigger && directionOk && !FloatingScheduleService.isShowing) {
+                        performHaptic(HapticFeedbackConstants.GESTURE_START)
                         startFloatingSchedule()
                     }
                     true
@@ -323,11 +320,19 @@ class EdgeBarService : Service() {
         return ((percent.coerceIn(0f, 100f) / 100f) * maxY).toInt()
     }
 
-    private fun startFloatingSchedule() {
+    private fun computeX(side: String, widthPx: Int): Int {
+        return if (side == SIDE_LEFT) {
+            0
+        } else {
+            (getScreenWidth() - widthPx).coerceAtLeast(0)
+        }
+    }
+
+    private fun startFloatingSchedule(inputMode: String = FloatingScheduleService.INPUT_MODE_SCHEDULE) {
         hiddenByFloating = true
         updateVisibility()
         val intent = Intent(this, FloatingScheduleService::class.java).apply {
-            putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, FloatingScheduleService.INPUT_MODE_SCHEDULE)
+            putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, inputMode)
         }
         try {
             startService(intent)
@@ -349,7 +354,7 @@ class EdgeBarService : Service() {
     private fun startEdgeVoiceCapture(settings: MySettings): Boolean {
         if (edgeVoiceStarting || edgeVoiceRecording) return true
         if (!settings.voiceInputEnabled) {
-            Toast.makeText(applicationContext, "请先在实验室中开启语音输入", Toast.LENGTH_SHORT).show()
+            Toast.makeText(applicationContext, "请先在实验室中开启随口记", Toast.LENGTH_SHORT).show()
             return false
         }
         if (!permissionCenter.canDrawOverlays(this)) {
@@ -362,8 +367,14 @@ class EdgeBarService : Service() {
             })
             return false
         }
+        if (QuickMemoRecordingDisplayMode.normalize(settings.quickMemoRecordingDisplayMode) == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
+            edgeVoiceUsingFloatingWindow = true
+            startFloatingVoiceCapture()
+            return true
+        }
 
         edgeVoiceStopRequested = false
+        edgeVoiceUsingFloatingWindow = false
         edgeVoiceStarting = true
         edgeVoiceStartedAt = System.currentTimeMillis()
 
@@ -408,6 +419,11 @@ class EdgeBarService : Service() {
     }
 
     private fun stopEdgeVoiceCapture() {
+        if (edgeVoiceUsingFloatingWindow) {
+            stopFloatingVoiceCapture()
+            edgeVoiceUsingFloatingWindow = false
+            return
+        }
         if (edgeVoiceStarting && !edgeVoiceRecording) {
             edgeVoiceStopRequested = true
             return
@@ -455,6 +471,32 @@ class EdgeBarService : Service() {
                 clearEdgeRecordingStatus()
             }
         }
+    }
+
+    private fun startFloatingVoiceCapture() {
+        hiddenByFloating = true
+        updateVisibility()
+        try {
+            startService(Intent(this, FloatingScheduleService::class.java).apply {
+                action = FloatingScheduleService.ACTION_START_VOICE_CAPTURE
+                putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, FloatingScheduleService.INPUT_MODE_NOTE)
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "start floating voice capture failed", e)
+            hiddenByFloating = false
+            updateVisibility()
+        }
+    }
+
+    private fun stopFloatingVoiceCapture() {
+        try {
+            startService(Intent(this, FloatingScheduleService::class.java).apply {
+                action = FloatingScheduleService.ACTION_STOP_VOICE_CAPTURE
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "stop floating voice capture failed", e)
+        }
+        restoreEdgeVisibilityAfterRecording()
     }
 
     private fun startEdgeRecordingTicker() {
@@ -547,6 +589,16 @@ class EdgeBarService : Service() {
     private fun getScreenHeight(): Int {
         val metrics = resources.displayMetrics
         return metrics.heightPixels
+    }
+
+    private fun getScreenWidth(): Int {
+        val metrics = resources.displayMetrics
+        return metrics.widthPixels
+    }
+
+    private fun performHaptic(feedbackConstant: Int) {
+        if (!settingsQueryApi.settings.value.hapticFeedbackEnabled) return
+        barView?.performHapticFeedback(feedbackConstant)
     }
 
     private fun dpToPx(dp: Float): Int {

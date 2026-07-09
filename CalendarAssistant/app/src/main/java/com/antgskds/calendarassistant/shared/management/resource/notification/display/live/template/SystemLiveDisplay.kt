@@ -49,14 +49,18 @@ object SystemLiveDisplay {
     }
 
     fun quickMemoRecording(title: String, content: String): CapsuleDisplayModel {
-        val primary = cleanTitle(title) ?: "录音中：00:00"
-        val secondary = cleanTitle(content) ?: "松开保存"
+        val timeText = extractRecordingTime(cleanTitle(title) ?: cleanTitle(content)) ?: "00:00"
         return CapsuleDisplayModel(
-            shortText = primary,
-            primaryText = primary,
-            secondaryText = secondary,
-            expandedText = secondary
+            shortText = "录音中",
+            primaryText = timeText,
+            secondaryText = timeText,
+            expandedText = timeText
         )
+    }
+
+    private fun extractRecordingTime(value: String?): String? {
+        val clean = value?.trim().orEmpty()
+        return Regex("\\d{1,2}:\\d{2}").find(clean)?.value ?: clean.takeIf { it.isNotBlank() }
     }
 
     private fun compactPrimaryTitle(shortTitle: String, detailTitle: String?): String {

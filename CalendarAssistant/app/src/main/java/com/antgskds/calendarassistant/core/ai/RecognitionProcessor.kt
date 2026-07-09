@@ -10,6 +10,7 @@ import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.ai.RulePatchProvider
+import com.antgskds.calendarassistant.core.instantcode.InstantCodeQrSupport
 import com.antgskds.calendarassistant.core.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.ModelMessage
@@ -281,7 +282,9 @@ object RecognitionProcessor {
         Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
 
         if (settings.useMultimodalAi) {
-            return analyzeImageWithMultimodal(bitmap, settings, appContext)
+            val result = analyzeImageWithMultimodal(bitmap, settings, appContext)
+            val qrPayloads = scanQrPayloadsSafely(bitmap)
+            return attachQrPayloads(result, qrPayloads)
         }
 
         val ocrResult = try {
@@ -297,6 +300,7 @@ object RecognitionProcessor {
         }
 
         val anchoredText = injectDateAnchors(ocrResult.reconstructedText, LocalDate.now())
+        val qrPayloads = scanQrPayloadsSafely(bitmap)
 
         Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
         Log.d(TAG, anchoredText)
@@ -322,7 +326,7 @@ object RecognitionProcessor {
                 }
 
                 val allEvents = refinedScheduleEvents + pickupEvents
-                val finalEvents = deduplicateAiEvents(allEvents)
+                val finalEvents = attachQrPayloads(deduplicateAiEvents(allEvents), qrPayloads)
 
                 if (finalEvents.isNotEmpty()) {
                     AnalysisResult.Success(finalEvents)
@@ -498,12 +502,8 @@ object RecognitionProcessor {
                         val events = parseCalendarEvents(cleanJson)
                         val normalizedEvents = enforceRuleHeaders(events)
 
-                        val pickupEvents = normalizedEvents.filter {
-                            it.tag == EventTags.PICKUP
-                        }
-                        val scheduleEvents = normalizedEvents.filter {
-                            it.tag != EventTags.PICKUP
-                        }
+                        val pickupEvents = normalizedEvents.filter(::isInstantCodeDraft)
+                        val scheduleEvents = normalizedEvents.filterNot(::isInstantCodeDraft)
                     val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
 
                         val mergedEvents = refinedScheduleEvents + pickupEvents
@@ -573,6 +573,52 @@ object RecognitionProcessor {
                 tag = ruleId
             )
         }
+    }
+
+    private suspend fun scanQrPayloadsSafely(bitmap: Bitmap): List<String> {
+        return runCatching { InstantCodeQrSupport.scanQrPayloads(bitmap) }
+            .onFailure { Log.w(TAG, "二维码内容识别失败", it) }
+            .getOrDefault(emptyList())
+    }
+
+    private fun attachQrPayloads(
+        result: AnalysisResult<List<RecognitionDraft>>,
+        qrPayloads: List<String>
+    ): AnalysisResult<List<RecognitionDraft>> {
+        return when (result) {
+            is AnalysisResult.Success -> result.copy(data = attachQrPayloads(result.data, qrPayloads))
+            else -> result
+        }
+    }
+
+    private fun attachQrPayloads(
+        events: List<RecognitionDraft>,
+        qrPayloads: List<String>
+    ): List<RecognitionDraft> {
+        val cleanPayloads = qrPayloads.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (cleanPayloads.isEmpty()) return events
+
+        val instantIndices = events.indices.filter { index ->
+            isInstantCodeDraft(events[index]) && events[index].qrPayload.isBlank()
+        }
+        if (instantIndices.isEmpty()) return events
+
+        var payloadIndex = 0
+        return events.mapIndexed { index, event ->
+            if (index !in instantIndices) return@mapIndexed event
+            val payload = if (cleanPayloads.size == 1) {
+                cleanPayloads.first()
+            } else {
+                cleanPayloads.getOrNull(payloadIndex++) ?: cleanPayloads.first()
+            }
+            event.copy(qrPayload = payload)
+        }
+    }
+
+    private fun isInstantCodeDraft(event: RecognitionDraft): Boolean {
+        val ruleId = RuleMatchingEngine.resolvePayload(event.description, event.tag)?.ruleId
+            ?: event.tag.trim().lowercase()
+        return RuleMatchingEngine.isInstantCodeRule(ruleId)
     }
 
     private fun normalizeRuleId(event: RecognitionDraft): String {
@@ -867,7 +913,11 @@ object RecognitionProcessor {
                 .toLocalDateTime()
         } else null
 
-        val hasPickupMicro = description.startsWith("【取件】") || description.startsWith("【取餐】") || description.startsWith("【pickup】")
+        val hasPickupMicro = description.startsWith("【取件】") ||
+            description.startsWith("【取餐】") ||
+            description.startsWith("【取票】") ||
+            description.startsWith("【寄件】") ||
+            description.startsWith("【pickup】")
         val hasRideMicro = description.startsWith("【用车】") || description.startsWith("【taxi】")
         val hasTrainMicro = description.startsWith("【列车】") || description.startsWith("【train】")
         val hasMicroFormat = hasPickupMicro || hasRideMicro || hasTrainMicro
@@ -875,8 +925,8 @@ object RecognitionProcessor {
         var pickupCode: String? = null
         var pickupPlatform: String? = null
         if (hasPickupMicro) {
-            val payload = RuleMatchingEngine.resolvePayload(description, RuleMatchingEngine.RULE_PICKUP)
-            if (payload?.ruleId == RuleMatchingEngine.RULE_PICKUP) {
+            val payload = RuleMatchingEngine.resolvePayload(description, event.tag)
+            if (payload != null && RuleMatchingEngine.isInstantCodeRule(payload.ruleId)) {
                 val fields = RuleMatchingEngine.splitFields(payload.payload, 3)
                 pickupCode = fields[0].trim().ifBlank { null }
                 pickupPlatform = fields[1].trim().ifBlank { null }
@@ -889,7 +939,7 @@ object RecognitionProcessor {
         val trainNo = extractTrainNo(description).ifBlankOrNull()
             ?: extractTrainNo(title).ifBlankOrNull()
 
-        val isPickup = event.tag == EventTags.PICKUP || hasPickupMicro
+        val isPickup = isInstantCodeDraft(event) || hasPickupMicro
 
         return AiEventFeature(
             event = event,

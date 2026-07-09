@@ -359,6 +359,7 @@ internal object EventPresentationInternals {
             secondaryText = secondaryText,
             expandedText = expandedText,
             tapOpensPickupList = true,
+            tapEventId = event.id?.toString(),
             templateMode = templateMode,
             action = action
         )
@@ -396,6 +397,7 @@ internal object EventPresentationInternals {
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            tapEventId = event.id?.toString(),
             templateMode = templateMode,
             action = action
         )
@@ -415,6 +417,7 @@ internal object EventPresentationInternals {
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
+            tapEventId = event.id?.toString(),
             templateMode = templateMode,
             action = action
         )

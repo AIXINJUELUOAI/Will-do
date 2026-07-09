@@ -57,7 +57,7 @@ fun NotePage(
             ) {
                 Text(
                     text = if (searchQuery.isBlank()) "还没有便签" else "未找到相关便签",
-                    color = MaterialTheme.colorScheme.secondary
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = if (searchQuery.isBlank()) {
@@ -66,7 +66,7 @@ fun NotePage(
                         "换个关键词，或者到编辑页里补充更明确的标题和正文。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
                 )
             }
         }
@@ -94,7 +94,7 @@ fun NotePage(
                         .padding(vertical = 16.dp, horizontal = 20.dp),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 

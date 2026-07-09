@@ -45,7 +45,7 @@ object FeatureCatalog {
         // —— 识别 ——
         FeatureEntry("AI 识别", Chain.RECOGNITION, "core/center/RecognitionCenter", "截图/图片/文本/语音 → OCR/多模态/文本解析 → 日程草稿"),
         FeatureEntry("正则日程识别", Chain.RECOGNITION, "data/node/recognition/RecognitionRegexNode", "文本/语音转写先走可配置正则规则生成日程草稿"),
-        FeatureEntry("语音输入", Chain.RECOGNITION, "core/service/voice/VoiceCaptureHandleActivity", "长按音量+或悬浮窗入口录音，转写为随口记/识别输入"),
+        FeatureEntry("随口记", Chain.RECOGNITION, "core/service/voice/VoiceCaptureHandleActivity", "长按音量+或悬浮窗入口录音，转写为随口记/识别输入"),
         FeatureEntry("短信取件码", Chain.RECOGNITION, "core/sms/SmsPickupIngestCoordinator", "监听短信、本地解析取件码"),
         FeatureEntry("剪贴板识别", Chain.RECOGNITION, "core/center/ClipboardCodeCenter", "剪贴板取件码识别"),
 

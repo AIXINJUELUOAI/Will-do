@@ -44,7 +44,8 @@ data class Event(
     @ColumnInfo(name = "type") var type: Int = TYPE_EVENT,
     @ColumnInfo(name = "state") var state: Int = STATE_PENDING,
     @ColumnInfo(name = "tag") var tag: String = TAG_GENERAL,
-    @ColumnInfo(name = "archived_at") var archivedAt: Long? = null  // 秒级时间戳，null=未归档
+    @ColumnInfo(name = "archived_at") var archivedAt: Long? = null,  // 秒级时间戳，null=未归档
+    @ColumnInfo(name = "code_qr_payload") var codeQrPayload: String = ""
 ) {
     fun getIsAllDay(): Boolean = flags and FLAG_ALL_DAY != 0
 
