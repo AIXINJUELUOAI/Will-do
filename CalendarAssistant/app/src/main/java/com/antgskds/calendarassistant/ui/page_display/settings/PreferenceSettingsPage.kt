@@ -36,12 +36,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.platform.floating.EdgeBarService
+import com.antgskds.calendarassistant.platform.floating.FloatingBallService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -77,6 +79,7 @@ fun PreferenceSettingsPage(
     var showRecognitionModePicker by remember { mutableStateOf(false) }
     var showDailySummaryMorningTimePicker by remember { mutableStateOf(false) }
     var showDailySummaryEveningTimePicker by remember { mutableStateOf(false) }
+    var floatingBallActionPicker by remember { mutableStateOf<FloatingBallActionSlot?>(null) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -140,6 +143,16 @@ fun PreferenceSettingsPage(
     fun stopEdgeBarService() {
         app?.floatingCenter?.stopEdgeBarService()
             ?: context.stopService(Intent(context, EdgeBarService::class.java))
+    }
+
+    fun startFloatingBallService() {
+        app?.floatingCenter?.startFloatingBallServiceIfPermitted()
+            ?: context.startService(Intent(context, FloatingBallService::class.java))
+    }
+
+    fun stopFloatingBallService() {
+        app?.floatingCenter?.stopFloatingBallService()
+            ?: context.stopService(Intent(context, FloatingBallService::class.java))
     }
 
     // --- 字体样式优化 ---
@@ -304,12 +317,15 @@ fun PreferenceSettingsPage(
                             }
                             viewModel.updatePreference(
                                 floatingWindow = isChecked,
-                                edgeBarEnabled = if (isChecked) settings.edgeBarEnabled else false
+                                edgeBarEnabled = if (isChecked) settings.edgeBarEnabled else false,
+                                floatingBallEnabled = if (isChecked) settings.floatingBallEnabled else false
                             )
                             if (!isChecked) {
                                 stopEdgeBarService()
-                            } else if (settings.edgeBarEnabled) {
-                                startEdgeBarService()
+                                stopFloatingBallService()
+                            } else {
+                                if (settings.edgeBarEnabled) startEdgeBarService()
+                                if (settings.floatingBallEnabled) startFloatingBallService()
                             }
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -383,8 +399,8 @@ fun PreferenceSettingsPage(
                         )
 
                         SwitchSettingItem(
-                            title = "侧边栏唤起",
-                            subtitle = "在屏幕侧边滑动呼出悬浮窗",
+                            title = "侧边栏入口",
+                            subtitle = "在屏幕边缘显示窄条，滑动呼出悬浮日程",
                             checked = settings.edgeBarEnabled,
                             onCheckedChange = { isChecked ->
                                 if (isChecked && !hasOverlayPermission) {
@@ -477,7 +493,7 @@ fun PreferenceSettingsPage(
                                 SliderSettingItem(
                                     title = "颜色深浅",
                                     subtitle = "调整透明度，0% 时完全透明",
-                                    value = (settings.edgeBarAlpha * 100f),
+                                    value = settings.edgeBarAlpha * 100f,
                                     onValueChange = { viewModel.updateEdgeBarSettings(alpha = it.roundToInt() / 100f) },
                                     valueRange = 0f..100f,
                                     steps = 0,
@@ -494,18 +510,162 @@ fun PreferenceSettingsPage(
                                         .padding(horizontal = 16.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.End
                                 ) {
-                                    TextButton(onClick = {
-                                        viewModel.updateEdgeBarSettings(
-                                            enabled = true,
-                                            side = "RIGHT",
-                                            yPercent = 50f,
-                                            widthDp = 8,
-                                            heightDp = 120,
-                                            alpha = 0.4f
-                                        )
-                                    }) {
-                                        Text("恢复默认")
-                                    }
+                                    AssistChip(
+                                        onClick = {
+                                            viewModel.updateEdgeBarSettings(
+                                                enabled = true,
+                                                side = "RIGHT",
+                                                yPercent = 50f,
+                                                widthDp = 8,
+                                                heightDp = 120,
+                                                alpha = 0.4f
+                                            )
+                                            startEdgeBarService()
+                                        },
+                                        label = { Text("恢复默认") }
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                        SwitchSettingItem(
+                            title = "悬浮球入口",
+                            subtitle = "显示可拖动悬浮球，单击、双击和长按可分别设置动作",
+                            checked = settings.floatingBallEnabled,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked && !hasOverlayPermission) {
+                                    openOverlayPermissionSettings()
+                                    return@SwitchSettingItem
+                                }
+                                viewModel.updatePreference(floatingBallEnabled = isChecked)
+                                if (isChecked) {
+                                    startFloatingBallService()
+                                } else {
+                                    stopFloatingBallService()
+                                }
+                            },
+                            cardTitleStyle = cardTitleStyle,
+                            cardSubtitleStyle = cardSubtitleStyle
+                        )
+
+                        AnimatedVisibility(
+                            visible = settings.floatingBallEnabled,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                ActionSettingItem(
+                                    title = "单击动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallSingleTapAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.SINGLE_TAP },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
+                                )
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                ActionSettingItem(
+                                    title = "双击动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallDoubleTapAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.DOUBLE_TAP },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
+                                )
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                ActionSettingItem(
+                                    title = "长按动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallLongPressAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.LONG_PRESS },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
+                                )
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                SliderSettingItem(
+                                    title = "尺寸",
+                                    subtitle = "悬浮球直径",
+                                    value = settings.floatingBallSizeDp.toFloat(),
+                                    onValueChange = { viewModel.updatePreference(floatingBallSizeDp = it.roundToInt()) },
+                                    valueRange = 44f..72f,
+                                    steps = 0,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "dp"
+                                )
+
+                                SliderSettingItem(
+                                    title = "透明度",
+                                    subtitle = "调整悬浮球可见程度",
+                                    value = settings.floatingBallAlpha * 100f,
+                                    onValueChange = { viewModel.updatePreference(floatingBallAlpha = it.roundToInt() / 100f) },
+                                    valueRange = 20f..100f,
+                                    steps = 0,
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle,
+                                    showValueAsNumber = true,
+                                    valueUnit = "%"
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    AssistChip(
+                                        onClick = {
+                                            viewModel.updatePreference(
+                                                floatingBallEnabled = true,
+                                                floatingBallXPercent = 86f,
+                                                floatingBallYPercent = 50f,
+                                                floatingBallSizeDp = 56,
+                                                floatingBallAlpha = 0.9f,
+                                                floatingBallSingleTapAction = FloatingBallGestureAction.OPEN_QUICK_MEMO,
+                                                floatingBallDoubleTapAction = FloatingBallGestureAction.QUICK_RECOGNITION,
+                                                floatingBallLongPressAction = FloatingBallGestureAction.QUICK_MEMO_RECORDING
+                                            )
+                                            startFloatingBallService()
+                                        },
+                                        label = { Text("恢复默认") }
+                                    )
                                 }
                             }
                         }
@@ -1122,8 +1282,83 @@ fun PreferenceSettingsPage(
                 }
             )
         }
+
+        floatingBallActionPicker?.let { slot ->
+            FloatingBallActionPickerDialog(
+                slot = slot,
+                selectedAction = slot.currentAction(settings),
+                onDismiss = { floatingBallActionPicker = null },
+                onActionSelected = { action ->
+                    when (slot) {
+                        FloatingBallActionSlot.SINGLE_TAP -> viewModel.updatePreference(floatingBallSingleTapAction = action)
+                        FloatingBallActionSlot.DOUBLE_TAP -> viewModel.updatePreference(floatingBallDoubleTapAction = action)
+                        FloatingBallActionSlot.LONG_PRESS -> viewModel.updatePreference(floatingBallLongPressAction = action)
+                    }
+                    floatingBallActionPicker = null
+                }
+            )
+        }
     }
     }
+}
+
+private enum class FloatingBallActionSlot(val title: String) {
+    SINGLE_TAP("单击动作"),
+    DOUBLE_TAP("双击动作"),
+    LONG_PRESS("长按动作")
+}
+
+private fun FloatingBallActionSlot.currentAction(settings: MySettings): Int {
+    return when (this) {
+        FloatingBallActionSlot.SINGLE_TAP -> settings.floatingBallSingleTapAction
+        FloatingBallActionSlot.DOUBLE_TAP -> settings.floatingBallDoubleTapAction
+        FloatingBallActionSlot.LONG_PRESS -> settings.floatingBallLongPressAction
+    }
+}
+
+@Composable
+private fun FloatingBallActionPickerDialog(
+    slot: FloatingBallActionSlot,
+    selectedAction: Int,
+    onDismiss: () -> Unit,
+    onActionSelected: (Int) -> Unit
+) {
+    val haptics = rememberAppHaptics()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(slot.title) },
+        text = {
+            Column {
+                FloatingBallGestureAction.ALL.forEach { action ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptics.selection()
+                                onActionSelected(action)
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = FloatingBallGestureAction.normalize(selectedAction) == action,
+                            onClick = {
+                                haptics.selection()
+                                onActionSelected(action)
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(FloatingBallGestureAction.label(action))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
 }
 
 private fun formatMinuteOfDay(minuteOfDay: Int): String {
@@ -1139,6 +1374,46 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 // SwitchSettingItem 已抽至 SettingsRowComponents.kt（公共组件，同包，无需改 import）
 
 // SideChoiceSettingItem 已抽至 SettingsRowComponents.kt
+
+@Composable
+private fun TwoOptionSettingItem(
+    title: String,
+    subtitle: String,
+    selectedValue: Int,
+    firstValue: Int,
+    firstLabel: String,
+    secondValue: Int,
+    secondLabel: String,
+    onValueSelected: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle
+) {
+    val haptics = rememberAppHaptics()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = cardTitleStyle)
+            Text(subtitle, style = cardSubtitleStyle)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (selectedValue == firstValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(firstValue) }) { Text(firstLabel) }
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(firstValue) }) { Text(firstLabel) }
+            }
+            if (selectedValue == secondValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(secondValue) }) { Text(secondLabel) }
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(secondValue) }) { Text(secondLabel) }
+            }
+        }
+    }
+}
 
 // ActionSettingItem 已抽至 SettingsRowComponents.kt
 

@@ -51,7 +51,7 @@ fun ArchivesPage(
             Box(
                 modifier = Modifier.align(Alignment.Center)
             ) {
-                Text("暂无归档", color = MaterialTheme.colorScheme.secondary)
+                Text("暂无归档", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f))
             }
         } else {
             LazyColumn(
@@ -76,7 +76,7 @@ fun ArchivesPage(
                             modifier = Modifier.padding(vertical = 16.dp),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     }
 

@@ -10,7 +10,8 @@ import java.io.FileOutputStream
 import kotlin.math.max
 
 data class AppBackgroundImportResult(
-    val path: String
+    val path: String,
+    val averageLuminance: Float
 )
 
 class AppBackgroundImageStore(context: Context) {
@@ -19,6 +20,7 @@ class AppBackgroundImageStore(context: Context) {
 
     fun importBackground(uri: Uri, oldPath: String?): AppBackgroundImportResult {
         val bitmap = decodeScaledBitmap(uri)
+        val averageLuminance = extractAverageLuminance(bitmap)
         backgroundDir.mkdirs()
 
         val target = File(backgroundDir, "app_background_${System.currentTimeMillis()}.jpg")
@@ -33,7 +35,8 @@ class AppBackgroundImageStore(context: Context) {
         cleanupOldBackgrounds(keepPath = target.absolutePath)
 
         return AppBackgroundImportResult(
-            path = target.absolutePath
+            path = target.absolutePath,
+            averageLuminance = averageLuminance
         )
     }
 
@@ -42,6 +45,16 @@ class AppBackgroundImageStore(context: Context) {
         val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("无法读取背景图片")
         return try {
             extractSeedColorHex(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    fun extractAverageLuminance(path: String): Float {
+        val file = ownedBackgroundFile(path)?.takeIf { it.exists() } ?: error("背景图片不存在")
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("无法读取背景图片")
+        return try {
+            extractAverageLuminance(bitmap)
         } finally {
             bitmap.recycle()
         }
@@ -132,6 +145,75 @@ class AppBackgroundImageStore(context: Context) {
         return "#%02X%02X%02X".format(red, green, blue)
     }
 
+    private fun extractAverageLuminance(bitmap: Bitmap): Float {
+        val stepX = (bitmap.width / LUMINANCE_SAMPLE_GRID).coerceAtLeast(1)
+        val stepY = (bitmap.height / LUMINANCE_SAMPLE_GRID).coerceAtLeast(1)
+        val samples = ArrayList<Double>(LUMINANCE_SAMPLE_GRID * LUMINANCE_SAMPLE_GRID)
+        val regionTotals = DoubleArray(LUMINANCE_REGION_GRID * LUMINANCE_REGION_GRID)
+        val regionCounts = IntArray(LUMINANCE_REGION_GRID * LUMINANCE_REGION_GRID)
+        var total = 0.0
+        var count = 0
+        var y = stepY / 2
+        while (y < bitmap.height) {
+            var x = stepX / 2
+            while (x < bitmap.width) {
+                val pixel = bitmap.getPixel(x, y)
+                if (Color.alpha(pixel) >= MIN_ALPHA) {
+                    val luminance = pixelLuminance(pixel)
+                    val regionIndex = luminanceRegionIndex(bitmap, x, y)
+                    samples += luminance
+                    regionTotals[regionIndex] += luminance
+                    regionCounts[regionIndex]++
+                    total += luminance
+                    count++
+                }
+                x += stepX
+            }
+            y += stepY
+        }
+        if (count == 0) return -1f
+
+        val average = total / count
+        val sortedSamples = samples.sorted()
+        val sampleMedian = percentile(sortedSamples, 0.50)
+        val regionLuminance = regionTotals.indices.mapNotNull { index ->
+            val regionCount = regionCounts[index]
+            if (regionCount == 0) null else regionTotals[index] / regionCount
+        }.sorted()
+        val regionMedian = percentile(regionLuminance, 0.50)
+        val darkSampleRatio = sortedSamples.count { it <= DARK_LUMINANCE_THRESHOLD }.toDouble() / sortedSamples.size
+        val darkRegionRatio = regionLuminance.count { it <= DARK_REGION_LUMINANCE_THRESHOLD }.toDouble() / regionLuminance.size
+
+        val robustLuminance = when {
+            darkRegionRatio >= DARK_REGION_DOMINANT_RATIO || darkSampleRatio >= DARK_SAMPLE_DOMINANT_RATIO -> {
+                minOf(average, sampleMedian, regionMedian)
+            }
+            darkRegionRatio >= DARK_REGION_MIXED_RATIO && regionMedian < 0.52 -> {
+                minOf(sampleMedian, regionMedian)
+            }
+            else -> average * 0.35 + sampleMedian * 0.35 + regionMedian * 0.30
+        }
+        return robustLuminance.toFloat().coerceIn(0f, 1f)
+    }
+
+    private fun pixelLuminance(pixel: Int): Double {
+        return (0.299 * Color.red(pixel) + 0.587 * Color.green(pixel) + 0.114 * Color.blue(pixel)) / 255.0
+    }
+
+    private fun luminanceRegionIndex(bitmap: Bitmap, x: Int, y: Int): Int {
+        val regionX = ((x.toFloat() / bitmap.width) * LUMINANCE_REGION_GRID).toInt()
+            .coerceIn(0, LUMINANCE_REGION_GRID - 1)
+        val regionY = ((y.toFloat() / bitmap.height) * LUMINANCE_REGION_GRID).toInt()
+            .coerceIn(0, LUMINANCE_REGION_GRID - 1)
+        return regionY * LUMINANCE_REGION_GRID + regionX
+    }
+
+    private fun percentile(sortedValues: List<Double>, ratio: Double): Double {
+        if (sortedValues.isEmpty()) return -1.0
+        val index = ((sortedValues.size - 1) * ratio).toInt().coerceIn(0, sortedValues.lastIndex)
+        return sortedValues[index]
+    }
+
     private fun deleteOwnedBackground(path: String?, exceptPath: String?) {
         val file = ownedBackgroundFile(path) ?: return
         if (exceptPath != null && file.absolutePath == exceptPath) return
@@ -159,6 +241,13 @@ class AppBackgroundImageStore(context: Context) {
         private const val MAX_IMAGE_SIDE = 1920
         private const val OUTPUT_QUALITY = 90
         private const val COLOR_SAMPLE_GRID = 48
+        private const val LUMINANCE_SAMPLE_GRID = 64
+        private const val LUMINANCE_REGION_GRID = 3
+        private const val DARK_LUMINANCE_THRESHOLD = 0.42
+        private const val DARK_REGION_LUMINANCE_THRESHOLD = 0.48
+        private const val DARK_SAMPLE_DOMINANT_RATIO = 0.45
+        private const val DARK_REGION_DOMINANT_RATIO = 0.50
+        private const val DARK_REGION_MIXED_RATIO = 0.34
         private const val MIN_ALPHA = 180
         private const val MIN_SATURATION = 0.12f
         private const val MIN_VALUE = 0.18f

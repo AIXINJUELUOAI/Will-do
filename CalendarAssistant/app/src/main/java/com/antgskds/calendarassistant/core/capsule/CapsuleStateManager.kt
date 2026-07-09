@@ -748,7 +748,7 @@ class CapsuleStateManager(
                     id = entry.id,
                     notifId = entry.notifId,
                     type = capsuleType,
-                    eventType = RuleMatchingEngine.RULE_PICKUP,
+                    eventType = resolveRuleId(event),
                     description = stripSourceImageMarkers(event.description),
                     color = resolvePickupCapsuleColor(event),
                     state = event.state,
@@ -927,15 +927,18 @@ class CapsuleStateManager(
         }
         return when (event.tag) {
             EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
+            EventTags.FOOD -> RuleMatchingEngine.RULE_FOOD
             EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
             EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
+            EventTags.TICKET -> RuleMatchingEngine.RULE_TICKET
+            EventTags.SENDER -> RuleMatchingEngine.RULE_SENDER
             EventTags.GENERAL -> RuleMatchingEngine.RULE_GENERAL
             else -> if (event.tag.isNotBlank()) event.tag else RuleMatchingEngine.RULE_GENERAL
         }
     }
 
     private fun isPickupRule(event: Event): Boolean {
-        return resolveRuleId(event) == RuleMatchingEngine.RULE_PICKUP
+        return RuleMatchingEngine.isInstantCodeRule(resolveRuleId(event))
     }
 
     private fun resolveAggregatePickupCapsuleColor(events: List<Event>): Int {

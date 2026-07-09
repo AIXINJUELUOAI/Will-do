@@ -1,6 +1,9 @@
 package com.antgskds.calendarassistant.shared.management.catalog
 
 import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
+import com.antgskds.calendarassistant.data.model.FloatingEntryStyle
+import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.data.model.RecognitionMode
 
 /**
@@ -14,13 +17,12 @@ import com.antgskds.calendarassistant.data.model.RecognitionMode
  * - 本文件只放声明（management 纪律：不放流程/发布/网络/DB）；真正写回由编辑页调
  *   settingsOperationApi.updateSettings 完成。
  *
- * 首版只支持 Int 控件（[ConfigControl.IntOptions]），足够天气阈值这条纵切。等出现第二种类型
- * （如某个 Boolean 配置）时，再把下面 get/set 的 Int 泛化为 sealed ConfigValue。
+ * 控件以 Int 为主，开关以 0/1 与 [MySettings] 字段桥接。
  */
 
 /** 配置分组（域）。落地页按出现的域分组；加新域时在此加一个值。 */
 enum class ConfigDomain(val label: String) {
-    APPEARANCE("外观"),
+    APPEARANCE("主题"),
     RECOGNITION("识别"),
     WEATHER("天气"),
     NOTIFICATION("通知"),
@@ -66,6 +68,9 @@ class ConfigItem(
     val control: ConfigControl,
     val get: (MySettings) -> Int,             // 读当前值
     val set: (MySettings, Int) -> MySettings, // 产出更新后的 settings
+    val getText: (MySettings) -> String = { "" },
+    val setText: (MySettings, String) -> MySettings = { s, _ -> s },
+    val visible: (MySettings) -> Boolean = { true },
 )
 
 object ConfigCatalog {
@@ -258,8 +263,8 @@ object ConfigCatalog {
             domain = ConfigDomain.VOICE,
             kind = ConfigKind.USER_SETTING,
             key = "voice.input.enabled",
-            label = "语音输入",
-            description = "语音输入总开关；关闭后长按音量+和悬浮窗入口都不能启动语音输入。",
+            label = "随口记",
+            description = "随口记总开关；关闭后长按音量+和悬浮窗入口都不能启动随口记录音。",
             exposure = ConfigExposure.USER_EDITABLE,
             control = ConfigControl.Toggle,
             get = { if (it.voiceInputEnabled) 1 else 0 },
@@ -269,8 +274,8 @@ object ConfigCatalog {
             domain = ConfigDomain.VOICE,
             kind = ConfigKind.USER_SETTING,
             key = "voice.floating_long_press.enabled",
-            label = "悬浮窗长按语音输入",
-            description = "控制悬浮窗已呼出后再次长按音量+是否进入语音输入；默认开启以保留旧行为。",
+            label = "悬浮窗长按随口记",
+            description = "控制悬浮窗已呼出后再次长按音量+是否进入随口记录音；默认开启以保留旧行为。",
             exposure = ConfigExposure.USER_EDITABLE,
             control = ConfigControl.Toggle,
             get = { if (it.floatingVoiceLongPressEnabled) 1 else 0 },
@@ -297,6 +302,82 @@ object ConfigCatalog {
             control = ConfigControl.Toggle,
             get = { if (it.voiceQuickMemoAutoPinEnabled) 1 else 0 },
             set = { s, v -> s.copy(voiceQuickMemoAutoPinEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.quick_memo.recording_display_mode",
+            label = "随口记录音展示",
+            description = "控制所有随口记录音入口在录音时使用实况通知还是悬浮窗。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.IntOptions(
+                listOf(
+                    ConfigControl.IntOptions.Option(QuickMemoRecordingDisplayMode.LIVE_CAPSULE, "实况通知"),
+                    ConfigControl.IntOptions.Option(QuickMemoRecordingDisplayMode.FLOATING_WINDOW, "悬浮窗"),
+                )
+            ),
+            get = { it.quickMemoRecordingDisplayMode },
+            set = { s, v -> s.copy(quickMemoRecordingDisplayMode = QuickMemoRecordingDisplayMode.normalize(v)) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating.entry_style",
+            label = "悬浮入口样式",
+            description = "旧兼容字段；当前侧边栏和悬浮球使用独立开关。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.IntOptions(
+                listOf(
+                    ConfigControl.IntOptions.Option(FloatingEntryStyle.EDGE_BAR, "侧边栏"),
+                    ConfigControl.IntOptions.Option(FloatingEntryStyle.FLOATING_BALL, "悬浮球"),
+                )
+            ),
+            get = { it.floatingEntryStyle },
+            set = { s, v -> s.copy(floatingEntryStyle = FloatingEntryStyle.normalize(v)) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating_ball.enabled",
+            label = "悬浮球入口",
+            description = "独立显示可拖动悬浮球，可与侧边栏同时开启。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.Toggle,
+            get = { if (it.floatingBallEnabled) 1 else 0 },
+            set = { s, v -> s.copy(floatingBallEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating_ball.single_tap_action",
+            label = "悬浮球单击动作",
+            description = "配置悬浮球单击触发的操作。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = floatingBallActionControl(),
+            get = { it.floatingBallSingleTapAction },
+            set = { s, v -> s.copy(floatingBallSingleTapAction = FloatingBallGestureAction.normalize(v)) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating_ball.double_tap_action",
+            label = "悬浮球双击动作",
+            description = "配置悬浮球双击触发的操作。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = floatingBallActionControl(),
+            get = { it.floatingBallDoubleTapAction },
+            set = { s, v -> s.copy(floatingBallDoubleTapAction = FloatingBallGestureAction.normalize(v)) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
+            kind = ConfigKind.USER_SETTING,
+            key = "voice.floating_ball.long_press_action",
+            label = "悬浮球长按动作",
+            description = "配置悬浮球长按触发的操作。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = floatingBallActionControl(),
+            get = { it.floatingBallLongPressAction },
+            set = { s, v -> s.copy(floatingBallLongPressAction = FloatingBallGestureAction.normalize(v)) },
         ),
         // —— 天气预测风险阈值（软件自算的 WeatherRiskAlert，非官方 API 预警）——
         ConfigItem(
@@ -597,4 +678,12 @@ object ConfigCatalog {
     /** 某个域下的可见配置项。 */
     fun itemsInDomain(domain: ConfigDomain): List<ConfigItem> =
         editableItems().filter { it.domain == domain }
+
+    private fun floatingBallActionControl(): ConfigControl.IntOptions {
+        return ConfigControl.IntOptions(
+            FloatingBallGestureAction.ALL.map { action ->
+                ConfigControl.IntOptions.Option(action, FloatingBallGestureAction.label(action))
+            }
+        )
+    }
 }

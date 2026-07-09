@@ -179,6 +179,14 @@
             android:exported="false" />
 
         <activity
+            android:name=".core.service.pickup.PickupQrHandleActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="false" />
+
+        <activity
             android:name=".platform.widget.ScheduleWidgetConfigureActivity"
             android:exported="true"
             android:theme="@style/Theme.CalendarAssistant" />
@@ -239,6 +247,11 @@
             android:foregroundServiceType="microphone" />
 
         <service
+            android:name=".platform.floating.QuickMemoVoiceCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
             android:name=".platform.clipboard.ClipboardCodeMonitorService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
@@ -252,6 +265,10 @@
             android:name=".platform.floating.EdgeBarService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".platform.floating.FloatingBallService"
+            android:exported="false" />
 
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".platform.receiver.AlarmReceiver" />

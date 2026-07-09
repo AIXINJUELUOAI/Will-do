@@ -107,10 +107,12 @@ class DuplicateEventCleanupCenter(context: Context) {
         val richestReminder = (listOf(keep) + duplicates).maxByOrNull { it.getReminders().size }
         val richestColor = (listOf(keep) + duplicates).firstOrNull { it.color != 0 }
         val richestDescription = (listOf(keep) + duplicates).maxByOrNull { it.description.length }
+        val qrSource = (listOf(keep) + duplicates).firstOrNull { it.codeQrPayload.isNotBlank() }
         val fallbackLocation = duplicates.firstOrNull { it.location.isNotBlank() }?.location.orEmpty()
         return keep.copy(
             location = keep.location.ifBlank { fallbackLocation },
             description = richestDescription?.description ?: keep.description,
+            codeQrPayload = qrSource?.codeQrPayload ?: keep.codeQrPayload,
             importId = systemBound?.importId?.takeIf { it.isNotBlank() } ?: keep.importId,
             source = systemBound?.source?.takeIf { it.isNotBlank() } ?: keep.source.ifBlank { SOURCE_SIMPLE_CALENDAR },
             state = richestState?.state ?: keep.state,

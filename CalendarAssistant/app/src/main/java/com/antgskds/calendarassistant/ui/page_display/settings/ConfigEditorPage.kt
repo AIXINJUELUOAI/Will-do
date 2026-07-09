@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -111,7 +112,7 @@ fun ConfigEditorPage(uiSize: Int = 2) {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
-            ConfigCatalog.itemsInDomain(domain).forEach { item ->
+            ConfigCatalog.itemsInDomain(domain).filter { it.visible(settings) }.forEach { item ->
                 ConfigItemControl(
                     item = item,
                     currentSettings = settings,
@@ -123,11 +124,11 @@ fun ConfigEditorPage(uiSize: Int = 2) {
 }
 
 private fun configDomainSubtitle(domain: ConfigDomain): String = when (domain) {
-    ConfigDomain.APPEARANCE -> "背景与主题外观配置"
+    ConfigDomain.APPEARANCE -> "主题色、壁纸和卡片显示配置"
     ConfigDomain.RECOGNITION -> "AI/正则识别模式与识别策略"
     ConfigDomain.WEATHER -> "天气风险阈值与显示配置"
     ConfigDomain.NOTIFICATION -> "通知展示、提醒时长与发布策略"
-    ConfigDomain.VOICE -> "语音输入与悬浮窗长按配置"
+    ConfigDomain.VOICE -> "随口记与悬浮窗长按配置"
 }
 
 @Composable

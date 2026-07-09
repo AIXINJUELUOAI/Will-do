@@ -137,7 +137,7 @@ fun AllEventsPage(
                         } else {
                             "未找到相关日程"
                         }
-                        Text(emptyText, color = MaterialTheme.colorScheme.secondary)
+                        Text(emptyText, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f))
                     }
                 }
             } else {
@@ -165,7 +165,7 @@ fun AllEventsPage(
                                 modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                         }
 

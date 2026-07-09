@@ -371,12 +371,12 @@ class TextAccessibilityService : AccessibilityService() {
 
     private fun startVoiceCaptureService() {
         if (!settingsQueryApi.settings.value.voiceInputEnabled) {
-            Log.w(TAG, "语音输入未开启，无法启动语音输入")
-            showResultNotification("语音输入未开启", "请先在实验室中开启语音输入")
+            Log.w(TAG, "随口记未开启，无法启动随口记录音")
+            showResultNotification("随口记未开启", "请先在实验室中开启随口记")
             return
         }
         if (!floatingCenter.canDrawOverlays(this)) {
-            Log.w(TAG, "悬浮窗权限未授予，无法启动语音输入")
+            Log.w(TAG, "悬浮窗权限未授予，无法启动随口记录音")
             app.notificationCenter.showFloatingPermissionDeniedNotification(NOTIFICATION_ID_RESULT)
             return
         }

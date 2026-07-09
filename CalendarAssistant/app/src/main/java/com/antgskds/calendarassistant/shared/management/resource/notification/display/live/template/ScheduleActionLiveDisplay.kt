@@ -9,6 +9,7 @@ object ScheduleActionLiveDisplay {
         secondaryText: String?,
         expandedText: String?,
         tapOpensPickupList: Boolean = false,
+        tapEventId: String? = null,
         action: CapsuleActionSpec? = null
     ): CapsuleDisplayModel {
         val headerTitle = clean(title) ?: "日程提醒"
@@ -20,6 +21,7 @@ object ScheduleActionLiveDisplay {
             secondaryText = secondary,
             expandedText = expanded,
             tapOpensPickupList = tapOpensPickupList,
+            tapEventId = tapEventId,
             action = action
         )
     }

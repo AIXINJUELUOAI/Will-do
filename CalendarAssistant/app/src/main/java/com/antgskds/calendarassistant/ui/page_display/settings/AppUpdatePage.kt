@@ -20,11 +20,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +54,12 @@ fun AppUpdatePage(
     val versionTitleStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
     val bodyStyle = MaterialTheme.typography.bodyLarge
 
+    LaunchedEffect(Unit) {
+        if (updateState.info == null && !updateState.isChecking) {
+            mainViewModel.checkAppUpdatesManually()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -58,6 +68,30 @@ fun AppUpdatePage(
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (updateState.hasUpdate) "发现新版本" else "软件更新",
+                style = versionTitleStyle,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            OutlinedButton(
+                onClick = { mainViewModel.checkAppUpdatesManually() },
+                enabled = !updateState.isChecking
+            ) {
+                if (updateState.isChecking) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(if (updateState.isChecking) "检查中" else "检查")
+            }
+        }
+
         val versions = updateState.info?.versions.orEmpty()
         if (versions.isEmpty()) {
             AppCard(

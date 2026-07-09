@@ -47,6 +47,7 @@ object HelperCatalog {
         // —— 识别 ——
         HelperEntry("AI 失败映射", Chain.RECOGNITION, "core/ai/AiFailureMapper", "AI 调用失败原因 → 内部失败类型"),
         HelperEntry("识别失败文案映射", Chain.RECOGNITION, "core/ai/RecognitionFailureMessageMapper", "识别失败类型 → 用户可读提示"),
+        HelperEntry("即时码二维码支持", Chain.RECOGNITION, "core/instantcode/InstantCodeQrSupport", "取件/取餐/取票/寄件图片二维码解析与卡片二维码生成"),
         HelperEntry("正则日程解析", Chain.RECOGNITION, "core/rule/RegexScheduleRecognizer", "可配置正则规则 → 日程草稿"),
         HelperEntry("正则规则偏好存储", Chain.RECOGNITION, "core/rule/RegexScheduleRulePrefs", "开发者可编辑正则规则 JSON 读写"),
 

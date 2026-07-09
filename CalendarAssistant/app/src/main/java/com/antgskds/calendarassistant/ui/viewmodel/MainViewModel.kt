@@ -423,6 +423,13 @@ class MainViewModel(
         onResult(result)
     }
 
+    fun removeImageFromQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            if (!quickMemoCenter.removeImageFromMemo(memoId)) error("当前随口记没有图片")
+        }
+        onResult(result)
+    }
+
     fun attachVoiceToQuickMemo(memoId: Long, audioPath: String, durationMs: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
         val result = runCatching {
             if (!quickMemoCenter.attachVoiceToMemo(memoId, audioPath, durationMs)) error("随口记不存在")
@@ -447,6 +454,10 @@ class MainViewModel(
 
     fun markQuickMemoTodo(memoId: Long) = viewModelScope.launch {
         quickMemoCenter.markTodoActive(memoId)
+    }
+
+    fun removeQuickMemoTodo(memoId: Long) = viewModelScope.launch {
+        quickMemoCenter.removeTodo(memoId)
     }
 
     fun retryQuickMemoTranscription(memoId: Long) {

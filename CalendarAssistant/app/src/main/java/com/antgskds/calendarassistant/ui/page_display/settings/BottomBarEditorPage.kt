@@ -51,8 +51,10 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.homeEntryLabel
+import com.antgskds.calendarassistant.data.model.isHomeEntryAvailable
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
@@ -91,21 +93,28 @@ fun BottomBarEditorPage(
     val scrollState = rememberScrollState()
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
 
-    val activeItems = sanitizeHomeBottomItems(settings.homeBottomItems)
+    val storedItems = sanitizeHomeBottomItems(settings.homeBottomItems)
+    val activeItems = visibleHomeBottomItems(storedItems, quickMemoEnabled = settings.voiceInputEnabled)
     val startPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, activeItems)
 
-    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey) {
-        if (activeItems != settings.homeBottomItems || startPage != settings.homeStartPageKey) {
+    LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, storedItems) {
+        val storedStartPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, storedItems)
+        if (storedItems != settings.homeBottomItems || storedStartPage != settings.homeStartPageKey) {
             settingsViewModel.updatePreference(
-                homeBottomItems = activeItems,
-                homeStartPageKey = startPage
+                homeBottomItems = storedItems,
+                homeStartPageKey = storedStartPage
             )
         }
     }
 
     fun saveConfig(newItems: List<String>, newStartPage: String? = null) {
-        val sanitizedItems = sanitizeHomeBottomItems(newItems)
-        val sanitizedStart = sanitizeHomeStartPageKey(newStartPage ?: startPage, sanitizedItems)
+        val hiddenUnavailableItems = storedItems.filterNot { isHomeEntryAvailable(it, settings.voiceInputEnabled) }
+        val visibleItems = sanitizeHomeBottomItems(newItems)
+            .filter { isHomeEntryAvailable(it, settings.voiceInputEnabled) }
+            .take((3 - hiddenUnavailableItems.size).coerceAtLeast(1))
+            .ifEmpty { listOf(HomeEntryKey.TODAY) }
+        val sanitizedItems = (visibleItems + hiddenUnavailableItems).distinct().take(3)
+        val sanitizedStart = sanitizeHomeStartPageKey(newStartPage ?: settings.homeStartPageKey, sanitizedItems)
         settingsViewModel.updatePreference(
             homeBottomItems = sanitizedItems,
             homeStartPageKey = sanitizedStart
@@ -319,8 +328,11 @@ fun BottomBarEditorPage(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         standbyItems.forEach { key ->
+                            val entryAvailable = isHomeEntryAvailable(key, settings.voiceInputEnabled)
                             ElevatedAssistChip(
+                                enabled = entryAvailable,
                                 onClick = {
+                                    if (!entryAvailable) return@ElevatedAssistChip
                                     haptics.click()
                                     val mutable = activeItems.toMutableList()
                                     if (mutable.size < 3) {

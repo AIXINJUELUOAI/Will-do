@@ -54,8 +54,8 @@ import androidx.navigation.navArgument
 import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
-import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
@@ -74,6 +74,7 @@ import com.antgskds.calendarassistant.ui.page_display.QuickMemoDetailPage
 import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundRootSize
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundWallpaperBitmap
+import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundAverageLuminance
 import com.antgskds.calendarassistant.ui.page_display.settings.shouldUseLightSystemBarsForAppBackground
 import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
@@ -94,6 +95,11 @@ private data class PendingQuickMemoDetailLaunch(
     val nonce: Long = System.nanoTime()
 )
 
+private data class PendingEventDialogLaunch(
+    val eventId: Long,
+    val nonce: Long = System.nanoTime()
+)
+
 class MainActivity : ComponentActivity() {
 
     // 取件码时间戳
@@ -104,6 +110,7 @@ class MainActivity : ComponentActivity() {
 
     private val pendingWidgetAction = mutableStateOf<PendingWidgetLaunchAction?>(null)
     private val pendingQuickMemoDetailLaunch = mutableStateOf<PendingQuickMemoDetailLaunch?>(null)
+    private val pendingEventDialogLaunch = mutableStateOf<PendingEventDialogLaunch?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
@@ -141,6 +148,7 @@ class MainActivity : ComponentActivity() {
         requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
         consumeQuickMemoDetailIntent(intent)
+        consumeEventDialogIntent(intent)
 
         enableEdgeToEdge()
 
@@ -257,8 +265,8 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val predictiveBackEnabled = settings.predictiveBackEnabled
-                val homeBottomItems = remember(settings.homeBottomItems) {
-                    sanitizeHomeBottomItems(settings.homeBottomItems)
+                val homeBottomItems = remember(settings.homeBottomItems, settings.voiceInputEnabled) {
+                    visibleHomeBottomItems(settings.homeBottomItems, quickMemoEnabled = settings.voiceInputEnabled)
                 }
                 val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
                     sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -267,6 +275,7 @@ class MainActivity : ComponentActivity() {
                 var lastPickupEventTimestamp by rememberSaveable { mutableLongStateOf(0L) }
                 var lastWidgetActionNonce by rememberSaveable { mutableLongStateOf(0L) }
                 var lastQuickMemoDetailNonce by rememberSaveable { mutableLongStateOf(0L) }
+                var lastEventDialogNonce by rememberSaveable { mutableLongStateOf(0L) }
                 var openCourseRequestId by rememberSaveable { mutableLongStateOf(0L) }
                 val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val floatingActionCardBottomPadding = if (currentBackStackEntry?.destination?.route == AppRoutes.Home) {
@@ -352,6 +361,19 @@ class MainActivity : ComponentActivity() {
                     navController.navigate(AppRoutes.quickMemoDetail(pending.memoId)) { launchSingleTop = true }
                 }
 
+                LaunchedEffect(pendingEventDialogLaunch.value) {
+                    val pending = pendingEventDialogLaunch.value ?: return@LaunchedEffect
+                    if (pending.nonce == lastEventDialogNonce) return@LaunchedEffect
+                    lastEventDialogNonce = pending.nonce
+                    selectedHomePageKey = HomeEntryKey.ALL
+                    navController.navigate(AppRoutes.Home) {
+                        launchSingleTop = true
+                        popUpTo(AppRoutes.Home) { inclusive = false }
+                    }
+                }
+
+                val pendingEventDialog = pendingEventDialogLaunch.value
+
                 val appBackgroundBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
                     initialValue = null,
                     key1 = settings.appBackgroundImagePath
@@ -368,7 +390,8 @@ class MainActivity : ComponentActivity() {
 
                 CompositionLocalProvider(
                     LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
-                    LocalAppBackgroundRootSize provides appBackgroundRootSize
+                    LocalAppBackgroundRootSize provides appBackgroundRootSize,
+                    LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance
                 ) {
                     // 最外层容器（包裹 NavHost 和所有弹窗）
                     Box(
@@ -413,6 +436,8 @@ class MainActivity : ComponentActivity() {
                                     settingsViewModel = settingsViewModel,
                                      pickupTimestamp = pickupEventTimestamp.value,
                                      openCourseRequestId = openCourseRequestId,
+                                      openEventId = pendingEventDialog?.eventId,
+                                      openEventRequestId = pendingEventDialog?.nonce ?: 0L,
                                      selectedPageKey = selectedHomePageKey,
                                     clipboardPrompt = homeClipboardPrompt,
                                     onConfirmClipboardPrompt = { app.clipboardCodeCenter.confirmPendingPrompt() },
@@ -679,6 +704,7 @@ class MainActivity : ComponentActivity() {
         requestRecordAudioPermissionIfNeeded(intent)
         consumeWidgetAction(intent)
         consumeQuickMemoDetailIntent(intent)
+        consumeEventDialogIntent(intent)
     }
 
     private fun requestRecordAudioPermissionIfNeeded(intent: Intent?) {
@@ -698,6 +724,12 @@ class MainActivity : ComponentActivity() {
         val memoId = intent?.getLongExtra(EXTRA_OPEN_QUICK_MEMO_ID, -1L)?.takeIf { it > 0L } ?: return
         pendingQuickMemoDetailLaunch.value = PendingQuickMemoDetailLaunch(memoId)
         intent.removeExtra(EXTRA_OPEN_QUICK_MEMO_ID)
+    }
+
+    private fun consumeEventDialogIntent(intent: Intent?) {
+        val eventId = intent?.getLongExtra(EXTRA_OPEN_EVENT_ID, -1L)?.takeIf { it > 0L } ?: return
+        pendingEventDialogLaunch.value = PendingEventDialogLaunch(eventId)
+        intent.removeExtra(EXTRA_OPEN_EVENT_ID)
     }
 
     override fun onResume() {
@@ -754,6 +786,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_REQUEST_RECORD_AUDIO_PERMISSION = "request_record_audio_permission"
         const val EXTRA_OPEN_QUICK_MEMO_ID = "open_quick_memo_id"
+        const val EXTRA_OPEN_EVENT_ID = "open_event_id"
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 2401
         private var currentUiSize: Int = -1
         private var currentThemeMode: Int = -1

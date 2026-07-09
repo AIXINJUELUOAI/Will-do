@@ -122,6 +122,15 @@ class QuickMemoCenter(
         repository.attachImage(id, imagePath)
     }
 
+    suspend fun removeImageFromMemo(id: Long): Boolean = withContext(Dispatchers.IO) {
+        val removed = repository.removeImage(id)
+        if (removed && activeTextQuickMemoId() == id) {
+            repository.getQuickMemo(id)?.let { refreshPinnedTextQuickMemo(it) }
+                ?: capsuleCommandApi?.clearTextQuickMemo()
+        }
+        removed
+    }
+
     suspend fun attachVoiceToMemo(id: Long, audioPath: String, durationMs: Long): Boolean = withContext(Dispatchers.IO) {
         val attached = repository.attachVoice(id, audioPath, durationMs)
         if (attached) {

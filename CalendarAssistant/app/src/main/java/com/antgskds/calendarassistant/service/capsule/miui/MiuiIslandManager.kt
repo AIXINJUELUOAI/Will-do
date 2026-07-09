@@ -8,6 +8,7 @@ import android.graphics.drawable.Icon
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
+import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
@@ -249,9 +250,12 @@ object MiuiIslandManager {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): PendingIntent {
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
+        val tapEventId = item.display.tapEventId?.toLongOrNull()
+        val tapIntent = Intent(context, if (tapEventId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (item.display.tapOpensPickupList) {
+            if (tapEventId != null) {
+                putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (item.display.tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }
         }

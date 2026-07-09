@@ -83,6 +83,7 @@ object NotificationTemplateCenter {
         secondaryText: String?,
         expandedText: String?,
         tapOpensPickupList: Boolean = false,
+        tapEventId: String? = null,
         templateMode: String = LiveNotificationTemplateMode.AUTO,
         action: CapsuleActionSpec? = null
     ): CapsuleDisplayModel {
@@ -91,6 +92,7 @@ object NotificationTemplateCenter {
             secondaryText = secondaryText,
             expandedText = expandedText,
             tapOpensPickupList = tapOpensPickupList,
+            tapEventId = tapEventId,
             action = action
         )
     }

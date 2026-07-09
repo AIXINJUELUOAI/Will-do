@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
@@ -107,9 +108,12 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         item: CapsuleUiState.Active.CapsuleItem,
         tapOpensPickupList: Boolean
     ): PendingIntent {
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
+        val tapEventId = item.display.tapEventId?.toLongOrNull()
+        val tapIntent = Intent(context, if (tapEventId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (tapOpensPickupList) {
+            if (tapEventId != null) {
+                putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }
         }

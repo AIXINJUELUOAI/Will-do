@@ -165,6 +165,16 @@ class SettingsViewModel(
         selectedLocalModelId: String? = null,
         floatingEventRange: Int? = null,
         floatingExpandSide: String? = null,
+        quickMemoRecordingDisplayMode: Int? = null,
+        floatingEntryStyle: Int? = null,
+        floatingBallEnabled: Boolean? = null,
+        floatingBallXPercent: Float? = null,
+        floatingBallYPercent: Float? = null,
+        floatingBallSizeDp: Int? = null,
+        floatingBallAlpha: Float? = null,
+        floatingBallSingleTapAction: Int? = null,
+        floatingBallDoubleTapAction: Int? = null,
+        floatingBallLongPressAction: Int? = null,
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
@@ -211,6 +221,16 @@ class SettingsViewModel(
                 selectedLocalModelId = selectedLocalModelId,
                 floatingEventRange = floatingEventRange,
                 floatingExpandSide = floatingExpandSide,
+                quickMemoRecordingDisplayMode = quickMemoRecordingDisplayMode,
+                floatingEntryStyle = floatingEntryStyle,
+                floatingBallEnabled = floatingBallEnabled,
+                floatingBallXPercent = floatingBallXPercent,
+                floatingBallYPercent = floatingBallYPercent,
+                floatingBallSizeDp = floatingBallSizeDp,
+                floatingBallAlpha = floatingBallAlpha,
+                floatingBallSingleTapAction = floatingBallSingleTapAction,
+                floatingBallDoubleTapAction = floatingBallDoubleTapAction,
+                floatingBallLongPressAction = floatingBallLongPressAction,
                 volumeUpLongPressEnabled = volumeUpLongPressEnabled,
                 volumeUpLongPressAction = volumeUpLongPressAction,
                 smsMonitoring = smsMonitoring,
@@ -436,6 +456,7 @@ class SettingsViewModel(
                         appBackgroundSeedColorHex = "",
                         appBackgroundImageColorEnabled = false,
                         appBackgroundScrimAlphaPercent = 0,
+                        appBackgroundAverageLuminance = result.averageLuminance,
                         themeColorScheme = if (resetImageColor) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
                     )
                 )
@@ -460,6 +481,7 @@ class SettingsViewModel(
                         appBackgroundImageColorEnabled = false,
                         appBackgroundWallpaperBlurEnabled = false,
                         appBackgroundScrimAlphaPercent = 0,
+                        appBackgroundAverageLuminance = -1f,
                         themeColorScheme = if (current.appBackgroundImageColorEnabled) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
                     )
                 )

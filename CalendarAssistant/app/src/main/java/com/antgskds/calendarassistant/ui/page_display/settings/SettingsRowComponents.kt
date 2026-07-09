@@ -200,7 +200,7 @@ fun SliderSettingItem(
     }
 }
 
-/** 标题 + 说明 + 开关 + 展开三档滑杆（长按音量动作：识屏/悬浮窗/语音）行。 */
+/** 标题 + 说明 + 开关 + 展开三档滑杆（长按音量动作：识屏/悬浮窗/随口记）行。 */
 @Composable
 fun VolumeLongPressSettingItem(
     title: String,
@@ -252,7 +252,7 @@ fun VolumeLongPressSettingItem(
                 ) {
                     Text(text = "识屏", style = cardSubtitleStyle)
                     Text(text = "悬浮窗", style = cardSubtitleStyle)
-                    Text(text = "语音", style = cardSubtitleStyle)
+                    Text(text = "随口记", style = cardSubtitleStyle)
                 }
                 Slider(
                     value = normalizedAction.toFloat(),

@@ -1088,7 +1088,8 @@ class LegacyDataMigrationCoordinator(
             eventType = if (existing.eventType > 0) existing.eventType else candidate.eventType,
             parentId = if (candidate.parentId != 0L) candidate.parentId else existing.parentId,
             rrule = if (candidate.rrule.isNotBlank()) candidate.rrule else existing.rrule,
-            exdates = if (candidate.exdates.isNotEmpty()) candidate.exdates else existing.exdates
+            exdates = if (candidate.exdates.isNotEmpty()) candidate.exdates else existing.exdates,
+            codeQrPayload = candidate.codeQrPayload.ifBlank { existing.codeQrPayload }
         )
     }
 
@@ -1144,7 +1145,8 @@ class LegacyDataMigrationCoordinator(
             type = type,
             state = state,
             tag = tag,
-            archivedAt = archivedAt
+            archivedAt = archivedAt,
+            codeQrPayload = codeQrPayload
         )
     }
 
@@ -1177,7 +1179,8 @@ class LegacyDataMigrationCoordinator(
             type = type,
             state = state,
             tag = normalizeTag(tag),
-            archivedAt = archivedAt ?: if (forceArchived) nowSeconds else null
+            archivedAt = archivedAt ?: if (forceArchived) nowSeconds else null,
+            codeQrPayload = codeQrPayload
         )
     }
 
@@ -1459,7 +1462,8 @@ class LegacyDataMigrationCoordinator(
         val type: Int = 0,
         val state: Int = STATE_PENDING,
         val tag: String = EventTags.GENERAL,
-        val archivedAt: Long? = null
+        val archivedAt: Long? = null,
+        val codeQrPayload: String = ""
     )
 
     @Serializable

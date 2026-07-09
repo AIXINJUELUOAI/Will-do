@@ -46,6 +46,7 @@ class StoreRootNode(context: Context) {
             description = draft.description,
             timeZone = draft.timeZone,
             tag = draft.tag,
+            codeQrPayload = draft.qrPayload,
             rrule = "",
             parentId = 0
         )

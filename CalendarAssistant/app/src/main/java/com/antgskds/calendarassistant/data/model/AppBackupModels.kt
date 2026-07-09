@@ -27,6 +27,7 @@ data class AppBackupData(
     val eventsJson: String? = null,
     val settings: MySettings? = null,
     val promptsJson: String? = null,
+    val appBackgroundImageFileName: String? = null,
     val attachments: List<AppBackupAttachmentDto> = emptyList(),
     val quickMemos: List<AppBackupQuickMemoDto> = emptyList(),
     val quickMemoSuggestions: List<AppBackupQuickMemoSuggestionDto> = emptyList()

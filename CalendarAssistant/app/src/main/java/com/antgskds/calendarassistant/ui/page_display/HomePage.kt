@@ -77,7 +77,6 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.page_display.settings.appBackgroundSurfaceAlpha
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
@@ -562,149 +561,143 @@ fun HomePage(
                                 val hasAppBackground = uiState.settings.appBackgroundImagePath.isNotBlank()
                                 val themePrimary = MaterialTheme.colorScheme.primary
                                 val themeOnPrimary = MaterialTheme.colorScheme.onPrimary
-                                AppBackgroundStyleTheme(
-                                    enabled = hasAppBackground,
-                                    miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled,
-                                    cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent
-                                ) {
-                                    val isToday = uiState.selectedDate == uiState.today
-                                    val weatherData = uiState.weatherData
-                                    val topBaseColor = when {
-                                        isToday -> themePrimary
-                                        else -> MaterialTheme.colorScheme.surfaceVariant
-                                    }
-                                    val topContentColor = when {
-                                        isToday -> themeOnPrimary
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                    val topBarColor = if (hasAppBackground) {
-                                        val glassAlpha = appBackgroundSurfaceAlpha(
-                                            cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent,
-                                            dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
-                                            miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                val isToday = uiState.selectedDate == uiState.today
+                                val weatherData = uiState.weatherData
+                                val topBaseColor = when {
+                                    isToday -> themePrimary
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                }
+                                val topContentColor = when {
+                                    isToday -> themeOnPrimary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                                val topBarColor = if (hasAppBackground) {
+                                    val glassAlpha = appBackgroundSurfaceAlpha(
+                                        cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent,
+                                        dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
+                                        miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                    )
+                                    topBaseColor.copy(alpha = glassAlpha)
+                                } else {
+                                    topBaseColor
+                                }
+                                val dateCardShape = RoundedCornerShape(16.dp)
+                                AppCard(
+                                    modifier = Modifier
+                                        .padding(horizontal = 24.dp)
+                                        .fillMaxWidth()
+                                        .aspectRatio(0.95f)
+                                        .then(
+                                            if (hasAppBackground) {
+                                                Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
+                                            } else {
+                                                Modifier
+                                            }
                                         )
-                                        topBaseColor.copy(alpha = glassAlpha)
-                                    } else {
-                                        topBaseColor
-                                    }
-                                    val dateCardShape = RoundedCornerShape(16.dp)
-                                    AppCard(
-                                        modifier = Modifier
-                                            .padding(horizontal = 24.dp)
-                                            .fillMaxWidth()
-                                            .aspectRatio(0.95f)
-                                            .then(
-                                                if (hasAppBackground) {
-                                                    Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
-                                                } else {
-                                                    Modifier
+                                        .pointerInput(Unit) {
+                                            var totalDrag = 0f
+                                            detectHorizontalDragGestures(
+                                                onDragEnd = {
+                                                    if (totalDrag < -50) viewModel.updateSelectedDate(uiState.selectedDate.plusDays(1))
+                                                    else if (totalDrag > 50) viewModel.updateSelectedDate(uiState.selectedDate.minusDays(1))
+                                                    totalDrag = 0f
+                                                },
+                                                onHorizontalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    totalDrag += dragAmount
                                                 }
                                             )
-                                            .pointerInput(Unit) {
-                                                var totalDrag = 0f
-                                                detectHorizontalDragGestures(
-                                                    onDragEnd = {
-                                                        if (totalDrag < -50) viewModel.updateSelectedDate(uiState.selectedDate.plusDays(1))
-                                                        else if (totalDrag > 50) viewModel.updateSelectedDate(uiState.selectedDate.minusDays(1))
-                                                        totalDrag = 0f
-                                                    },
-                                                    onHorizontalDrag = { change, dragAmount ->
-                                                        change.consume()
-                                                        totalDrag += dragAmount
-                                                    }
-                                                )
-                                            },
-                                        shape = dateCardShape,
-                                        elevation = CardDefaults.cardElevation(defaultElevation = if (hasAppBackground) 0.dp else 6.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (hasAppBackground) {
-                                                MaterialTheme.colorScheme.surfaceContainerLow
-                                            } else if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                                MaterialTheme.colorScheme.surfaceContainerLow
-                                            } else {
-                                                MaterialTheme.colorScheme.surface
-                                            },
-                                            contentColor = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    ) {
-                                        Column(modifier = Modifier.fillMaxSize()) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(0.2f)
-                                                    .fillMaxWidth()
-                                                    .background(topBarColor)
-                                                    .clickable { viewModel.updateSelectedDate(uiState.today) }
-                                            ) {
-                                                if (weatherData != null) {
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .align(Alignment.CenterStart)
-                                                            .clip(RoundedCornerShape(50))
-                                                            .clickable { haptics.click(); onOpenWeatherDetail() }
-                                                            .padding(horizontal = 22.dp, vertical = 8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Icon(
-                                                            painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
-                                                            contentDescription = weatherData.text.ifBlank { "天气" },
-                                                            modifier = Modifier.size(30.dp),
-                                                            tint = topContentColor
-                                                        )
-                                                        Spacer(Modifier.width(10.dp))
-                                                        Text(
-                                                            text = buildString {
-                                                                append(weatherData.temperature.ifBlank { "--" })
-                                                                append("°C")
-                                                                if (weatherData.text.isNotBlank()) {
-                                                                    append(" · ")
-                                                                    append(weatherData.text)
-                                                                }
-                                                            },
-                                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                                            color = topContentColor,
-                                                            maxLines = 1
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            Column(
-                                                modifier = Modifier.weight(0.8f).fillMaxWidth(),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                                                    Text(
-                                                        uiState.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
-                                                        style = MaterialTheme.typography.titleLarge,
-                                                        color = MaterialTheme.colorScheme.onSurface
+                                        },
+                                    shape = dateCardShape,
+                                    elevation = CardDefaults.cardElevation(defaultElevation = if (hasAppBackground) 0.dp else 6.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (hasAppBackground) {
+                                            MaterialTheme.colorScheme.surfaceContainerLow
+                                        } else if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                            MaterialTheme.colorScheme.surfaceContainerLow
+                                        } else {
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        contentColor = MaterialTheme.colorScheme.onSurface
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.fillMaxSize()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(0.2f)
+                                                .fillMaxWidth()
+                                                .background(topBarColor)
+                                                .clickable { viewModel.updateSelectedDate(uiState.today) }
+                                        ) {
+                                            if (weatherData != null) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .align(Alignment.CenterStart)
+                                                        .clip(RoundedCornerShape(50))
+                                                        .clickable { haptics.click(); onOpenWeatherDetail() }
+                                                        .padding(horizontal = 22.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
+                                                        contentDescription = weatherData.text.ifBlank { "天气" },
+                                                        modifier = Modifier.size(30.dp),
+                                                        tint = topContentColor
                                                     )
-                                                    Spacer(Modifier.width(8.dp))
+                                                    Spacer(Modifier.width(10.dp))
                                                     Text(
-                                                        LunarCalendarUtils.getLunarDate(uiState.selectedDate),
-                                                        style = MaterialTheme.typography.titleLarge,
-                                                        color = MaterialTheme.colorScheme.onSurface
+                                                        text = buildString {
+                                                            append(weatherData.temperature.ifBlank { "--" })
+                                                            append("°C")
+                                                            if (weatherData.text.isNotBlank()) {
+                                                                append(" · ")
+                                                                append(weatherData.text)
+                                                            }
+                                                        },
+                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                                        color = topContentColor,
+                                                        maxLines = 1
                                                     )
                                                 }
+                                            }
+                                        }
+                                        Column(
+                                            modifier = Modifier.weight(0.8f).fillMaxWidth(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                                                 Text(
-                                                    text = uiState.selectedDate.dayOfMonth.toString(),
-                                                    fontSize = 140.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    lineHeight = 140.sp,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    modifier = Modifier.clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null
-                                                    ) {
-                                                        haptics.selection()
-                                                        viewModel.updateSelectedDate(uiState.today)
-                                                    }
+                                                    uiState.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
+                                                Spacer(Modifier.width(8.dp))
                                                 Text(
-                                                    "${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
+                                                    LunarCalendarUtils.getLunarDate(uiState.selectedDate),
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
+                                            Text(
+                                                text = uiState.selectedDate.dayOfMonth.toString(),
+                                                fontSize = 140.sp,
+                                                fontWeight = FontWeight.Black,
+                                                lineHeight = 140.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null
+                                                ) {
+                                                    haptics.selection()
+                                                    viewModel.updateSelectedDate(uiState.today)
+                                                }
+                                            )
+                                            Text(
+                                                "${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
+                                            )
                                         }
                                     }
                                 }
@@ -717,7 +710,7 @@ fun HomePage(
 
                             if (todayEvents.isEmpty()) {
                                 val emptyText = if (todaySearchQuery.isBlank()) "今日暂无日程" else "未找到相关日程"
-                                item { Text(emptyText, modifier = Modifier.padding(vertical = 40.dp), color = Color.LightGray) }
+                                item { Text(emptyText, modifier = Modifier.padding(vertical = 40.dp), color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)) }
                             } else {
                                 items(todayEvents, key = { "today_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
@@ -924,6 +917,6 @@ private fun SectionHeader(title: String, color: Color) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(6.dp).background(color, CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(text = title, style = SectionTitleTextStyle.copy(color = MaterialTheme.colorScheme.onSurface))
+        Text(text = title, style = SectionTitleTextStyle.copy(color = MaterialTheme.colorScheme.onBackground))
     }
 }
