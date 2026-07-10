@@ -97,7 +97,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
                 HorizontalDivider(
-                    modifier = Modifier.padding(start = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                 )
@@ -111,7 +111,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
                 HorizontalDivider(
-                    modifier = Modifier.padding(start = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                 )
@@ -147,7 +147,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
                 HorizontalDivider(
-                    modifier = Modifier.padding(start = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                 )

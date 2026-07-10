@@ -126,13 +126,13 @@ data class MySettings(
     // 短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
 
-    // 【实验室】码类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
+    // 【实验室】取件类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
     val forceInstantCodeTimeToNow: Boolean = false,
 
     // 【实验室】预测性返回手势
     val predictiveBackEnabled: Boolean = true,
 
-    // 【实验室】剪贴板码类识别
+    // 【实验室】剪贴板取件类识别
     val clipboardCodeRecognitionEnabled: Boolean = false,
 
     // 【实验室】随口记总开关
@@ -197,6 +197,12 @@ data class MySettings(
     val floatingEventRange: Int = 1, // 悬浮窗日程范围：0=全部, 1=今日, 2=今日+明日
     val floatingExpandSide: String = "RIGHT", // 悬浮窗展开方向：LEFT/RIGHT
     val quickMemoRecordingDisplayMode: Int = QuickMemoRecordingDisplayMode.LIVE_CAPSULE,
+    val floatingScheduleOrderKeys: List<String> = emptyList(),
+    val floatingDragTextIncludeTitle: Boolean = true,
+    val floatingDragTextIncludeTime: Boolean = false,
+    val floatingDragTextIncludeLocation: Boolean = false,
+    val floatingDragTextIncludeDescription: Boolean = true,
+    val floatingDragHotZonePercent: Int = FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT,
 
     // 天气配置
     val weatherEnabled: Boolean = false,
@@ -253,6 +259,9 @@ data class MySettings(
     val edgeBarWidthDp: Int = 8,
     val edgeBarHeightDp: Int = 120,
     val edgeBarAlpha: Float = 0.4f,
+    val edgeBarSingleTapAction: Int = FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE,
+    val edgeBarDoubleTapAction: Int = FloatingBallGestureAction.QUICK_RECOGNITION,
+    val edgeBarLongPressAction: Int = FloatingBallGestureAction.QUICK_MEMO_RECORDING,
     val floatingEntryStyle: Int = FloatingEntryStyle.EDGE_BAR,
 
     // 悬浮球入口（独立于侧边栏）
@@ -283,6 +292,9 @@ data class MySettings(
         const val APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT = 0
         const val APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT = 100
         const val APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT = 66
+        const val FLOATING_DRAG_HOT_ZONE_MIN_PERCENT = 25
+        const val FLOATING_DRAG_HOT_ZONE_MAX_PERCENT = 70
+        const val FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT = 50
 
         fun normalizeScreenshotDelayMs(delayMs: Long): Long {
             return delayMs.coerceIn(SCREENSHOT_DELAY_MIN_MS, SCREENSHOT_DELAY_MAX_MS)
@@ -300,6 +312,13 @@ data class MySettings(
             return alphaPercent.coerceIn(
                 APP_BACKGROUND_CARD_ALPHA_MIN_PERCENT,
                 APP_BACKGROUND_CARD_ALPHA_MAX_PERCENT
+            )
+        }
+
+        fun normalizeFloatingDragHotZonePercent(percent: Int): Int {
+            return percent.coerceIn(
+                FLOATING_DRAG_HOT_ZONE_MIN_PERCENT,
+                FLOATING_DRAG_HOT_ZONE_MAX_PERCENT
             )
         }
     }

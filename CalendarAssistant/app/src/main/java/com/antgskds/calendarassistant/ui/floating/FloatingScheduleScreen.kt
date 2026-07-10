@@ -126,6 +126,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -152,11 +153,13 @@ import com.antgskds.calendarassistant.feature.weather.domain.WeatherForecastIcon
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.core.rule.ActionIconType
 import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
+import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.rule.StatusColor
 import com.antgskds.calendarassistant.core.util.extractSourceImagePath
 import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
@@ -178,6 +181,7 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -187,8 +191,24 @@ private val FloatingActionYellowContainer = Color(0xFFFFF3C4)
 private val FloatingActionYellowIcon = Color(0xFF8A6200)
 private val FloatingActionWarningIcon = Color(0xFFE08600)
 private val FloatingVoiceWaveformWidth = 118.dp
+private val FloatingDragDescriptionLabels = mapOf(
+    RuleMatchingEngine.RULE_TRAIN to listOf("车次", "检票口", "座位号"),
+    RuleMatchingEngine.RULE_TAXI to listOf("颜色", "车型", "车牌"),
+    RuleMatchingEngine.RULE_FLIGHT to listOf("航班号", "登机口", "座位号"),
+    RuleMatchingEngine.RULE_PICKUP to listOf("取件码", "品牌", "位置"),
+    RuleMatchingEngine.RULE_FOOD to listOf("取餐码", "品牌", "位置"),
+    RuleMatchingEngine.RULE_TICKET to listOf("取票码", "品牌", "位置"),
+    RuleMatchingEngine.RULE_SENDER to listOf("寄件码", "品牌", "地点")
+)
 
 enum class FloatingInputMode { SCHEDULE, NOTE }
+
+data class FloatingDragTextOptions(
+    val includeTitle: Boolean = true,
+    val includeTime: Boolean = false,
+    val includeLocation: Boolean = false,
+    val includeDescription: Boolean = true
+)
 
 @Composable
 fun FloatingScheduleScreen(
@@ -218,6 +238,11 @@ fun FloatingScheduleScreen(
     onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
     onReorderQuickMemos: (List<Long>) -> Unit = {},
+    floatingScheduleOrderKeys: List<String> = emptyList(),
+    onReorderScheduleItems: (List<String>) -> Unit = {},
+    dragHotZonePercent: Int = MySettings.FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT,
+    dragTextOptions: FloatingDragTextOptions = FloatingDragTextOptions(),
+    onStartPlainTextDrag: (String, String, () -> Unit) -> Boolean = { _, _, _ -> false },
     onConfirmVoiceCapture: (Boolean) -> Unit = {},
     onPostVoiceTranscription: (QuickMemoEntity) -> Unit = {},
     onStartVoiceCapture: () -> Unit = {},
@@ -259,6 +284,9 @@ fun FloatingScheduleScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
+    val windowInfo = LocalWindowInfo.current
+    val windowWidthPx = windowInfo.containerSize.width.toFloat().takeIf { it > 0f } ?: with(density) { 360.dp.toPx() }
+    val normalizedDragHotZonePercent = MySettings.normalizeFloatingDragHotZonePercent(dragHotZonePercent)
     val haptics = rememberAppHaptics(hapticEnabled)
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
@@ -353,6 +381,12 @@ fun FloatingScheduleScreen(
                 },
                 onSaveQuickMemo = onSaveQuickMemo,
                 onReorderQuickMemos = onReorderQuickMemos,
+                floatingScheduleOrderKeys = floatingScheduleOrderKeys,
+                onReorderScheduleItems = onReorderScheduleItems,
+                dragHotZonePercent = normalizedDragHotZonePercent,
+                windowWidthPx = windowWidthPx,
+                dragTextOptions = dragTextOptions,
+                onStartPlainTextDrag = onStartPlainTextDrag,
                 onToggleAudioPlayback = onToggleAudioPlayback,
                 onRequestDatePicker = { initialDate, onConfirm ->
                     pickerRequest = FloatingPickerRequest.Date(initialDate, onConfirm)
@@ -721,6 +755,12 @@ fun TimeWheelList(
     onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
     onReorderQuickMemos: (List<Long>) -> Unit = {},
+    floatingScheduleOrderKeys: List<String> = emptyList(),
+    onReorderScheduleItems: (List<String>) -> Unit = {},
+    dragHotZonePercent: Int = MySettings.FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT,
+    windowWidthPx: Float,
+    dragTextOptions: FloatingDragTextOptions = FloatingDragTextOptions(),
+    onStartPlainTextDrag: (String, String, () -> Unit) -> Boolean = { _, _, _ -> false },
     onToggleAudioPlayback: (String?) -> Unit = {},
     onRequestDatePicker: (LocalDate, (LocalDate) -> Unit) -> Unit = { _, _ -> },
     onRequestTimePicker: (String, (String) -> Unit) -> Unit = { _, _ -> },
@@ -736,13 +776,57 @@ fun TimeWheelList(
     } else {
         Modifier.padding(end = 20.dp).width(260.dp)
     }
-    val sortedScheduleItems = remember(scheduleItems, reverseScheduleOrder) {
+    val baseSortedScheduleItems = remember(scheduleItems, reverseScheduleOrder) {
         val distinct = scheduleItems.distinctBy { it.stableKey }
         if (reverseScheduleOrder) {
             distinct.sortedByDescending { it.startTS }
         } else {
             distinct.sortedBy { it.startTS }
         }
+    }
+    val orderedScheduleItems = remember(baseSortedScheduleItems, floatingScheduleOrderKeys) {
+        mergeFloatingScheduleOrder(baseSortedScheduleItems, floatingScheduleOrderKeys)
+    }
+    val orderedScheduleKeys = remember(orderedScheduleItems) { orderedScheduleItems.map { it.stableKey } }
+    val scheduleOrder = remember { mutableStateListOf<String>() }
+    var draggingScheduleKey by remember { mutableStateOf<String?>(null) }
+    var draggedScheduleOffsetY by remember { mutableStateOf(0f) }
+    var externalDraggingScheduleKey by remember { mutableStateOf<String?>(null) }
+    val scheduleDragStepPx = with(density) { 82.dp.toPx() }
+    val externalDragDirectionBias = 1.2f
+    val normalizedDragHotZonePercent = MySettings.normalizeFloatingDragHotZonePercent(dragHotZonePercent)
+    val dragHotZoneWidthPx = windowWidthPx * (normalizedDragHotZonePercent / 100f)
+    fun isInFloatingDragHotZone(x: Float): Boolean {
+        return if (expandFromLeft) {
+            x <= dragHotZoneWidthPx
+        } else {
+            x >= windowWidthPx - dragHotZoneWidthPx
+        }
+    }
+    fun shouldStartExternalDrag(startX: Float, totalX: Float, totalY: Float): Boolean {
+        if (windowWidthPx <= 0f) return false
+        val currentX = (startX + totalX).coerceIn(0f, windowWidthPx)
+        val movedOutFromFloatingSide = if (expandFromLeft) totalX > 0f else totalX < 0f
+        return movedOutFromFloatingSide &&
+            isInFloatingDragHotZone(startX) &&
+            !isInFloatingDragHotZone(currentX) &&
+            abs(totalX) > abs(totalY) * externalDragDirectionBias
+    }
+
+    LaunchedEffect(orderedScheduleKeys) {
+        scheduleOrder.clear()
+        scheduleOrder.addAll(orderedScheduleKeys)
+    }
+    val scheduleOrderSnapshot = scheduleOrder.toList()
+    val displayScheduleItems = remember(baseSortedScheduleItems, scheduleOrderSnapshot, externalDraggingScheduleKey) {
+        val byKey = baseSortedScheduleItems.associateBy { it.stableKey }
+        val ordered = scheduleOrderSnapshot.mapNotNull(byKey::get)
+        (ordered + baseSortedScheduleItems.filter { it.stableKey !in scheduleOrderSnapshot })
+            .filter { it.stableKey != externalDraggingScheduleKey }
+    }
+    fun currentScheduleKeysInOrder(): List<String> {
+        val currentKeys = baseSortedScheduleItems.mapTo(mutableSetOf()) { it.stableKey }
+        return scheduleOrder.filter { it in currentKeys }
     }
     val sortedQuickMemos = remember(quickMemos) {
         quickMemos.sortedWith(compareBy<QuickMemoEntity> { it.sortRank }.thenByDescending { it.updatedAt })
@@ -752,6 +836,7 @@ fun TimeWheelList(
     val quickMemoOrder = remember { mutableStateListOf<String>() }
     var draggingQuickMemoKey by remember { mutableStateOf<String?>(null) }
     var draggedQuickMemoOffsetY by remember { mutableStateOf(0f) }
+    var externalDraggingQuickMemoKey by remember { mutableStateOf<String?>(null) }
     val quickMemoDragStepPx = with(density) { 74.dp.toPx() }
 
     LaunchedEffect(sortedQuickMemoKeys) {
@@ -767,10 +852,11 @@ fun TimeWheelList(
         }
     }
     val quickMemoOrderSnapshot = quickMemoOrder.toList()
-    val displayQuickMemos = remember(sortedQuickMemos, quickMemoOrderSnapshot) {
+    val displayQuickMemos = remember(sortedQuickMemos, quickMemoOrderSnapshot, externalDraggingQuickMemoKey) {
         val byKey = sortedQuickMemos.associateBy(::quickMemoOrderKey)
         val ordered = quickMemoOrderSnapshot.mapNotNull(byKey::get)
-        ordered + sortedQuickMemos.filter { quickMemoOrderKey(it) !in quickMemoOrderSnapshot }
+        (ordered + sortedQuickMemos.filter { quickMemoOrderKey(it) !in quickMemoOrderSnapshot })
+            .filter { quickMemoOrderKey(it) != externalDraggingQuickMemoKey }
     }
     fun currentQuickMemoIdsInOrder(): List<Long> {
         val byKey = sortedQuickMemos.associateBy(::quickMemoOrderKey)
@@ -778,11 +864,11 @@ fun TimeWheelList(
     }
     // 正序（从早到晚）时，悬浮窗打开后自动定位到第一个未结束的日程，
     // 让"今天/现在"出现在视野中，过去的日程在上方可往上滑查看。倒序保持默认（停在顶部）。
-    LaunchedEffect(sortedScheduleItems, reverseScheduleOrder, currentMode) {
+    LaunchedEffect(displayScheduleItems, reverseScheduleOrder, currentMode) {
         if (reverseScheduleOrder) return@LaunchedEffect
         if (currentMode == FloatingInputMode.NOTE) return@LaunchedEffect
         val nowSeconds = System.currentTimeMillis() / 1000L
-        val firstUpcoming = sortedScheduleItems.indexOfFirst { it.endTS >= nowSeconds }
+        val firstUpcoming = displayScheduleItems.indexOfFirst { it.endTS >= nowSeconds }
         if (firstUpcoming > 0) {
             val headerOffset = if (weatherData != null) 1 else 0
             listState.scrollToItem(firstUpcoming + headerOffset)
@@ -815,6 +901,9 @@ fun TimeWheelList(
             if (currentMode == FloatingInputMode.NOTE) {
                 items(displayQuickMemos, key = { "quick_memo_${it.id ?: it.hashCode()}" }) { memo ->
                     val memoKey = quickMemoOrderKey(memo)
+                    val memoDragText = remember(memo.id, memo.updatedAt, memo.bodyText, memo.type) {
+                        memo.bodyText.ifBlank { floatingQuickMemoFallbackText(memo) }.trim().take(800)
+                    }
                     val isDragging = draggingQuickMemoKey == memoKey
                     val dragScale by animateFloatAsState(
                         targetValue = if (isDragging) 1.035f else 1f,
@@ -828,25 +917,55 @@ fun TimeWheelList(
                             .zIndex(if (isDragging) 1f else 0f)
                             .offset { IntOffset(0, if (isDragging) draggedQuickMemoOffsetY.roundToInt() else 0) }
                             .scale(dragScale)
-                            .pointerInput(memoKey, displayQuickMemos.size) {
+                            .pointerInput(memoKey, displayQuickMemos.size, expandFromLeft, normalizedDragHotZonePercent, windowWidthPx) {
+                                var dragStartX = 0f
+                                var totalDragX = 0f
+                                var totalDragY = 0f
+                                var externalDragAttempted = false
+                                var externalDragStarted = false
                                 detectDragGesturesAfterLongPress(
-                                    onDragStart = {
+                                    onDragStart = { offset ->
                                         haptics.longPress()
+                                        dragStartX = offset.x.coerceIn(0f, windowWidthPx)
+                                        totalDragX = 0f
+                                        totalDragY = 0f
+                                        externalDragAttempted = false
+                                        externalDragStarted = false
                                         draggingQuickMemoKey = memoKey
                                         draggedQuickMemoOffsetY = 0f
                                     },
                                     onDragEnd = {
-                                        onReorderQuickMemos(currentQuickMemoIdsInOrder())
+                                        if (!externalDragStarted) onReorderQuickMemos(currentQuickMemoIdsInOrder())
                                         draggingQuickMemoKey = null
                                         draggedQuickMemoOffsetY = 0f
                                     },
                                     onDragCancel = {
-                                        onReorderQuickMemos(currentQuickMemoIdsInOrder())
+                                        if (!externalDragStarted) onReorderQuickMemos(currentQuickMemoIdsInOrder())
                                         draggingQuickMemoKey = null
                                         draggedQuickMemoOffsetY = 0f
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
+                                        if (externalDragStarted) return@detectDragGesturesAfterLongPress
+                                        totalDragX += dragAmount.x
+                                        totalDragY += dragAmount.y
+                                        if (
+                                            !externalDragAttempted &&
+                                            shouldStartExternalDrag(dragStartX, totalDragX, totalDragY)
+                                        ) {
+                                            externalDragAttempted = true
+                                            externalDragStarted = onStartPlainTextDrag("随口记", memoDragText) {
+                                                externalDraggingQuickMemoKey = null
+                                            }
+                                            if (externalDragStarted) {
+                                                externalDraggingQuickMemoKey = memoKey
+                                                draggingQuickMemoKey = null
+                                                draggedQuickMemoOffsetY = 0f
+                                            } else {
+                                                haptics.warning()
+                                            }
+                                            return@detectDragGesturesAfterLongPress
+                                        }
                                         if (quickMemoOrder.size <= 1 || draggingQuickMemoKey != memoKey) return@detectDragGesturesAfterLongPress
                                         draggedQuickMemoOffsetY += dragAmount.y
                                         val currentIndex = quickMemoOrder.indexOf(memoKey)
@@ -880,9 +999,88 @@ fun TimeWheelList(
                     }
                 }
             } else {
-            items(sortedScheduleItems, key = { it.stableKey }) { item ->
+            items(displayScheduleItems, key = { it.stableKey }) { item ->
+                val scheduleKey = item.stableKey
+                val scheduleDragText = remember(item.stableKey, item.title, item.startTS, item.endTS, item.location, item.description, dragTextOptions) {
+                    formatScheduleDragText(item, dragTextOptions)
+                }
+                val isDragging = draggingScheduleKey == scheduleKey
+                val dragScale by animateFloatAsState(
+                    targetValue = if (isDragging) 1.035f else 1f,
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+                    label = "floating_schedule_drag_scale"
+                )
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (isDragging) Modifier else Modifier.animateItem())
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .offset { IntOffset(0, if (isDragging) draggedScheduleOffsetY.roundToInt() else 0) }
+                        .scale(dragScale)
+                        .pointerInput(scheduleKey, displayScheduleItems.size, expandFromLeft, normalizedDragHotZonePercent, windowWidthPx) {
+                            var dragStartX = 0f
+                            var totalDragX = 0f
+                            var totalDragY = 0f
+                            var externalDragAttempted = false
+                            var externalDragStarted = false
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { offset ->
+                                    haptics.longPress()
+                                    dragStartX = offset.x.coerceIn(0f, windowWidthPx)
+                                    totalDragX = 0f
+                                    totalDragY = 0f
+                                    externalDragAttempted = false
+                                    externalDragStarted = false
+                                    draggingScheduleKey = scheduleKey
+                                    draggedScheduleOffsetY = 0f
+                                },
+                                onDragEnd = {
+                                    if (!externalDragStarted) onReorderScheduleItems(currentScheduleKeysInOrder())
+                                    draggingScheduleKey = null
+                                    draggedScheduleOffsetY = 0f
+                                },
+                                onDragCancel = {
+                                    if (!externalDragStarted) onReorderScheduleItems(currentScheduleKeysInOrder())
+                                    draggingScheduleKey = null
+                                    draggedScheduleOffsetY = 0f
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    if (externalDragStarted) return@detectDragGesturesAfterLongPress
+                                    totalDragX += dragAmount.x
+                                    totalDragY += dragAmount.y
+                                    if (
+                                        !externalDragAttempted &&
+                                        shouldStartExternalDrag(dragStartX, totalDragX, totalDragY)
+                                    ) {
+                                        externalDragAttempted = true
+                                        externalDragStarted = onStartPlainTextDrag("日程", scheduleDragText) {
+                                            externalDraggingScheduleKey = null
+                                        }
+                                        if (externalDragStarted) {
+                                            externalDraggingScheduleKey = scheduleKey
+                                            draggingScheduleKey = null
+                                            draggedScheduleOffsetY = 0f
+                                        } else {
+                                            haptics.warning()
+                                        }
+                                        return@detectDragGesturesAfterLongPress
+                                    }
+                                    if (scheduleOrder.size <= 1 || draggingScheduleKey != scheduleKey) return@detectDragGesturesAfterLongPress
+                                    draggedScheduleOffsetY += dragAmount.y
+                                    val currentIndex = scheduleOrder.indexOf(scheduleKey)
+                                    if (currentIndex == -1) return@detectDragGesturesAfterLongPress
+                                    val moveBy = (draggedScheduleOffsetY / scheduleDragStepPx).roundToInt()
+                                    if (moveBy == 0) return@detectDragGesturesAfterLongPress
+                                    val targetIndex = (currentIndex + moveBy).coerceIn(0, scheduleOrder.lastIndex)
+                                    if (targetIndex != currentIndex) {
+                                        scheduleOrder.removeAt(currentIndex)
+                                        scheduleOrder.add(targetIndex, scheduleKey)
+                                        draggedScheduleOffsetY -= (targetIndex - currentIndex) * scheduleDragStepPx
+                                    }
+                                }
+                            )
+                        },
                     contentAlignment = cardAlignment
                 ) {
                     ScheduleCard(
@@ -903,6 +1101,121 @@ fun TimeWheelList(
             }
         }
     }
+}
+
+private fun mergeFloatingScheduleOrder(
+    baseItems: List<ScheduleDisplayItem>,
+    persistedKeys: List<String>
+): List<ScheduleDisplayItem> {
+    val byKey = baseItems.associateBy { it.stableKey }
+    val savedKeys = persistedKeys.distinct().filter { it in byKey }
+    if (savedKeys.isEmpty()) return baseItems
+
+    val savedIndexByKey = savedKeys.withIndex().associate { it.value to it.index }
+    val result = mutableListOf<ScheduleDisplayItem>()
+    val pendingDefaultItems = mutableListOf<ScheduleDisplayItem>()
+    val placedKeys = mutableSetOf<String>()
+    var savedCursor = 0
+
+    fun appendSavedThrough(targetIndex: Int) {
+        while (savedCursor <= targetIndex && savedCursor < savedKeys.size) {
+            val key = savedKeys[savedCursor]
+            savedCursor += 1
+            if (placedKeys.add(key)) {
+                byKey[key]?.let(result::add)
+            }
+        }
+    }
+
+    baseItems.forEach { item ->
+        val key = item.stableKey
+        if (key in placedKeys) return@forEach
+        val savedIndex = savedIndexByKey[key]
+        if (savedIndex == null) {
+            pendingDefaultItems += item
+        } else {
+            result += pendingDefaultItems
+            pendingDefaultItems.clear()
+            appendSavedThrough(savedIndex)
+        }
+    }
+
+    result += pendingDefaultItems
+    appendSavedThrough(savedKeys.lastIndex)
+    return result + baseItems.filter { it.stableKey !in placedKeys && it !in result }
+}
+
+private fun formatScheduleDragText(
+    item: ScheduleDisplayItem,
+    options: FloatingDragTextOptions
+): String {
+    val title = item.title.trim().ifBlank { "未命名日程" }
+    val lines = buildList {
+        if (options.includeTitle) add(title)
+        if (options.includeTime) add("时间：${item.startDate} ${item.startTime}-${item.endTime}")
+        if (options.includeLocation && item.location.isNotBlank()) add("地点：${item.location.trim()}")
+        if (options.includeDescription) addAll(cleanDragDescriptionLines(item.description, title))
+    }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+    return (lines.ifEmpty { listOf(title) })
+        .joinToString("\n")
+        .take(1200)
+}
+
+private fun cleanDragDescriptionLines(description: String, title: String): List<String> {
+    val clean = stripSourceImageMarkers(description)
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
+        .trim()
+    if (clean.isBlank()) return emptyList()
+
+    val structuredPayload = RuleMatchingEngine.resolvePayload(clean, null)
+    if (structuredPayload != null && structuredPayload.ruleId != RuleMatchingEngine.RULE_GENERAL) {
+        val structuredLines = formatStructuredDragDescription(structuredPayload, title)
+        if (structuredLines.isNotEmpty()) return structuredLines
+    }
+
+    return clean.lines()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+}
+
+private fun formatStructuredDragDescription(
+    payload: RuleMatchingEngine.RulePayload,
+    title: String
+): List<String> {
+    val payloadLines = payload.payload
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
+        .lines()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+    val primaryPayload = payloadLines.firstOrNull().orEmpty()
+    if (primaryPayload.isBlank()) return emptyList()
+
+    val labels = FloatingDragDescriptionLabels[payload.ruleId]
+        ?: return payloadLines
+    val fields = RuleMatchingEngine.splitFields(primaryPayload, labels.size)
+    val titleForDuplicateCheck = title.trim()
+    val fieldLines = labels.mapIndexedNotNull { index, label ->
+        val rawField = fields.getOrNull(index).orEmpty()
+        val cleanField = cleanStructuredDragField(payload.ruleId, index, rawField)
+        when {
+            cleanField.isBlank() -> null
+            index == 0 && titleForDuplicateCheck.contains(cleanField) -> null
+            else -> "$label：$cleanField"
+        }
+    }
+    return fieldLines + payloadLines.drop(1)
+}
+
+private fun cleanStructuredDragField(ruleId: String, index: Int, value: String): String {
+    val clean = value
+        .replace('\n', ' ')
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    return if (index == 0) RuleMatchingEngine.stripInstantCodeLabel(ruleId, clean) else clean
 }
 
 @Composable

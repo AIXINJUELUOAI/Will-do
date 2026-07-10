@@ -209,7 +209,7 @@ private fun RegexRuleCard(
                 onValueChange = { onRuleChange(rule.copy(descriptionTemplate = it)) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("描述模板") },
-                supportingText = { Text("留空时使用原文；码类可用 {code}|| 生成字段") },
+                supportingText = { Text("留空时使用原文；取件类可用 {code}|| 生成字段") },
                 singleLine = true
             )
             OutlinedTextField(
@@ -236,7 +236,7 @@ private fun RegexRuleCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("缺少日期/时间时使用当前时间", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = "适合取件码、取餐码等即时码类规则",
+                        text = "适合取件码、取餐码等即时取件类规则",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

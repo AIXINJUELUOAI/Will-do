@@ -40,9 +40,11 @@ import com.antgskds.calendarassistant.platform.floating.FloatingBallService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
+import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
@@ -79,7 +81,7 @@ fun PreferenceSettingsPage(
     var showRecognitionModePicker by remember { mutableStateOf(false) }
     var showDailySummaryMorningTimePicker by remember { mutableStateOf(false) }
     var showDailySummaryEveningTimePicker by remember { mutableStateOf(false) }
-    var floatingBallActionPicker by remember { mutableStateOf<FloatingBallActionSlot?>(null) }
+    var gestureActionPicker by remember { mutableStateOf<FloatingGestureActionPickerState?>(null) }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -257,7 +259,7 @@ fun PreferenceSettingsPage(
                         showValueAsNumber = false // 显示文字：小/中/大
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -270,7 +272,7 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -286,7 +288,7 @@ fun PreferenceSettingsPage(
                         cardValueStyle = cardValueStyle
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -302,7 +304,7 @@ fun PreferenceSettingsPage(
                         cardValueStyle = cardValueStyle,
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -374,7 +376,7 @@ fun PreferenceSettingsPage(
                         )
 
                         HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
@@ -393,14 +395,14 @@ fun PreferenceSettingsPage(
                         )
 
                         HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
                         SwitchSettingItem(
                             title = "侧边栏入口",
-                            subtitle = "在屏幕边缘显示窄条，滑动呼出悬浮日程",
+                            subtitle = "在屏幕边缘显示窄条，滑动呼出悬浮日程，点击动作可单独设置",
                             checked = settings.edgeBarEnabled,
                             onCheckedChange = { isChecked ->
                                 if (isChecked && !hasOverlayPermission) {
@@ -425,7 +427,7 @@ fun PreferenceSettingsPage(
                         ) {
                             Column {
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
@@ -440,13 +442,82 @@ fun PreferenceSettingsPage(
                                     onSideSelected = { side -> viewModel.updateEdgeBarSettings(side = side) },
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                                ActionSettingItem(
+                                    title = "单击动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarSingleTapAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.EDGE_BAR,
+                                            FloatingGestureActionSlot.SINGLE_TAP
+                                        )
+                                    },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
                                 )
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                                ActionSettingItem(
+                                    title = "双击动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarDoubleTapAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.EDGE_BAR,
+                                            FloatingGestureActionSlot.DOUBLE_TAP
+                                        )
+                                    },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
                                 )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                                ActionSettingItem(
+                                    title = "长按动作",
+                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarLongPressAction)}",
+                                    value = "",
+                                    icon = Icons.Default.ChevronRight,
+                                    enabled = true,
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.EDGE_BAR,
+                                            FloatingGestureActionSlot.LONG_PRESS
+                                        )
+                                    },
+                                    cardTitleStyle = cardTitleStyle,
+                                    cardSubtitleStyle = cardSubtitleStyle,
+                                    cardValueStyle = cardValueStyle
+                                )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
 
                                 SliderSettingItem(
                                     title = "纵向位置",
@@ -518,10 +589,19 @@ fun PreferenceSettingsPage(
                                                 yPercent = 50f,
                                                 widthDp = 8,
                                                 heightDp = 120,
-                                                alpha = 0.4f
+                                                alpha = 0.4f,
+                                                singleTapAction = FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE,
+                                                doubleTapAction = FloatingBallGestureAction.QUICK_RECOGNITION,
+                                                longPressAction = FloatingBallGestureAction.QUICK_MEMO_RECORDING
                                             )
                                             startEdgeBarService()
                                         },
+                                        shape = RoundedCornerShape(50.dp),
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            labelColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
+                                        border = null,
                                         label = { Text("恢复默认") }
                                     )
                                 }
@@ -529,7 +609,7 @@ fun PreferenceSettingsPage(
                         }
 
                         HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
@@ -561,7 +641,7 @@ fun PreferenceSettingsPage(
                         ) {
                             Column {
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
@@ -571,14 +651,19 @@ fun PreferenceSettingsPage(
                                     value = "",
                                     icon = Icons.Default.ChevronRight,
                                     enabled = true,
-                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.SINGLE_TAP },
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.FLOATING_BALL,
+                                            FloatingGestureActionSlot.SINGLE_TAP
+                                        )
+                                    },
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle
                                 )
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
@@ -588,14 +673,19 @@ fun PreferenceSettingsPage(
                                     value = "",
                                     icon = Icons.Default.ChevronRight,
                                     enabled = true,
-                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.DOUBLE_TAP },
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.FLOATING_BALL,
+                                            FloatingGestureActionSlot.DOUBLE_TAP
+                                        )
+                                    },
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle
                                 )
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
@@ -605,14 +695,19 @@ fun PreferenceSettingsPage(
                                     value = "",
                                     icon = Icons.Default.ChevronRight,
                                     enabled = true,
-                                    onClick = { floatingBallActionPicker = FloatingBallActionSlot.LONG_PRESS },
+                                    onClick = {
+                                        gestureActionPicker = FloatingGestureActionPickerState(
+                                            FloatingGestureActionTarget.FLOATING_BALL,
+                                            FloatingGestureActionSlot.LONG_PRESS
+                                        )
+                                    },
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
                                     cardValueStyle = cardValueStyle
                                 )
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 16.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
@@ -635,7 +730,7 @@ fun PreferenceSettingsPage(
                                     subtitle = "调整悬浮球可见程度",
                                     value = settings.floatingBallAlpha * 100f,
                                     onValueChange = { viewModel.updatePreference(floatingBallAlpha = it.roundToInt() / 100f) },
-                                    valueRange = 20f..100f,
+                                    valueRange = 0f..100f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
@@ -664,6 +759,12 @@ fun PreferenceSettingsPage(
                                             )
                                             startFloatingBallService()
                                         },
+                                        shape = RoundedCornerShape(50.dp),
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            labelColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
+                                        border = null,
                                         label = { Text("恢复默认") }
                                     )
                                 }
@@ -684,7 +785,7 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -765,12 +866,12 @@ fun PreferenceSettingsPage(
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
-                        Column {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                             DailySummaryTimeSettingItem(
                                 title = "今日提醒时间",
                                 subtitle = "推送今日日程汇总",
@@ -780,11 +881,11 @@ fun PreferenceSettingsPage(
                                 cardSubtitleStyle = cardSubtitleStyle,
                                 cardValueStyle = cardValueStyle
                             )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                             DailySummaryTimeSettingItem(
                                 title = "明日预告时间",
                                 subtitle = "推送明日日程预告",
@@ -796,11 +897,11 @@ fun PreferenceSettingsPage(
                             )
                         }
                     }
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                     SwitchSettingItem(
                         title = "实况胶囊通知",
                         subtitle = "日程开始时显示实况通知",
@@ -819,11 +920,11 @@ fun PreferenceSettingsPage(
                         exit = shrinkVertically() + fadeOut()
                     ) {
                         Column {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                             SwitchSettingItem(
                                 title = "取件码聚合 (Beta)",
                                 subtitle = "当有多个取件码时合并显示为一个胶囊",
@@ -835,13 +936,13 @@ fun PreferenceSettingsPage(
                                 cardSubtitleStyle = cardSubtitleStyle
                             )
                         }
-                    }
+                        }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
 
                     AdvanceReminderSettingItem(
                         title = "日程提前提醒",
@@ -868,7 +969,7 @@ fun PreferenceSettingsPage(
                     )
 
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -902,12 +1003,6 @@ fun PreferenceSettingsPage(
                         )
                     }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-
             }
 
 
@@ -923,7 +1018,7 @@ fun PreferenceSettingsPage(
                     )
 
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -941,7 +1036,7 @@ fun PreferenceSettingsPage(
                     )
 
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -993,13 +1088,13 @@ fun PreferenceSettingsPage(
                         visible = syncStatus.isEnabled,
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
-                    ) {
-                        Column {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                        ) {
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
 
                             ActionSettingItem(
                                 title = "同步来源日历",
@@ -1022,11 +1117,11 @@ fun PreferenceSettingsPage(
                                 cardValueStyle = cardValueStyle
                             )
 
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
 
                             SliderSettingItem(
                                 title = "兜底同步频率",
@@ -1047,11 +1142,11 @@ fun PreferenceSettingsPage(
                         }
                     }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                     SwitchSettingItem(
                         title = "自动归档",
                         subtitle = "日程过期后立即自动归档",
@@ -1063,11 +1158,11 @@ fun PreferenceSettingsPage(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                     EventDurationSettingItem(
                         title = "日程默认持续时间",
                         subtitle = "所有识别日程都按该时长生成结束时间",
@@ -1078,7 +1173,7 @@ fun PreferenceSettingsPage(
                         cardValueStyle = cardValueStyle
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
@@ -1115,7 +1210,7 @@ fun PreferenceSettingsPage(
                     ) {
                         Column {
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp),
                                 thickness = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
@@ -1133,7 +1228,7 @@ fun PreferenceSettingsPage(
                             )
 
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp),
                                 thickness = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
@@ -1151,7 +1246,7 @@ fun PreferenceSettingsPage(
                             )
 
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 16.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp),
                                 thickness = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
@@ -1283,18 +1378,25 @@ fun PreferenceSettingsPage(
             )
         }
 
-        floatingBallActionPicker?.let { slot ->
-            FloatingBallActionPickerDialog(
-                slot = slot,
-                selectedAction = slot.currentAction(settings),
-                onDismiss = { floatingBallActionPicker = null },
+        gestureActionPicker?.let { request ->
+            FloatingGestureActionPickerDialog(
+                request = request,
+                selectedAction = request.currentAction(settings),
+                onDismiss = { gestureActionPicker = null },
                 onActionSelected = { action ->
-                    when (slot) {
-                        FloatingBallActionSlot.SINGLE_TAP -> viewModel.updatePreference(floatingBallSingleTapAction = action)
-                        FloatingBallActionSlot.DOUBLE_TAP -> viewModel.updatePreference(floatingBallDoubleTapAction = action)
-                        FloatingBallActionSlot.LONG_PRESS -> viewModel.updatePreference(floatingBallLongPressAction = action)
+                    when (request.target) {
+                        FloatingGestureActionTarget.EDGE_BAR -> when (request.slot) {
+                            FloatingGestureActionSlot.SINGLE_TAP -> viewModel.updatePreference(edgeBarSingleTapAction = action)
+                            FloatingGestureActionSlot.DOUBLE_TAP -> viewModel.updatePreference(edgeBarDoubleTapAction = action)
+                            FloatingGestureActionSlot.LONG_PRESS -> viewModel.updatePreference(edgeBarLongPressAction = action)
+                        }
+                        FloatingGestureActionTarget.FLOATING_BALL -> when (request.slot) {
+                            FloatingGestureActionSlot.SINGLE_TAP -> viewModel.updatePreference(floatingBallSingleTapAction = action)
+                            FloatingGestureActionSlot.DOUBLE_TAP -> viewModel.updatePreference(floatingBallDoubleTapAction = action)
+                            FloatingGestureActionSlot.LONG_PRESS -> viewModel.updatePreference(floatingBallLongPressAction = action)
+                        }
                     }
-                    floatingBallActionPicker = null
+                    gestureActionPicker = null
                 }
             )
         }
@@ -1302,62 +1404,78 @@ fun PreferenceSettingsPage(
     }
 }
 
-private enum class FloatingBallActionSlot(val title: String) {
+private data class FloatingGestureActionPickerState(
+    val target: FloatingGestureActionTarget,
+    val slot: FloatingGestureActionSlot
+) {
+    val title: String = "${target.title}${slot.title}"
+}
+
+private enum class FloatingGestureActionTarget(val title: String) {
+    EDGE_BAR("侧边栏"),
+    FLOATING_BALL("悬浮球")
+}
+
+private enum class FloatingGestureActionSlot(val title: String) {
     SINGLE_TAP("单击动作"),
     DOUBLE_TAP("双击动作"),
     LONG_PRESS("长按动作")
 }
 
-private fun FloatingBallActionSlot.currentAction(settings: MySettings): Int {
-    return when (this) {
-        FloatingBallActionSlot.SINGLE_TAP -> settings.floatingBallSingleTapAction
-        FloatingBallActionSlot.DOUBLE_TAP -> settings.floatingBallDoubleTapAction
-        FloatingBallActionSlot.LONG_PRESS -> settings.floatingBallLongPressAction
+private fun FloatingGestureActionPickerState.currentAction(settings: MySettings): Int {
+    return when (target) {
+        FloatingGestureActionTarget.EDGE_BAR -> when (slot) {
+            FloatingGestureActionSlot.SINGLE_TAP -> settings.edgeBarSingleTapAction
+            FloatingGestureActionSlot.DOUBLE_TAP -> settings.edgeBarDoubleTapAction
+            FloatingGestureActionSlot.LONG_PRESS -> settings.edgeBarLongPressAction
+        }
+        FloatingGestureActionTarget.FLOATING_BALL -> when (slot) {
+            FloatingGestureActionSlot.SINGLE_TAP -> settings.floatingBallSingleTapAction
+            FloatingGestureActionSlot.DOUBLE_TAP -> settings.floatingBallDoubleTapAction
+            FloatingGestureActionSlot.LONG_PRESS -> settings.floatingBallLongPressAction
+        }
     }
 }
 
 @Composable
-private fun FloatingBallActionPickerDialog(
-    slot: FloatingBallActionSlot,
+private fun FloatingGestureActionPickerDialog(
+    request: FloatingGestureActionPickerState,
     selectedAction: Int,
     onDismiss: () -> Unit,
     onActionSelected: (Int) -> Unit
 ) {
+    val options = FloatingBallGestureAction.ALL
+    val selectedActionIndex = options.indexOf(FloatingBallGestureAction.normalize(selectedAction)).coerceAtLeast(0)
+    var selectedIndex by remember(request, selectedAction) { mutableIntStateOf(selectedActionIndex) }
     val haptics = rememberAppHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(slot.title) },
+        title = { CenteredDialogTitle(request.title) },
         text = {
-            Column {
-                FloatingBallGestureAction.ALL.forEach { action ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                haptics.selection()
-                                onActionSelected(action)
-                            }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = FloatingBallGestureAction.normalize(selectedAction) == action,
-                            onClick = {
-                                haptics.selection()
-                                onActionSelected(action)
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(FloatingBallGestureAction.label(action))
-                    }
-                }
-            }
+            WheelPicker(
+                items = options.map { FloatingBallGestureAction.label(it) },
+                initialIndex = selectedActionIndex,
+                onSelectionChanged = { selectedIndex = it }
+            )
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
+            TextButton(
+                onClick = {
+                    haptics.confirm()
+                    onActionSelected(options[selectedIndex])
+                }
+            ) {
+                Text("确定")
             }
-        }
+        },
+        dismissButton = {
+            TextButton(onClick = { haptics.click(); onDismiss() }) {
+                Text("取消")
+            }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
     )
 }
 

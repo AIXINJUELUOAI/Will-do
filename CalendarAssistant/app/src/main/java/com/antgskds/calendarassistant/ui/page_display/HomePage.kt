@@ -10,6 +10,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -522,7 +523,26 @@ fun HomePage(
                         floatingBarContentPadding
                     }
 
-                    if (isTodayPage) {
+                    val pageOrder = remember { listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE) }
+                    AnimatedContent(
+                        targetState = currentPageKey,
+                        modifier = Modifier.fillMaxSize(),
+                        transitionSpec = {
+                            val from = pageOrder.indexOf(initialState).coerceAtLeast(0)
+                            val to = pageOrder.indexOf(targetState).coerceAtLeast(0)
+                            val direction = if (to >= from) 1 else -1
+                            (slideInHorizontally(animationSpec = tween(220)) { width -> width * direction } +
+                                fadeIn(animationSpec = tween(160))) togetherWith
+                                (slideOutHorizontally(animationSpec = tween(220)) { width -> -width * direction } +
+                                    fadeOut(animationSpec = tween(140))) using SizeTransform(clip = false)
+                        },
+                        label = "home_page_switch"
+                    ) { animatedPageKey ->
+                    val animatedIsTodayPage = animatedPageKey == HomeEntryKey.TODAY
+                    val animatedIsAllPage = animatedPageKey == HomeEntryKey.ALL
+                    val animatedIsNotePage = animatedPageKey == HomeEntryKey.NOTE
+
+                    if (animatedIsTodayPage) {
                         // === 今日视图内容 ===
                         val todayEvents = remember(uiState.currentDateEvents, todaySearchQuery) {
                             if (todaySearchQuery.isBlank()) {
@@ -750,7 +770,7 @@ fun HomePage(
                                 }
                             }
                         }
-                    } else if (isAllPage) {
+                    } else if (animatedIsAllPage) {
                         AllEventsPage(
                             viewModel = viewModel,
                             onEditItem = { onEditItem(it) },
@@ -762,7 +782,7 @@ fun HomePage(
                             onRequestDeleteItem = onRequestDeleteItem,
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
-                    } else if (isLegacyNoteMode) {
+                    } else if (animatedIsNotePage && isLegacyNoteMode) {
                         NotePage(
                             viewModel = viewModel,
                             searchQuery = noteSearchQuery,
@@ -781,6 +801,7 @@ fun HomePage(
                             onPendingDeleteChange = { memo -> memo?.let(onRequestDeleteQuickMemo) },
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
+                    }
                     }
 
                     if (showSearchBar) {

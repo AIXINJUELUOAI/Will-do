@@ -6,12 +6,18 @@ import android.app.PendingIntent
 import android.app.Service
 import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.Point
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -20,9 +26,12 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.content.pm.ServiceInfo
 import android.util.Log
+import android.view.DragEvent
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.Toast
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,6 +82,7 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
+import com.antgskds.calendarassistant.ui.floating.FloatingDragTextOptions
 import com.antgskds.calendarassistant.ui.floating.PickupQrFloatingCard
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
@@ -100,6 +110,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         private const val RECOGNITION_SOURCE_TYPE = "floating"
         private const val RECOGNITION_SOURCE_ID = "floating.manual_input"
         private const val RECENT_VOICE_MEMO_HOLD_MS = 5_000L
+        private const val TEXT_DRAG_WINDOW_ANIMATION_MS = 180L
 
         const val ACTION_IMAGE_PICKED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICKED"
         const val ACTION_IMAGE_PICK_CANCELLED = "com.antgskds.calendarassistant.floating.action.IMAGE_PICK_CANCELLED"
@@ -150,6 +161,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private var voiceConfirmJob: Job? = null
     private var recentVoiceMemoJob: Job? = null
     private var voiceStartJob: Job? = null
+    private var plainTextDragRestoreJob: Job? = null
+    private var plainTextDragCancelHotZoneActive: Boolean = false
+    private var plainTextDragDropHandled: Boolean = false
+    private var textDragHotZoneView: View? = null
+    private var textDragHotZoneParams: WindowManager.LayoutParams? = null
+    private var plainTextDragRestoreSourceAction: (() -> Unit)? = null
     private var voiceStopRequested: Boolean = false
     private var voiceForegroundActive: Boolean = false
 
@@ -451,6 +468,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         voiceCaptureState = currentVoiceCaptureState,
                         recentVoiceMemoId = currentRecentVoiceMemoId,
                         reverseScheduleOrder = settings.floatingListReverseOrder,
+                        floatingScheduleOrderKeys = settings.floatingScheduleOrderKeys,
+                        dragHotZonePercent = settings.floatingDragHotZonePercent,
+                        dragTextOptions = FloatingDragTextOptions(
+                            includeTitle = settings.floatingDragTextIncludeTitle,
+                            includeTime = settings.floatingDragTextIncludeTime,
+                            includeLocation = settings.floatingDragTextIncludeLocation,
+                            includeDescription = settings.floatingDragTextIncludeDescription
+                        ),
                         audioPlaybackState = audioPlaybackState,
                         weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
                         weatherForecastRange = settings.floatingWeatherForecastRange,
@@ -531,6 +556,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onReorderQuickMemos = { ids ->
                             serviceScope.launch { quickMemoCenter.updateSortRanks(ids) }
                         },
+                        onReorderScheduleItems = { keys ->
+                            updateFloatingScheduleOrder(keys)
+                        },
+                        onStartPlainTextDrag = { label, text, onRestoreSource ->
+                            startPlainTextDrag(label, text, onRestoreSource)
+                        },
                         onConfirmVoiceCapture = { asTodo ->
                             confirmVoiceCapture(asTodo)
                         },
@@ -586,6 +617,269 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         } catch (e: Exception) {
             Log.w(TAG, "hideFloatingWindow failed", e)
         }
+    }
+
+    private fun updateFloatingScheduleOrder(keys: List<String>) {
+        val sanitized = keys
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(300)
+            .toList()
+        val current = settingsQueryApi.settings.value
+        if (current.floatingScheduleOrderKeys == sanitized) return
+        app.settingsOperationApi.updateSettings(current.copy(floatingScheduleOrderKeys = sanitized))
+    }
+
+    private fun startPlainTextDrag(label: String, text: String, onRestoreSource: () -> Unit): Boolean {
+        val view = composeView ?: return false
+        val cleanText = text.trim().takeIf { it.isNotBlank() } ?: return false
+        val clipData = ClipData.newPlainText(label.ifBlank { "文本" }, cleanText)
+        plainTextDragCancelHotZoneActive = false
+        plainTextDragDropHandled = false
+        plainTextDragRestoreSourceAction = onRestoreSource
+        view.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    plainTextDragCancelHotZoneActive = false
+                    plainTextDragDropHandled = false
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    plainTextDragDropHandled = true
+                    restoreFloatingWindowAfterTextDrag()
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    handleTextDragEnded(event.result)
+                    true
+                }
+                else -> true
+            }
+        }
+        attachTextDragHotZoneOverlay()
+        val started = view.startDragAndDrop(
+            clipData,
+            PlainTextDragShadowBuilder(cleanText),
+            null,
+            View.DRAG_FLAG_GLOBAL
+        )
+        if (!started) {
+            view.setOnDragListener(null)
+            detachTextDragHotZoneOverlay()
+            plainTextDragRestoreSourceAction = null
+            return false
+        }
+        prepareFloatingWindowForTextDrag()
+        plainTextDragRestoreJob?.cancel()
+        plainTextDragRestoreJob = serviceScope.launch {
+            delay(12_000L)
+            restoreFloatingWindowAfterTextDrag()
+        }
+        return true
+    }
+
+    private fun attachTextDragHotZoneOverlay() {
+        detachTextDragHotZoneOverlay()
+        if (!permissionCenter.canDrawOverlays(this)) return
+        val width = composeView?.width?.takeIf { it > 0 } ?: return
+        val height = composeView?.height?.takeIf { it > 0 } ?: WindowManager.LayoutParams.MATCH_PARENT
+        val settings = settingsQueryApi.settings.value
+        val hotZonePercent = MySettings.normalizeFloatingDragHotZonePercent(settings.floatingDragHotZonePercent)
+        val hotZoneWidth = (width * (hotZonePercent / 100f)).toInt().coerceAtLeast(1)
+        val isLeftSide = settings.floatingExpandSide == "LEFT"
+        val params = WindowManager.LayoutParams(
+            hotZoneWidth,
+            height,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = (if (isLeftSide) Gravity.START else Gravity.END) or Gravity.TOP
+            x = 0
+            y = 0
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        val hotZoneView = View(this).apply {
+            alpha = 0f
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnDragListener { _, event ->
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> true
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        showFloatingWindowAsTextDragCancelTarget()
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        hideFloatingWindowDuringTextDrag()
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        plainTextDragDropHandled = true
+                        restoreFloatingWindowAfterTextDrag()
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        handleTextDragEnded(event.result)
+                        true
+                    }
+                    else -> true
+                }
+            }
+        }
+        try {
+            windowManager.addView(hotZoneView, params)
+            textDragHotZoneView = hotZoneView
+            textDragHotZoneParams = params
+        } catch (e: Exception) {
+            Log.w(TAG, "attach text drag hot zone failed", e)
+        }
+    }
+
+    private fun prepareFloatingWindowForTextDrag() {
+        val view = composeView ?: return
+        val params = windowLayoutParams ?: return
+        if (!isViewAttached || !view.isAttachedToWindow) return
+        try {
+            animateTextDragWindowVisible(false)
+            params.flags = baseWindowFlags or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            windowManager.updateViewLayout(view, params)
+        } catch (e: Exception) {
+            Log.w(TAG, "prepare text drag failed", e)
+        }
+    }
+
+    private fun hideFloatingWindowDuringTextDrag() {
+        val view = composeView ?: return
+        val params = windowLayoutParams ?: return
+        if (!isViewAttached || !view.isAttachedToWindow) return
+        try {
+            plainTextDragCancelHotZoneActive = false
+            animateTextDragWindowVisible(false)
+            params.flags = baseWindowFlags or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            windowManager.updateViewLayout(view, params)
+        } catch (e: Exception) {
+            Log.w(TAG, "hide text drag cancel target failed", e)
+        }
+    }
+
+    private fun showFloatingWindowAsTextDragCancelTarget() {
+        val view = composeView ?: return
+        val params = windowLayoutParams ?: return
+        if (!isViewAttached || !view.isAttachedToWindow) return
+        try {
+            val wasInactive = !plainTextDragCancelHotZoneActive
+            plainTextDragCancelHotZoneActive = true
+            view.visibility = View.VISIBLE
+            params.flags = baseWindowFlags
+            windowManager.updateViewLayout(view, params)
+            animateTextDragWindowVisible(true)
+            if (wasInactive && settingsQueryApi.settings.value.hapticFeedbackEnabled) performServiceHaptic()
+        } catch (e: Exception) {
+            Log.w(TAG, "show text drag cancel target failed", e)
+        }
+    }
+
+    private fun animateTextDragWindowVisible(visible: Boolean) {
+        val view = composeView ?: return
+        val direction = if (settingsQueryApi.settings.value.floatingExpandSide == "LEFT") -1f else 1f
+        val translation = 72f * direction
+        view.animate().cancel()
+        if (visible) {
+            view.visibility = View.VISIBLE
+            if (view.alpha < 0.5f) view.translationX = translation
+            view.animate()
+                .alpha(1f)
+                .translationX(0f)
+                .setDuration(TEXT_DRAG_WINDOW_ANIMATION_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        } else {
+            view.animate()
+                .alpha(0f)
+                .translationX(translation)
+                .setDuration(TEXT_DRAG_WINDOW_ANIMATION_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+    }
+
+    private fun detachTextDragHotZoneOverlay() {
+        val view = textDragHotZoneView
+        textDragHotZoneView = null
+        textDragHotZoneParams = null
+        view?.setOnDragListener(null)
+        if (view != null && view.isAttachedToWindow) {
+            try {
+                windowManager.removeView(view)
+            } catch (e: Exception) {
+                Log.w(TAG, "detach text drag hot zone failed", e)
+            }
+        }
+    }
+
+    private fun closeFloatingWindowAfterTextDrag() {
+        plainTextDragRestoreJob?.cancel()
+        plainTextDragRestoreJob = null
+        plainTextDragCancelHotZoneActive = false
+        plainTextDragDropHandled = true
+        plainTextDragRestoreSourceAction = null
+        detachTextDragHotZoneOverlay()
+        composeView?.setOnDragListener(null)
+        requestClose()
+    }
+
+    private fun handleTextDragEnded(dropAccepted: Boolean) {
+        if (plainTextDragDropHandled) return
+        plainTextDragDropHandled = true
+        if (dropAccepted) {
+            closeFloatingWindowAfterTextDrag()
+        } else {
+            restoreFloatingWindowAfterTextDrag()
+        }
+    }
+
+    private fun restoreFloatingWindowAfterTextDrag() {
+        plainTextDragRestoreJob?.cancel()
+        plainTextDragRestoreJob = null
+        plainTextDragCancelHotZoneActive = false
+        plainTextDragDropHandled = true
+        detachTextDragHotZoneOverlay()
+        val view = composeView
+        val params = windowLayoutParams
+        view?.setOnDragListener(null)
+        restorePlainTextDragSource()
+        if (view == null || params == null) return
+        if (!isViewAttached || !view.isAttachedToWindow) return
+        try {
+            view.animate().cancel()
+            view.alpha = 1f
+            view.translationX = 0f
+            params.flags = baseWindowFlags
+            windowManager.updateViewLayout(view, params)
+            view.requestFocus()
+        } catch (e: Exception) {
+            Log.w(TAG, "restore text drag failed", e)
+        }
+    }
+
+    private fun restorePlainTextDragSource() {
+        val action = plainTextDragRestoreSourceAction
+        plainTextDragRestoreSourceAction = null
+        action?.invoke()
     }
 
     private fun detachFloatingWindowForVoice() {
@@ -1319,6 +1613,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         isShowing = false
         sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        plainTextDragRestoreJob?.cancel()
+        plainTextDragRestoreJob = null
         serviceScope.cancel()
         audioPlaybackCenter.stop()
         audioRecorder.stopAndDiscard()
@@ -1331,6 +1627,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         ingestSucceededSubscriptionJob = null
         ingestFailedSubscriptionJob?.cancel()
         ingestFailedSubscriptionJob = null
+        plainTextDragRestoreSourceAction = null
+        detachTextDragHotZoneOverlay()
         composeView?.let { view ->
             if (view.isAttachedToWindow) {
                 try { windowManager.removeView(view) } catch (e: Exception) {}
@@ -1363,5 +1661,49 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private fun finishClose() {
         sendBroadcast(Intent(ACTION_FLOATING_HIDDEN))
         stopSelf()
+    }
+}
+
+private class PlainTextDragShadowBuilder(
+    text: String
+) : View.DragShadowBuilder() {
+    private val previewLines = text
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .take(3)
+        .map { line -> if (line.length > 24) line.take(23) + "..." else line }
+        .toList()
+        .ifEmpty { listOf("文本") }
+    private val width = 520
+    private val height = 76 + previewLines.size * 34
+    private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(248, 248, 248, 253)
+    }
+    private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(255, 92, 112, 146) }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(44, 48, 56)
+        textSize = 30f
+        isFakeBoldText = true
+    }
+    private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(99, 105, 116)
+        textSize = 25f
+    }
+
+    override fun onProvideShadowMetrics(outShadowSize: Point, outShadowTouchPoint: Point) {
+        outShadowSize.set(width, height)
+        outShadowTouchPoint.set(36, height / 2)
+    }
+
+    override fun onDrawShadow(canvas: Canvas) {
+        canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), 34f, 34f, backgroundPaint)
+        canvas.drawRoundRect(RectF(24f, 28f, 34f, height - 28f), 5f, 5f, accentPaint)
+        previewLines.forEachIndexed { index, line ->
+            val paint = if (index == 0) textPaint else detailPaint
+            canvas.drawText(line, 58f, 54f + index * 34f, paint)
+        }
     }
 }

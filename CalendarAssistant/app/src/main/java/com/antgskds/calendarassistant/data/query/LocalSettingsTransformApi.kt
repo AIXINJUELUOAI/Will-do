@@ -43,6 +43,9 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         floatingBallSingleTapAction: Int?,
         floatingBallDoubleTapAction: Int?,
         floatingBallLongPressAction: Int?,
+        edgeBarSingleTapAction: Int?,
+        edgeBarDoubleTapAction: Int?,
+        edgeBarLongPressAction: Int?,
         volumeUpLongPressEnabled: Boolean?,
         volumeUpLongPressAction: Int?,
         smsMonitoring: Boolean?,
@@ -107,7 +110,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (floatingBallXPercent != null) updated = updated.copy(floatingBallXPercent = floatingBallXPercent.coerceIn(0f, 100f))
         if (floatingBallYPercent != null) updated = updated.copy(floatingBallYPercent = floatingBallYPercent.coerceIn(0f, 100f))
         if (floatingBallSizeDp != null) updated = updated.copy(floatingBallSizeDp = floatingBallSizeDp.coerceIn(40, 80))
-        if (floatingBallAlpha != null) updated = updated.copy(floatingBallAlpha = floatingBallAlpha.coerceIn(0.2f, 1f))
+        if (floatingBallAlpha != null) updated = updated.copy(floatingBallAlpha = floatingBallAlpha.coerceIn(0f, 1f))
         if (floatingBallSingleTapAction != null) {
             updated = updated.copy(floatingBallSingleTapAction = FloatingBallGestureAction.normalize(floatingBallSingleTapAction))
         }
@@ -116,6 +119,15 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         }
         if (floatingBallLongPressAction != null) {
             updated = updated.copy(floatingBallLongPressAction = FloatingBallGestureAction.normalize(floatingBallLongPressAction))
+        }
+        if (edgeBarSingleTapAction != null) {
+            updated = updated.copy(edgeBarSingleTapAction = FloatingBallGestureAction.normalize(edgeBarSingleTapAction))
+        }
+        if (edgeBarDoubleTapAction != null) {
+            updated = updated.copy(edgeBarDoubleTapAction = FloatingBallGestureAction.normalize(edgeBarDoubleTapAction))
+        }
+        if (edgeBarLongPressAction != null) {
+            updated = updated.copy(edgeBarLongPressAction = FloatingBallGestureAction.normalize(edgeBarLongPressAction))
         }
         if (volumeUpLongPressEnabled != null) updated = updated.copy(volumeUpLongPressEnabled = volumeUpLongPressEnabled)
         if (volumeUpLongPressAction != null) updated = updated.copy(volumeUpLongPressAction = volumeUpLongPressAction.coerceIn(1, 3))

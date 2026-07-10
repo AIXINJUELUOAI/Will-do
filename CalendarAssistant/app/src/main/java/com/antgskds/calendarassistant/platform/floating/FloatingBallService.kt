@@ -310,12 +310,14 @@ class FloatingBallService : Service() {
 
     private fun buildBackground(settings: MySettings, sizePx: Int): GradientDrawable {
         val baseColor = resolveThemeColor(settings)
-        val alpha = (settings.floatingBallAlpha.coerceIn(0.2f, 1f) * 255).toInt()
+        val normalizedAlpha = settings.floatingBallAlpha.coerceIn(0f, 1f)
+        val alpha = (normalizedAlpha * 255).toInt()
+        val strokeAlpha = (normalizedAlpha * 80).toInt()
         val color = Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
         return GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(color)
-            setStroke((sizePx * 0.04f).toInt().coerceAtLeast(1), Color.argb(80, 255, 255, 255))
+            setStroke((sizePx * 0.04f).toInt().coerceAtLeast(1), Color.argb(strokeAlpha, 255, 255, 255))
         }
     }
 

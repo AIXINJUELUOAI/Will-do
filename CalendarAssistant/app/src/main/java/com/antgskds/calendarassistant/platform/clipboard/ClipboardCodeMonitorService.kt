@@ -116,7 +116,7 @@ class ClipboardCodeMonitorService : Service() {
         val ingested = app.clipboardCodeCenter.autoIngestCurrentClipboard(source)
         if (ingested) {
             withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(applicationContext, "已创建剪贴板码类日程", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(applicationContext, "已创建剪贴板取件类日程", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }

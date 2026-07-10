@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -80,6 +81,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -176,11 +178,19 @@ fun QuickMemoPage(
     val context = LocalContext.current
     val metrics = quickMemoUiMetrics(uiSize)
     val bottomSafePadding = 112.dp + extraBottomPadding
+    val listState = rememberLazyListState()
     val filteredMemos = remember(quickMemos, searchQuery) {
-        quickMemos.filter { memo ->
-            searchQuery.isBlank() || memo.bodyText.contains(searchQuery, ignoreCase = true)
-        }
+        quickMemos
+            .filter { memo ->
+                searchQuery.isBlank() || memo.bodyText.contains(searchQuery, ignoreCase = true)
+            }
+            .sortedWith(
+                compareBy<QuickMemoEntity> { it.sortRank }
+                    .thenByDescending { it.updatedAt }
+                    .thenByDescending { it.createdAt }
+            )
     }
+    val topMemoKey = filteredMemos.firstOrNull()?.let { it.id ?: it.hashCode().toLong() }
     val groupedMemos = remember(filteredMemos) {
         filteredMemos
             .groupBy { memo ->
@@ -192,6 +202,12 @@ fun QuickMemoPage(
         suggestions
             .filter { it.status == QuickMemoSuggestionStatus.PENDING || it.status == QuickMemoSuggestionStatus.CREATED }
             .groupBy { it.quickMemoId }
+    }
+
+    LaunchedEffect(topMemoKey, searchQuery) {
+        if (topMemoKey != null && searchQuery.isBlank()) {
+            listState.animateScrollToItem(0)
+        }
     }
 
     if (filteredMemos.isEmpty()) {
@@ -220,6 +236,7 @@ fun QuickMemoPage(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 10.dp, bottom = bottomSafePadding + 24.dp)
     ) {

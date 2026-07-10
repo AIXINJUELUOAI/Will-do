@@ -158,7 +158,7 @@ fun LaboratoryPage(
             )
 
             LaboratorySwitchCard(
-                title = "码类事件使用当前时间",
+                title = "取件类事件使用当前时间",
                 subtitle = "开启后取件码、取餐码、取票码、寄件码会忽略 AI 返回时间，入库时改为当前时间",
                 checked = settings!!.forceInstantCodeTimeToNow,
                 onCheckedChange = { enabled ->
@@ -167,7 +167,7 @@ fun LaboratoryPage(
             )
 
             LaboratorySwitchCard(
-                title = "剪贴板码类识别（实验）",
+                title = "剪贴板取件类识别（实验）",
                 subtitle = "识别剪贴板中的取件码、取餐码、取票码、寄件码；有 Shizuku/Root 时后台自动入库，否则打开软件时确认入库",
                 checked = settings!!.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
@@ -175,7 +175,7 @@ fun LaboratoryPage(
                     if (enabled) {
                         PrivilegeManager.refreshPrivilege()
                         val message = if (PrivilegeManager.hasPrivilege) {
-                            "已启用完整后台识别，识别到码类内容将自动创建日程"
+                            "已启用完整后台识别，识别到取件类内容将自动创建日程"
                         } else {
                             "未获取 Shizuku/Root 权限，仅打开软件时识别，并向你确认是否入库"
                         }
@@ -312,7 +312,7 @@ private fun LaboratoryQuickMemoCard(
 @Composable
 private fun LaboratoryDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(start = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp),
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )

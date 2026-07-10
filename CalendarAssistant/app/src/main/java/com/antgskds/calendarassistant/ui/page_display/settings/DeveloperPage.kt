@@ -45,6 +45,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.developer.DebugAction
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
@@ -492,6 +493,62 @@ fun DeveloperPage(
                 )
             }
 
+            Text(text = "悬浮拖拽", style = sectionTitleStyle)
+            SettingsCard {
+                SwitchSettingItem(
+                    title = "拖拽文本包含标题",
+                    subtitle = "日程拖到输入框时输出标题行",
+                    checked = settings.floatingDragTextIncludeTitle,
+                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeTitle = it) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                SwitchSettingItem(
+                    title = "拖拽文本包含时间",
+                    subtitle = "附加开始和结束时间",
+                    checked = settings.floatingDragTextIncludeTime,
+                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeTime = it) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                SwitchSettingItem(
+                    title = "拖拽文本包含地点",
+                    subtitle = "附加地点信息",
+                    checked = settings.floatingDragTextIncludeLocation,
+                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeLocation = it) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                SwitchSettingItem(
+                    title = "拖拽文本包含详情",
+                    subtitle = "附加备注或结构化详情",
+                    checked = settings.floatingDragTextIncludeDescription,
+                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeDescription = it) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                SliderSettingItem(
+                    title = "拖拽热区范围",
+                    subtitle = "呼出侧热区越大，越容易拖回取消；也越晚进入外部投放",
+                    value = settings.floatingDragHotZonePercent.toFloat(),
+                    onValueChange = { value ->
+                        settingsViewModel.updateFloatingDragHotZonePercent(value.roundToInt())
+                    },
+                    valueRange = MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT.toFloat()..MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT.toFloat(),
+                    steps = ((MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT - MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT) / 5 - 1)
+                        .coerceAtLeast(0),
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardSubtitleStyle,
+                    showValueAsNumber = true,
+                    valueUnit = "%"
+                )
+            }
+
             // 调试动作（按 category 分组，每组收进一张卡片）
             DebugActionRegistry.actions
                 .filterNot { it.id in coveredQuickActionIds }
@@ -923,7 +980,7 @@ private fun SettingsCard(content: @Composable () -> Unit) {
 @Composable
 private fun RowDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(start = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp),
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )

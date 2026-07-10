@@ -27,6 +27,7 @@ import com.antgskds.calendarassistant.data.model.ImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
+import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
@@ -175,6 +176,9 @@ class SettingsViewModel(
         floatingBallSingleTapAction: Int? = null,
         floatingBallDoubleTapAction: Int? = null,
         floatingBallLongPressAction: Int? = null,
+        edgeBarSingleTapAction: Int? = null,
+        edgeBarDoubleTapAction: Int? = null,
+        edgeBarLongPressAction: Int? = null,
         volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null,
         smsMonitoring: Boolean? = null,
@@ -231,6 +235,9 @@ class SettingsViewModel(
                 floatingBallSingleTapAction = floatingBallSingleTapAction,
                 floatingBallDoubleTapAction = floatingBallDoubleTapAction,
                 floatingBallLongPressAction = floatingBallLongPressAction,
+                edgeBarSingleTapAction = edgeBarSingleTapAction,
+                edgeBarDoubleTapAction = edgeBarDoubleTapAction,
+                edgeBarLongPressAction = edgeBarLongPressAction,
                 volumeUpLongPressEnabled = volumeUpLongPressEnabled,
                 volumeUpLongPressAction = volumeUpLongPressAction,
                 smsMonitoring = smsMonitoring,
@@ -275,6 +282,37 @@ class SettingsViewModel(
                     allEventsListReverseOrder = allEventsListReverseOrder ?: current.allEventsListReverseOrder,
                     floatingListReverseOrder = floatingListReverseOrder ?: current.floatingListReverseOrder,
                     archivesListReverseOrder = archivesListReverseOrder ?: current.archivesListReverseOrder
+                )
+            )
+        }
+    }
+
+    fun updateFloatingDragTextOptions(
+        includeTitle: Boolean? = null,
+        includeTime: Boolean? = null,
+        includeLocation: Boolean? = null,
+        includeDescription: Boolean? = null
+    ) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    floatingDragTextIncludeTitle = includeTitle ?: current.floatingDragTextIncludeTitle,
+                    floatingDragTextIncludeTime = includeTime ?: current.floatingDragTextIncludeTime,
+                    floatingDragTextIncludeLocation = includeLocation ?: current.floatingDragTextIncludeLocation,
+                    floatingDragTextIncludeDescription = includeDescription ?: current.floatingDragTextIncludeDescription
+                )
+            )
+        }
+    }
+
+    fun updateFloatingDragHotZonePercent(percent: Int) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    floatingDragHotZonePercent = com.antgskds.calendarassistant.data.model.MySettings
+                        .normalizeFloatingDragHotZonePercent(percent)
                 )
             )
         }
@@ -574,7 +612,10 @@ class SettingsViewModel(
         yPercent: Float? = null,
         widthDp: Int? = null,
         heightDp: Int? = null,
-        alpha: Float? = null
+        alpha: Float? = null,
+        singleTapAction: Int? = null,
+        doubleTapAction: Int? = null,
+        longPressAction: Int? = null
     ) {
         viewModelScope.launch {
             var current = settings.value
@@ -584,6 +625,9 @@ class SettingsViewModel(
             if (widthDp != null) current = current.copy(edgeBarWidthDp = widthDp)
             if (heightDp != null) current = current.copy(edgeBarHeightDp = heightDp)
             if (alpha != null) current = current.copy(edgeBarAlpha = alpha)
+            if (singleTapAction != null) current = current.copy(edgeBarSingleTapAction = FloatingBallGestureAction.normalize(singleTapAction))
+            if (doubleTapAction != null) current = current.copy(edgeBarDoubleTapAction = FloatingBallGestureAction.normalize(doubleTapAction))
+            if (longPressAction != null) current = current.copy(edgeBarLongPressAction = FloatingBallGestureAction.normalize(longPressAction))
             settingsOperationApi.updateSettings(current)
         }
     }

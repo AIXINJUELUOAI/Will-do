@@ -92,12 +92,9 @@ fun ScheduleColorSettingsPage(
                         style = cardSubtitleStyle
                     )
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // 1. 遍历显示当前颜色
-                        colors.forEach { hex ->
+                    ColorCircleGrid(itemCount = colors.size + 1) { index ->
+                        if (index < colors.size) {
+                            val hex = colors[index]
                             ColorCircleItem(
                                 hex = hex,
                                 isDeletable = colors.size > 1,
@@ -107,25 +104,12 @@ fun ScheduleColorSettingsPage(
                                     viewModel.updateEventColorPalette(colors - hex)
                                 }
                             )
-                        }
-
-                        // 2. 添加按钮 (+号圆圈)
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                .clickable {
+                        } else {
+                            AddColorCircleButton(
+                                onClick = {
                                     haptics.selection()
                                     showAddColorSheet = true
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "添加颜色",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
@@ -148,36 +132,39 @@ fun ScheduleColorSettingsPage(
                         style = cardSubtitleStyle
                     )
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        DEFAULT_EVENT_COLOR_PALETTE_HEX.forEach { hex ->
-                            val isSelected = hex in colors
-                            ColorCircleItem(
-                                hex = hex,
-                                isDeletable = false,
-                                isAlreadyAdded = isSelected,
-                                onClick = {
-                                    if (!isSelected) {
-                                        haptics.selection()
-                                        viewModel.updateEventColorPalette(colors + hex)
-                                    }
+                    ColorCircleGrid(itemCount = DEFAULT_EVENT_COLOR_PALETTE_HEX.size) { index ->
+                        val hex = DEFAULT_EVENT_COLOR_PALETTE_HEX[index]
+                        val isSelected = hex in colors
+                        ColorCircleItem(
+                            hex = hex,
+                            isDeletable = false,
+                            isAlreadyAdded = isSelected,
+                            onClick = {
+                                if (!isSelected) {
+                                    haptics.selection()
+                                    viewModel.updateEventColorPalette(colors + hex)
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    TextButton(
-                        onClick = {
-                            haptics.confirm()
-                            viewModel.resetEventColorPalette()
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("恢复默认色盘")
+                        AssistChip(
+                            onClick = {
+                                haptics.confirm()
+                                viewModel.resetEventColorPalette()
+                            },
+                            shape = RoundedCornerShape(50.dp),
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                labelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            border = null,
+                            label = { Text("恢复默认色盘") }
+                        )
                     }
                 }
             }
@@ -210,6 +197,54 @@ fun ScheduleColorSettingsPage(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ColorCircleGrid(
+    itemCount: Int,
+    columns: Int = 4,
+    itemContent: @Composable (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        val rowCount = (itemCount + columns - 1) / columns
+        repeat(rowCount) { rowIndex ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                repeat(columns) { columnIndex ->
+                    val index = rowIndex * columns + columnIndex
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (index < itemCount) {
+                            itemContent(index)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddColorCircleButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "添加颜色",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

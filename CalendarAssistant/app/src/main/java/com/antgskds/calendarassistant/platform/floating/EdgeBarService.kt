@@ -30,6 +30,8 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity
+import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
@@ -53,6 +55,7 @@ class EdgeBarService : Service() {
         private const val SIDE_RIGHT = "RIGHT"
         private const val SIDE_LEFT = "LEFT"
         private const val LONG_PRESS_MS = 520L
+        private const val TAP_WINDOW_MS = 320L
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -73,6 +76,9 @@ class EdgeBarService : Service() {
     private var edgeVoiceRecording = false
     private var edgeVoiceStopRequested = false
     private var edgeVoiceUsingFloatingWindow = false
+    private var toggleVoiceActive = false
+    private var tapCount = 0
+    private var tapJob: Job? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -124,6 +130,7 @@ class EdgeBarService : Service() {
         edgeVoiceStartJob?.cancel()
         edgeVoiceTickerJob?.cancel()
         edgeVoiceStopJob?.cancel()
+        tapJob?.cancel()
         runCatching { edgeAudioRecorder.stopAndDiscard() }
         app.capsuleCommandApi.clearQuickMemoRecording()
         stopEdgeRecordingForeground()
@@ -258,35 +265,49 @@ class EdgeBarService : Service() {
         val velocityThreshold = dpToPx(800f)
         val touchSlop = dpToPx(12f)
         var longPressJob: Job? = null
-        var voiceCaptureTriggered = false
+        var longPressTriggered = false
+        var longPressVoiceActive = false
+        var pointerMoved = false
 
         return View.OnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.rawX
                     downY = event.rawY
-                    voiceCaptureTriggered = false
+                    longPressTriggered = false
+                    longPressVoiceActive = false
+                    pointerMoved = false
                     longPressJob?.cancel()
                     longPressJob = serviceScope.launch {
                         delay(LONG_PRESS_MS)
-                        voiceCaptureTriggered = startEdgeVoiceCapture(settings)
-                        if (voiceCaptureTriggered) performHaptic(HapticFeedbackConstants.LONG_PRESS)
+                        val action = settingsQueryApi.settings.value.edgeBarLongPressAction
+                        val normalizedAction = FloatingBallGestureAction.normalize(action)
+                        longPressTriggered = true
+                        if (normalizedAction != FloatingBallGestureAction.NONE) {
+                            longPressVoiceActive = performGestureAction(action, fromLongPress = true)
+                            if (normalizedAction != FloatingBallGestureAction.QUICK_MEMO_RECORDING || longPressVoiceActive) {
+                                performHaptic(HapticFeedbackConstants.LONG_PRESS)
+                            }
+                        }
                     }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
-                    if (!voiceCaptureTriggered && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                    if (!longPressTriggered && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                        pointerMoved = true
                         longPressJob?.cancel()
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     longPressJob?.cancel()
-                    if (voiceCaptureTriggered) {
-                        stopEdgeVoiceCapture()
-                        voiceCaptureTriggered = false
+                    if (longPressTriggered) {
+                        if (longPressVoiceActive) {
+                            stopEdgeVoiceCapture()
+                            longPressVoiceActive = false
+                        }
                         return@OnTouchListener true
                     }
 
@@ -307,11 +328,28 @@ class EdgeBarService : Service() {
                     if (shouldTrigger && directionOk && !FloatingScheduleService.isShowing) {
                         performHaptic(HapticFeedbackConstants.GESTURE_START)
                         startFloatingSchedule()
+                    } else if (!pointerMoved && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) <= touchSlop) {
+                        handleTap()
                     }
                     true
                 }
                 else -> false
             }
+        }
+    }
+
+    private fun handleTap() {
+        tapCount += 1
+        tapJob?.cancel()
+        tapJob = serviceScope.launch {
+            delay(TAP_WINDOW_MS)
+            val settings = settingsQueryApi.settings.value
+            val action = if (tapCount >= 2) settings.edgeBarDoubleTapAction else settings.edgeBarSingleTapAction
+            tapCount = 0
+            if (FloatingBallGestureAction.normalize(action) != FloatingBallGestureAction.NONE) {
+                performHaptic(HapticFeedbackConstants.CONTEXT_CLICK)
+            }
+            performGestureAction(action, fromLongPress = false)
         }
     }
 
@@ -348,6 +386,63 @@ class EdgeBarService : Service() {
                 hiddenByFloating = false
                 updateVisibility()
             }
+        }
+    }
+
+    private fun performGestureAction(action: Int, fromLongPress: Boolean): Boolean {
+        return when (FloatingBallGestureAction.normalize(action)) {
+            FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE -> {
+                startFloatingSchedule(FloatingScheduleService.INPUT_MODE_SCHEDULE)
+                false
+            }
+            FloatingBallGestureAction.OPEN_QUICK_MEMO -> {
+                startFloatingSchedule(FloatingScheduleService.INPUT_MODE_NOTE)
+                false
+            }
+            FloatingBallGestureAction.QUICK_RECOGNITION -> {
+                startQuickRecognition()
+                false
+            }
+            FloatingBallGestureAction.QUICK_MEMO_RECORDING -> startOrToggleEdgeVoiceCapture(fromLongPress)
+            FloatingBallGestureAction.OPEN_APP_HOME -> {
+                openAppHome()
+                false
+            }
+            else -> false
+        }
+    }
+
+    private fun startOrToggleEdgeVoiceCapture(fromLongPress: Boolean): Boolean {
+        if (fromLongPress) {
+            return startEdgeVoiceCapture(settingsQueryApi.settings.value)
+        }
+        if (edgeVoiceStarting || edgeVoiceRecording || toggleVoiceActive) {
+            toggleVoiceActive = false
+            stopEdgeVoiceCapture()
+        } else {
+            toggleVoiceActive = startEdgeVoiceCapture(settingsQueryApi.settings.value)
+        }
+        return false
+    }
+
+    private fun startQuickRecognition() {
+        try {
+            startActivity(Intent(this, ShortcutHandleActivity::class.java).apply {
+                action = ShortcutHandleActivity.ACTION_QUICK_CAPTURE
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "start quick recognition failed", e)
+        }
+    }
+
+    private fun openAppHome() {
+        try {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "open home failed", e)
         }
     }
 
@@ -397,6 +492,7 @@ class EdgeBarService : Service() {
                     edgeVoiceStarting = false
                     edgeVoiceRecording = false
                     edgeVoiceStopRequested = false
+                    toggleVoiceActive = false
                     runCatching { edgeAudioRecorder.stopAndDiscard() }
                     app.capsuleCommandApi.clearQuickMemoRecording()
                     stopEdgeRecordingForeground()
@@ -555,6 +651,7 @@ class EdgeBarService : Service() {
         edgeVoiceRecording = false
         edgeVoiceStopRequested = false
         edgeVoiceStartedAt = 0L
+        toggleVoiceActive = false
         edgeVoiceTickerJob?.cancel()
         edgeVoiceTickerJob = null
         app.capsuleCommandApi.clearQuickMemoRecording()
