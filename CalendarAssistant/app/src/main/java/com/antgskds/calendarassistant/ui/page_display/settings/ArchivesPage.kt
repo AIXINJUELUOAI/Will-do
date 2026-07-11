@@ -1,56 +1,81 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.ui.contract.ArchivesDateGroupUi
+import com.antgskds.calendarassistant.ui.contract.ArchivesUiAction
+import com.antgskds.calendarassistant.ui.contract.ArchivesUiState
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
+import com.antgskds.calendarassistant.ui.flavor.ArchivesScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import com.antgskds.calendarassistant.calendar.models.endDate
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun ArchivesPage(
-    viewModel: MainViewModel
-) {
+fun ArchivesPage(viewModel: MainViewModel) {
     val archivedEvents by viewModel.archivedEvents.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     LaunchedEffect(Unit) {
         viewModel.fetchArchivedEvents()
     }
 
     val reverseOrderEnabled = uiState.settings.archivesListReverseOrder
-    val groupedEvents = remember(archivedEvents, reverseOrderEnabled) {
-        val base = archivedEvents
-            .filter { it.archivedAt != null }
+    val groups = remember(archivedEvents, reverseOrderEnabled) {
+        val items = archivedEvents
+            .filter { it.archivedAt != null && it.id != null }
             .distinctBy { it.id }
-        if (reverseOrderEnabled) {
-            // 倒序（默认）：结束日期从晚到早
-            base.sortedByDescending { it.endDate }
-                .groupBy { it.endDate }
-                .toSortedMap(reverseOrder())
+            .map(ScheduleDisplayHelper::eventToSingleItem)
+        val grouped = if (reverseOrderEnabled) {
+            items.sortedByDescending { it.endDate }.groupBy { it.endDate }.toSortedMap(reverseOrder())
         } else {
-            // 正序：结束日期从早到晚
-            base.sortedBy { it.endDate }
-                .groupBy { it.endDate }
-                .toSortedMap()
+            items.sortedBy { it.endDate }.groupBy { it.endDate }.toSortedMap()
         }
+        grouped.map { (date, dateItems) -> ArchivesDateGroupUi(date, dateItems) }
     }
 
-    val currentYear = uiState.today.year
+    ArchivesScreen(
+        state = ArchivesUiState(
+            groups = groups,
+            currentYear = uiState.today.year,
+            timeRefreshToken = uiState.timeRefreshToken,
+            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+        ),
+        onAction = { action ->
+            when (action) {
+                is ArchivesUiAction.Delete -> viewModel.deleteArchivedEvent(action.eventId)
+                is ArchivesUiAction.Restore -> viewModel.restoreEvent(action.eventId)
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialArchivesScreen(state: ArchivesUiState, onAction: (ArchivesUiAction) -> Unit) {
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (groupedEvents.isEmpty()) {
-            Box(
-                modifier = Modifier.align(Alignment.Center)
-            ) {
+        if (state.groups.isEmpty()) {
+            Box(modifier = Modifier.align(Alignment.Center)) {
                 Text("暂无归档", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f))
             }
         } else {
@@ -64,12 +89,12 @@ fun ArchivesPage(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                groupedEvents.forEach { (date, events) ->
-                    item(key = "header_$date") {
-                        val headerText = if (date.year == currentYear) {
-                            date.format(DateTimeFormatter.ofPattern("M月d日"))
+                state.groups.forEach { group ->
+                    item(key = "header_${group.date}") {
+                        val headerText = if (group.date.year == state.currentYear) {
+                            group.date.format(DateTimeFormatter.ofPattern("M月d日"))
                         } else {
-                            date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
+                            group.date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
                         }
                         Text(
                             text = "—— $headerText",
@@ -80,19 +105,18 @@ fun ArchivesPage(
                         )
                     }
 
-                    items(events, key = { it.id ?: 0L }) { event ->
-                        val displayItem = com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper.eventToSingleItem(event)
+                    items(group.items, key = { it.stableKey }) { item ->
                         SwipeableEventItem(
-                            item = displayItem,
+                            item = item,
                             isRevealed = false,
-                            timeRefreshToken = uiState.timeRefreshToken,
+                            timeRefreshToken = state.timeRefreshToken,
                             onExpand = {},
                             onCollapse = {},
-                            onDelete = { event.id?.let { id -> viewModel.deleteArchivedEvent(id) } },
+                            onDelete = { item.eventId?.let { onAction(ArchivesUiAction.Delete(it)) } },
                             onEdit = {},
                             isArchivePage = true,
-                            onRestore = { event.id?.let { id -> viewModel.restoreEvent(id) } },
-                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                            onRestore = { item.eventId?.let { onAction(ArchivesUiAction.Restore(it)) } },
+                            hapticEnabled = state.hapticEnabled
                         )
                     }
                 }
