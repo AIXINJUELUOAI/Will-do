@@ -97,6 +97,19 @@ android {
             )
         }
     }
+
+    flavorDimensions += "ui"
+    productFlavors {
+        create("native") {
+            dimension = "ui"
+            buildConfigField("String", "UI_EDITION", "\"native\"")
+        }
+        create("hyperos") {
+            dimension = "ui"
+            buildConfigField("String", "UI_EDITION", "\"hyperos\"")
+        }
+    }
+
     compileOptions {
         // 🔥 开启脱糖，支持 Java 8 时间 API
         isCoreLibraryDesugaringEnabled = true
@@ -122,6 +135,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":location"))
+
     // === 基础库 (使用默认生成的引用) ===
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

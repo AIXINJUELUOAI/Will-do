@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="F:\CalendarAssistant\CalendarAssistant\location"
+    name=":location"
+    type="LIBRARY"
+    maven="CalendarAssistant:location:unspecified"
+    agpVersion="8.13.2"
+    buildFolder="build"
+    bootClassPath="D:\application\Android Studio\Android\Sdk\platforms\android-37.0\android.jar;D:\application\Android Studio\Android\Sdk\build-tools\35.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="11"
+    compileTarget="android-37.0"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
