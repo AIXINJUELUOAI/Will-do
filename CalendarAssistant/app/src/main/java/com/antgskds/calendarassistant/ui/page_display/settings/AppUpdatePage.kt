@@ -39,9 +39,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.data.model.RemoteAppUpdateSection
-import com.antgskds.calendarassistant.data.model.RemoteAppVersion
 import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.contract.AppUpdateScreenState
+import com.antgskds.calendarassistant.ui.contract.AppUpdateSectionUi
+import com.antgskds.calendarassistant.ui.contract.AppUpdateUiAction
+import com.antgskds.calendarassistant.ui.contract.AppUpdateVersionUi
+import com.antgskds.calendarassistant.ui.flavor.AppUpdateScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable
@@ -51,14 +54,44 @@ fun AppUpdatePage(
 ) {
     val updateState by mainViewModel.appUpdateUiState.collectAsState()
     val uriHandler = LocalUriHandler.current
-    val versionTitleStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-    val bodyStyle = MaterialTheme.typography.bodyLarge
-
     LaunchedEffect(Unit) {
         if (updateState.info == null && !updateState.isChecking) {
             mainViewModel.checkAppUpdatesManually()
         }
     }
+
+    AppUpdateScreen(
+        state = AppUpdateScreenState(
+            hasUpdate = updateState.hasUpdate,
+            isChecking = updateState.isChecking,
+            errorMessage = updateState.errorMessage,
+            versions = updateState.info?.versions.orEmpty().map { version ->
+                AppUpdateVersionUi(
+                    versionName = version.versionname,
+                    downloadUrl = version.downloadUrl,
+                    downloadPassword = version.downloadPassword,
+                    sections = version.sections.map { AppUpdateSectionUi(it.title, it.items) }
+                )
+            }
+        ),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                AppUpdateUiAction.CheckForUpdates -> mainViewModel.checkAppUpdatesManually()
+                is AppUpdateUiAction.OpenDownload -> uriHandler.openUri(action.url)
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialAppUpdateScreen(
+    state: AppUpdateScreenState,
+    uiSize: Int = 2,
+    onAction: (AppUpdateUiAction) -> Unit
+) {
+    val versionTitleStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+    val bodyStyle = MaterialTheme.typography.bodyLarge
 
     Column(
         modifier = Modifier
@@ -74,25 +107,25 @@ fun AppUpdatePage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (updateState.hasUpdate) "发现新版本" else "软件更新",
+                text = if (state.hasUpdate) "发现新版本" else "软件更新",
                 style = versionTitleStyle,
                 color = MaterialTheme.colorScheme.onSurface
             )
             OutlinedButton(
-                onClick = { mainViewModel.checkAppUpdatesManually() },
-                enabled = !updateState.isChecking
+                onClick = { onAction(AppUpdateUiAction.CheckForUpdates) },
+                enabled = !state.isChecking
             ) {
-                if (updateState.isChecking) {
+                if (state.isChecking) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(if (updateState.isChecking) "检查中" else "检查")
+                Text(if (state.isChecking) "检查中" else "检查")
             }
         }
 
-        val versions = updateState.info?.versions.orEmpty()
+        val versions = state.versions
         if (versions.isEmpty()) {
             AppCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -100,7 +133,7 @@ fun AppUpdatePage(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
             ) {
                 Text(
-                    text = updateState.errorMessage ?: "暂无更新日志",
+                    text = state.errorMessage ?: "暂无更新日志",
                     style = bodyStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(if (uiSize >= 3) 20.dp else 16.dp)
@@ -115,7 +148,7 @@ fun AppUpdatePage(
                     titleStyle = versionTitleStyle,
                     sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     bodyStyle = bodyStyle,
-                    onDownload = { url -> uriHandler.openUri(url) }
+                    onDownload = { url -> onAction(AppUpdateUiAction.OpenDownload(url)) }
                 )
             }
         }
@@ -126,7 +159,7 @@ fun AppUpdatePage(
 
 @Composable
 private fun AppVersionCard(
-    version: RemoteAppVersion,
+    version: AppUpdateVersionUi,
     isLatest: Boolean,
     defaultExpanded: Boolean,
     titleStyle: androidx.compose.ui.text.TextStyle,
@@ -134,7 +167,7 @@ private fun AppVersionCard(
     bodyStyle: androidx.compose.ui.text.TextStyle,
     onDownload: (String) -> Unit
 ) {
-    var expanded by rememberSaveable(version.versionname) { mutableStateOf(defaultExpanded) }
+    var expanded by rememberSaveable(version.versionName) { mutableStateOf(defaultExpanded) }
 
     AppCard(
         modifier = Modifier
@@ -154,7 +187,7 @@ private fun AppVersionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(version.versionname.ifBlank { "未知版本" }, style = titleStyle)
+                Text(version.versionName.ifBlank { "未知版本" }, style = titleStyle)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -209,7 +242,7 @@ private fun AppVersionCard(
 
 @Composable
 private fun AppUpdateSection(
-    section: RemoteAppUpdateSection,
+    section: AppUpdateSectionUi,
     sectionTitleStyle: androidx.compose.ui.text.TextStyle,
     bodyStyle: androidx.compose.ui.text.TextStyle
 ) {
