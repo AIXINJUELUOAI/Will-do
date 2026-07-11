@@ -42,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.developer.DebugAction
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.data.model.MySettings
@@ -52,6 +51,8 @@ import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.*
+import com.antgskds.calendarassistant.ui.flavor.DeveloperScreen
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -75,19 +76,77 @@ fun DeveloperPage(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as? App
-    val scope = rememberCoroutineScope()
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val settings by settingsViewModel.settings.collectAsState()
 
-    var pendingDangerous by remember { mutableStateOf<DebugAction?>(null) }
+    LaunchedEffect(settings.developerOptionsUnlocked, settings.developerOptionsEnabled, settings.developerOptionsDisabledAtMillis) {
+        if (settings.developerOptionsUnlocked && !settings.developerOptionsEnabled && settings.developerOptionsDisabledAtMillis > 0L) {
+            val remaining = DEVELOPER_OPTION_HIDE_DELAY_MS - (System.currentTimeMillis() - settings.developerOptionsDisabledAtMillis)
+            if (remaining > 0L) delay(remaining)
+            val latest = settingsViewModel.settings.value
+            if (latest.developerOptionsUnlocked && !latest.developerOptionsEnabled && latest.developerOptionsDisabledAtMillis > 0L && System.currentTimeMillis() - latest.developerOptionsDisabledAtMillis >= DEVELOPER_OPTION_HIDE_DELAY_MS) {
+                settingsViewModel.expireDeveloperOptionsUnlock()
+            }
+        }
+    }
+
+    DeveloperScreen(
+        state = DeveloperUiState(settings, DebugActionRegistry.actions.map { DeveloperActionUi(it.id, it.label, it.category, it.dangerous) }),
+        uiSize = uiSize,
+        onAction = { action -> when (action) {
+            is DeveloperUiAction.SetEnabled -> settingsViewModel.setDeveloperOptionsEnabled(action.enabled)
+            is DeveloperUiAction.SetLiveTemplateMode -> { settingsViewModel.updatePreference(liveNotificationTemplateMode = action.mode); app?.capsuleCenter?.forceRefresh() }
+            is DeveloperUiAction.SetListReverse -> when (action.kind) {
+                DeveloperListKind.HOME -> settingsViewModel.updateListSortOrder(homeListReverseOrder = action.enabled)
+                DeveloperListKind.ALL_EVENTS -> settingsViewModel.updateListSortOrder(allEventsListReverseOrder = action.enabled)
+                DeveloperListKind.FLOATING -> settingsViewModel.updateListSortOrder(floatingListReverseOrder = action.enabled)
+                DeveloperListKind.ARCHIVES -> settingsViewModel.updateListSortOrder(archivesListReverseOrder = action.enabled)
+            }
+            is DeveloperUiAction.SetDragField -> when (action.field) {
+                DeveloperDragField.TITLE -> settingsViewModel.updateFloatingDragTextOptions(includeTitle = action.enabled)
+                DeveloperDragField.TIME -> settingsViewModel.updateFloatingDragTextOptions(includeTime = action.enabled)
+                DeveloperDragField.LOCATION -> settingsViewModel.updateFloatingDragTextOptions(includeLocation = action.enabled)
+                DeveloperDragField.DESCRIPTION -> settingsViewModel.updateFloatingDragTextOptions(includeDescription = action.enabled)
+            }
+            is DeveloperUiAction.SetDragHotZone -> settingsViewModel.updateFloatingDragHotZonePercent(action.percent)
+            DeveloperUiAction.ResetListOrder -> settingsViewModel.resetListSortOrderToDefault()
+            DeveloperUiAction.OpenConfig -> onNavigateToConfig()
+            DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
+        } },
+        runDebugActions = { ids ->
+            val target = app ?: return@DeveloperScreen DebugBatchResult(0, ids.size)
+            var success = 0
+            var failed = 0
+            ids.mapNotNull { id -> DebugActionRegistry.actions.firstOrNull { it.id == id } }.forEach { action ->
+                runCatching { action.execute(target) }.onSuccess { success++ }.onFailure { failed++ }
+            }
+            DebugBatchResult(success, failed)
+        },
+        exportLogs = settingsViewModel::exportDiagnosticLogs
+    )
+}
+
+@Composable
+fun MaterialDeveloperScreen(
+    state: DeveloperUiState,
+    uiSize: Int = 2,
+    onAction: (DeveloperUiAction) -> Unit,
+    runDebugActions: suspend (List<String>) -> DebugBatchResult,
+    exportLogs: (Int?, (Result<String>) -> Unit) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val settings = state.settings
+
+    var pendingDangerous by remember { mutableStateOf<DeveloperActionUi?>(null) }
     var pendingBatch by remember { mutableStateOf<DebugActionBatch?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showLogExportSheet by remember { mutableStateOf(false) }
     var quickActionSheet by remember { mutableStateOf<QuickActionSheetSpec?>(null) }
-    val actionsById = remember { DebugActionRegistry.actions.associateBy { it.id } }
+    val actionsById = remember(state.actions) { state.actions.associateBy { it.id } }
 
-    fun actions(ids: List<String>): List<DebugAction> = ids.mapNotNull { actionsById[it] }
+    fun actions(ids: List<String>): List<DeveloperActionUi> = ids.mapNotNull { actionsById[it] }
 
     val createScheduleActions = remember {
         actions(
@@ -181,33 +240,6 @@ fun DeveloperPage(
         }
     }
 
-    LaunchedEffect(
-        settings.developerOptionsUnlocked,
-        settings.developerOptionsEnabled,
-        settings.developerOptionsDisabledAtMillis
-    ) {
-        if (
-            settings.developerOptionsUnlocked &&
-            !settings.developerOptionsEnabled &&
-            settings.developerOptionsDisabledAtMillis > 0L
-        ) {
-            val remaining = DEVELOPER_OPTION_HIDE_DELAY_MS -
-                (System.currentTimeMillis() - settings.developerOptionsDisabledAtMillis)
-            if (remaining > 0L) {
-                delay(remaining)
-            }
-            val latest = settingsViewModel.settings.value
-            if (
-                latest.developerOptionsUnlocked &&
-                !latest.developerOptionsEnabled &&
-                latest.developerOptionsDisabledAtMillis > 0L &&
-                System.currentTimeMillis() - latest.developerOptionsDisabledAtMillis >= DEVELOPER_OPTION_HIDE_DELAY_MS
-            ) {
-                settingsViewModel.expireDeveloperOptionsUnlock()
-            }
-        }
-    }
-
     // 与偏好设置页一致的字体样式
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
@@ -221,60 +253,35 @@ fun DeveloperPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 
-    fun runAction(action: DebugAction) {
-        val target = app
-        if (target == null) {
-            Toast.makeText(context, "应用上下文不可用", Toast.LENGTH_SHORT).show()
-            return
-        }
+    fun runAction(action: DeveloperActionUi) {
         scope.launch {
             runningId = action.id
             try {
-                action.execute(target)
-                Toast.makeText(context, "已执行 ${action.label}", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "执行失败：${e.message}", Toast.LENGTH_SHORT).show()
+                val result = runDebugActions(listOf(action.id))
+                Toast.makeText(context, if (result.failedCount == 0) "已执行 ${action.label}" else "执行失败", Toast.LENGTH_SHORT).show()
             } finally {
                 runningId = null
             }
         }
     }
 
-    fun runActions(actions: List<DebugAction>) {
-        val target = app
-        if (target == null) {
-            Toast.makeText(context, "应用上下文不可用", Toast.LENGTH_SHORT).show()
-            return
-        }
+    fun runActions(actions: List<DeveloperActionUi>) {
         scope.launch {
-            var successCount = 0
-            val failed = mutableListOf<String>()
             try {
-                actions.forEach { action ->
-                    runningId = action.id
-                    try {
-                        action.execute(target)
-                        successCount++
-                    } catch (e: Exception) {
-                        failed += "${action.label}: ${e.message ?: "未知错误"}"
-                    }
-                }
+                runningId = actions.firstOrNull()?.id
+                val result = runDebugActions(actions.map { it.id })
+                val message = if (result.failedCount == 0) "已执行 ${result.successCount} 项" else "执行完成：成功 ${result.successCount} 项，失败 ${result.failedCount} 项"
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             } finally {
                 runningId = null
             }
-            val message = if (failed.isEmpty()) {
-                "已执行 $successCount 项"
-            } else {
-                "执行完成：成功 $successCount 项，失败 ${failed.size} 项"
-            }
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
 
     fun openQuickActionSheet(
         title: String,
         description: String,
-        actions: List<DebugAction>,
+        actions: List<DeveloperActionUi>,
         confirmText: String,
         requiresConfirm: Boolean,
         defaultSelected: Boolean = true
@@ -290,7 +297,7 @@ fun DeveloperPage(
     }
 
     fun exportLogs(minutes: Int?) {
-        settingsViewModel.exportDiagnosticLogs(minutes) { result ->
+        exportLogs(minutes) { result ->
             val message = result.fold(
                 onSuccess = { path -> "日志包已导出到 $path" },
                 onFailure = { error -> "日志导出失败: ${error.message ?: "未知错误"}" }
@@ -317,7 +324,7 @@ fun DeveloperPage(
                     title = "开发者选项",
                     subtitle = "打开后才显示调试入口。关闭超过 5 分钟后会隐藏开发者页入口，需要重新在关于页解锁。",
                     checked = settings.developerOptionsEnabled,
-                    onCheckedChange = { settingsViewModel.setDeveloperOptionsEnabled(it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetEnabled(it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -347,7 +354,7 @@ fun DeveloperPage(
                     value = "",
                     icon = Icons.Default.ChevronRight,
                     enabled = true,
-                    onClick = onNavigateToConfig,
+                    onClick = { onAction(DeveloperUiAction.OpenConfig) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle
@@ -359,7 +366,7 @@ fun DeveloperPage(
                     value = "",
                     icon = Icons.Default.ChevronRight,
                     enabled = true,
-                    onClick = onNavigateToRegexRules,
+                    onClick = { onAction(DeveloperUiAction.OpenRegexRules) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle
@@ -371,8 +378,7 @@ fun DeveloperPage(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 onOpenLogExportSheet = { showLogExportSheet = true },
                 onLiveNotificationTemplateModeChange = { mode ->
-                    settingsViewModel.updatePreference(liveNotificationTemplateMode = mode)
-                    app?.capsuleCenter?.forceRefresh()
+                    onAction(DeveloperUiAction.SetLiveTemplateMode(mode))
                     Toast.makeText(context, "原生实况通知模板已设为 ${liveTemplateModeLabel(mode)}", Toast.LENGTH_SHORT).show()
                 }
             )
@@ -449,7 +455,7 @@ fun DeveloperPage(
                     title = "首页列表倒序",
                     subtitle = "开启后今日/明日按时间从晚到早",
                     checked = settings.homeListReverseOrder,
-                    onCheckedChange = { settingsViewModel.updateListSortOrder(homeListReverseOrder = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.HOME, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -458,7 +464,7 @@ fun DeveloperPage(
                     title = "全部日程倒序",
                     subtitle = "开启后全部日程页按时间从晚到早",
                     checked = settings.allEventsListReverseOrder,
-                    onCheckedChange = { settingsViewModel.updateListSortOrder(allEventsListReverseOrder = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.ALL_EVENTS, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -467,7 +473,7 @@ fun DeveloperPage(
                     title = "悬浮窗倒序",
                     subtitle = "关闭后悬浮窗按时间从早到晚，打开自动定位到当前",
                     checked = settings.floatingListReverseOrder,
-                    onCheckedChange = { settingsViewModel.updateListSortOrder(floatingListReverseOrder = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.FLOATING, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -476,7 +482,7 @@ fun DeveloperPage(
                     title = "归档列表倒序",
                     subtitle = "开启后归档页按结束日期从晚到早",
                     checked = settings.archivesListReverseOrder,
-                    onCheckedChange = { settingsViewModel.updateListSortOrder(archivesListReverseOrder = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.ARCHIVES, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -499,7 +505,7 @@ fun DeveloperPage(
                     title = "拖拽文本包含标题",
                     subtitle = "日程拖到输入框时输出标题行",
                     checked = settings.floatingDragTextIncludeTitle,
-                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeTitle = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetDragField(DeveloperDragField.TITLE, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -508,7 +514,7 @@ fun DeveloperPage(
                     title = "拖拽文本包含时间",
                     subtitle = "附加开始和结束时间",
                     checked = settings.floatingDragTextIncludeTime,
-                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeTime = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetDragField(DeveloperDragField.TIME, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -517,7 +523,7 @@ fun DeveloperPage(
                     title = "拖拽文本包含地点",
                     subtitle = "附加地点信息",
                     checked = settings.floatingDragTextIncludeLocation,
-                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeLocation = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetDragField(DeveloperDragField.LOCATION, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -526,7 +532,7 @@ fun DeveloperPage(
                     title = "拖拽文本包含详情",
                     subtitle = "附加备注或结构化详情",
                     checked = settings.floatingDragTextIncludeDescription,
-                    onCheckedChange = { settingsViewModel.updateFloatingDragTextOptions(includeDescription = it) },
+                    onCheckedChange = { onAction(DeveloperUiAction.SetDragField(DeveloperDragField.DESCRIPTION, it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -536,7 +542,7 @@ fun DeveloperPage(
                     subtitle = "呼出侧热区越大，越容易拖回取消；也越晚进入外部投放",
                     value = settings.floatingDragHotZonePercent.toFloat(),
                     onValueChange = { value ->
-                        settingsViewModel.updateFloatingDragHotZonePercent(value.roundToInt())
+                        onAction(DeveloperUiAction.SetDragHotZone(value.roundToInt()))
                     },
                     valueRange = MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT.toFloat()..MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT.toFloat(),
                     steps = ((MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT - MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT) / 5 - 1)
@@ -550,7 +556,7 @@ fun DeveloperPage(
             }
 
             // 调试动作（按 category 分组，每组收进一张卡片）
-            DebugActionRegistry.actions
+            state.actions
                 .filterNot { it.id in coveredQuickActionIds }
                 .groupBy { it.category }
                 .forEach { (category, items) ->
@@ -619,7 +625,7 @@ fun DeveloperPage(
             isDestructive = false,
             onConfirm = {
                 showResetConfirm = false
-                settingsViewModel.resetListSortOrderToDefault()
+                onAction(DeveloperUiAction.ResetListOrder)
                 Toast.makeText(context, "已恢复列表排序默认", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showResetConfirm = false },
@@ -852,14 +858,14 @@ private data class LogExportOption(
 private data class QuickActionSheetSpec(
     val title: String,
     val description: String,
-    val actions: List<DebugAction>,
+    val actions: List<DeveloperActionUi>,
     val confirmText: String,
     val requiresConfirm: Boolean,
     val defaultSelected: Boolean
 )
 
 private data class DebugActionBatch(
-    val actions: List<DebugAction>,
+    val actions: List<DeveloperActionUi>,
     val confirmText: String
 )
 
@@ -868,7 +874,7 @@ private data class DebugActionBatch(
 private fun DebugActionSelectSheet(
     spec: QuickActionSheetSpec,
     onDismiss: () -> Unit,
-    onRun: (List<DebugAction>) -> Unit
+    onRun: (List<DeveloperActionUi>) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptics = rememberAppHaptics()
@@ -934,7 +940,7 @@ private fun DebugActionSelectSheet(
 
 @Composable
 private fun DebugActionOptionRow(
-    action: DebugAction,
+    action: DeveloperActionUi,
     selected: Boolean,
     onSelect: () -> Unit
 ) {
@@ -1023,7 +1029,7 @@ private fun RegistryOverviewRow(
 /** 单个调试动作行（无独立卡片背景，放进分组卡片内）。 */
 @Composable
 private fun DeveloperActionRow(
-    action: DebugAction,
+    action: DeveloperActionUi,
     running: Boolean,
     cardTitleStyle: androidx.compose.ui.text.TextStyle,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle,
