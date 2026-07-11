@@ -103,6 +103,8 @@ import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.WeatherSettingsUiState
+import com.antgskds.calendarassistant.ui.flavor.WeatherSettingsScreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,14 +115,54 @@ fun WeatherSettingsPage(
     onOpenWeatherDetail: () -> Unit = {}
 ) {
     val settings by viewModel.settings.collectAsState()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val context = LocalContext.current
     val appContext = context.applicationContext
     val app = appContext as App
+    val weatherData by app.weatherQueryApi.weatherData.collectAsState()
+    val locationCatalog = remember(appContext) { WeatherLocationCatalog.load(appContext) }
+    WeatherSettingsScreen(
+        state = WeatherSettingsUiState(settings, weatherData, locationCatalog),
+        uiSize = uiSize,
+        onOpenDetail = onOpenWeatherDetail,
+        saveWeather = { draft ->
+            viewModel.updateWeatherSettings(
+                enabled = draft.weatherEnabled, provider = WeatherApiAdapter.PROVIDER_QWEATHER,
+                apiUrl = draft.weatherApiUrl, apiKey = draft.weatherApiKey,
+                refreshInterval = draft.weatherRefreshInterval, showInFloating = draft.showWeatherInFloating,
+                locationMode = draft.weatherLocationMode, manualLocationId = draft.weatherManualLocationId,
+                manualLocationName = draft.weatherManualLocationName, manualAdm1 = draft.weatherManualAdm1,
+                manualAdm2 = draft.weatherManualAdm2, manualCountry = draft.weatherManualCountry,
+                manualLat = draft.weatherManualLat, manualLon = draft.weatherManualLon,
+                warningEnabled = draft.weatherWarningEnabled, riskWarningEnabled = draft.weatherRiskWarningEnabled,
+                warningLookaheadHours = draft.weatherWarningLookaheadHours,
+                floatingWeatherForecastRange = draft.floatingWeatherForecastRange
+            )
+            if (draft.weatherManualLocationId != settings.weatherManualLocationId || draft.weatherLocationMode != settings.weatherLocationMode) {
+                app.weatherOperationApi.clearCache()
+            }
+            WeatherSyncWorker.syncForSettings(appContext, draft)
+            if (draft.weatherEnabled) app.weatherOperationApi.forceRefresh(draft).map { Unit } else Result.success(Unit)
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MaterialWeatherSettingsScreen(
+    state: WeatherSettingsUiState,
+    uiSize: Int = 2,
+    onOpenWeatherDetail: () -> Unit,
+    saveWeather: suspend (MySettings) -> Result<Unit>
+) {
+    val settings = state.settings
+    val weatherData = state.weatherData
+    val locationCatalog = state.locationCatalog
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val context = LocalContext.current
+    val appContext = context.applicationContext
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
-    val weatherData by app.weatherQueryApi.weatherData.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val density = LocalDensity.current
@@ -164,7 +206,6 @@ fun WeatherSettingsPage(
     var actionLoading by remember { mutableStateOf(false) }
     var showLocationSheet by remember { mutableStateOf(false) }
     var isLocationModeExpanded by remember { mutableStateOf(false) }
-    val locationCatalog = remember(appContext) { WeatherLocationCatalog.load(appContext) }
 
     fun showToast(message: String, type: ToastType) {
         if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
@@ -575,40 +616,12 @@ fun WeatherSettingsPage(
                         return@launch
                     }
 
-                    viewModel.updateWeatherSettings(
-                        enabled = draft.weatherEnabled,
-                        provider = WeatherApiAdapter.PROVIDER_QWEATHER,
-                        apiUrl = draft.weatherApiUrl,
-                        apiKey = draft.weatherApiKey,
-                        refreshInterval = draft.weatherRefreshInterval,
-                        showInFloating = draft.showWeatherInFloating,
-                        locationMode = draft.weatherLocationMode,
-                        manualLocationId = draft.weatherManualLocationId,
-                        manualLocationName = draft.weatherManualLocationName,
-                        manualAdm1 = draft.weatherManualAdm1,
-                        manualAdm2 = draft.weatherManualAdm2,
-                        manualCountry = draft.weatherManualCountry,
-                        manualLat = draft.weatherManualLat,
-                        manualLon = draft.weatherManualLon,
-                        warningEnabled = draft.weatherWarningEnabled,
-                        riskWarningEnabled = draft.weatherRiskWarningEnabled,
-                        warningLookaheadHours = draft.weatherWarningLookaheadHours,
-                        floatingWeatherForecastRange = draft.floatingWeatherForecastRange
-                    )
-                    if (draft.weatherManualLocationId != settings.weatherManualLocationId || draft.weatherLocationMode != settings.weatherLocationMode) {
-                        app.weatherOperationApi.clearCache()
-                    }
-                    WeatherSyncWorker.syncForSettings(appContext, draft)
-                    haptics.confirm()
-                    showToast("天气配置已保存", ToastType.SUCCESS)
-
-                    if (!draft.weatherEnabled) {
-                        return@launch
-                    }
-
                     actionLoading = true
                     try {
-                        val result = app.weatherOperationApi.forceRefresh(draft)
+                        val result = saveWeather(draft)
+                        haptics.confirm()
+                        showToast("天气配置已保存", ToastType.SUCCESS)
+                        if (!draft.weatherEnabled) return@launch
                         if (result.isSuccess) {
                             showToast("天气连接成功", ToastType.SUCCESS)
                         } else {
