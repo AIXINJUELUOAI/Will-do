@@ -69,6 +69,9 @@ import com.antgskds.calendarassistant.platform.widget.WeatherWidgetProvider
 import com.antgskds.calendarassistant.platform.widget.WidgetAppearanceConfig
 import com.antgskds.calendarassistant.platform.widget.WidgetInstanceConfigStore
 import com.antgskds.calendarassistant.platform.widget.WidgetType
+import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiAction
+import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiState
+import com.antgskds.calendarassistant.ui.flavor.WidgetSettingsScreen
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -85,24 +88,38 @@ fun WidgetSettingsPage(
     val app = context.applicationContext as? App
     val settings by settingsViewModel.settings.collectAsState()
     val weatherData by app?.weatherQueryApi?.weatherData?.collectAsState() ?: remember { mutableStateOf<WeatherData?>(null) }
-    val scrollState = rememberScrollState()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
-    var selectedType by remember { mutableStateOf(WidgetType.SCHEDULE) }
-    var selectedSize by remember { mutableStateOf(WidgetPreviewSize.FourByTwo) }
     var appearanceRefreshKey by remember { mutableStateOf(0) }
     val queryApi = remember { LocalWidgetScheduleQueryApi() }
     val snapshot = remember(rawEvents) { queryApi.buildSnapshot(rawEvents) }
     val courseSnapshot = remember(rawEvents, settings) { CourseWidgetSnapshotBuilder.build(rawEvents, settings) }
     val configStore = remember(context) { WidgetInstanceConfigStore(context) }
-    val selectedAppearance = remember(context, settings, selectedType, appearanceRefreshKey) {
-        configStore.defaultAppearance(selectedType, settings)
+    val appearances = remember(context, settings, appearanceRefreshKey) {
+        WidgetType.entries.associateWith { configStore.defaultAppearance(it, settings) }
     }
-    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+    WidgetSettingsScreen(
+        state = WidgetSettingsUiState(settings, snapshot, courseSnapshot, weatherData, appearances),
+        uiSize = uiSize,
+        onAction = { action -> when (action) {
+            is WidgetSettingsUiAction.UpdateAppearance -> {
+                saveWidgetTypeAppearance(context, action.type, settings, action.appearance)
+                appearanceRefreshKey++
+            }
+        } }
+    )
+}
 
-    fun updateSelectedAppearance(appearance: WidgetAppearanceConfig) {
-        saveWidgetTypeAppearance(context, selectedType, settings, appearance)
-        appearanceRefreshKey++
-    }
+@Composable
+fun MaterialWidgetSettingsScreen(state: WidgetSettingsUiState, uiSize: Int = 2, onAction: (WidgetSettingsUiAction) -> Unit) {
+    val settings = state.settings
+    val snapshot = state.scheduleSnapshot
+    val courseSnapshot = state.courseSnapshot
+    val weatherData = state.weatherData
+    val scrollState = rememberScrollState()
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    var selectedType by remember { mutableStateOf(WidgetType.SCHEDULE) }
+    var selectedSize by remember { mutableStateOf(WidgetPreviewSize.FourByTwo) }
+    val selectedAppearance = state.appearances.getValue(selectedType)
+    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
 
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
@@ -189,7 +206,7 @@ fun WidgetSettingsPage(
                     selectedMode = selectedAppearance.themeMode,
                     onSelected = { mode ->
                         haptics.selection()
-                        updateSelectedAppearance(selectedAppearance.copy(themeMode = mode))
+                        onAction(WidgetSettingsUiAction.UpdateAppearance(selectedType, selectedAppearance.copy(themeMode = mode)))
                     }
                 )
                 HorizontalDivider(
@@ -201,7 +218,7 @@ fun WidgetSettingsPage(
                     widgetType = selectedType,
                     alpha = selectedAppearance.backgroundAlpha,
                     onAlphaChange = { value ->
-                        updateSelectedAppearance(selectedAppearance.copy(backgroundAlpha = value))
+                        onAction(WidgetSettingsUiAction.UpdateAppearance(selectedType, selectedAppearance.copy(backgroundAlpha = value)))
                     }
                 )
             }
