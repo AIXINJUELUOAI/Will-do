@@ -40,6 +40,9 @@ import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiAction
+import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiState
+import com.antgskds.calendarassistant.ui.flavor.ScheduleColorScreen
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -52,8 +55,28 @@ fun ScheduleColorSettingsPage(
     val colors = remember(settings.eventColorPaletteHex) {
         sanitizeEventColorPaletteHex(settings.eventColorPaletteHex)
     }
+    ScheduleColorScreen(
+        state = ScheduleColorUiState(colors = colors, hapticEnabled = settings.hapticFeedbackEnabled),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is ScheduleColorUiAction.UpdatePalette -> viewModel.updateEventColorPalette(action.colors)
+                ScheduleColorUiAction.ResetPalette -> viewModel.resetEventColorPalette()
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun MaterialScheduleColorScreen(
+    state: ScheduleColorUiState,
+    uiSize: Int = 2,
+    onAction: (ScheduleColorUiAction) -> Unit
+) {
+    val colors = state.colors
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val haptics = rememberAppHaptics(state.hapticEnabled)
     val context = LocalContext.current
 
     // 控制底部弹窗的显示状态
@@ -101,7 +124,7 @@ fun ScheduleColorSettingsPage(
                                 isAlreadyAdded = false,
                                 onDelete = {
                                     haptics.selection()
-                                    viewModel.updateEventColorPalette(colors - hex)
+                                    onAction(ScheduleColorUiAction.UpdatePalette(colors - hex))
                                 }
                             )
                         } else {
@@ -142,7 +165,7 @@ fun ScheduleColorSettingsPage(
                             onClick = {
                                 if (!isSelected) {
                                     haptics.selection()
-                                    viewModel.updateEventColorPalette(colors + hex)
+                                    onAction(ScheduleColorUiAction.UpdatePalette(colors + hex))
                                 }
                             }
                         )
@@ -155,7 +178,7 @@ fun ScheduleColorSettingsPage(
                         AssistChip(
                             onClick = {
                                 haptics.confirm()
-                                viewModel.resetEventColorPalette()
+                                onAction(ScheduleColorUiAction.ResetPalette)
                             },
                             shape = RoundedCornerShape(50.dp),
                             colors = AssistChipDefaults.assistChipColors(
@@ -188,7 +211,7 @@ fun ScheduleColorSettingsPage(
                             }
                             else -> {
                                 haptics.confirm()
-                                viewModel.updateEventColorPalette(colors + normalized)
+                                onAction(ScheduleColorUiAction.UpdatePalette(colors + normalized))
                                 showAddColorSheet = false
                             }
                         }
