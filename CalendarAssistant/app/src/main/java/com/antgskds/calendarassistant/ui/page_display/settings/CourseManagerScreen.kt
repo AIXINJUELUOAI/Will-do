@@ -33,6 +33,9 @@ import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.ui.dialogs.CourseEditDialog
 import com.antgskds.calendarassistant.ui.dialogs.CourseItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.contract.CourseManagerUiAction
+import com.antgskds.calendarassistant.ui.contract.CourseManagerUiState
+import com.antgskds.calendarassistant.ui.flavor.CourseManagerContent
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable
@@ -41,13 +44,41 @@ fun CourseManagerScreen(
     uiSize: Int = 2
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
     val courses = remember(uiState.rawEvents, uiState.settings) {
         CourseEventMapper.extractParentCourses(uiState.rawEvents, uiState.settings)
     }
     val maxNodes = remember(uiState.settings.timeTableJson) {
         TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
     }
+
+    CourseManagerContent(
+        state = CourseManagerUiState(
+            courses = courses,
+            maxNodes = maxNodes,
+            timeTableJson = uiState.settings.timeTableJson,
+            hapticEnabled = uiState.settings.hapticFeedbackEnabled,
+            predictiveBackEnabled = uiState.settings.predictiveBackEnabled
+        ),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is CourseManagerUiAction.AddCourse -> viewModel.addCourse(action.course)
+                is CourseManagerUiAction.UpdateCourse -> viewModel.updateCourse(action.course)
+                is CourseManagerUiAction.DeleteCourse -> viewModel.deleteCourse(action.course)
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialCourseManagerScreen(
+    state: CourseManagerUiState,
+    uiSize: Int = 2,
+    onAction: (CourseManagerUiAction) -> Unit
+) {
+    val haptics = rememberAppHaptics(state.hapticEnabled)
+    val courses = state.courses
+    val maxNodes = state.maxNodes
 
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
@@ -67,7 +98,7 @@ fun CourseManagerScreen(
                 items(courses, key = { it.id }) { course ->
                     CourseItem(
                         course = course,
-                        onDelete = { viewModel.deleteCourse(course) },
+                        onDelete = { onAction(CourseManagerUiAction.DeleteCourse(course)) },
                         onClick = { courseToEdit = course; showEditDialog = true },
                         uiSize = uiSize
                     )
@@ -90,12 +121,16 @@ fun CourseManagerScreen(
         CourseEditDialog(
             course = courseToEdit,
             maxNodes = maxNodes,
-            timeTableJson = uiState.settings.timeTableJson,
-            hapticEnabled = uiState.settings.hapticFeedbackEnabled,
-            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
+            timeTableJson = state.timeTableJson,
+            hapticEnabled = state.hapticEnabled,
+            predictiveBackEnabled = state.predictiveBackEnabled,
             onDismiss = { showEditDialog = false; courseToEdit = null },
             onConfirm = { course ->
-                if (courseToEdit == null) viewModel.addCourse(course) else viewModel.updateCourse(course)
+                if (courseToEdit == null) {
+                    onAction(CourseManagerUiAction.AddCourse(course))
+                } else {
+                    onAction(CourseManagerUiAction.UpdateCourse(course))
+                }
                 showEditDialog = false
                 courseToEdit = null
             }
