@@ -77,6 +77,7 @@ location/            独立 Android 定位模块，不依赖 app 或天气
 - 关于页作为首个试点：`AboutUiState/AboutUiAction` 和连接层留在 main，`AboutScreen` 分别由 native/hyperos 源码集提供。
 - 天气详情页已建立 `WeatherDetailUiState/WeatherDetailUiAction`；数据连接留在 main，native/hyperos 源码集分别提供页面入口，当前共同复用 Material 渲染。
 - 软件更新页已建立独立展示 DTO 和 `AppUpdateUiAction`；检查更新与打开链接留在 main，两个 flavor 分别提供页面入口。
+- 课程管理页已将课程列表状态和增删改动作收敛到 UI 契约；课程派生与 ViewModel 操作保留在 main。
 
 ### Phase 2：低风险页面试迁移
 
