@@ -66,6 +66,10 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.contract.DonateQrCode
+import com.antgskds.calendarassistant.ui.contract.DonateUiAction
+import com.antgskds.calendarassistant.ui.contract.DonateUiState
+import com.antgskds.calendarassistant.ui.flavor.DonateScreen
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
@@ -84,8 +88,27 @@ fun DonatePage(
 ) {
     val settings by settingsViewModel?.settings?.collectAsState()
         ?: remember { mutableStateOf(com.antgskds.calendarassistant.data.model.MySettings()) }
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val context = LocalContext.current
+
+    DonateScreen(
+        state = DonateUiState(hapticEnabled = settings.hapticFeedbackEnabled),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                DonateUiAction.MarkDonated -> settingsViewModel?.updateHasDonated(true)
+                is DonateUiAction.SaveQrCode -> saveImageToGallery(context, donateQrImageRes(action.code))
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialDonateScreen(
+    state: DonateUiState,
+    uiSize: Int = 2,
+    onAction: (DonateUiAction) -> Unit
+) {
+    val haptics = rememberAppHaptics(state.hapticEnabled)
 
     var confettiTrigger by remember { mutableIntStateOf(0) }
     var showConfetti by remember { mutableStateOf(false) }
@@ -94,7 +117,7 @@ fun DonatePage(
     var buttonCenter by remember { mutableStateOf<Offset?>(null) }
 
     // 用于保存当前被放大的二维码图片资源 ID
-    var enlargedImageRes by remember { mutableStateOf<Int?>(null) }
+    var enlargedQrCode by remember { mutableStateOf<DonateQrCode?>(null) }
 
     LaunchedEffect(confettiTrigger) {
         if (confettiTrigger <= 0) return@LaunchedEffect
@@ -128,18 +151,20 @@ fun DonatePage(
                     title = "支付宝",
                     subtitle = "Alipay",
                     imageRes = R.drawable.qr_alipay,
+                    hapticEnabled = state.hapticEnabled,
                     modifier = Modifier.weight(1f)
                 ) {
-                    enlargedImageRes = R.drawable.qr_alipay
+                    enlargedQrCode = DonateQrCode.ALIPAY
                 }
 
                 DonateQrCard(
                     title = "微信",
                     subtitle = "WeChat Pay",
                     imageRes = R.drawable.qr_wechat_pay,
+                    hapticEnabled = state.hapticEnabled,
                     modifier = Modifier.weight(1f)
                 ) {
-                    enlargedImageRes = R.drawable.qr_wechat_pay
+                    enlargedQrCode = DonateQrCode.WECHAT_PAY
                 }
             }
 
@@ -150,7 +175,7 @@ fun DonatePage(
                     haptics.confirm()
                     confettiTrigger += 1
                     // 保存捐赠状态
-                    settingsViewModel?.updateHasDonated(true)
+                    onAction(DonateUiAction.MarkDonated)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,9 +210,9 @@ fun DonatePage(
     }
 
     // ========== 放大二维码的 Dialog 保持不变 ==========
-    if (enlargedImageRes != null) {
+    enlargedQrCode?.let { selectedCode ->
         Dialog(
-            onDismissRequest = { enlargedImageRes = null },
+            onDismissRequest = { enlargedQrCode = null },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,
@@ -200,10 +225,10 @@ fun DonatePage(
                     .background(Color.Black.copy(alpha = 0.85f))
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { enlargedImageRes = null },
+                            onTap = { enlargedQrCode = null },
                             onLongPress = {
                                 haptics.longPress()
-                                saveImageToGallery(context, enlargedImageRes!!)
+                                onAction(DonateUiAction.SaveQrCode(selectedCode))
                             }
                         )
                     },
@@ -211,7 +236,7 @@ fun DonatePage(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
-                        painter = painterResource(id = enlargedImageRes!!),
+                        painter = painterResource(id = donateQrImageRes(selectedCode)),
                         contentDescription = "Enlarged QR Code",
                         modifier = Modifier
                             .fillMaxWidth(0.75f)
@@ -230,6 +255,11 @@ fun DonatePage(
     }
 }
 
+private fun donateQrImageRes(code: DonateQrCode): Int = when (code) {
+    DonateQrCode.ALIPAY -> R.drawable.qr_alipay
+    DonateQrCode.WECHAT_PAY -> R.drawable.qr_wechat_pay
+}
+
 // ========== 捐赠卡片和保存图片的方法保持不变 ==========
 
 @Composable
@@ -237,10 +267,11 @@ private fun DonateQrCard(
     title: String,
     subtitle: String,
     imageRes: Int,
+    hapticEnabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val haptics = rememberAppHaptics()
+    val haptics = rememberAppHaptics(hapticEnabled)
     AppCard(
         modifier = modifier.clickable { haptics.click(); onClick() },
         shape = RoundedCornerShape(18.dp),
