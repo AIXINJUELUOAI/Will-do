@@ -16,6 +16,7 @@ import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.service.capsule.IconUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveNotificationTemplate
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveTemplateKind
 import com.antgskds.calendarassistant.platform.xposed.MiuiIslandAction
@@ -255,6 +256,8 @@ object MiuiIslandManager {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (tapEventId != null) {
                 putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (item.type == CapsuleType.WEATHER_ALERT) {
+                putExtra(WidgetActions.EXTRA_WIDGET_ACTION, WidgetActions.ACTION_OPEN_WEATHER)
             } else if (item.display.tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }

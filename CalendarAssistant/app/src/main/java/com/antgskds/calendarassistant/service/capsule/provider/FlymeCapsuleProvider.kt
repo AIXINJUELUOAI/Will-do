@@ -15,9 +15,11 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
+import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.flyme.FlymeLiveNotificationTemplate
 import kotlin.math.pow
 
@@ -113,6 +115,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (tapEventId != null) {
                 putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (item.type == CapsuleType.WEATHER_ALERT) {
+                putExtra(WidgetActions.EXTRA_WIDGET_ACTION, WidgetActions.ACTION_OPEN_WEATHER)
             } else if (tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }

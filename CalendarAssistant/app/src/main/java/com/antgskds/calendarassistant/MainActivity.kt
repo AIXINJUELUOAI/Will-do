@@ -100,6 +100,14 @@ private data class PendingEventDialogLaunch(
     val nonce: Long = System.nanoTime()
 )
 
+private data class ActivityAppearanceConfig(
+    val uiSize: Int,
+    val themeMode: Int,
+    val themeColorScheme: String,
+    val customThemeColorHex: String,
+    val uiStyle: String
+)
+
 class MainActivity : ComponentActivity() {
 
     // 取件码时间戳
@@ -206,22 +214,18 @@ class MainActivity : ComponentActivity() {
             val localModelResiduePrompt by app.localModelResidueCenter.pendingPrompt.collectAsState()
             val uiStyle = UiStyle.fromName(settings.uiStyle)
 
-            LaunchedEffect(settings.uiSize) {
-                if (currentUiSize != settings.uiSize) {
-                    currentUiSize = settings.uiSize
-                    recreate()
-                }
-            }
-
-            LaunchedEffect(settings.themeMode, settings.themeColorScheme, settings.customThemeColorHex, settings.uiStyle) {
-                if (
-                    currentThemeMode != settings.themeMode ||
-                    currentThemeColorScheme != settings.themeColorScheme ||
-                    currentUiStyle != settings.uiStyle
-                ) {
-                    currentThemeMode = settings.themeMode
-                    currentThemeColorScheme = settings.themeColorScheme
-                    currentUiStyle = settings.uiStyle
+            val appearanceConfig = ActivityAppearanceConfig(
+                uiSize = settings.uiSize,
+                themeMode = settings.themeMode,
+                themeColorScheme = settings.themeColorScheme,
+                customThemeColorHex = settings.customThemeColorHex,
+                uiStyle = settings.uiStyle
+            )
+            var appliedAppearanceConfig by remember { mutableStateOf<ActivityAppearanceConfig?>(null) }
+            LaunchedEffect(appearanceConfig) {
+                val previous = appliedAppearanceConfig
+                appliedAppearanceConfig = appearanceConfig
+                if (previous != null && previous != appearanceConfig) {
                     recreate()
                 }
             }
@@ -788,10 +792,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_QUICK_MEMO_ID = "open_quick_memo_id"
         const val EXTRA_OPEN_EVENT_ID = "open_event_id"
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 2401
-        private var currentUiSize: Int = -1
-        private var currentThemeMode: Int = -1
-        private var currentThemeColorScheme: String = ""
-        private var currentUiStyle: String = ""
     }
 }
 

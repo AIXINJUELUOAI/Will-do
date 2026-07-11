@@ -42,7 +42,7 @@ android {
         minSdk = 33
         targetSdk = 36
         versionCode = 87
-        versionName = "2.2"
+        versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_MODEL_EDITION", "false")
