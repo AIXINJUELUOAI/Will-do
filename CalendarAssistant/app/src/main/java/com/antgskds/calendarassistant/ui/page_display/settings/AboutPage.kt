@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.ui.contract.AboutUiAction
+import com.antgskds.calendarassistant.ui.contract.AboutUiState
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
@@ -44,14 +46,31 @@ fun AboutPage(
 
     // 获取捐赠状态，如果 settingsViewModel 为 null 则默认为 false
     val settings = settingsViewModel?.settings?.collectAsState()?.value
-    val haptics = rememberAppHaptics(settings?.hapticFeedbackEnabled ?: true)
-    val hasDonated = settings?.hasDonated ?: false
-    val developerUnlocked = settings?.developerOptionsUnlocked == true
+    val state = AboutUiState(
+        versionName = BuildConfig.VERSION_NAME,
+        hasDonated = settings?.hasDonated ?: false,
+        developerOptionsUnlocked = settings?.developerOptionsUnlocked == true,
+        hapticFeedbackEnabled = settings?.hapticFeedbackEnabled ?: true,
+        daemonStatus = when (PrivilegeManager.privilegeType) {
+            PrivilegeManager.PrivilegeType.SHIZUKU -> "Daemon: Shizuku Active"
+            PrivilegeManager.PrivilegeType.ROOT -> "Daemon: Root Active"
+            PrivilegeManager.PrivilegeType.NONE -> "Daemon: None"
+        }
+    )
+    val haptics = rememberAppHaptics(state.hapticFeedbackEnabled)
 
     // --- 链接配置 ---
     // 您的 GitHub 仓库
     val githubUrl = "https://github.com/AIXINJUELUOAI/Will-do"
     val blogUrl = "https://aixinjueluoonline.top/"
+    val onAction: (AboutUiAction) -> Unit = { action ->
+        when (action) {
+            AboutUiAction.OpenGithub -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl)))
+            AboutUiAction.OpenBlog -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(blogUrl)))
+            AboutUiAction.OpenDonate -> onNavigateToDonate()
+            AboutUiAction.UnlockDeveloperOptions -> settingsViewModel?.unlockDeveloperOptions()
+        }
+    }
 
     // --- 样式定义 ---
     val cardTitleStyle = MaterialTheme.typography.headlineMedium
@@ -81,7 +100,7 @@ fun AboutPage(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.clickable {
                 haptics.click()
-                if (developerUnlocked) {
+                if (state.developerOptionsUnlocked) {
                     Toast.makeText(context, "开发者选项已解锁", Toast.LENGTH_SHORT).show()
                     return@clickable
                 }
@@ -89,7 +108,7 @@ fun AboutPage(
                 val remaining = DEVELOPER_UNLOCK_TAP_COUNT - appTitleTapCount
                 if (remaining <= 0) {
                     appTitleTapCount = 0
-                    settingsViewModel?.unlockDeveloperOptions()
+                    onAction(AboutUiAction.UnlockDeveloperOptions)
                     Toast.makeText(context, "开发者选项已解锁，请前往实验室查看", Toast.LENGTH_SHORT).show()
                 } else if (appTitleTapCount >= 2) {
                     Toast.makeText(context, "再点击 $remaining 次解锁开发者选项", Toast.LENGTH_SHORT).show()
@@ -97,7 +116,7 @@ fun AboutPage(
             }
         )
         Text(
-            text = "Version ${BuildConfig.VERSION_NAME}",
+            text = "Version ${state.versionName}",
             style = metaInfoStyle
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -139,7 +158,7 @@ fun AboutPage(
         Spacer(modifier = Modifier.height(12.dp))
 
         // 仅在用户已捐赠时显示
-        if (hasDonated) {
+        if (state.hasDonated) {
             // “感谢您的捐赠” 字体样式已和”特别致谢”统一
             Text(
                 text = "感谢您的捐赠",
@@ -161,8 +180,7 @@ fun AboutPage(
             IconButton(
                 onClick = {
                     haptics.click()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
-                    context.startActivity(intent)
+                    onAction(AboutUiAction.OpenGithub)
                 },
                 modifier = Modifier.size(56.dp)
             ) {
@@ -178,8 +196,7 @@ fun AboutPage(
             IconButton(
                 onClick = {
                     haptics.click()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(blogUrl))
-                    context.startActivity(intent)
+                    onAction(AboutUiAction.OpenBlog)
                 },
                 modifier = Modifier.size(56.dp)
             ) {
@@ -193,7 +210,7 @@ fun AboutPage(
 
             // 3. 捐赠按钮
             IconButton(
-                onClick = { haptics.click(); onNavigateToDonate() },
+                onClick = { haptics.click(); onAction(AboutUiAction.OpenDonate) },
                 modifier = Modifier.size(56.dp)
             ) {
                 Icon(
@@ -217,13 +234,8 @@ fun AboutPage(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        val daemonStatus = when (PrivilegeManager.privilegeType) {
-            PrivilegeManager.PrivilegeType.SHIZUKU -> "Daemon: Shizuku Active"
-            PrivilegeManager.PrivilegeType.ROOT -> "Daemon: Root Active"
-            PrivilegeManager.PrivilegeType.NONE -> "Daemon: None"
-        }
         Text(
-            text = daemonStatus,
+            text = state.daemonStatus,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
