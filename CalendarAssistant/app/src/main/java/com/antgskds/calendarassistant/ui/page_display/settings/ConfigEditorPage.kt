@@ -37,6 +37,9 @@ import com.antgskds.calendarassistant.shared.management.catalog.ConfigDomain
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigItem
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
+import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiAction
+import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiState
+import com.antgskds.calendarassistant.ui.flavor.ConfigEditorScreen
 
 /**
  * 配置编辑页 —— 完全由 [ConfigCatalog] 驱动。
@@ -50,12 +53,34 @@ fun ConfigEditorPage(uiSize: Int = 2) {
     val context = LocalContext.current
     val app = context.applicationContext as? App
     if (app == null) {
+        ConfigEditorScreen(state = ConfigEditorUiState(null), uiSize = uiSize, onAction = {})
+        return
+    }
+    val settings by app.settingsQueryApi.settings.collectAsState()
+    ConfigEditorScreen(
+        state = ConfigEditorUiState(settings),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is ConfigEditorUiAction.UpdateSettings -> app.settingsOperationApi.updateSettings(action.settings)
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialConfigEditorScreen(
+    state: ConfigEditorUiState,
+    uiSize: Int = 2,
+    onAction: (ConfigEditorUiAction) -> Unit
+) {
+    val settings = state.settings
+    if (settings == null) {
         Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text(text = "应用上下文不可用", color = MaterialTheme.colorScheme.error)
         }
         return
     }
-    val settings by app.settingsQueryApi.settings.collectAsState()
     var selectedDomain by remember { mutableStateOf<ConfigDomain?>(null) }
 
     val domain = selectedDomain
@@ -116,7 +141,7 @@ fun ConfigEditorPage(uiSize: Int = 2) {
                 ConfigItemControl(
                     item = item,
                     currentSettings = settings,
-                    onPick = { newSettings -> app.settingsOperationApi.updateSettings(newSettings) }
+                    onPick = { newSettings -> onAction(ConfigEditorUiAction.UpdateSettings(newSettings)) }
                 )
             }
         }
