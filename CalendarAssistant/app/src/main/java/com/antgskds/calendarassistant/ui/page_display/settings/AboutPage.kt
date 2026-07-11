@@ -31,6 +31,7 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.ui.contract.AboutUiAction
 import com.antgskds.calendarassistant.ui.contract.AboutUiState
+import com.antgskds.calendarassistant.ui.flavor.AboutFlavorHost
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 
@@ -82,6 +83,7 @@ fun AboutPage(
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     )
 
+    AboutFlavorHost {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -245,6 +247,7 @@ fun AboutPage(
 
         // 导航栏避让
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
     }
 }
 
