@@ -62,6 +62,9 @@ import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.TimeTableEditorUiAction
+import com.antgskds.calendarassistant.ui.contract.TimeTableEditorUiState
+import com.antgskds.calendarassistant.ui.flavor.TimeTableEditorContent
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -74,8 +77,32 @@ fun TimeTableEditorScreen(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
+    val resolvedConfig = remember(settings.timeTableConfigJson, settings.timeTableJson) {
+        TimeTableLayoutUtils.resolveLayoutConfig(settings.timeTableConfigJson, settings.timeTableJson)
+    }
+    LaunchedEffect(settings.timeTableConfigJson, settings.timeTableJson) {
+        if (settings.timeTableConfigJson.isBlank() && settings.timeTableJson.isNotBlank()) {
+            viewModel.updateTimeTableConfig(TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig))
+        }
+    }
+    TimeTableEditorContent(
+        state = TimeTableEditorUiState(resolvedConfig, settings.timeTableConfigJson.isNotBlank(), settings.hapticFeedbackEnabled),
+        uiSize = uiSize,
+        onAction = { action -> when (action) {
+            is TimeTableEditorUiAction.Save -> viewModel.updateTimeTable(action.nodesJson, action.configJson)
+        } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MaterialTimeTableEditorScreen(
+    state: TimeTableEditorUiState,
+    uiSize: Int = 2,
+    onAction: (TimeTableEditorUiAction) -> Unit
+) {
     val scope = rememberCoroutineScope()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val haptics = rememberAppHaptics(state.hapticEnabled)
     val jsonParser = remember { Json { ignoreUnknownKeys = true; prettyPrint = true } }
     val snackbarHostState = remember { SnackbarHostState() }
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
@@ -88,9 +115,7 @@ fun TimeTableEditorScreen(
         }
     }
 
-    val resolvedConfig = remember(settings.timeTableConfigJson, settings.timeTableJson) {
-        TimeTableLayoutUtils.resolveLayoutConfig(settings.timeTableConfigJson, settings.timeTableJson)
-    }
+    val resolvedConfig = state.resolvedConfig
 
     val fabSize = 72.dp
     val fabIconSize = 34.dp
@@ -127,12 +152,6 @@ fun TimeTableEditorScreen(
     var showDurationPickerForNode by remember { mutableStateOf<Int?>(null) }
     var showTimePickerForAnchor by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(settings.timeTableConfigJson, settings.timeTableJson) {
-        if (settings.timeTableConfigJson.isBlank() && settings.timeTableJson.isNotBlank()) {
-            viewModel.updateTimeTableConfig(TimeTableLayoutUtils.encodeLayoutConfig(resolvedConfig))
-        }
-    }
-
     val layoutConfig = remember(
         morningCount,
         afternoonCount,
@@ -168,8 +187,8 @@ fun TimeTableEditorScreen(
     val afternoonStartNode = layoutConfig.afternoonStartNode
     val nightStartNode = layoutConfig.nightStartNode
 
-    LaunchedEffect(generatedNodes, afternoonCount, nightCount, settings.timeTableConfigJson) {
-        if (settings.timeTableConfigJson.isNotBlank()) return@LaunchedEffect
+    LaunchedEffect(generatedNodes, afternoonCount, nightCount, state.hasStoredLayoutConfig) {
+        if (state.hasStoredLayoutConfig) return@LaunchedEffect
 
         if (afternoonCount > 0 && afternoonStartNode in 1..generatedNodes.size) {
             val actualAfternoonStart = parseTimeOrFallback(
@@ -194,7 +213,7 @@ fun TimeTableEditorScreen(
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides state.hapticEnabled) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -365,7 +384,7 @@ fun TimeTableEditorScreen(
                         haptics.confirm()
                         val jsonStr = jsonParser.encodeToString(generatedNodes)
                         val configJson = TimeTableLayoutUtils.encodeLayoutConfig(layoutConfig)
-                        viewModel.updateTimeTable(jsonStr, configJson)
+                        onAction(TimeTableEditorUiAction.Save(jsonStr, configJson))
                         showToast("作息时间已保存", ToastType.SUCCESS)
                     }
                 },
