@@ -23,6 +23,9 @@ import com.antgskds.calendarassistant.ui.components.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.contract.ScheduleSettingsUiAction
+import com.antgskds.calendarassistant.ui.contract.ScheduleSettingsUiState
+import com.antgskds.calendarassistant.ui.flavor.ScheduleSettingsScreen
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -34,21 +37,48 @@ fun ScheduleSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val semesterStartDate = remember(settings.semesterStartDate) {
+        runCatching { settings.semesterStartDate.takeIf(String::isNotBlank)?.let(LocalDate::parse) }.getOrNull()
+    }
+    val currentWeek = if (semesterStartDate != null) {
+        (ChronoUnit.DAYS.between(semesterStartDate, LocalDate.now()) / 7).toInt() + 1
+    } else {
+        1
+    }
+    ScheduleSettingsScreen(
+        state = ScheduleSettingsUiState(
+            semesterStartDate = semesterStartDate,
+            currentWeek = currentWeek,
+            totalWeeks = settings.totalWeeks,
+            hapticEnabled = settings.hapticFeedbackEnabled
+        ),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is ScheduleSettingsUiAction.UpdateSemesterStartDate -> viewModel.updateSemesterStartDate(action.date)
+                is ScheduleSettingsUiAction.UpdateTotalWeeks -> viewModel.updateTotalWeeks(action.weeks)
+                ScheduleSettingsUiAction.OpenCourseManager -> onNavigateTo(SettingsDestination.CourseManage)
+                ScheduleSettingsUiAction.OpenTimeTableManager -> onNavigateTo(SettingsDestination.TimeTableManage)
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialScheduleSettingsScreen(
+    state: ScheduleSettingsUiState,
+    uiSize: Int = 2,
+    onAction: (ScheduleSettingsUiAction) -> Unit
+) {
+    val haptics = rememberAppHaptics(state.hapticEnabled)
     val scrollState = rememberScrollState()
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showWeekPicker by remember { mutableStateOf(false) }
     var showTotalWeeksPicker by remember { mutableStateOf(false) }
 
-    val semesterStartDate = try {
-        if(settings.semesterStartDate.isNotBlank()) LocalDate.parse(settings.semesterStartDate) else null
-    } catch(e: Exception) { null }
-
-    val currentWeek = if (semesterStartDate != null) {
-        val daysDiff = ChronoUnit.DAYS.between(semesterStartDate, LocalDate.now())
-        (daysDiff / 7).toInt() + 1
-    } else { 1 }
+    val semesterStartDate = state.semesterStartDate
+    val currentWeek = state.currentWeek
 
     // --- 字体样式优化 ---
     // 板块标题：Primary + ExtraBold
@@ -91,7 +121,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "第一周第一天",
                     value = semesterStartDate?.toString() ?: "未设置",
                     onClick = { showDatePicker = true },
-                    hapticEnabled = settings.hapticFeedbackEnabled,
+                    hapticEnabled = state.hapticEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -105,7 +135,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "当前周次",
                     value = "第 $currentWeek 周",
                     onClick = { showWeekPicker = true },
-                    hapticEnabled = settings.hapticFeedbackEnabled,
+                    hapticEnabled = state.hapticEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -117,9 +147,9 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                 )
                 SettingItem(
                     title = "学期总周数",
-                    value = "${settings.totalWeeks} 周",
+                    value = "${state.totalWeeks} 周",
                     onClick = { showTotalWeeksPicker = true },
-                    hapticEnabled = settings.hapticFeedbackEnabled,
+                    hapticEnabled = state.hapticEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -140,8 +170,8 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "管理所有课程",
                     value = "添加、修改或删除课程",
                     icon = Icons.Default.ChevronRight,
-                    onClick = { onNavigateTo(SettingsDestination.CourseManage) },
-                    hapticEnabled = settings.hapticFeedbackEnabled,
+                    onClick = { onAction(ScheduleSettingsUiAction.OpenCourseManager) },
+                    hapticEnabled = state.hapticEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -155,8 +185,8 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     title = "作息时间设置",
                     value = "设置每日节次时间段",
                     icon = Icons.Default.ChevronRight,
-                    onClick = { onNavigateTo(SettingsDestination.TimeTableManage) },
-                    hapticEnabled = settings.hapticFeedbackEnabled,
+                    onClick = { onAction(ScheduleSettingsUiAction.OpenTimeTableManager) },
+                    hapticEnabled = state.hapticEnabled,
                     cardTitleStyle = cardTitleStyle,
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
@@ -174,7 +204,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             title = "学期开始日期",
             onConfirm = {
                 haptics.confirm()
-                viewModel.updateSemesterStartDate(it.toString())
+                onAction(ScheduleSettingsUiAction.UpdateSemesterStartDate(it.toString()))
                 showDatePicker = false
             }
         )
@@ -195,7 +225,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     val today = LocalDate.now()
                     val daysToSubtract = (selectedWeek - 1) * 7L
                     val newStartDate = today.minusDays(daysToSubtract)
-                    viewModel.updateSemesterStartDate(newStartDate.toString())
+                    onAction(ScheduleSettingsUiAction.UpdateSemesterStartDate(newStartDate.toString()))
                     showWeekPicker = false
                 }) { Text("确定") }
             },
@@ -205,17 +235,17 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
 
     if (showTotalWeeksPicker) {
         val totalOptions = (10..30).toList()
-        var selectedTotal by remember { mutableIntStateOf(settings.totalWeeks) }
+        var selectedTotal by remember { mutableIntStateOf(state.totalWeeks) }
         AlertDialog(
             onDismissRequest = { showTotalWeeksPicker = false },
             title = { CenteredDialogTitle("设置学期总周数") },
             text = {
-                WheelPicker(items = totalOptions.map { "$it 周" }, initialIndex = totalOptions.indexOf(settings.totalWeeks).coerceAtLeast(0), onSelectionChanged = { selectedTotal = totalOptions[it] })
+                WheelPicker(items = totalOptions.map { "$it 周" }, initialIndex = totalOptions.indexOf(state.totalWeeks).coerceAtLeast(0), onSelectionChanged = { selectedTotal = totalOptions[it] })
             },
             confirmButton = {
                 TextButton(onClick = {
                     haptics.confirm()
-                    viewModel.updateTotalWeeks(selectedTotal)
+                    onAction(ScheduleSettingsUiAction.UpdateTotalWeeks(selectedTotal))
                     showTotalWeeksPicker = false
                 }) { Text("确定") }
             },
