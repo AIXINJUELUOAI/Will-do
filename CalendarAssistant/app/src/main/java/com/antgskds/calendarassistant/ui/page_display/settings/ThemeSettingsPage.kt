@@ -51,6 +51,9 @@ import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
 import com.antgskds.calendarassistant.ui.theme.parseThemeHexColor
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.ThemeSettingsUiAction
+import com.antgskds.calendarassistant.ui.contract.ThemeSettingsUiState
+import com.antgskds.calendarassistant.ui.flavor.ThemeSettingsScreen
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -60,14 +63,8 @@ fun ThemeSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
-    val scrollState = rememberScrollState()
     val context = LocalContext.current
-    val isCustomTheme = settings.themeColorScheme == ThemeColorScheme.CUSTOM.name
-    val selectedUiStyle = UiStyle.fromName(settings.uiStyle)
-    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
-    var isHexFocused by remember { mutableStateOf(false) }
     var isBackgroundImporting by remember { mutableStateOf(false) }
-    var showBackgroundActions by remember { mutableStateOf(false) }
     val backgroundImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) {
             isBackgroundImporting = false
@@ -78,6 +75,39 @@ fun ThemeSettingsPage(
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
+    ThemeSettingsScreen(
+        state = ThemeSettingsUiState(settings, isBackgroundImporting),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is ThemeSettingsUiAction.UpdateThemeMode -> viewModel.updateThemeMode(action.mode)
+                is ThemeSettingsUiAction.UpdateUiStyle -> viewModel.updateUiStyle(action.style)
+                is ThemeSettingsUiAction.UpdateColorScheme -> viewModel.updateThemeColorScheme(action.scheme)
+                is ThemeSettingsUiAction.UpdateCustomColor -> viewModel.updateCustomThemeColorHex(action.hex)
+                is ThemeSettingsUiAction.UpdateWallpaperBlur -> viewModel.updateAppBackgroundWallpaperBlurEnabled(action.enabled)
+                is ThemeSettingsUiAction.UpdateImageColor -> viewModel.updateAppBackgroundImageColorEnabled(action.enabled) { _, message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+                ThemeSettingsUiAction.ClearBackground -> { viewModel.clearAppBackground(); Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show() }
+                ThemeSettingsUiAction.ImportBackground -> { isBackgroundImporting = true; backgroundImagePicker.launch("image/*") }
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialThemeSettingsScreen(
+    state: ThemeSettingsUiState,
+    uiSize: Int = 2,
+    onAction: (ThemeSettingsUiAction) -> Unit
+) {
+    val settings = state.settings
+    val isBackgroundImporting = state.isBackgroundImporting
+    val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val isCustomTheme = settings.themeColorScheme == ThemeColorScheme.CUSTOM.name
+    val selectedUiStyle = UiStyle.fromName(settings.uiStyle)
+    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
+    var isHexFocused by remember { mutableStateOf(false) }
+    var showBackgroundActions by remember { mutableStateOf(false) }
     val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val bottomPadding = when {
@@ -126,7 +156,7 @@ fun ThemeSettingsPage(
                     title = "主题模式",
                     subtitle = "选择主题模式",
                     value = settings.themeMode,
-                    onValueChange = { viewModel.updateThemeMode(it) },
+                    onValueChange = { onAction(ThemeSettingsUiAction.UpdateThemeMode(it)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardValueStyle
@@ -137,7 +167,7 @@ fun ThemeSettingsPage(
                 )
                 UiStyleSettingItem(
                     selectedStyle = selectedUiStyle,
-                    onStyleSelected = { viewModel.updateUiStyle(it.name) },
+                    onStyleSelected = { onAction(ThemeSettingsUiAction.UpdateUiStyle(it.name)) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
@@ -155,9 +185,7 @@ fun ThemeSettingsPage(
         AppBackgroundImageColorSwitchCard(
             settings = settings,
             onImageColorEnabledChange = { enabled ->
-                viewModel.updateAppBackgroundImageColorEnabled(enabled) { _, message ->
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                }
+                onAction(ThemeSettingsUiAction.UpdateImageColor(enabled))
             },
             glassMode = hasAppBackground,
             cardTitleStyle = cardTitleStyle,
@@ -165,7 +193,7 @@ fun ThemeSettingsPage(
         )
         AppBackgroundWallpaperBlurSwitchCard(
             settings = settings,
-            onWallpaperBlurEnabledChange = viewModel::updateAppBackgroundWallpaperBlurEnabled,
+            onWallpaperBlurEnabledChange = { onAction(ThemeSettingsUiAction.UpdateWallpaperBlur(it)) },
             glassMode = hasAppBackground,
             cardTitleStyle = cardTitleStyle,
             cardSubtitleStyle = cardSubtitleStyle
@@ -192,10 +220,10 @@ fun ThemeSettingsPage(
                 ThemeColorModeSwitch(
                     customSelected = isCustomTheme,
                     onPresetClick = {
-                        if (isCustomTheme) viewModel.updateThemeColorScheme(ThemeColorScheme.DEFAULT.name)
+                        if (isCustomTheme) onAction(ThemeSettingsUiAction.UpdateColorScheme(ThemeColorScheme.DEFAULT.name))
                     },
                     onCustomClick = {
-                        if (!isCustomTheme) viewModel.updateThemeColorScheme(ThemeColorScheme.CUSTOM.name)
+                        if (!isCustomTheme) onAction(ThemeSettingsUiAction.UpdateColorScheme(ThemeColorScheme.CUSTOM.name))
                     }
                 )
 
@@ -216,7 +244,7 @@ fun ThemeSettingsPage(
                                 scheme = scheme,
                                 displayColor = getDisplayColor(scheme, context),
                                 isSelected = settings.themeColorScheme == scheme.name,
-                                onClick = { viewModel.updateThemeColorScheme(scheme.name) }
+                                onClick = { onAction(ThemeSettingsUiAction.UpdateColorScheme(scheme.name)) }
                             )
                         }
                     }
@@ -229,7 +257,7 @@ fun ThemeSettingsPage(
                 ) {
                     CustomThemeColorEditor(
                         hex = settings.customThemeColorHex,
-                        onColorChange = viewModel::updateCustomThemeColorHex,
+                        onColorChange = { onAction(ThemeSettingsUiAction.UpdateCustomColor(it)) },
                         onHexFocusChange = { isHexFocused = it },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
@@ -256,8 +284,7 @@ fun ThemeSettingsPage(
                 TextButton(
                     onClick = {
                         showBackgroundActions = false
-                        viewModel.clearAppBackground()
-                        Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show()
+                        onAction(ThemeSettingsUiAction.ClearBackground)
                     },
                     enabled = hasAppBackground && !isBackgroundImporting,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
@@ -272,8 +299,7 @@ fun ThemeSettingsPage(
                 Button(
                     onClick = {
                         showBackgroundActions = false
-                        isBackgroundImporting = true
-                        backgroundImagePicker.launch("image/*")
+                        onAction(ThemeSettingsUiAction.ImportBackground)
                     },
                     enabled = !isBackgroundImporting,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
