@@ -36,6 +36,8 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.BackupUiController
+import com.antgskds.calendarassistant.ui.flavor.BackupSettingsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,10 +48,15 @@ import java.util.Locale
 
 @Composable
 fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewModel, uiSize: Int = 2) {
+    BackupSettingsScreen(remember(viewModel, mainViewModel) { BackupUiController(viewModel, mainViewModel) }, uiSize)
+}
+
+@Composable
+fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val currentSettings by viewModel.settings.collectAsState()
+    val currentSettings by controller.settings.collectAsState()
     val haptics = rememberAppHaptics(currentSettings.hapticFeedbackEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -67,16 +74,16 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
     var importOptions by remember { mutableStateOf(AppBackupOptions(includeEvents = true, includeSettings = true, includeAttachments = true, includePrompts = true)) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingImportIsZip by remember { mutableStateOf(false) }
-    val promptLocalVersion by mainViewModel.promptLocalVersion.collectAsState()
-    val promptSource by mainViewModel.promptSource.collectAsState()
-    val promptCheckInProgress by mainViewModel.promptCheckInProgress.collectAsState()
+    val promptLocalVersion by controller.promptLocalVersion.collectAsState()
+    val promptSource by controller.promptSource.collectAsState()
+    val promptCheckInProgress by controller.promptCheckInProgress.collectAsState()
     var attachmentCount by remember { mutableIntStateOf(0) }
     var attachmentSizeText by remember { mutableStateOf(EventAttachmentManager.formatSize(0L)) }
 
     LaunchedEffect(showBackupExportSheet, showBackupImportSheet) {
         withContext(Dispatchers.IO) {
-            val count = viewModel.getAttachmentCount()
-            val size = EventAttachmentManager.formatSize(viewModel.estimateAttachmentBytes())
+            val count = controller.getAttachmentCount()
+            val size = EventAttachmentManager.formatSize(controller.estimateAttachmentBytes())
             withContext(Dispatchers.Main) {
                 attachmentCount = count
                 attachmentSizeText = size
@@ -118,8 +125,8 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
     val contentBodyStyle = MaterialTheme.typography.bodyMedium
 
     // 监听 Prompt 检查反馈
-    LaunchedEffect(mainViewModel) {
-        mainViewModel.promptCheckFeedback.collect { feedback ->
+    LaunchedEffect(controller) {
+        controller.promptCheckFeedback.collect { feedback ->
             showToast(feedback.message, feedback.type)
         }
     }
@@ -142,7 +149,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    val jsonData = viewModel.exportCoursesData()
+                    val jsonData = controller.exportCoursesData()
                     context.contentResolver.openOutputStream(uri)?.use { output -> output.write(jsonData.toByteArray()) }
                     withContext(Dispatchers.Main) { showToast("课程数据导出成功", ToastType.SUCCESS) }
                 } catch (e: Exception) {
@@ -159,15 +166,15 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                 try {
                     val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     if (content != null) {
-                        val externalResult = viewModel.parseExternalCourseImport(content)
+                        val externalResult = controller.parseExternalCourseImport(content)
                         if (externalResult.isSuccess) {
                             withContext(Dispatchers.Main) {
                                 prepareExternalImport(externalResult.getOrThrow())
                             }
                         } else {
-                            val result = viewModel.importCoursesData(content)
+                            val result = controller.importCoursesData(content)
                             withContext(Dispatchers.Main) {
-                                if (result.isSuccess) showToast("课程数据导入成功，共 ${viewModel.getCoursesCount()} 门课程", ToastType.SUCCESS)
+                                if (result.isSuccess) showToast("课程数据导入成功，共 ${controller.getCoursesCount()} 门课程", ToastType.SUCCESS)
                                 else showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
                             }
                         }
@@ -182,7 +189,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    val jsonData = viewModel.exportBackupData(exportOptions)
+                    val jsonData = controller.exportBackupData(exportOptions)
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(jsonData.toByteArray())
                     } ?: throw IOException("无法打开导出文件")
@@ -197,7 +204,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    viewModel.exportBackupZip(uri, exportOptions)
+                    controller.exportBackupZip(uri, exportOptions)
                     withContext(Dispatchers.Main) { showToast("数据备份导出成功", ToastType.SUCCESS) }
                 } catch (e: Exception) { withContext(Dispatchers.Main) { showToast("导出失败: ${e.message}", ToastType.ERROR) } }
             }
@@ -252,7 +259,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                         withContext(Dispatchers.Main) {
                             if (success) {
                                 showToast("提示词导入成功", ToastType.SUCCESS)
-                                mainViewModel.refreshPromptInfo()
+                                controller.refreshPromptInfo()
                             } else {
                                 showToast("导入失败：格式无效", ToastType.ERROR)
                             }
@@ -324,7 +331,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                 swapButtons = true, // 导出在左，导入在右
                 extraButton = {
                     OutlinedButton(
-                        onClick = { haptics.confirm(); mainViewModel.checkPromptUpdatesManually() },
+                        onClick = { haptics.confirm(); controller.checkPromptUpdatesManually() },
                         enabled = !promptCheckInProgress,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -371,7 +378,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                 shareImportLoading = true
                 val clipboardText = readClipboardText()
                 scope.launch {
-                    val result = viewModel.fetchWakeUpShareImport(clipboardText)
+                    val result = controller.fetchWakeUpShareImport(clipboardText)
                     shareImportLoading = false
                     if (result.isSuccess) {
                         showImportMethodDialog = false
@@ -408,7 +415,7 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                 },
                 onConfirm = {
                     haptics.confirm()
-                    viewModel.importParsedCourseImport(parsedImport, importMode, importSettings && parsedImport.canImportSettings) { result ->
+                    controller.importParsedCourseImport(parsedImport, importMode, importSettings && parsedImport.canImportSettings) { result ->
                         if (result.isSuccess) showToast("成功导入 ${result.getOrNull()} 门课程", ToastType.SUCCESS)
                         else showToast("导入失败: ${result.exceptionOrNull()?.message}", ToastType.ERROR)
                     }
@@ -462,10 +469,10 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
                     showBackupImportSheet = false
                     scope.launch(Dispatchers.IO) {
                         val result = if (pendingImportIsZip) {
-                            viewModel.importBackupZip(uri, importOptions)
+                            controller.importBackupZip(uri, importOptions)
                         } else {
                             val jsonString = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                            viewModel.importBackupJson(jsonString, importOptions)
+                            controller.importBackupJson(jsonString, importOptions)
                         }
                         withContext(Dispatchers.Main) {
                             if (result.isSuccess) showToast(formatBackupImportResult(result.getOrThrow()), ToastType.SUCCESS)
