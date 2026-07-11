@@ -36,6 +36,9 @@ import com.antgskds.calendarassistant.core.rule.RegexScheduleRecognizer
 import com.antgskds.calendarassistant.core.rule.RegexScheduleRule
 import com.antgskds.calendarassistant.core.rule.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiAction
+import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiState
+import com.antgskds.calendarassistant.ui.flavor.RegexRuleEditorScreen
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -50,34 +53,52 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
     }
     val settings by app.settingsQueryApi.settings.collectAsState()
     var rules by remember { mutableStateOf(RegexScheduleRulePrefs.loadRules(context)) }
-    var testInput by remember { mutableStateOf("明天 9点 项目会") }
     var testMessage by remember { mutableStateOf("输入一句话后点击测试，结果不会写入日程。") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
 
-    fun save(nextRules: List<RegexScheduleRule>) {
-        rules = nextRules
-        RegexScheduleRulePrefs.saveRules(context, nextRules)
-    }
-
-    fun runTest() {
-        runCatching {
-            RegexScheduleRecognizer.analyze(
-                text = testInput,
-                rules = rules,
-                defaultDurationMinutes = settings.defaultEventDurationMinutes,
-            ).firstOrNull()
-        }.onSuccess { result ->
-            testMessage = if (result == null) {
-                "未匹配到明确日程"
-            } else {
-                val draft = result.draft
-                val time = Instant.ofEpochSecond(draft.startTS).atZone(ZoneId.systemDefault()).format(timeFormatter)
-                "命中：${result.rule.name}\n${draft.title}\n$time"
+    RegexRuleEditorScreen(
+        state = RegexRuleEditorUiState(rules = rules, testMessage = testMessage),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is RegexRuleEditorUiAction.UpdateRule -> {
+                    val nextRules = rules.toMutableList().also { it[action.index] = action.rule }
+                    rules = nextRules
+                    RegexScheduleRulePrefs.saveRules(context, nextRules)
+                }
+                RegexRuleEditorUiAction.ResetRules -> {
+                    rules = RegexScheduleRulePrefs.reset(context)
+                    testMessage = "已恢复默认规则"
+                }
+                is RegexRuleEditorUiAction.RunTest -> runCatching {
+                    RegexScheduleRecognizer.analyze(
+                        text = action.input,
+                        rules = rules,
+                        defaultDurationMinutes = settings.defaultEventDurationMinutes
+                    ).firstOrNull()
+                }.onSuccess { result ->
+                    testMessage = if (result == null) {
+                        "未匹配到明确日程"
+                    } else {
+                        val draft = result.draft
+                        val time = Instant.ofEpochSecond(draft.startTS).atZone(ZoneId.systemDefault()).format(timeFormatter)
+                        "命中：${result.rule.name}\n${draft.title}\n$time"
+                    }
+                }.onFailure { error ->
+                    testMessage = "测试失败：${error.message ?: error::class.java.simpleName}"
+                }
             }
-        }.onFailure { error ->
-            testMessage = "测试失败：${error.message ?: error::class.java.simpleName}"
         }
-    }
+    )
+}
+
+@Composable
+fun MaterialRegexRuleEditorScreen(
+    state: RegexRuleEditorUiState,
+    uiSize: Int = 2,
+    onAction: (RegexRuleEditorUiAction) -> Unit
+) {
+    var testInput by remember { mutableStateOf("明天 9点 项目会") }
 
     Column(
         modifier = Modifier
@@ -115,7 +136,7 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
                     minLines = 2
                 )
                 Text(
-                    text = testMessage,
+                    text = state.testMessage,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -125,24 +146,22 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = {
-                        val defaults = RegexScheduleRulePrefs.reset(context)
-                        rules = defaults
-                        testMessage = "已恢复默认规则"
+                        onAction(RegexRuleEditorUiAction.ResetRules)
                     }) {
                         Text("恢复默认")
                     }
-                    Button(onClick = { runTest() }) {
+                    Button(onClick = { onAction(RegexRuleEditorUiAction.RunTest(testInput)) }) {
                         Text("测试")
                     }
                 }
             }
         }
 
-        rules.forEachIndexed { index, rule ->
+        state.rules.forEachIndexed { index, rule ->
             RegexRuleCard(
                 rule = rule,
                 onRuleChange = { updated ->
-                    save(rules.toMutableList().also { it[index] = updated })
+                    onAction(RegexRuleEditorUiAction.UpdateRule(index, updated))
                 }
             )
         }
