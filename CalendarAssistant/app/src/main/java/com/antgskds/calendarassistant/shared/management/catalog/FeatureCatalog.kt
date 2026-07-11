@@ -69,6 +69,7 @@ object FeatureCatalog {
         FeatureEntry("便签笔记", Chain.SCHEDULE, "core/center/NoteCenter", "便签编辑与存储"),
 
         // —— 横切支撑 ——
+        FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),
         FeatureEntry("天气", Chain.SUPPORT, "core/weather", "天气预警/风险，位置选择"),
         FeatureEntry("背景自定义", Chain.SUPPORT, "feature/appearance/domain/AppBackgroundImageStore", "用户图片背景导入、私有存储与背景取色"),
         FeatureEntry("数据备份", Chain.SUPPORT, "core/center/BackupCenter", "导入导出备份"),
