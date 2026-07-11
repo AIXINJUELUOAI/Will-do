@@ -75,6 +75,7 @@ location/            独立 Android 定位模块，不依赖 app 或天气
 - 页面不直接访问 Room、Repository 或具体平台 Publisher。
 - 导航目标保持共享，导航外观允许由 flavor 实现。
 - 关于页作为首个试点：`AboutUiState/AboutUiAction` 和连接层留在 main，`AboutScreen` 分别由 native/hyperos 源码集提供。
+- 天气详情页已建立 `WeatherDetailUiState/WeatherDetailUiAction`；数据连接留在 main，native/hyperos 源码集分别提供页面入口，当前共同复用 Material 渲染。
 
 ### Phase 2：低风险页面试迁移
 
