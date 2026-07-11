@@ -53,6 +53,9 @@ import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.LaboratoryUiAction
+import com.antgskds.calendarassistant.ui.contract.LaboratoryUiState
+import com.antgskds.calendarassistant.ui.flavor.LaboratoryScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -66,7 +69,6 @@ fun LaboratoryPage(
     onNavigateToDeveloper: () -> Unit = {}
 ) {
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
-    val scrollState = rememberScrollState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var asrModelStatus by remember { mutableStateOf(QuickMemoAsrModelStore.status(context)) }
@@ -115,6 +117,50 @@ fun LaboratoryPage(
         }
     }
 
+    LaboratoryScreen(
+        state = LaboratoryUiState(settings = settings, asrModelStatus = asrModelStatus),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is LaboratoryUiAction.SetVoiceInput -> settingsViewModel?.updatePreference(voiceInputEnabled = action.enabled)
+                is LaboratoryUiAction.SetFloatingLongPress -> settingsViewModel?.updatePreference(floatingVoiceLongPressEnabled = action.enabled)
+                is LaboratoryUiAction.SetRecordingDisplayMode -> settingsViewModel?.updatePreference(quickMemoRecordingDisplayMode = action.mode)
+                is LaboratoryUiAction.SetTextAutoPin -> settingsViewModel?.updatePreference(floatingTextQuickMemoAutoPinEnabled = action.enabled)
+                is LaboratoryUiAction.SetVoiceAutoPin -> settingsViewModel?.updatePreference(voiceQuickMemoAutoPinEnabled = action.enabled)
+                is LaboratoryUiAction.SetForceInstantCodeTime -> settingsViewModel?.updatePreference(forceInstantCodeTimeToNow = action.enabled)
+                is LaboratoryUiAction.SetPredictiveBack -> settingsViewModel?.updatePreference(predictiveBackEnabled = action.enabled)
+                is LaboratoryUiAction.SetClipboardRecognition -> {
+                    settingsViewModel?.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
+                    if (action.enabled) {
+                        PrivilegeManager.refreshPrivilege()
+                        val message = if (PrivilegeManager.hasPrivilege) {
+                            "已启用完整后台识别，识别到取件类内容将自动创建日程"
+                        } else {
+                            "未获取 Shizuku/Root 权限，仅打开软件时识别，并向你确认是否入库"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        ClipboardCodeMonitorService.startIfNeeded(context)
+                    } else {
+                        ClipboardCodeMonitorService.stop(context)
+                    }
+                }
+                LaboratoryUiAction.ImportAsrModel -> asrModelImportLauncher.launch(arrayOf("*/*"))
+                LaboratoryUiAction.OpenDeveloper -> onNavigateToDeveloper()
+            }
+        }
+    )
+}
+
+@Composable
+fun MaterialLaboratoryScreen(
+    state: LaboratoryUiState,
+    uiSize: Int = 2,
+    onAction: (LaboratoryUiAction) -> Unit
+) {
+    val settings = state.settings
+    val asrModelStatus = state.asrModelStatus
+    val scrollState = rememberScrollState()
+
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides (settings?.hapticFeedbackEnabled ?: true)) {
     Column(
         modifier = Modifier
@@ -131,24 +177,24 @@ fun LaboratoryPage(
             )
 
             LaboratoryQuickMemoCard(
-                settings = settings!!,
+                settings = settings,
                 asrModelStatus = asrModelStatus,
                 onVoiceInputEnabledChange = { enabled ->
-                    settingsViewModel?.updatePreference(voiceInputEnabled = enabled)
+                    onAction(LaboratoryUiAction.SetVoiceInput(enabled))
                 },
                 onFloatingLongPressChange = { enabled ->
-                    settingsViewModel?.updatePreference(floatingVoiceLongPressEnabled = enabled)
+                    onAction(LaboratoryUiAction.SetFloatingLongPress(enabled))
                 },
                 onRecordingDisplayModeChange = { mode ->
-                    settingsViewModel?.updatePreference(quickMemoRecordingDisplayMode = mode)
+                    onAction(LaboratoryUiAction.SetRecordingDisplayMode(mode))
                 },
                 onTextAutoPinChange = { enabled ->
-                    settingsViewModel?.updatePreference(floatingTextQuickMemoAutoPinEnabled = enabled)
+                    onAction(LaboratoryUiAction.SetTextAutoPin(enabled))
                 },
                 onVoiceAutoPinChange = { enabled ->
-                    settingsViewModel?.updatePreference(voiceQuickMemoAutoPinEnabled = enabled)
+                    onAction(LaboratoryUiAction.SetVoiceAutoPin(enabled))
                 },
-                onImportAsrModel = { asrModelImportLauncher.launch(arrayOf("*/*")) }
+                onImportAsrModel = { onAction(LaboratoryUiAction.ImportAsrModel) }
             )
 
             Text(
@@ -160,43 +206,31 @@ fun LaboratoryPage(
             LaboratorySwitchCard(
                 title = "取件类事件使用当前时间",
                 subtitle = "开启后取件码、取餐码、取票码、寄件码会忽略 AI 返回时间，入库时改为当前时间",
-                checked = settings!!.forceInstantCodeTimeToNow,
+                checked = settings.forceInstantCodeTimeToNow,
                 onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(forceInstantCodeTimeToNow = enabled)
+                    onAction(LaboratoryUiAction.SetForceInstantCodeTime(enabled))
                 }
             )
 
             LaboratorySwitchCard(
                 title = "剪贴板取件类识别（实验）",
                 subtitle = "识别剪贴板中的取件码、取餐码、取票码、寄件码；有 Shizuku/Root 时后台自动入库，否则打开软件时确认入库",
-                checked = settings!!.clipboardCodeRecognitionEnabled,
+                checked = settings.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(clipboardCodeRecognitionEnabled = enabled)
-                    if (enabled) {
-                        PrivilegeManager.refreshPrivilege()
-                        val message = if (PrivilegeManager.hasPrivilege) {
-                            "已启用完整后台识别，识别到取件类内容将自动创建日程"
-                        } else {
-                            "未获取 Shizuku/Root 权限，仅打开软件时识别，并向你确认是否入库"
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                        ClipboardCodeMonitorService.startIfNeeded(context)
-                    } else {
-                        ClipboardCodeMonitorService.stop(context)
-                    }
+                    onAction(LaboratoryUiAction.SetClipboardRecognition(enabled))
                 }
             )
 
             LaboratorySwitchCard(
                 title = "预测性返回手势",
                 subtitle = "侧滑返回时页面支持跟手动画效果",
-                checked = settings!!.predictiveBackEnabled,
+                checked = settings.predictiveBackEnabled,
                 onCheckedChange = { enabled ->
-                    settingsViewModel?.updatePreference(predictiveBackEnabled = enabled)
+                    onAction(LaboratoryUiAction.SetPredictiveBack(enabled))
                 }
             )
 
-            if (settings!!.developerOptionsUnlocked) {
+            if (settings.developerOptionsUnlocked) {
                 Text(
                     text = "开发者",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -215,7 +249,7 @@ fun LaboratoryPage(
                             value = "",
                             icon = Icons.Default.ChevronRight,
                             enabled = true,
-                            onClick = onNavigateToDeveloper,
+                            onClick = { onAction(LaboratoryUiAction.OpenDeveloper) },
                             cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                             cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
                             cardValueStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
