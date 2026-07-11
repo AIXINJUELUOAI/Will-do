@@ -77,6 +77,9 @@ import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.AiSettingsUiAction
+import com.antgskds.calendarassistant.ui.contract.AiSettingsUiState
+import com.antgskds.calendarassistant.ui.flavor.AiSettingsScreen
 import kotlinx.coroutines.launch
 
 private const val PROVIDER_DEEPSEEK = "DeepSeek"
@@ -115,6 +118,28 @@ fun AiSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
+    AiSettingsScreen(
+        state = AiSettingsUiState(settings),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is AiSettingsUiAction.SaveTextModel -> viewModel.updateAiSettings(action.key, action.name, action.url)
+                is AiSettingsUiAction.SaveMultimodalModel -> viewModel.updateMultimodalAiSettings(action.key, action.name, action.url)
+            }
+        },
+        fetchModels = ApiModelProvider::fetchAvailableModels
+    )
+}
+
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun MaterialAiSettingsScreen(
+    state: AiSettingsUiState,
+    uiSize: Int = 2,
+    onAction: (AiSettingsUiAction) -> Unit,
+    fetchModels: suspend (String, String) -> ModelListResult
+) {
+    val settings = state.settings
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -227,9 +252,9 @@ fun AiSettingsPage(
 
     suspend fun saveCurrent(url: String, name: String, key: String) {
         if (isMultimodalEnabled) {
-            viewModel.updateMultimodalAiSettings(key.trim(), name.trim(), url.trim())
+            onAction(AiSettingsUiAction.SaveMultimodalModel(key.trim(), name.trim(), url.trim()))
         } else {
-            viewModel.updateAiSettings(key.trim(), name.trim(), url.trim())
+            onAction(AiSettingsUiAction.SaveTextModel(key.trim(), name.trim(), url.trim()))
         }
         showToast("配置保存成功")
     }
@@ -247,7 +272,7 @@ fun AiSettingsPage(
 
         val signature = "${normalizedUrl.trim()}|${activeModelKey.trim()}"
         actionLoading = true
-        when (val result = ApiModelProvider.fetchAvailableModels(activeModelKey.trim(), normalizedUrl.trim())) {
+        when (val result = fetchModels(activeModelKey.trim(), normalizedUrl.trim())) {
             is ModelListResult.Success -> {
                 setActiveCustomModels(result.models)
                 setActiveFetchedSignature(signature)
