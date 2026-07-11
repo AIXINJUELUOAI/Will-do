@@ -71,6 +71,10 @@ import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.ui.components.AppCard
+import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiAction
+import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiState
+import com.antgskds.calendarassistant.ui.flavor.WeatherDetailPageContent
+import com.antgskds.calendarassistant.ui.flavor.WeatherDetailScreenContent
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -81,6 +85,20 @@ import java.util.Locale
 fun WeatherDetailPage(uiSize: Int = 2) {
     val app = LocalContext.current.applicationContext as App
     val weatherData by app.weatherQueryApi.weatherData.collectAsState()
+    WeatherDetailPageContent(
+        state = WeatherDetailUiState(
+            weatherData = weatherData,
+            hasAppBackground = false,
+            miuiBlurEnabled = false,
+            cardAlphaPercent = 100
+        ),
+        uiSize = uiSize
+    )
+}
+
+@Composable
+fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
+    val weatherData = state.weatherData
     val bottomInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
 
     Column(
@@ -125,14 +143,37 @@ fun WeatherDetailScreen(
     onBack: () -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
+    val weatherData by app.weatherQueryApi.weatherData.collectAsState()
     val settings by app.settingsQueryApi.settings.collectAsState()
-    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
-    val pageContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
+    WeatherDetailScreenContent(
+        state = WeatherDetailUiState(
+            weatherData = weatherData,
+            hasAppBackground = settings.appBackgroundImagePath.isNotBlank(),
+            miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+            cardAlphaPercent = settings.appBackgroundCardAlphaPercent
+        ),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                WeatherDetailUiAction.NavigateBack -> onBack()
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MaterialWeatherDetailScreen(
+    state: WeatherDetailUiState,
+    uiSize: Int = 2,
+    onAction: (WeatherDetailUiAction) -> Unit
+) {
+    val pageContainerColor = if (state.hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
     val haptics = rememberAppHaptics()
     AppBackgroundStyleTheme(
-        enabled = hasAppBackground,
-        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
-        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
+        enabled = state.hasAppBackground,
+        miuiBlurEnabled = state.miuiBlurEnabled,
+        cardAlphaPercent = state.cardAlphaPercent
     ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -140,7 +181,7 @@ fun WeatherDetailScreen(
             TopAppBar(
                 title = { Text("天气详情") },
                 navigationIcon = {
-                    IconButton(onClick = { haptics.click(); onBack() }) {
+                    IconButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -160,7 +201,7 @@ fun WeatherDetailScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            WeatherDetailPage(uiSize = uiSize)
+            MaterialWeatherDetailPage(state = state, uiSize = uiSize)
         }
     }
     }
