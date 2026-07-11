@@ -60,6 +60,9 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiAction
+import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiState
+import com.antgskds.calendarassistant.ui.flavor.BottomBarEditorScreen
 
 @Composable
 fun getHomeEntryIcon(key: String): Painter {
@@ -90,8 +93,6 @@ fun BottomBarEditorPage(
     uiSize: Int = 2
 ) {
     val settings by settingsViewModel.settings.collectAsState()
-    val scrollState = rememberScrollState()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
 
     val storedItems = sanitizeHomeBottomItems(settings.homeBottomItems)
     val activeItems = visibleHomeBottomItems(storedItems, quickMemoEnabled = settings.voiceInputEnabled)
@@ -121,10 +122,39 @@ fun BottomBarEditorPage(
         )
     }
 
-    val candidates = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE)
-    val standbyItems = candidates.filterNot { it in activeItems }
+    val standbyItems = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE).filterNot { it in activeItems }
+    BottomBarEditorScreen(
+        state = BottomBarEditorUiState(
+            activeItems = activeItems,
+            standbyItems = standbyItems,
+            startPage = startPage,
+            quickMemoEnabled = settings.voiceInputEnabled,
+            hapticEnabled = settings.hapticFeedbackEnabled
+        ),
+        uiSize = uiSize,
+        onAction = { action ->
+            when (action) {
+                is BottomBarEditorUiAction.SaveConfig -> saveConfig(action.items, action.startPage)
+            }
+        }
+    )
+}
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
+@OptIn(ExperimentalLayoutApi::class)
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun MaterialBottomBarEditorScreen(
+    state: BottomBarEditorUiState,
+    uiSize: Int = 2,
+    onAction: (BottomBarEditorUiAction) -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val haptics = rememberAppHaptics(state.hapticEnabled)
+    val activeItems = state.activeItems
+    val standbyItems = state.standbyItems
+    val startPage = state.startPage
+
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides state.hapticEnabled) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -259,7 +289,7 @@ fun BottomBarEditorPage(
                                     val mutable = activeItems.toMutableList()
                                     mutable.removeAt(index)
                                     mutable.add(index - 1, key)
-                                    saveConfig(mutable)
+                                    onAction(BottomBarEditorUiAction.SaveConfig(mutable))
                                 },
                                 enabled = index > 0
                             ) {
@@ -271,7 +301,7 @@ fun BottomBarEditorPage(
                                     val mutable = activeItems.toMutableList()
                                     mutable.removeAt(index)
                                     mutable.add(index + 1, key)
-                                    saveConfig(mutable)
+                                    onAction(BottomBarEditorUiAction.SaveConfig(mutable))
                                 },
                                 enabled = index < activeItems.lastIndex
                             ) {
@@ -282,7 +312,7 @@ fun BottomBarEditorPage(
                                     if (activeItems.size <= 1) return@IconButton
                                     haptics.warning()
                                     val mutable = activeItems.toMutableList().apply { remove(key) }
-                                    saveConfig(mutable)
+                                    onAction(BottomBarEditorUiAction.SaveConfig(mutable))
                                 },
                                 enabled = activeItems.size > 1
                             ) {
@@ -328,7 +358,7 @@ fun BottomBarEditorPage(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         standbyItems.forEach { key ->
-                            val entryAvailable = isHomeEntryAvailable(key, settings.voiceInputEnabled)
+                            val entryAvailable = isHomeEntryAvailable(key, state.quickMemoEnabled)
                             ElevatedAssistChip(
                                 enabled = entryAvailable,
                                 onClick = {
@@ -337,7 +367,7 @@ fun BottomBarEditorPage(
                                     val mutable = activeItems.toMutableList()
                                     if (mutable.size < 3) {
                                         mutable.add(key)
-                                        saveConfig(mutable)
+                                        onAction(BottomBarEditorUiAction.SaveConfig(mutable))
                                     }
                                 },
                                 label = {
@@ -405,7 +435,7 @@ fun BottomBarEditorPage(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(bgColor)
-                                .clickable { haptics.selection(); saveConfig(activeItems, key) }
+                                .clickable { haptics.selection(); onAction(BottomBarEditorUiAction.SaveConfig(activeItems, key)) }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
