@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.components
+package com.antgskds.calendarassistant.feature.note.ui.render.material.editor
 
 import android.content.Context
 import android.content.ClipboardManager

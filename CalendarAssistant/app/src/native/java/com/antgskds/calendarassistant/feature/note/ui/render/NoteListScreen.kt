@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import com.antgskds.calendarassistant.ui.contract.NoteListUiAction
 import com.antgskds.calendarassistant.ui.contract.NoteListUiState
-import com.antgskds.calendarassistant.ui.page_display.MaterialNoteListScreen
+import com.antgskds.calendarassistant.feature.note.ui.render.material.MaterialNoteListScreen
 
 @Composable
 fun NoteListScreen(
