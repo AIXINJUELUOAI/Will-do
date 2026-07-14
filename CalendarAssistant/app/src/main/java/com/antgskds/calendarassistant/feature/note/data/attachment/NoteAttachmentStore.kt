@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.data.attachment
 
 import android.content.Context
 import android.content.ClipData
@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import com.antgskds.calendarassistant.BuildConfig
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph
 import java.io.File
 import java.util.UUID
 

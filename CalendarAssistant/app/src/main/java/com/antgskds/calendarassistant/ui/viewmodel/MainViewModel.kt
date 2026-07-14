@@ -32,11 +32,11 @@ import com.antgskds.calendarassistant.feature.schedule.presentation.model.Schedu
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
-import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteTransferManager
+import com.antgskds.calendarassistant.feature.note.data.transfer.NoteTransferManager
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
+import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState

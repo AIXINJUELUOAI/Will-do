@@ -1,5 +1,17 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.data.transfer
 
+import com.antgskds.calendarassistant.feature.note.data.attachment.StoredNoteAttachment
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteListStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTableData
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTextSpan
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTextStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.effectiveListStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.effectiveParagraphStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.withMigratedParagraphStyle
 import java.io.File
 
 object NoteMarkdownCodec {

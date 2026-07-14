@@ -11,7 +11,7 @@ import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoAnalysisStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
+import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionType

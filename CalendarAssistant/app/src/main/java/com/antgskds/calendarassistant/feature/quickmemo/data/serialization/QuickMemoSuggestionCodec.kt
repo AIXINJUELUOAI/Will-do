@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.quickmemo
+package com.antgskds.calendarassistant.feature.quickmemo.data.serialization
 
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.google.gson.Gson

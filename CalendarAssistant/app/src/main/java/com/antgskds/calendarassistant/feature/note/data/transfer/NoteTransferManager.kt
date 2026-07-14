@@ -1,7 +1,11 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.data.transfer
 
 import android.content.Context
 import android.net.Uri
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.feature.note.data.attachment.NoteAttachmentStore
+import com.antgskds.calendarassistant.feature.note.data.attachment.StoredNoteAttachment
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString

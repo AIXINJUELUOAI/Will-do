@@ -56,19 +56,19 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import androidx.core.widget.doAfterTextChanged
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
-import com.antgskds.calendarassistant.core.note.NoteDocument
-import com.antgskds.calendarassistant.core.note.NoteListStyle
-import com.antgskds.calendarassistant.core.note.NoteParagraph
-import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
-import com.antgskds.calendarassistant.core.note.NoteParagraphType
-import com.antgskds.calendarassistant.core.note.NoteTableData
-import com.antgskds.calendarassistant.core.note.NoteTextSpan
-import com.antgskds.calendarassistant.core.note.NoteTextStyle
-import com.antgskds.calendarassistant.core.note.effectiveListStyle
-import com.antgskds.calendarassistant.core.note.effectiveParagraphStyle
-import com.antgskds.calendarassistant.core.note.withMigratedParagraphStyles
-import com.antgskds.calendarassistant.core.note.withMigratedParagraphStyle
+import com.antgskds.calendarassistant.feature.note.data.attachment.NoteAttachmentStore
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteListStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTableData
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTextSpan
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteTextStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.effectiveListStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.effectiveParagraphStyle
+import com.antgskds.calendarassistant.feature.note.domain.model.withMigratedParagraphStyles
+import com.antgskds.calendarassistant.feature.note.domain.model.withMigratedParagraphStyle
 
 class PlainNoteEditorController {
     internal var toggleCurrentTodoAction: (() -> NoteDocument)? = null

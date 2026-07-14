@@ -159,7 +159,7 @@ internal fun buildNoteEditorUiState(
         editorSessionKey = editorSessionKey,
         initialNoteId = initialNote?.id,
         initialTitle = initialNote?.title.orEmpty(),
-        initialDocument = initialNote?.document() ?: com.antgskds.calendarassistant.core.note.NoteDocument(),
+        initialDocument = initialNote?.document() ?: com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument(),
         initialCreatedAt = initialNote?.createdAt,
         initiallyPinned = initialNote?.pinnedAt != null,
         hapticEnabled = settings.hapticFeedbackEnabled,

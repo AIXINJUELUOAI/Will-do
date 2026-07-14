@@ -8,7 +8,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
+import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
