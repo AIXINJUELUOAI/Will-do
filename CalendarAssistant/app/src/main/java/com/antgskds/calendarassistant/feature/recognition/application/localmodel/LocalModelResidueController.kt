@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.recognition.application.localmodel
 
 import android.content.Context
 import android.util.Log
@@ -20,7 +20,7 @@ data class LocalModelResiduePrompt(
     val fingerprint: String
 )
 
-class LocalModelResidueCenter(
+class LocalModelResidueController(
     private val appContext: Context,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsOperationApi: SettingsOperationApi,

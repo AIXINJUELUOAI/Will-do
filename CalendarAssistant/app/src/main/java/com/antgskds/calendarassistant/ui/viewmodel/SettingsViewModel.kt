@@ -9,9 +9,9 @@ import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.core.center.BackupCenter
-import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
-import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupCenter
-import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupResult
+import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
+import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
+import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleanupResult
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
@@ -47,13 +47,13 @@ class SettingsViewModel(
     private val scheduleCenter: ScheduleCenter,
     private val backupCenter: BackupCenter,
     private val syncCenter: SyncCenter,
-    private val diagnosticLogCenter: DiagnosticLogCenter,
+    private val diagnosticLogCenter: DiagnosticLogExporter,
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
     private val legacyNoteMigrationCenter: LegacyNoteMigrationCenter,
-    private val duplicateEventCleanupCenter: DuplicateEventCleanupCenter
+    private val duplicateEventCleanupCenter: DuplicateEventCleaner
 ) : ViewModel() {
     private val backgroundImageStore = AppBackgroundImageStore(appContext)
 

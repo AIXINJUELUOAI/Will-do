@@ -10,7 +10,7 @@ import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
-import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateCenter
+import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateComposer
 import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleActionDefaults
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
@@ -186,7 +186,7 @@ internal object EventPresentationInternals {
         val action = if (events.any { !it.isCompleted && !computeIsExpired(it, LocalDateTime.now()) }) {
             CapsuleActionSpec(label = "已取", receiverAction = EventActionReceiver.ACTION_COMPLETE_SCHEDULE)
         } else null
-        return NotificationTemplateCenter.composeScheduleActionItem(
+        return NotificationTemplateComposer.composeScheduleActionItem(
             title = primaryText,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -320,7 +320,7 @@ internal object EventPresentationInternals {
         val info = parseTransport(event)
         val secondaryText = formatTrainSubtitle(info.subDisplay, event.location)
         val action = if (!info.isCheckedIn && !isExpired) CapsuleActionSpec("已检票", EventActionReceiver.ACTION_CHECKIN) else null
-        return NotificationTemplateCenter.composeTransportTrain(
+        return NotificationTemplateComposer.composeTransportTrain(
             title = model.title,
             secondaryText = secondaryText,
             templateMode = templateMode,
@@ -338,7 +338,7 @@ internal object EventPresentationInternals {
         val secondaryText = formatTaxiSubtitle(event, info) ?: "网约车"
         val expandedText = joinLines(secondaryText, sanitize(event.location))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已用车", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return NotificationTemplateCenter.composeScheduleActionItem(
+        return NotificationTemplateComposer.composeScheduleActionItem(
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -357,7 +357,7 @@ internal object EventPresentationInternals {
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已取", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return NotificationTemplateCenter.composeScheduleActionItem(
+        return NotificationTemplateComposer.composeScheduleActionItem(
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -377,7 +377,7 @@ internal object EventPresentationInternals {
         val secondaryText = model.subtitle
         val expandedText = joinLines(secondaryText, sanitize(event.location))
         val action = if (!event.isCheckedIn && !event.isCompleted && !isExpired) CapsuleActionSpec("已登机", EventActionReceiver.ACTION_CHECKIN) else null
-        return NotificationTemplateCenter.composeTransportFlight(
+        return NotificationTemplateComposer.composeTransportFlight(
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -396,7 +396,7 @@ internal object EventPresentationInternals {
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已取", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return NotificationTemplateCenter.composeScheduleActionItem(
+        return NotificationTemplateComposer.composeScheduleActionItem(
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -416,7 +416,7 @@ internal object EventPresentationInternals {
         val secondaryText = formatPickupSubtitle(info.platform, info.location)
         val expandedText = joinLines(secondaryText, summaryText(event.description))
         val action = if (!event.isCompleted && !isExpired) CapsuleActionSpec("已寄件", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return NotificationTemplateCenter.composeScheduleActionItem(
+        return NotificationTemplateComposer.composeScheduleActionItem(
             title = model.title,
             secondaryText = secondaryText,
             expandedText = expandedText,
@@ -437,7 +437,7 @@ internal object EventPresentationInternals {
         val locationText = sanitize(event.location)
         val descriptionText = summaryText(event.description)
         val action = if (!event.isCompleted && !isExpired && event.tag != "__removed_course__" && event.tag != EventTags.COURSE) CapsuleActionSpec("已完成", EventActionReceiver.ACTION_COMPLETE_SCHEDULE) else null
-        return NotificationTemplateCenter.composeSchedule(
+        return NotificationTemplateComposer.composeSchedule(
             title = primaryText,
             time = timeText,
             location = locationText,

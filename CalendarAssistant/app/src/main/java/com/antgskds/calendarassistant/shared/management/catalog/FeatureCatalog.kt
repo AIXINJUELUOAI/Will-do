@@ -73,10 +73,10 @@ object FeatureCatalog {
         FeatureEntry("天气", Chain.SUPPORT, "core/weather", "天气预警/风险，位置选择"),
         FeatureEntry("背景自定义", Chain.SUPPORT, "feature/appearance/domain/AppBackgroundImageStore", "用户图片背景导入、私有存储与背景取色"),
         FeatureEntry("数据备份", Chain.SUPPORT, "core/center/BackupCenter", "导入导出备份"),
-        FeatureEntry("桌面小组件", Chain.SUPPORT, "core/center/WidgetCenter", "日程/课程桌面小组件"),
-        FeatureEntry("悬浮窗/EdgeBar", Chain.SUPPORT, "core/center/FloatingCenter", "悬浮窗与侧边栏快捷入口"),
-        FeatureEntry("诊断日志", Chain.SUPPORT, "core/center/DiagnosticLogCenter", "异常日志捕获与导出"),
-        FeatureEntry("重复事件清理", Chain.SUPPORT, "core/center/DuplicateEventCleanupCenter", "重复事件去重"),
+        FeatureEntry("桌面小组件", Chain.SUPPORT, "platform/widget/WidgetController", "日程/课程桌面小组件"),
+        FeatureEntry("悬浮窗/EdgeBar", Chain.SUPPORT, "platform/floating/FloatingServiceController", "悬浮窗与侧边栏快捷入口"),
+        FeatureEntry("诊断日志", Chain.SUPPORT, "feature/settings/diagnostics/application/DiagnosticLogExporter", "异常日志捕获与导出"),
+        FeatureEntry("重复事件清理", Chain.SUPPORT, "feature/schedule/data/maintenance/DuplicateEventCleaner", "重复事件去重"),
     )
 
     /** 按链路筛选。 */

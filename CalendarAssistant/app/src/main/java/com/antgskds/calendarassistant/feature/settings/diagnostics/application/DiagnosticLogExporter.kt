@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.settings.diagnostics.application
 
 import android.content.Context
 import android.os.Environment
@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-class DiagnosticLogCenter(private val context: Context) {
+class DiagnosticLogExporter(private val context: Context) {
     private val appContext = context.applicationContext
     private val exportNameFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
     private val logTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
@@ -22,7 +22,7 @@ class DiagnosticLogCenter(private val context: Context) {
 
     suspend fun migrateLegacyLogs(): List<String> = withContext(Dispatchers.IO) {
         val result = WillDoDownloadLogNode.migrateLegacyLogs(appContext)
-        AppLogger.i("DiagnosticLogCenter", "legacy log migration result=${result.joinToString()}")
+        AppLogger.i("DiagnosticLogExporter", "legacy log migration result=${result.joinToString()}")
         result
     }
 
@@ -36,7 +36,7 @@ class DiagnosticLogCenter(private val context: Context) {
             check(WillDoDownloadLogNode.writeText(appContext, WillDoDownloadLogNode.EXPORT_DIR, fileName, text)) {
                 "写入日志失败"
             }
-            AppLogger.i("DiagnosticLogCenter", "exported diagnostic log file=$fileName minutes=${minutes ?: -1}")
+            AppLogger.i("DiagnosticLogExporter", "exported diagnostic log file=$fileName minutes=${minutes ?: -1}")
             WillDoDownloadLogNode.publicPath(WillDoDownloadLogNode.EXPORT_DIR, fileName)
         }
     }

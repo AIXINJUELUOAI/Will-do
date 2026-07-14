@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.platform.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class WidgetCenter(
+class WidgetController(
     private val appContext: Context,
     private val calendarQueryApi: CalendarQueryApi,
     private val settingsQueryApi: SettingsQueryApi,

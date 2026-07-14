@@ -18,7 +18,7 @@ enum class NotificationTemplateMode {
     COMPACT_TWO_LINE
 }
 
-object NotificationTemplateCenter {
+object NotificationTemplateComposer {
     fun nativeCapsuleMode(templateMode: String = LiveNotificationTemplateMode.AUTO): NotificationTemplateMode {
         return when (LiveNotificationTemplateMode.normalize(templateMode)) {
             LiveNotificationTemplateMode.FULL -> NotificationTemplateMode.FULL_MULTILINE

@@ -11,21 +11,21 @@ import com.antgskds.calendarassistant.core.util.AppLogger
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.center.CapsuleCenter
 import com.antgskds.calendarassistant.core.center.ContentIngestCenter
-import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
-import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupCenter
-import com.antgskds.calendarassistant.core.center.FloatingCenter
+import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
+import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
+import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
 import com.antgskds.calendarassistant.core.center.ImportCenter
-import com.antgskds.calendarassistant.core.center.LocalModelResidueCenter
+import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
-import com.antgskds.calendarassistant.core.center.PermissionCenter
+import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.center.RecognitionCenter
 import com.antgskds.calendarassistant.core.center.ReminderCenter
 import com.antgskds.calendarassistant.core.center.RuntimeCenter
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
-import com.antgskds.calendarassistant.core.center.WidgetCenter
+import com.antgskds.calendarassistant.platform.widget.WidgetController
 import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.content.ContentDefinition
@@ -254,8 +254,8 @@ class App : Application() {
         )
     }
 
-    val localModelResidueCenter: LocalModelResidueCenter by lazy {
-        LocalModelResidueCenter(
+    val localModelResidueCenter: LocalModelResidueController by lazy {
+        LocalModelResidueController(
             appContext = applicationContext,
             settingsQueryApi = settingsQueryApi,
             settingsOperationApi = settingsOperationApi,
@@ -270,19 +270,19 @@ class App : Application() {
         )
     }
 
-    val diagnosticLogCenter: DiagnosticLogCenter by lazy {
-        DiagnosticLogCenter(applicationContext)
+    val diagnosticLogCenter: DiagnosticLogExporter by lazy {
+        DiagnosticLogExporter(applicationContext)
     }
 
-    val duplicateEventCleanupCenter: DuplicateEventCleanupCenter by lazy {
-        DuplicateEventCleanupCenter(applicationContext)
+    val duplicateEventCleanupCenter: DuplicateEventCleaner by lazy {
+        DuplicateEventCleaner(applicationContext)
     }
 
     // ══════════════════════════════════════════════════════════════════════
     // 规则 / 胶囊 / 权限 / 通知
     // ══════════════════════════════════════════════════════════════════════
 
-    val permissionCenter: PermissionCenter by lazy { PermissionCenter() }
+    val permissionCenter: AndroidPermissionChecker by lazy { AndroidPermissionChecker() }
 
     val capsuleStateManager: CapsuleStateManager by lazy {
         CapsuleStateManager(
@@ -300,8 +300,8 @@ class App : Application() {
         CapsuleCenter(capsuleCommandApi = capsuleCommandApi, capsuleQueryApi = capsuleQueryApi)
     }
 
-    val floatingCenter: FloatingCenter by lazy {
-        FloatingCenter(
+    val floatingCenter: FloatingServiceController by lazy {
+        FloatingServiceController(
             appContext = applicationContext,
             permissionCenter = permissionCenter,
             settingsQueryApi = settingsQueryApi
@@ -367,8 +367,8 @@ class App : Application() {
         )
     }
 
-    val widgetCenter: WidgetCenter by lazy {
-        WidgetCenter(
+    val widgetCenter: WidgetController by lazy {
+        WidgetController(
             appContext = applicationContext,
             calendarQueryApi = calendarCenter,
             settingsQueryApi = settingsQueryApi,

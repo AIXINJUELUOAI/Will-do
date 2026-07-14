@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.schedule.data.maintenance
 
 import android.content.Context
 import android.util.Log
@@ -20,7 +20,7 @@ data class DuplicateEventCleanupResult(
     val skipped: Int = 0
 )
 
-class DuplicateEventCleanupCenter(context: Context) {
+class DuplicateEventCleaner(context: Context) {
     private val appContext = context.applicationContext
     private val db = EventsDatabase.getInstance(appContext)
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
