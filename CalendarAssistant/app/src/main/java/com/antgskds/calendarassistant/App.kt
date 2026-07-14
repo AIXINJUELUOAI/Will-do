@@ -22,7 +22,6 @@ import com.antgskds.calendarassistant.core.center.PermissionCenter
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.center.RecognitionCenter
 import com.antgskds.calendarassistant.core.center.ReminderCenter
-import com.antgskds.calendarassistant.core.center.RuleCenter
 import com.antgskds.calendarassistant.core.center.RuntimeCenter
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
@@ -282,8 +281,6 @@ class App : Application() {
     // ══════════════════════════════════════════════════════════════════════
     // 规则 / 胶囊 / 权限 / 通知
     // ══════════════════════════════════════════════════════════════════════
-
-    val ruleCenter: RuleCenter by lazy { RuleCenter(applicationContext) }
 
     val permissionCenter: PermissionCenter by lazy { PermissionCenter() }
 
