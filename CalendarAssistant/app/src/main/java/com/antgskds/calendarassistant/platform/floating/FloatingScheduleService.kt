@@ -82,7 +82,7 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
 import com.antgskds.calendarassistant.ui.floating.FloatingDragTextOptions
-import com.antgskds.calendarassistant.ui.floating.PickupQrFloatingCard
+import com.antgskds.calendarassistant.ui.connector.PickupQrFloatingCardRoute
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
@@ -398,7 +398,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 ) {
                     val floatingContent: @androidx.compose.runtime.Composable () -> Unit = {
                         if (pickupQrEvent != null) {
-                            PickupQrFloatingCard(
+                            PickupQrFloatingCardRoute(
                                 event = pickupQrEvent,
                                 onClose = { requestClose() },
                                 onComplete = {
