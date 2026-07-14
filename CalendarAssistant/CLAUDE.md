@@ -36,7 +36,7 @@
 主流程 `入口 → 识别 → 入库 → 同步 → 通知`。各链路有统一入口契约，新入口/调用方应**依赖契约接口，不要直接拿 Center 实现类**：
 - 识别：`core/operation/RecognitionApi`（RecognitionOrchestrator 实现）——所有识别入口（截图/图片/文本/语音）统一走它，输出 `AnalysisResult<RecognitionDraft>`。
 - 入库：`core/operation/IngestCommandApi`（IngestPipeline/ScheduleIngestWriter 实现）——识别结果/短信/即时码统一入库。
-- 同步：`core/operation/SyncApi`（SyncCenter 实现）——启停/立即同步/选日历/状态查询。同步失败不回滚本地入库。
+- 同步：`core/operation/SyncApi`（CalendarSyncService 实现）——启停/立即同步/选日历/状态查询。同步失败不回滚本地入库。
 - 通知：`feature/api/notification/NotificationApi`（见下）。
 旧 `*Center` 是过渡实现，可继续作为这些契约的实现体；不要新增 `*Center.kt`。
 

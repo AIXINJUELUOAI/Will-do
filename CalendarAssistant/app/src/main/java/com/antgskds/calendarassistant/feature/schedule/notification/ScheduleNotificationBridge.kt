@@ -227,7 +227,7 @@ class ScheduleNotificationBridge(
 
     /**
      * Phase 3：重复事件的窗口内实例 → 新通知链路。
-     * 复用 ReminderCenter 已算好的 displayItems（展开的实例）+ parentMap，不重做展开。
+     * 复用 ScheduleReminderCoordinator 已算好的 displayItems（展开的实例）+ parentMap，不重做展开。
      * 每实例用 Recurring(parentId, 实例时刻) 排提醒；含即时补发；最后做出窗清理。
      */
     suspend fun submitRecurringWindow(

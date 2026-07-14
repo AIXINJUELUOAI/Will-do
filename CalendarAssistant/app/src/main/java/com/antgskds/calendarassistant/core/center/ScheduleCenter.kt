@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.core.center
 
 import android.util.Log
 import com.antgskds.calendarassistant.feature.schedule.application.undo.UndoManager
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
@@ -32,12 +33,12 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 日程业务中心 — UI 层与 willdo CalendarCenter 之间的桥梁。
+ * 日程业务中心——UI 层与 ScheduleStoreGateway 之间的桥梁。
  *
  * 直接暴露 willdo Event，不再经过 MyEvent 转换。
  */
 class ScheduleCenter(
-    private val calendarCenter: CalendarCenter,
+    private val calendarCenter: ScheduleStoreGateway,
     private val appScope: CoroutineScope,
     private val notificationApi: NotificationApi? = null,
     private val eventActionQueryApi: EventActionQueryApi? = null,
@@ -68,7 +69,7 @@ class ScheduleCenter(
         notificationBridge?.submitSingleEvents(events)
     }
 
-    /** Phase 3：把重复事件窗口内的实例转发给新通知链路（由 ReminderCenter 全量重排时调用）。 */
+    /** Phase 3：把重复事件窗口内的实例转发给新通知链路（由 ScheduleReminderCoordinator 全量重排时调用）。 */
     suspend fun submitRecurringWindow(
         items: List<ScheduleDisplayItem>,
         parentEvents: Map<Long, Event>

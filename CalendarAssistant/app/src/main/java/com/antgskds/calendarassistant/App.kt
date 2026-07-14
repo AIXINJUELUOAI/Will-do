@@ -21,10 +21,10 @@ import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
-import com.antgskds.calendarassistant.core.center.ReminderCenter
-import com.antgskds.calendarassistant.core.center.RuntimeCenter
+import com.antgskds.calendarassistant.feature.schedule.notification.ScheduleReminderCoordinator
+import com.antgskds.calendarassistant.app.runtime.AppRuntimeCoordinator
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
-import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.feature.schedule.application.sync.CalendarSyncService
 import com.antgskds.calendarassistant.platform.widget.WidgetController
 import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
@@ -72,7 +72,7 @@ import com.antgskds.calendarassistant.data.repository.SettingsRepository
 import com.antgskds.calendarassistant.feature.notification.data.local.SharedPreferencesNotificationRegistryStore
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
 import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
-import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardCodeIngestCoordinator
 import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.platform.receiver.sms.SmsContentObserver
@@ -101,8 +101,8 @@ class App : Application() {
     // 新底层核心
     // ══════════════════════════════════════════════════════════════════════
 
-    val calendarCenter: CalendarCenter by lazy {
-        CalendarCenter.getInstance(this)
+    val calendarCenter: ScheduleStoreGateway by lazy {
+        ScheduleStoreGateway.getInstance(this)
     }
 
     val scheduleCenter: ScheduleCenter by lazy {
@@ -115,8 +115,8 @@ class App : Application() {
         )
     }
 
-    val syncCenter: SyncCenter by lazy {
-        SyncCenter(calendarCenter, this)
+    val syncCenter: CalendarSyncService by lazy {
+        CalendarSyncService(calendarCenter, this)
     }
 
     val eventAttachmentManager: EventAttachmentManager by lazy {
@@ -330,8 +330,8 @@ class App : Application() {
         )
     }
 
-    val reminderCenter: ReminderCenter by lazy {
-        ReminderCenter(
+    val reminderCenter: ScheduleReminderCoordinator by lazy {
+        ScheduleReminderCoordinator(
             appContext = applicationContext,
             capsuleCenter = capsuleCenter,
             settingsQueryApi = settingsQueryApi,
@@ -341,8 +341,8 @@ class App : Application() {
         )
     }
 
-    val runtimeCenter: RuntimeCenter by lazy {
-        RuntimeCenter(
+    val runtimeCenter: AppRuntimeCoordinator by lazy {
+        AppRuntimeCoordinator(
             appContext = applicationContext,
             settingsQueryApi = settingsQueryApi,
             permissionCenter = permissionCenter,

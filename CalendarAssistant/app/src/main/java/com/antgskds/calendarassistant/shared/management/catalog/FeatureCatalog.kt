@@ -54,12 +54,12 @@ object FeatureCatalog {
         FeatureEntry("日程导入", Chain.INGEST, "feature/recognition/application/ingest/ScheduleIngestWriter", "各来源草稿转 Event、本地去重写库"),
 
         // —— 同步 ——
-        FeatureEntry("系统日历同步", Chain.SYNC, "core/center/SyncCenter", "本地日程 ↔ 系统日历双向同步"),
+        FeatureEntry("系统日历同步", Chain.SYNC, "feature/schedule/application/sync/CalendarSyncService", "本地日程 ↔ 系统日历双向同步"),
 
         // —— 通知 ——
         FeatureEntry("通知主链路", Chain.NOTIFICATION, "feature/api/notification/NotificationApi", "普通通知统一发布（NotificationCenter + Publisher）"),
         FeatureEntry("实况胶囊", Chain.NOTIFICATION, "core/capsule/CapsuleStateManager", "胶囊状态计算 + CapsuleDispatcher 发布（原生/魅族/小米超级岛）"),
-        FeatureEntry("提醒调度", Chain.NOTIFICATION, "core/center/ReminderCenter", "提醒生命周期、胶囊闹钟、reconcile"),
+        FeatureEntry("提醒调度", Chain.NOTIFICATION, "feature/schedule/notification/ScheduleReminderCoordinator", "提醒生命周期、胶囊闹钟、reconcile"),
 
         // —— 日程主体 ——
         FeatureEntry("日程管理", Chain.SCHEDULE, "core/center/ScheduleCenter", "事件 CRUD、展示模型、重复日程"),
