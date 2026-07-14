@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import android.content.Context
-import com.antgskds.calendarassistant.core.rule.EventRuleEntity
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.EventRuleEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 
 object RulePatchProvider {
     suspend fun loadSchedulePatch(context: Context): String {

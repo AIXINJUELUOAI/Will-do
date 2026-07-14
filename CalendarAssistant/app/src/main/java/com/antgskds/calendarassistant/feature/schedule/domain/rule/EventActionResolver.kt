@@ -1,7 +1,8 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.domain.rule
 
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 
 enum class RuleActionType {
     COMPLETE,

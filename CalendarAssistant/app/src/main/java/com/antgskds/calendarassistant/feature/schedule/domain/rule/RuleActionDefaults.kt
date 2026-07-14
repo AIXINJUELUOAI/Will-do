@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.domain.rule
 
 
 object RuleActionDefaults {

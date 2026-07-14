@@ -42,7 +42,7 @@ import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch

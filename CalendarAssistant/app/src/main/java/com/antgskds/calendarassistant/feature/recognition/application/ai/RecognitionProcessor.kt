@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.core.util.ImageCompressionUtils
 import com.antgskds.calendarassistant.core.util.LayoutAnalyzer
 import com.antgskds.calendarassistant.core.util.OcrElement
 import com.antgskds.calendarassistant.core.util.ScreenMetrics
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeQrSupport
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.domain.rule
 
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
 import com.antgskds.calendarassistant.calendar.models.EventTags

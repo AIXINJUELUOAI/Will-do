@@ -19,7 +19,7 @@ import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureDisplay
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.DailySummaryPayload
-import com.antgskds.calendarassistant.core.rule.EventPresenter
+import com.antgskds.calendarassistant.feature.schedule.presentation.rule.EventPresenter
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
