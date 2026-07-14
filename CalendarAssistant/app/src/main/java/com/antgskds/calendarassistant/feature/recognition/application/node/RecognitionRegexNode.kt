@@ -2,9 +2,9 @@ package com.antgskds.calendarassistant.feature.recognition.application.node
 
 import android.content.Context
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.data.preferences.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRecognizer
-import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.data.model.MySettings
 
 internal object RecognitionRegexNode {

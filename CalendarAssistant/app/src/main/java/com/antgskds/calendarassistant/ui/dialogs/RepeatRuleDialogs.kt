@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
-import com.antgskds.calendarassistant.core.model.shortCn
+import com.antgskds.calendarassistant.feature.schedule.domain.model.shortCn
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.DayOfWeek
