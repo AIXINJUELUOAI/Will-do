@@ -14,12 +14,12 @@ import com.antgskds.calendarassistant.feature.notification.model.NotificationKin
  * （带 note 说明），否则架构守卫 KIND_NOT_REGISTERED 会让 `checkArchitectureGuardrails` 失败。
  *
  * ## 边界
- * - 只登记元信息（标签/说明/典型路由倾向），不持有发布逻辑。真正发布走 NotificationCenter。
+ * - 只登记元信息（标签/说明/典型路由倾向），不持有发布逻辑。真正发布走 NotificationOrchestrator。
  * - 不要做成给 App 用户看的 UI——是代码内管理台账。
  */
 object NotificationKindCatalog {
 
-    /** 典型展示倾向（仅说明用，不是硬规则；实际路由由 NotificationCenter/Request 决定）。 */
+    /** 典型展示倾向（仅说明用，不是硬规则；实际路由由 NotificationOrchestrator/Request 决定）。 */
     enum class TypicalRoute {
         /** 一般走普通通知。 */
         NORMAL,

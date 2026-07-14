@@ -5,7 +5,7 @@ import android.util.Log
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionTextNode
@@ -17,7 +17,7 @@ import kotlin.math.abs
 
 class RegexAiReviewCoordinator(
     private val appContext: Context,
-    private val scheduleCenter: ScheduleCenter,
+    private val scheduleCenter: ScheduleFacade,
     private val appScope: CoroutineScope,
 ) {
     companion object {

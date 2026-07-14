@@ -13,7 +13,7 @@ private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
  * 日程展示模型 —— 纯展示用，不是数据库实体。
  *
  * UI 列表（首页/全部日程/胶囊）只使用此模型渲染。
- * 操作（编辑/删除/归档/完成）通过 [action] 路由到 ScheduleCenter。
+ * 操作（编辑/删除/归档/完成）通过 [action] 路由到 ScheduleFacade。
  */
 data class ScheduleDisplayItem(
     // ── 唯一标识 ──
@@ -36,7 +36,7 @@ data class ScheduleDisplayItem(
     val action: ActionTarget
 ) {
     /**
-     * 操作目标：告诉 ScheduleCenter 该怎么找到真实数据。
+     * 操作目标：告诉 ScheduleFacade 该怎么找到真实数据。
      */
     sealed class ActionTarget {
         /** 真实的单次事件（或已脱离系列的子事件） */

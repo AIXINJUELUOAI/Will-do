@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 事件动作接收器：处理通知上的「完成」「签到」按钮。
- * 统一通过 ActionTarget 路由到 ScheduleCenter 新 API。
+ * 统一通过 ActionTarget 路由到 ScheduleFacade 新 API。
  */
 class EventActionReceiver : BroadcastReceiver() {
     companion object {

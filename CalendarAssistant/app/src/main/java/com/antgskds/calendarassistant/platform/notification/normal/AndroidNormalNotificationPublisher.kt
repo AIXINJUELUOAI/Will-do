@@ -27,7 +27,7 @@ import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
  *
  * 职责单一：把一份纯数据 [PlatformNotificationPayload] 渲染成系统通知并 notify。
  * 边界：
- * - 不读日程库、不读 Registry、不判断业务规则（这些在上层 NotificationCenter / feature 完成）。
+ * - 不读日程库、不读 Registry、不判断业务规则（这些在上层 NotificationOrchestrator / feature 完成）。
  * - 当前只支持普通（NORMAL）通知；live / 胶囊 / 厂商由后续 publisher 承担。
  * - 渲染对齐旧 [com.antgskds.calendarassistant.calendar.receivers.EventReminderReceiver]：
  *   同一 channel（event_reminders）、ic_launcher、HIGH、autoCancel，便于 Phase 2 无缝切换。
@@ -101,8 +101,8 @@ class AndroidNormalNotificationPublisher(
     }
 
     override suspend fun cancel(key: NotificationKey): NotificationResult {
-        // Phase 1 说明：按 id 取消的真实动作目前仍由 NotificationCenter.cancel() 用快照里的
-        // notificationId 执行（见 NotificationCenter.cancelNotification）。本方法保留接口契约，
+        // Phase 1 说明：按 id 取消的真实动作目前仍由 NotificationOrchestrator.cancel() 用快照里的
+        // notificationId 执行（见 NotificationOrchestrator.cancelNotification）。本方法保留接口契约，
         // 暂不在发布器侧重复持有 key→id 映射；Phase 2+ 把发布/取消完全收进发布器时再补。
         return NotificationResult.Success(key, NotificationState.CANCELLED)
     }

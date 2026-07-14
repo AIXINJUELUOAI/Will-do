@@ -12,9 +12,9 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.PromptC
 import com.antgskds.calendarassistant.feature.recognition.application.ai.PromptUpdater
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateChecker
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateCheckResult
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.note.application.NoteService
-import com.antgskds.calendarassistant.core.center.QuickMemoCenter
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
@@ -89,9 +89,9 @@ data class AppUpdateUiState(
 
 class MainViewModel(
     private val appContext: Context,
-    private val scheduleCenter: ScheduleCenter,
+    private val scheduleCenter: ScheduleFacade,
     private val noteCenter: NoteService,
-    private val quickMemoCenter: QuickMemoCenter,
+    private val quickMemoCenter: QuickMemoFacade,
     private val audioPlaybackCenter: QuickMemoAudioPlayer,
     private val capsuleQueryApi: CapsuleQueryApi,
     private val settingsQueryApi: SettingsQueryApi,

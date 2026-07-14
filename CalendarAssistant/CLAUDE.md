@@ -26,19 +26,19 @@
 ## 通知系统（已重构，走新链路）
 
 业务层**不要**直接 `NotificationManager.notify()` 或建 `NotificationCompat.Builder`。
-- 普通通知：经 `feature/api/notification`（NotificationApi）→ `NotificationCenter` → `platform/notification` 的 Publisher。
-- 日程提醒：单次/重复/错过补发都走 `core/center/ScheduleNotificationBridge` → NotificationApi，已统一，勿走旧 `NotificationScheduler` 排普通提醒（它现在只排胶囊闹钟）。
+- 普通通知：经 `feature/notification/api`（NotificationApi）→ `NotificationOrchestrator` → `platform/notification` 的 Publisher。
+- 日程提醒：单次/重复/错过补发都走 `feature/schedule/notification/ScheduleNotificationBridge` → NotificationApi，已统一，勿走旧 `NotificationScheduler` 排普通提醒（它现在只排胶囊闹钟）。
 - 胶囊（实况通知）：`CapsuleStateManager` 只算状态，发布交 `platform/capsule/CapsuleDispatcher`（内部分流原生/魅族/小米超级岛）。小米超级岛走 Xposed/SystemUI 跨进程，是底层 transport 例外。
 - 通知「展示模板层」(`shared/management/resource/notification/display/`) 禁止 import NotificationManager/Compat/Builder/PendingIntent/Repository/Room/*Center（守卫 `TEMPLATE_NO_*` 强制）。
 
 ## 主链路：入口可多，主流程一条（同类能力统一入口）
 
-主流程 `入口 → 识别 → 入库 → 同步 → 通知`。各链路有统一入口契约，新入口/调用方应**依赖契约接口，不要直接拿 Center 实现类**：
+主流程 `入口 → 识别 → 入库 → 同步 → 通知`。各链路有统一入口契约，新入口/调用方应**依赖契约接口，不要直接拿具体实现类**：
 - 识别：`core/operation/RecognitionApi`（RecognitionOrchestrator 实现）——所有识别入口（截图/图片/文本/语音）统一走它，输出 `AnalysisResult<RecognitionDraft>`。
 - 入库：`core/operation/IngestCommandApi`（IngestPipeline/ScheduleIngestWriter 实现）——识别结果/短信/即时码统一入库。
 - 同步：`core/operation/SyncApi`（CalendarSyncService 实现）——启停/立即同步/选日历/状态查询。同步失败不回滚本地入库。
-- 通知：`feature/api/notification/NotificationApi`（见下）。
-旧 `*Center` 是过渡实现，可继续作为这些契约的实现体；不要新增 `*Center.kt`。
+- 通知：`feature/notification/api/NotificationApi`（见下）。
+旧 `*Center` 已全部归位并改为职责名；不要新增 `*Center.kt`。
 
 ## 验证纪律
 
@@ -51,4 +51,4 @@
 ## 顶层结构方向
 
 `app`（启动装配）/ `feature`（业务）/ `platform`（系统厂商副作用）/ `shared`（跨业务公共 + 管理清单）。
-旧 `core/center/*Center` 是过渡 adapter，**不要新增 `*Center.kt`**。
+旧 `core/center` 已清空，**不要新增 `*Center.kt`**。

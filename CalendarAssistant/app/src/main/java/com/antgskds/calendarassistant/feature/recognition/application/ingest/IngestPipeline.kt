@@ -9,7 +9,7 @@ import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
 import com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.center.NotificationCenter
+import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -24,7 +24,7 @@ class IngestPipeline(
     private val importCenter: ScheduleIngestWriter,
     private val domainEventBus: DomainEventBus,
     private val appScope: CoroutineScope,
-    private val notificationCenter: NotificationCenter? = null,
+    private val notificationCenter: NotificationOrchestrator? = null,
     private val settingsProvider: (() -> MySettings)? = null,
     private val regexAiReviewCoordinator: RegexAiReviewCoordinator? = null,
 ) : IngestCommandApi {

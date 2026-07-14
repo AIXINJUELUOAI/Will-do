@@ -16,7 +16,7 @@ import com.antgskds.calendarassistant.feature.schedule.api.model.ScheduleInstanc
  * Phase 1 开发者调试：通过【新通知链路】预览 / 强制触发一条普通通知。
  *
  * 关键设计：刻意复用真实链路 `create() → trigger(Debug)`，让它完整流经
- * `NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher`，
+ * `NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher`，
  * 从而真正验证新发布器是否工作——**不另起任何「测试专用发送逻辑」**，否则等于白测。
  *
  * 注意：本动作不依赖任何真实日程，使用一个固定的虚拟事件 id，不污染用户数据。
@@ -39,7 +39,7 @@ object NotificationDebugActions {
                 secondaryText = "现在开始",
                 tertiaryText = "今天 14:00 · 会议室 A203",
                 expandedText = "开发者预览（新通知链路 Phase 1）：这条通知经 " +
-                    "NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher 真实发布，" +
+                    "NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher 真实发布，" +
                     "用于验证新发布器是否正常工作。"
             ),
             route = NotificationRoute.NORMAL,

@@ -1,7 +1,2 @@
-# Existing transitional Center implementations, relative to the repository root.
+# No transitional Center implementations remain.
 # New *Center.kt files are forbidden.
-app/src/main/java/com/antgskds/calendarassistant/core/center/BackupCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/CapsuleCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/NotificationCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/QuickMemoCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/ScheduleCenter.kt

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.quickmemo.application
 
 import android.content.Context
 import android.util.Log
@@ -22,6 +22,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.Noo
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
+import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,19 +32,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
-class QuickMemoCenter(
+class QuickMemoFacade(
     private val repository: QuickMemoRepository,
     private val appScope: CoroutineScope,
     private val speechTranscriber: SpeechTranscriber = NoopSpeechTranscriber(),
     private val recognitionCenter: RecognitionOrchestrator? = null,
     private val settingsQueryApi: SettingsQueryApi? = null,
     private val appContext: Context? = null,
-    private val notificationCenter: NotificationCenter? = null,
+    private val notificationCenter: NotificationOrchestrator? = null,
     private val capsuleCommandApi: CapsuleCommandApi? = null,
     private val capsuleQueryApi: CapsuleQueryApi? = null
 ) {
     companion object {
-        private const val TAG = "QuickMemoCenter"
+        private const val TAG = "QuickMemoFacade"
         private const val TRANSCRIPTION_TIMEOUT_MS = 120_000L
         private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
     }

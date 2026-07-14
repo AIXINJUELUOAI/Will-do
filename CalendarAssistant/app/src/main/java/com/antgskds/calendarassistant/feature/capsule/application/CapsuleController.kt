@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.capsule.application
 
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 
-class CapsuleCenter(
+class CapsuleController(
     private val capsuleCommandApi: CapsuleCommandApi,
     private val capsuleQueryApi: CapsuleQueryApi
 ) {

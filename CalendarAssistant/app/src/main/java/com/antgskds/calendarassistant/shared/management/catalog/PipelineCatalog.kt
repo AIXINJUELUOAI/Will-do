@@ -83,9 +83,9 @@ object PipelineCatalog {
 
         // —— 通知 ——
         PipelineEntry(
-            "通知发布主流程", Chain.NOTIFICATION, "core/center/NotificationCenter",
+            "通知发布主流程", Chain.NOTIFICATION, "feature/notification/application/NotificationOrchestrator",
             Maturity.TRANSITION,
-            "NotificationApi 请求 → NotificationCenter 分流 → Publisher 发布；目标迁为 NotificationOrchestrator",
+            "NotificationApi 请求 → NotificationOrchestrator 分流 → Publisher 发布",
         ),
         PipelineEntry(
             "胶囊发布流程", Chain.NOTIFICATION, "platform/capsule/CapsuleDispatcher",
@@ -97,7 +97,7 @@ object PipelineCatalog {
         PipelineEntry(
             "本地存储分流", Chain.SCHEDULE, "store/StoreDispatcher",
             Maturity.TRANSITION,
-            "日程写入主链路 ScheduleCenter → ScheduleStoreGateway → StoreDispatcher → StoreRootNode 的分流节点",
+            "日程写入主链路 ScheduleFacade → ScheduleStoreGateway → StoreDispatcher → StoreRootNode 的分流节点",
         ),
     )
 }

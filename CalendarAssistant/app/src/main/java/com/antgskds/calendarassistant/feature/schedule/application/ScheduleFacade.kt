@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.schedule.application
 
 import android.util.Log
 import com.antgskds.calendarassistant.feature.schedule.application.undo.UndoManager
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * 直接暴露 willdo Event，不再经过 MyEvent 转换。
  */
-class ScheduleCenter(
+class ScheduleFacade(
     private val calendarCenter: ScheduleStoreGateway,
     private val appScope: CoroutineScope,
     private val notificationApi: NotificationApi? = null,

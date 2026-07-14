@@ -22,7 +22,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * 【已降级为底层胶囊闹钟工具】历史名「通知调度器」，但普通日程提醒早已迁到新通知链路
- * （ScheduleNotificationBridge → NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher）。
+ * （ScheduleNotificationBridge → NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher）。
  *
  * 现存职责仅剩：
  * - 胶囊开启时排 CAPSULE_START/END/REFRESH 系统闹钟（scheduleReminders 内）；
@@ -60,7 +60,7 @@ object NotificationScheduler {
 
         val isLiveCapsuleEnabled = settings.isLiveCapsuleEnabled
         // Phase 2+：单次日程的「普通提醒」已完全由新通知链路接管
-        // （ScheduleNotificationBridge → NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher）。
+        // （ScheduleNotificationBridge → NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher）。
         // 此处只在胶囊开启时排胶囊闹钟（CAPSULE_START/END/REFRESH，仅作为加速刷新信号，胶囊本体由
         // CapsuleStateManager 实时计算驱动），不再排任何普通提醒，避免与新链路重复。
         if (!isLiveCapsuleEnabled) {

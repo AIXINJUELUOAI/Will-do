@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.backup.application
 
 import android.content.Context
 import android.net.Uri
@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
@@ -42,9 +43,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-class BackupCenter(
+class BackupCoordinator(
     private val context: Context,
-    private val scheduleCenter: ScheduleCenter,
+    private val scheduleCenter: ScheduleFacade,
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsOperationApi: SettingsOperationApi,
     private val attachmentManager: EventAttachmentManager,
