@@ -32,7 +32,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
 import com.antgskds.calendarassistant.feature.appearance.domain.AppBackgroundImageStore
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
-import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
+import com.antgskds.calendarassistant.app.ui.theme.material.normalizeThemeHexColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

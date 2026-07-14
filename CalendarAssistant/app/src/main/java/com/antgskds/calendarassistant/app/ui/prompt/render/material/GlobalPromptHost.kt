@@ -4,9 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.padding
-import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
-import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiAction
-import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiState
+import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
+import com.antgskds.calendarassistant.app.ui.prompt.contract.GlobalPromptUiAction
+import com.antgskds.calendarassistant.app.ui.prompt.contract.GlobalPromptUiState
 
 @Composable
 fun MaterialGlobalPromptHost(

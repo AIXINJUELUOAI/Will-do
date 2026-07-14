@@ -2,8 +2,8 @@ package com.antgskds.calendarassistant.feature.schedule.ui.render
 
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.ui.dialogs.MaterialCourseEditDialog
-import com.antgskds.calendarassistant.ui.dialogs.MaterialCourseSingleEditDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog.MaterialCourseEditDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog.MaterialCourseSingleEditDialog
 import java.time.LocalDate
 
 @Composable

@@ -39,11 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.contract.AppUpdateScreenState
-import com.antgskds.calendarassistant.ui.contract.AppUpdateSectionUi
-import com.antgskds.calendarassistant.ui.contract.AppUpdateUiAction
-import com.antgskds.calendarassistant.ui.contract.AppUpdateVersionUi
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.feature.update.ui.contract.AppUpdateScreenState
+import com.antgskds.calendarassistant.feature.update.ui.contract.AppUpdateSectionUi
+import com.antgskds.calendarassistant.feature.update.ui.contract.AppUpdateUiAction
+import com.antgskds.calendarassistant.feature.update.ui.contract.AppUpdateVersionUi
 import com.antgskds.calendarassistant.feature.update.ui.render.AppUpdateScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 

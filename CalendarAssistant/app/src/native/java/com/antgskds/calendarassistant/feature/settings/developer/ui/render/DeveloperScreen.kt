@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.*
+import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.*
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialDeveloperScreen
 
 @Composable

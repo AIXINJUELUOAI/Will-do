@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.settings.about.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.DonateUiAction
-import com.antgskds.calendarassistant.ui.contract.DonateUiState
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.DonateUiAction
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.DonateUiState
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialDonateScreen
 
 @Composable

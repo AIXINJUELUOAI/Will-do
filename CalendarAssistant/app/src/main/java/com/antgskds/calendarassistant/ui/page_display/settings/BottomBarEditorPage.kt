@@ -55,13 +55,13 @@ import com.antgskds.calendarassistant.data.model.isHomeEntryAvailable
 import com.antgskds.calendarassistant.data.model.sanitizeHomeBottomItems
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBar
-import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBar
+import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiAction
-import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiState
+import com.antgskds.calendarassistant.feature.home.ui.contract.BottomBarEditorUiAction
+import com.antgskds.calendarassistant.feature.home.ui.contract.BottomBarEditorUiState
 import com.antgskds.calendarassistant.feature.home.ui.render.BottomBarEditorScreen
 
 @Composable

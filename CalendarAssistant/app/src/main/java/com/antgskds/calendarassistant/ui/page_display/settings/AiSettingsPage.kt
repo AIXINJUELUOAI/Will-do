@@ -71,14 +71,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ApiModelProvider
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.components.ToastType
-import com.antgskds.calendarassistant.ui.components.UniversalToast
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
+import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToast
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.ui.contract.AiSettingsUiAction
-import com.antgskds.calendarassistant.ui.contract.AiSettingsUiState
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiAction
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiState
 import com.antgskds.calendarassistant.feature.recognition.ui.render.AiSettingsScreen
 import kotlinx.coroutines.launch
 

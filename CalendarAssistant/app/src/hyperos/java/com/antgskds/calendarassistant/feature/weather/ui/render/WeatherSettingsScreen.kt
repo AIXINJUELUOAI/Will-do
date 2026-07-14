@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.weather.ui.render
 
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.contract.WeatherSettingsUiState
+import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherSettingsUiState
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialWeatherSettingsScreen
 
 @Composable

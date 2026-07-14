@@ -58,8 +58,8 @@ import com.antgskds.calendarassistant.data.model.WidgetScheduleSnapshot
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
 import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.CourseWidgetProvider
 import com.antgskds.calendarassistant.platform.widget.CourseWidgetSnapshot
@@ -69,8 +69,8 @@ import com.antgskds.calendarassistant.platform.widget.WeatherWidgetProvider
 import com.antgskds.calendarassistant.platform.widget.WidgetAppearanceConfig
 import com.antgskds.calendarassistant.platform.widget.WidgetInstanceConfigStore
 import com.antgskds.calendarassistant.platform.widget.WidgetType
-import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiAction
-import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiState
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetSettingsUiAction
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetSettingsUiState
 import com.antgskds.calendarassistant.platform.widget.ui.render.WidgetSettingsScreen
 import java.time.LocalDate
 import java.time.LocalDateTime

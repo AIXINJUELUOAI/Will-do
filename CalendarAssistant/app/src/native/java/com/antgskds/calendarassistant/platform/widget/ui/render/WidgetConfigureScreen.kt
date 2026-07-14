@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.platform.widget.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiAction
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiState
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiAction
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiState
 import com.antgskds.calendarassistant.platform.widget.ui.render.material.MaterialWidgetConfigureScreen
 
 @Composable

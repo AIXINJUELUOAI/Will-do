@@ -2,8 +2,8 @@ package com.antgskds.calendarassistant.feature.recognition.ui.render
 
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
-import com.antgskds.calendarassistant.ui.contract.AiSettingsUiAction
-import com.antgskds.calendarassistant.ui.contract.AiSettingsUiState
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiAction
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiState
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialAiSettingsScreen
 
 @Composable

@@ -7,7 +7,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.data.model.eventColorPaletteToArgb
-import com.antgskds.calendarassistant.ui.theme.AppEventColors
+import com.antgskds.calendarassistant.app.ui.theme.material.AppEventColors
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
