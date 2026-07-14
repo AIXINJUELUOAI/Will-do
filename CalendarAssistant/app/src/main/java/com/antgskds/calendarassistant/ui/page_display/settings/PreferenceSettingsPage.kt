@@ -51,6 +51,8 @@ import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.ui.contract.PreferenceUiController
+import com.antgskds.calendarassistant.ui.flavor.PreferenceSettingsScreen
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -65,9 +67,32 @@ fun PreferenceSettingsPage(
     onNavigateToCourseManage: () -> Unit = {},
     onNavigateToTimeTableManage: () -> Unit = {}
 ) {
-    val settings by viewModel.settings.collectAsState()
-    val syncStatus by viewModel.syncStatus.collectAsState()
-    val availableSyncCalendars by viewModel.availableSyncCalendars.collectAsState()
+    PreferenceSettingsScreen(
+        controller = remember(viewModel) { PreferenceUiController(viewModel) },
+        uiSize = uiSize,
+        onNavigateToBottomBarEditor = onNavigateToBottomBarEditor,
+        onNavigateToWidgetSettings = onNavigateToWidgetSettings,
+        onNavigateToScheduleColors = onNavigateToScheduleColors,
+        onNavigateToSemesterConfig = onNavigateToSemesterConfig,
+        onNavigateToCourseManage = onNavigateToCourseManage,
+        onNavigateToTimeTableManage = onNavigateToTimeTableManage
+    )
+}
+
+@Composable
+fun MaterialPreferenceSettingsScreen(
+    controller: PreferenceUiController,
+    uiSize: Int = 2,
+    onNavigateToBottomBarEditor: () -> Unit = {},
+    onNavigateToWidgetSettings: () -> Unit = {},
+    onNavigateToScheduleColors: () -> Unit = {},
+    onNavigateToSemesterConfig: () -> Unit = {},
+    onNavigateToCourseManage: () -> Unit = {},
+    onNavigateToTimeTableManage: () -> Unit = {}
+) {
+    val settings by controller.settings.collectAsState()
+    val syncStatus by controller.syncStatus.collectAsState()
+    val availableSyncCalendars by controller.availableSyncCalendars.collectAsState()
     val context = LocalContext.current
     val app = context.applicationContext as? App
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -119,8 +144,8 @@ fun PreferenceSettingsPage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshOverlayPermission()
-                viewModel.refreshSyncStatus()
-                viewModel.refreshSyncCalendars()
+                controller.refreshSyncStatus()
+                controller.refreshSyncCalendars()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -181,9 +206,9 @@ fun PreferenceSettingsPage(
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            viewModel.enableCalendarSyncAndSyncNow { result ->
+            controller.enableCalendarSyncAndSyncNow { result ->
                 // initCalendarObserver removed - sync handled by StoreRootNode
-                viewModel.refreshSyncCalendars()
+                controller.refreshSyncCalendars()
                 if (result.isSuccess) {
                     snackbarHostState.showSnackbar("日历同步已开启，并已立即同步")
                 } else {
@@ -216,7 +241,7 @@ fun PreferenceSettingsPage(
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (!allGranted) {
-            viewModel.updatePreference(smsMonitoring = false)
+            controller.updatePreference(smsMonitoring = false)
         } else if (!SmsNotificationListenerService.isEnabled(context)) {
             Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
             SmsNotificationListenerService.requestEnable(context)
@@ -250,7 +275,7 @@ fun PreferenceSettingsPage(
                         title = "界面大小",
                         subtitle = "调整界面缩放（相对于设备原生大小）",
                         value = settings.uiSize.toFloat(),
-                        onValueChange = { viewModel.updateUiSize(it.toInt()) },
+                        onValueChange = { controller.updateUiSize(it.toInt()) },
                         valueRange = 1f..3f,
                         steps = 1, // 离散：1, 2, 3
                         cardTitleStyle = cardTitleStyle,
@@ -267,7 +292,7 @@ fun PreferenceSettingsPage(
                         title = "显示明日日程",
                         subtitle = "在今日日程列表底部预览明日安排",
                         checked = settings.showTomorrowEvents,
-                        onCheckedChange = { viewModel.updatePreference(showTomorrow = it) },
+                        onCheckedChange = { controller.updatePreference(showTomorrow = it) },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
@@ -317,7 +342,7 @@ fun PreferenceSettingsPage(
                                 openOverlayPermissionSettings()
                                 return@SwitchSettingItem
                             }
-                            viewModel.updatePreference(
+                            controller.updatePreference(
                                 floatingWindow = isChecked,
                                 edgeBarEnabled = if (isChecked) settings.edgeBarEnabled else false,
                                 floatingBallEnabled = if (isChecked) settings.floatingBallEnabled else false
@@ -369,7 +394,7 @@ fun PreferenceSettingsPage(
                             },
                             eventRange = settings.floatingEventRange,
                             onEventRangeChange = { range ->
-                                viewModel.updatePreference(floatingEventRange = range)
+                                controller.updatePreference(floatingEventRange = range)
                             },
                             cardTitleStyle = cardTitleStyle,
                             cardSubtitleStyle = cardSubtitleStyle
@@ -389,7 +414,7 @@ fun PreferenceSettingsPage(
                                 "所有入口从右侧滑入"
                             },
                             selectedSide = settings.floatingExpandSide,
-                            onSideSelected = { side -> viewModel.updatePreference(floatingExpandSide = side) },
+                            onSideSelected = { side -> controller.updatePreference(floatingExpandSide = side) },
                             cardTitleStyle = cardTitleStyle,
                             cardSubtitleStyle = cardSubtitleStyle
                         )
@@ -409,7 +434,7 @@ fun PreferenceSettingsPage(
                                     openOverlayPermissionSettings()
                                     return@SwitchSettingItem
                                 }
-                                viewModel.updateEdgeBarSettings(enabled = isChecked)
+                                controller.updateEdgeBarSettings(enabled = isChecked)
                                 if (isChecked) {
                                     startEdgeBarService()
                                 } else {
@@ -439,7 +464,7 @@ fun PreferenceSettingsPage(
                                         "唤起条固定在屏幕右侧"
                                     },
                                     selectedSide = settings.edgeBarSide,
-                                    onSideSelected = { side -> viewModel.updateEdgeBarSettings(side = side) },
+                                    onSideSelected = { side -> controller.updateEdgeBarSettings(side = side) },
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle
                         )
@@ -523,7 +548,7 @@ fun PreferenceSettingsPage(
                                     title = "纵向位置",
                                     subtitle = "上下位置百分比",
                                     value = settings.edgeBarYPercent,
-                                    onValueChange = { viewModel.updateEdgeBarSettings(yPercent = it.roundToInt().toFloat()) },
+                                    onValueChange = { controller.updateEdgeBarSettings(yPercent = it.roundToInt().toFloat()) },
                                     valueRange = 0f..100f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -537,7 +562,7 @@ fun PreferenceSettingsPage(
                                     title = "宽度",
                                     subtitle = "侧边条宽度",
                                     value = settings.edgeBarWidthDp.toFloat(),
-                                    onValueChange = { viewModel.updateEdgeBarSettings(widthDp = it.roundToInt()) },
+                                    onValueChange = { controller.updateEdgeBarSettings(widthDp = it.roundToInt()) },
                                     valueRange = 4f..20f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -551,7 +576,7 @@ fun PreferenceSettingsPage(
                                     title = "高度",
                                     subtitle = "侧边条高度",
                                     value = settings.edgeBarHeightDp.toFloat(),
-                                    onValueChange = { viewModel.updateEdgeBarSettings(heightDp = it.roundToInt()) },
+                                    onValueChange = { controller.updateEdgeBarSettings(heightDp = it.roundToInt()) },
                                     valueRange = 60f..240f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -565,7 +590,7 @@ fun PreferenceSettingsPage(
                                     title = "颜色深浅",
                                     subtitle = "调整透明度，0% 时完全透明",
                                     value = settings.edgeBarAlpha * 100f,
-                                    onValueChange = { viewModel.updateEdgeBarSettings(alpha = it.roundToInt() / 100f) },
+                                    onValueChange = { controller.updateEdgeBarSettings(alpha = it.roundToInt() / 100f) },
                                     valueRange = 0f..100f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -583,7 +608,7 @@ fun PreferenceSettingsPage(
                                 ) {
                                     AssistChip(
                                         onClick = {
-                                            viewModel.updateEdgeBarSettings(
+                                            controller.updateEdgeBarSettings(
                                                 enabled = true,
                                                 side = "RIGHT",
                                                 yPercent = 50f,
@@ -623,7 +648,7 @@ fun PreferenceSettingsPage(
                                     openOverlayPermissionSettings()
                                     return@SwitchSettingItem
                                 }
-                                viewModel.updatePreference(floatingBallEnabled = isChecked)
+                                controller.updatePreference(floatingBallEnabled = isChecked)
                                 if (isChecked) {
                                     startFloatingBallService()
                                 } else {
@@ -715,7 +740,7 @@ fun PreferenceSettingsPage(
                                     title = "尺寸",
                                     subtitle = "悬浮球直径",
                                     value = settings.floatingBallSizeDp.toFloat(),
-                                    onValueChange = { viewModel.updatePreference(floatingBallSizeDp = it.roundToInt()) },
+                                    onValueChange = { controller.updatePreference(floatingBallSizeDp = it.roundToInt()) },
                                     valueRange = 44f..72f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -729,7 +754,7 @@ fun PreferenceSettingsPage(
                                     title = "透明度",
                                     subtitle = "调整悬浮球可见程度",
                                     value = settings.floatingBallAlpha * 100f,
-                                    onValueChange = { viewModel.updatePreference(floatingBallAlpha = it.roundToInt() / 100f) },
+                                    onValueChange = { controller.updatePreference(floatingBallAlpha = it.roundToInt() / 100f) },
                                     valueRange = 0f..100f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
@@ -747,7 +772,7 @@ fun PreferenceSettingsPage(
                                 ) {
                                     AssistChip(
                                         onClick = {
-                                            viewModel.updatePreference(
+                                            controller.updatePreference(
                                                 floatingBallEnabled = true,
                                                 floatingBallXPercent = 86f,
                                                 floatingBallYPercent = 50f,
@@ -780,7 +805,7 @@ fun PreferenceSettingsPage(
                         title = "触感反馈",
                         subtitle = "点击、长按和滑动到阈值时提供轻微反馈",
                         checked = settings.hapticFeedbackEnabled,
-                        onCheckedChange = { viewModel.updatePreference(hapticFeedbackEnabled = it) },
+                        onCheckedChange = { controller.updatePreference(hapticFeedbackEnabled = it) },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
@@ -795,13 +820,13 @@ fun PreferenceSettingsPage(
                         checked = settings.volumeUpLongPressEnabled,
                         action = settings.volumeUpLongPressAction,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(
+                            controller.updatePreference(
                                 volumeUpLongPressEnabled = isChecked,
                                 volumeUpLongPressAction = if (isChecked) settings.volumeUpLongPressAction.coerceIn(1, 3) else settings.volumeUpLongPressAction
                             )
                         },
                         onActionChange = { action ->
-                            viewModel.updatePreference(volumeUpLongPressAction = action)
+                            controller.updatePreference(volumeUpLongPressAction = action)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -819,7 +844,7 @@ fun PreferenceSettingsPage(
                                     )
                                 )
                             }
-                            viewModel.updatePreference(smsMonitoring = isChecked)
+                            controller.updatePreference(smsMonitoring = isChecked)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -852,7 +877,7 @@ fun PreferenceSettingsPage(
                         subtitle = "今日 ${formatMinuteOfDay(settings.dailySummaryMorningMinuteOfDay)}，明日 ${formatMinuteOfDay(settings.dailySummaryEveningMinuteOfDay)}",
                         checked = settings.isDailySummaryEnabled,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(dailySummary = isChecked)
+                            controller.updatePreference(dailySummary = isChecked)
                             if (isChecked) {
                                 app?.runtimeCenter?.scheduleDailySummary()
                             }
@@ -907,7 +932,7 @@ fun PreferenceSettingsPage(
                         subtitle = "日程开始时显示实况通知",
                         checked = settings.isLiveCapsuleEnabled,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(liveCapsule = isChecked)
+                            controller.updatePreference(liveCapsule = isChecked)
                             if (isChecked) showToast("实况胶囊已开启", ToastType.INFO)
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -930,7 +955,7 @@ fun PreferenceSettingsPage(
                                 subtitle = "当有多个取件码时合并显示为一个胶囊",
                                 checked = settings.isPickupAggregationEnabled,
                                 onCheckedChange = { isChecked ->
-                                    viewModel.updatePreference(pickupAggregation = isChecked)
+                                    controller.updatePreference(pickupAggregation = isChecked)
                                 },
                                 cardTitleStyle = cardTitleStyle,
                                 cardSubtitleStyle = cardSubtitleStyle
@@ -953,16 +978,16 @@ fun PreferenceSettingsPage(
                         checked = settings.isAdvanceReminderEnabled,
                         minutes = settings.advanceReminderMinutes,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(advanceReminderEnabled = isChecked)
+                            controller.updatePreference(advanceReminderEnabled = isChecked)
                             if (isChecked && settings.advanceReminderMinutes > 0) {
-                                val hasDuplicate = viewModel.hasDuplicateAdvanceReminder(settings.advanceReminderMinutes)
+                                val hasDuplicate = controller.hasDuplicateAdvanceReminder(settings.advanceReminderMinutes)
                                 if (hasDuplicate) {
                                     showToast("检测到可能存在的重复提醒", ToastType.INFO)
                                 }
                             }
                         },
                         onMinutesChange = { minutes ->
-                            viewModel.updatePreference(advanceReminderMinutes = minutes)
+                            controller.updatePreference(advanceReminderMinutes = minutes)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -979,7 +1004,7 @@ fun PreferenceSettingsPage(
                         subtitle = "在状态栏显示下载速度",
                         checked = settings.isNetworkSpeedCapsuleEnabled,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(networkSpeedCapsule = isChecked)
+                            controller.updatePreference(networkSpeedCapsule = isChecked)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -1028,7 +1053,7 @@ fun PreferenceSettingsPage(
                         subtitle = "开启后图片识别将使用多模态模型",
                         checked = settings.useMultimodalAi,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(useMultimodalAi = isChecked)
+                            controller.updatePreference(useMultimodalAi = isChecked)
                             showToast(if (isChecked) "已切换为多模态AI" else "已切换为文本AI")
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -1045,7 +1070,7 @@ fun PreferenceSettingsPage(
                         subtitle = "仅适配 OpenAI",
                         checked = settings.disableThinking,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(disableThinking = isChecked)
+                            controller.updatePreference(disableThinking = isChecked)
                             showToast(if (isChecked) "快速模式已开启" else "快速模式已关闭")
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -1064,7 +1089,7 @@ fun PreferenceSettingsPage(
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
                                 if (app?.permissionCenter?.hasCalendarPermissions(context) == true) {
-                                    viewModel.enableCalendarSyncAndSyncNow { result ->
+                                    controller.enableCalendarSyncAndSyncNow { result ->
                                         // initCalendarObserver removed - sync handled by StoreRootNode
                                         if (result.isSuccess) {
                                             showToast("日历同步已开启，并已立即同步")
@@ -1076,7 +1101,7 @@ fun PreferenceSettingsPage(
                                     showPermissionDialog = true
                                 }
                             } else {
-                                viewModel.toggleCalendarSync(false)
+                                controller.toggleCalendarSync(false)
                                 showToast("日历同步已关闭")
                             }
                         },
@@ -1128,7 +1153,7 @@ fun PreferenceSettingsPage(
                                 subtitle = "仅作兜底轮询，优先即时监听",
                                 value = syncStatus.syncIntervalSeconds.toFloat(),
                                 onValueChange = { seconds ->
-                                    viewModel.updateSyncIntervalSeconds(seconds.toInt())
+                                    controller.updateSyncIntervalSeconds(seconds.toInt())
                                 },
                                 valueRange = 1f..300f,
                                 steps = 0,
@@ -1152,7 +1177,7 @@ fun PreferenceSettingsPage(
                         subtitle = "日程过期后立即自动归档",
                         checked = settings.autoArchiveEnabled,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(autoArchive = isChecked)
+                            controller.updatePreference(autoArchive = isChecked)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -1197,7 +1222,7 @@ fun PreferenceSettingsPage(
                         subtitle = "关闭后无法在主页下滑进入课表",
                         checked = settings.courseFeatureEnabled,
                         onCheckedChange = { isChecked ->
-                            viewModel.updatePreference(courseFeatureEnabled = isChecked)
+                            controller.updatePreference(courseFeatureEnabled = isChecked)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -1274,7 +1299,7 @@ fun PreferenceSettingsPage(
                         title = "截图延迟",
                         subtitle = "截图与分析之间的等待时间",
                         value = MySettings.normalizeScreenshotDelayMs(settings.screenshotDelayMs).toFloat(),
-                        onValueChange = { viewModel.updateScreenshotDelay(it.toLong()) },
+                        onValueChange = { controller.updateScreenshotDelay(it.toLong()) },
                         valueRange = MySettings.SCREENSHOT_DELAY_MIN_MS.toFloat()..MySettings.SCREENSHOT_DELAY_MAX_MS.toFloat(),
                         steps = 0, // 0 = 无极调节
                         cardTitleStyle = cardTitleStyle,
@@ -1314,7 +1339,7 @@ fun PreferenceSettingsPage(
                 initialSelection = syncStatus.sourceCalendarIds.toSet(),
                 onDismiss = { showSourceCalendarSheet = false },
                 onConfirm = { selectedIds ->
-                    viewModel.updateSourceCalendars(selectedIds) { result ->
+                    controller.updateSourceCalendars(selectedIds) { result ->
                         if (result.isSuccess) {
                             showToast("同步来源日历已更新")
                             showSourceCalendarSheet = false
@@ -1331,7 +1356,7 @@ fun PreferenceSettingsPage(
                 selectedDuration = settings.defaultEventDurationMinutes,
                 onDismiss = { showEventDurationPicker = false },
                 onConfirm = { duration ->
-                    viewModel.updatePreference(defaultEventDurationMinutes = duration)
+                    controller.updatePreference(defaultEventDurationMinutes = duration)
                     showEventDurationPicker = false
                 }
             )
@@ -1342,7 +1367,7 @@ fun PreferenceSettingsPage(
                 selectedMode = settings.recognitionMode,
                 onDismiss = { showRecognitionModePicker = false },
                 onConfirm = { mode ->
-                    viewModel.updatePreference(recognitionMode = mode)
+                    controller.updatePreference(recognitionMode = mode)
                     showRecognitionModePicker = false
                 }
             )
@@ -1354,7 +1379,7 @@ fun PreferenceSettingsPage(
                 onDismiss = { showDailySummaryMorningTimePicker = false },
                 title = "今日提醒时间",
                 onConfirm = { minuteOfDay ->
-                    viewModel.updateDailySummaryTimes(
+                    controller.updateDailySummaryTimes(
                         morningMinuteOfDay = minuteOfDay,
                         onUpdated = { app?.runtimeCenter?.scheduleDailySummary() }
                     )
@@ -1369,7 +1394,7 @@ fun PreferenceSettingsPage(
                 onDismiss = { showDailySummaryEveningTimePicker = false },
                 title = "明日预告时间",
                 onConfirm = { minuteOfDay ->
-                    viewModel.updateDailySummaryTimes(
+                    controller.updateDailySummaryTimes(
                         eveningMinuteOfDay = minuteOfDay,
                         onUpdated = { app?.runtimeCenter?.scheduleDailySummary() }
                     )
@@ -1386,14 +1411,14 @@ fun PreferenceSettingsPage(
                 onActionSelected = { action ->
                     when (request.target) {
                         FloatingGestureActionTarget.EDGE_BAR -> when (request.slot) {
-                            FloatingGestureActionSlot.SINGLE_TAP -> viewModel.updatePreference(edgeBarSingleTapAction = action)
-                            FloatingGestureActionSlot.DOUBLE_TAP -> viewModel.updatePreference(edgeBarDoubleTapAction = action)
-                            FloatingGestureActionSlot.LONG_PRESS -> viewModel.updatePreference(edgeBarLongPressAction = action)
+                            FloatingGestureActionSlot.SINGLE_TAP -> controller.updatePreference(edgeBarSingleTapAction = action)
+                            FloatingGestureActionSlot.DOUBLE_TAP -> controller.updatePreference(edgeBarDoubleTapAction = action)
+                            FloatingGestureActionSlot.LONG_PRESS -> controller.updatePreference(edgeBarLongPressAction = action)
                         }
                         FloatingGestureActionTarget.FLOATING_BALL -> when (request.slot) {
-                            FloatingGestureActionSlot.SINGLE_TAP -> viewModel.updatePreference(floatingBallSingleTapAction = action)
-                            FloatingGestureActionSlot.DOUBLE_TAP -> viewModel.updatePreference(floatingBallDoubleTapAction = action)
-                            FloatingGestureActionSlot.LONG_PRESS -> viewModel.updatePreference(floatingBallLongPressAction = action)
+                            FloatingGestureActionSlot.SINGLE_TAP -> controller.updatePreference(floatingBallSingleTapAction = action)
+                            FloatingGestureActionSlot.DOUBLE_TAP -> controller.updatePreference(floatingBallDoubleTapAction = action)
+                            FloatingGestureActionSlot.LONG_PRESS -> controller.updatePreference(floatingBallLongPressAction = action)
                         }
                     }
                     gestureActionPicker = null
