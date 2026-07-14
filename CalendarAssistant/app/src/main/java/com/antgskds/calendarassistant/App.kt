@@ -16,7 +16,7 @@ import com.antgskds.calendarassistant.feature.schedule.data.maintenance.Duplicat
 import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
 import com.antgskds.calendarassistant.feature.recognition.application.ingest.ScheduleIngestWriter
 import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
-import com.antgskds.calendarassistant.core.center.NoteCenter
+import com.antgskds.calendarassistant.feature.note.application.NoteService
 import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
@@ -32,10 +32,10 @@ import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
-import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
+import com.antgskds.calendarassistant.feature.note.data.migration.LegacyNoteMigrator
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
 import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaParaformerTranscriber
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.QuickMemoAudioPlayer
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
@@ -127,15 +127,15 @@ class App : Application() {
         NoteRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).notesDao())
     }
 
-    val noteCenter: NoteCenter by lazy {
-        NoteCenter(noteRepository, appScope)
+    val noteCenter: NoteService by lazy {
+        NoteService(noteRepository, appScope)
     }
 
     private val quickMemoRepository: QuickMemoRepository by lazy {
         QuickMemoRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).quickMemoDao())
     }
 
-    val audioPlaybackCenter: AudioPlaybackCenter by lazy { AudioPlaybackCenter() }
+    val audioPlaybackCenter: QuickMemoAudioPlayer by lazy { QuickMemoAudioPlayer() }
 
     val quickMemoCenter: QuickMemoCenter by lazy {
         QuickMemoCenter(
@@ -151,8 +151,8 @@ class App : Application() {
         )
     }
 
-    val legacyNoteMigrationCenter: LegacyNoteMigrationCenter by lazy {
-        LegacyNoteMigrationCenter(applicationContext, noteRepository)
+    val legacyNoteMigrationCenter: LegacyNoteMigrator by lazy {
+        LegacyNoteMigrator(applicationContext, noteRepository)
     }
 
     // ══════════════════════════════════════════════════════════════════════

@@ -124,7 +124,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.MySettings

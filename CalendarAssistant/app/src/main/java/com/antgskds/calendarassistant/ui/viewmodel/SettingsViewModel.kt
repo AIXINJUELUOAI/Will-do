@@ -18,8 +18,8 @@ import com.antgskds.calendarassistant.feature.schedule.application.sync.Calendar
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
-import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
-import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationResult
+import com.antgskds.calendarassistant.feature.note.data.migration.LegacyNoteMigrator
+import com.antgskds.calendarassistant.feature.note.data.migration.LegacyNoteMigrationResult
 import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsTransformApi
@@ -52,7 +52,7 @@ class SettingsViewModel(
     private val settingsQueryApi: SettingsQueryApi,
     private val settingsTransformApi: SettingsTransformApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
-    private val legacyNoteMigrationCenter: LegacyNoteMigrationCenter,
+    private val legacyNoteMigrationCenter: LegacyNoteMigrator,
     private val duplicateEventCleanupCenter: DuplicateEventCleaner
 ) : ViewModel() {
     private val backgroundImageStore = AppBackgroundImageStore(appContext)

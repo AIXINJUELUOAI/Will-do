@@ -1,8 +1,9 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.data.migration
 
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +16,7 @@ data class LegacyNoteMigrationResult(
     val cleaned: Int = 0
 )
 
-class LegacyNoteMigrationCenter(
+class LegacyNoteMigrator(
     context: Context,
     private val noteRepository: NoteRepository
 ) {
