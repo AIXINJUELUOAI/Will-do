@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.capsule.domain.icon
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.core.content
 
 import android.content.Context
-import com.antgskds.calendarassistant.core.rule.EventPresenter
-import com.antgskds.calendarassistant.core.rule.EventRenderModel
+import com.antgskds.calendarassistant.feature.schedule.presentation.rule.EventPresenter
+import com.antgskds.calendarassistant.feature.schedule.presentation.rule.EventRenderModel
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode

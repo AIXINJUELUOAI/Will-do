@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.data.query
 
 import com.antgskds.calendarassistant.core.query.EventActionButton
 import com.antgskds.calendarassistant.core.query.EventActionQueryApi
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*

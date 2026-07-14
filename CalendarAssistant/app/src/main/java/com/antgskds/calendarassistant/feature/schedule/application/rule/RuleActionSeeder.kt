@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.application.rule
 
 import android.content.Context
 

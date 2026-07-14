@@ -9,7 +9,7 @@ import android.util.Log
 
 import com.antgskds.calendarassistant.calendar.helpers.FLAG_ALL_DAY
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.FlymeUtils
 import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers

@@ -5,7 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiAction
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiState
 import com.antgskds.calendarassistant.platform.floating.ui.render.PickupQrFloatingCardContent

@@ -35,9 +35,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.rule.PresetIcons
-import com.antgskds.calendarassistant.core.rule.RuleIconSource
-import com.antgskds.calendarassistant.core.rule.RuleRegistry
+import com.antgskds.calendarassistant.feature.capsule.domain.icon.RuleIconSource
+import com.antgskds.calendarassistant.feature.capsule.presentation.icon.PresetIcons
+import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 
 /**

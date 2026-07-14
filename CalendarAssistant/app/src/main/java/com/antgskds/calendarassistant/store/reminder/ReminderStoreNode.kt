@@ -13,7 +13,7 @@ import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.Reminder
 import com.antgskds.calendarassistant.calendar.models.isTransit
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler

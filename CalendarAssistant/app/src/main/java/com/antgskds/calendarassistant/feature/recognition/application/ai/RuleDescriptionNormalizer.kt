@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 
 object RuleDescriptionNormalizer {
     fun normalize(events: List<RecognitionDraft>): List<RecognitionDraft> {

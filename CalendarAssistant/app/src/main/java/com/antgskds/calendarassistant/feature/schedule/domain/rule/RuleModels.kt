@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.domain.rule
 
 /**
  * 简化的规则数据模型。

@@ -1,10 +1,15 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.application.rule
 
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.R
+import com.antgskds.calendarassistant.feature.capsule.domain.icon.RuleIconSource
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider
-import com.antgskds.calendarassistant.core.rule.RuleIconSource
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.EventRuleEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.EventStateEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.EventTransitionEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleActionDefaults
+import com.antgskds.calendarassistant.platform.capsule.render.RuleIconResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

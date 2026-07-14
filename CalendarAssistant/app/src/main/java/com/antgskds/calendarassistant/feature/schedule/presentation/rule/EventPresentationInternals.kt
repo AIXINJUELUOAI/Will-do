@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.schedule.presentation.rule
 
 import android.content.Context
 import com.antgskds.calendarassistant.R
@@ -11,6 +11,9 @@ import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateCenter
+import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleActionDefaults
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import java.time.LocalDate
 import java.time.LocalDateTime

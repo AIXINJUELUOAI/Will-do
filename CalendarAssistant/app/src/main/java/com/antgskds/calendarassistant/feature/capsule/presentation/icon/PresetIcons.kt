@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.feature.capsule.presentation.icon
 
 /**
  * 预设通知图标列表。

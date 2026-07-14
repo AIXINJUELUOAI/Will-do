@@ -2,7 +2,8 @@ package com.antgskds.calendarassistant.platform.capsule.render
 
 import android.content.Context
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
@@ -51,11 +52,11 @@ object IconUtils {
         // 优先从 RuleRegistry 获取用户自定义图标
         val payload = RuleMatchingEngine.resolvePayload(capsule.description, capsule.eventType)
         val ruleId = payload?.ruleId ?: capsule.eventType
-        val customIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getCustomCapsuleIconResId(ruleId)
+        val customIcon = RuleRegistry.getCustomCapsuleIconResId(ruleId)
         if (customIcon != null) return customIcon
 
         // 其次从 RuleRegistry 获取默认图标
-        val defaultIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getIconResId(ruleId)
+        val defaultIcon = RuleRegistry.getIconResId(ruleId)
         if (defaultIcon != null) return defaultIcon
 
         // 硬编码回退
@@ -79,7 +80,7 @@ object IconUtils {
     fun getSmallIconForEvent(context: Context, tag: String, description: String): Int {
         val payload = RuleMatchingEngine.resolvePayload(description, tag)
         val ruleId = payload?.ruleId ?: tag
-        return com.antgskds.calendarassistant.core.rule.RuleRegistry.getIconResIdWithFallback(ruleId, context)
+        return RuleRegistry.getIconResIdWithFallback(ruleId, context)
     }
 
     fun getNetworkSpeedIcon(): Int = R.drawable.ic_stat_net

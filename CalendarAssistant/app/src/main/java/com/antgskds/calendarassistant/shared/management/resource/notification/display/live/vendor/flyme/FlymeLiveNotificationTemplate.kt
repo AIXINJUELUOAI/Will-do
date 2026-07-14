@@ -5,7 +5,8 @@ import android.widget.RemoteViews
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
@@ -102,9 +103,9 @@ object FlymeLiveNotificationTemplate {
             else -> {
                 val payload = RuleMatchingEngine.resolvePayload(null, eventType)
                 val ruleId = payload?.ruleId ?: eventType
-                val customIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getCustomCapsuleIconResId(ruleId)
+                val customIcon = RuleRegistry.getCustomCapsuleIconResId(ruleId)
                 if (customIcon != null) return customIcon
-                val defaultIcon = com.antgskds.calendarassistant.core.rule.RuleRegistry.getIconResId(ruleId)
+                val defaultIcon = RuleRegistry.getIconResId(ruleId)
                 if (defaultIcon != null) return defaultIcon
                 when (ruleId) {
                     RuleMatchingEngine.RULE_PICKUP -> R.drawable.ic_stat_package

@@ -4,7 +4,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
+import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 
 object SmsPickupFingerprint {
     fun fromDraft(draft: RecognitionDraft): String? {

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.rule
+package com.antgskds.calendarassistant.platform.capsule.render
 
 import android.content.Context
 import android.util.Log
