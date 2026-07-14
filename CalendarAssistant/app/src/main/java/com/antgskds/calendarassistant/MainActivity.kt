@@ -61,7 +61,7 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomS
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
-import com.antgskds.calendarassistant.ui.components.SettingsDestination
+import com.antgskds.calendarassistant.ui.contract.SettingsDestination
 import com.antgskds.calendarassistant.ui.navigation.AppRoutes
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition

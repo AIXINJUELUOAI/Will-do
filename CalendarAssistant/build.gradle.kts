@@ -224,7 +224,7 @@ tasks.register("checkArchitectureGuardrails") {
 
         val settingsDestinations = extractEnumMembers(
             rootDir.resolve(
-                "app/src/main/java/com/antgskds/calendarassistant/ui/components/SettingsSidebar.kt"
+                "app/src/main/java/com/antgskds/calendarassistant/ui/contract/SettingsNavigationContract.kt"
             ),
             "SettingsDestination"
         )
