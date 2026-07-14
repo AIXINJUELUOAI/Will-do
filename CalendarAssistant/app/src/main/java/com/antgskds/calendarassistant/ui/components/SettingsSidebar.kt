@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

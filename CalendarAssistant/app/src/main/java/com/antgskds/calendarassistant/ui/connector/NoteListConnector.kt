@@ -14,7 +14,7 @@ import com.antgskds.calendarassistant.ui.contract.NoteListUiAction
 import com.antgskds.calendarassistant.ui.contract.NoteListUiState
 import com.antgskds.calendarassistant.ui.contract.NoteTaskPreviewUiModel
 import com.antgskds.calendarassistant.ui.contract.NoteTextSpanUiModel
-import com.antgskds.calendarassistant.ui.flavor.NoteListScreen
+import com.antgskds.calendarassistant.feature.note.ui.render.NoteListScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 internal data class NoteListConnection(

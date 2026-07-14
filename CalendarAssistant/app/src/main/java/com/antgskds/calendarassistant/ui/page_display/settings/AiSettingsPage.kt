@@ -79,7 +79,7 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.AiSettingsUiAction
 import com.antgskds.calendarassistant.ui.contract.AiSettingsUiState
-import com.antgskds.calendarassistant.ui.flavor.AiSettingsScreen
+import com.antgskds.calendarassistant.feature.recognition.ui.render.AiSettingsScreen
 import kotlinx.coroutines.launch
 
 private const val PROVIDER_DEEPSEEK = "DeepSeek"

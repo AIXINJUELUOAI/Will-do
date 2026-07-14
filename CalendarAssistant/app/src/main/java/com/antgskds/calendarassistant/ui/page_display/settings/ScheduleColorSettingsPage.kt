@@ -42,7 +42,7 @@ import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiAction
 import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiState
-import com.antgskds.calendarassistant.ui.flavor.ScheduleColorScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleColorScreen
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)

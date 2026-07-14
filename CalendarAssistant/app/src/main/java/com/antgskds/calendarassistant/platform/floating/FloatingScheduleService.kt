@@ -86,8 +86,8 @@ import com.antgskds.calendarassistant.ui.connector.PickupQrFloatingCardRoute
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import com.antgskds.calendarassistant.ui.connector.FloatingScheduleRoute
-import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
-import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
+import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

@@ -53,7 +53,7 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.PreferenceUiController
 import com.antgskds.calendarassistant.ui.connector.PreferenceUiControllerAdapter
-import com.antgskds.calendarassistant.ui.flavor.PreferenceSettingsScreen
+import com.antgskds.calendarassistant.feature.settings.preference.ui.render.PreferenceSettingsScreen
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 

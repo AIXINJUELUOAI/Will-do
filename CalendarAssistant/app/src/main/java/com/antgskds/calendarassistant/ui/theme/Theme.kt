@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

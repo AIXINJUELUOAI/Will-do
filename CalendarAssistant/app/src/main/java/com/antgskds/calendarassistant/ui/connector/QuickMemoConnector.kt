@@ -17,8 +17,8 @@ import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.ui.contract.QuickMemoDetailUiState
 import com.antgskds.calendarassistant.ui.contract.QuickMemoListUiState
 import com.antgskds.calendarassistant.ui.contract.QuickMemoUiAction
-import com.antgskds.calendarassistant.ui.flavor.QuickMemoDetailScreen
-import com.antgskds.calendarassistant.ui.flavor.QuickMemoScreen
+import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailScreen
+import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"

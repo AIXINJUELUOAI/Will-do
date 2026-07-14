@@ -25,7 +25,7 @@ import com.antgskds.calendarassistant.ui.contract.NoteEditorExportFormat
 import com.antgskds.calendarassistant.ui.contract.NoteEditorMessageKind
 import com.antgskds.calendarassistant.ui.contract.NoteEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.NoteEditorUiState
-import com.antgskds.calendarassistant.ui.flavor.NoteEditorScreen
+import com.antgskds.calendarassistant.feature.note.ui.render.NoteEditorScreen
 import com.antgskds.calendarassistant.ui.page_display.RecognitionFeedbackSource
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException

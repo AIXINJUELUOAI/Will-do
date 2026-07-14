@@ -15,9 +15,9 @@ import com.antgskds.calendarassistant.data.model.WidgetThemeMode
 import com.antgskds.calendarassistant.ui.contract.WidgetConfigureThemeOption
 import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiAction
 import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiState
-import com.antgskds.calendarassistant.ui.flavor.WidgetConfigureScreen
-import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
-import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
+import com.antgskds.calendarassistant.platform.widget.ui.render.WidgetConfigureScreen
+import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import kotlin.math.roundToInt
 
 open class WidgetConfigureActivity : ComponentActivity() {

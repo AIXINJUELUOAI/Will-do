@@ -46,13 +46,13 @@ import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
 import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
-import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
+import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.normalizeThemeHexColor
 import com.antgskds.calendarassistant.ui.theme.parseThemeHexColor
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.ThemeSettingsUiAction
 import com.antgskds.calendarassistant.ui.contract.ThemeSettingsUiState
-import com.antgskds.calendarassistant.ui.flavor.ThemeSettingsScreen
+import com.antgskds.calendarassistant.feature.appearance.ui.render.ThemeSettingsScreen
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 

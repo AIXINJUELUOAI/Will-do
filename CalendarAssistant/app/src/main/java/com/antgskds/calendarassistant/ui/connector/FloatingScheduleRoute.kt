@@ -13,7 +13,7 @@ import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiActions
 import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions
 import com.antgskds.calendarassistant.ui.contract.FloatingInputMode
 import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiState
-import com.antgskds.calendarassistant.ui.flavor.FloatingScheduleScreen
+import com.antgskds.calendarassistant.platform.floating.ui.render.FloatingScheduleScreen
 
 @Composable
 fun FloatingScheduleRoute(

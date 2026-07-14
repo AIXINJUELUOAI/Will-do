@@ -6,11 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiAction
 import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiState
-import com.antgskds.calendarassistant.ui.flavor.SettingsDetailScreenContent
-import com.antgskds.calendarassistant.ui.page_display.settings.AboutPage
+import com.antgskds.calendarassistant.feature.settings.shell.ui.render.SettingsDetailScreenContent
+import com.antgskds.calendarassistant.feature.settings.about.ui.connector.AboutPage
 import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
 import com.antgskds.calendarassistant.ui.page_display.settings.AppUpdatePage
 import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage

@@ -10,7 +10,7 @@ import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.contract.AllEventsDateGroupUiModel
 import com.antgskds.calendarassistant.ui.contract.AllEventsUiAction
 import com.antgskds.calendarassistant.ui.contract.AllEventsUiState
-import com.antgskds.calendarassistant.ui.flavor.AllEventsScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.render.AllEventsScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime

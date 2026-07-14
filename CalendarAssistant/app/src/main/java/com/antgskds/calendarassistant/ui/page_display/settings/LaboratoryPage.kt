@@ -55,7 +55,7 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.LaboratoryUiAction
 import com.antgskds.calendarassistant.ui.contract.LaboratoryUiState
-import com.antgskds.calendarassistant.ui.flavor.LaboratoryScreen
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.render.LaboratoryScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

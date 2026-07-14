@@ -69,7 +69,7 @@ import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.contract.DonateQrCode
 import com.antgskds.calendarassistant.ui.contract.DonateUiAction
 import com.antgskds.calendarassistant.ui.contract.DonateUiState
-import com.antgskds.calendarassistant.ui.flavor.DonateScreen
+import com.antgskds.calendarassistant.feature.settings.about.ui.render.DonateScreen
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay

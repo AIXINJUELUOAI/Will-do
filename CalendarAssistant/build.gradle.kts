@@ -20,7 +20,7 @@ data class ArchitectureGuardrailRule(
 val architectureGuardrailsBaselineFile = file("gradle/architecture-guardrails-baseline.txt")
 val centerFilesBaselineFile = file("gradle/center-files-baseline.txt")
 val mainUiEditionMetadataAllowlist = setOf(
-    "app/src/main/java/com/antgskds/calendarassistant/ui/page_display/settings/AboutPage.kt"
+    "app/src/main/java/com/antgskds/calendarassistant/feature/settings/about/ui/connector/AboutPage.kt"
 )
 
 fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String>, List<Int>> {
@@ -45,13 +45,13 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
         ),
         ArchitectureGuardrailRule(
             id = "CONTRACT_VIEWMODEL_IMPORT",
-            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.ui\\.viewmodel"),
+            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.(ui\\.viewmodel|app\\.ui\\.state)"),
             description = "UI contracts must not depend on concrete ViewModels",
             pathRegex = Regex("app/src/main/.*/ui/contract/.*")
         ),
         ArchitectureGuardrailRule(
             id = "FLAVOR_CONCRETE_BUSINESS_IMPORT",
-            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.(ui\\.viewmodel|core\\.center|data\\.(repository|store))"),
+            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.(ui\\.viewmodel|app\\.ui\\.state|core\\.center|data\\.(repository|store))"),
             description = "Flavor UI must consume contracts instead of concrete business implementations",
             pathRegex = Regex("app/src/(native|hyperos)/.*")
         ),
@@ -208,7 +208,7 @@ tasks.register("checkArchitectureGuardrails") {
 
         fun collectFlavorHosts(flavor: String): Set<String> {
             val hostRoot = rootDir.resolve(
-                "app/src/$flavor/java/com/antgskds/calendarassistant/ui/flavor"
+                "app/src/$flavor/java/com/antgskds/calendarassistant"
             )
             return fileTree(hostRoot) {
                 include("**/*.kt")
@@ -224,7 +224,7 @@ tasks.register("checkArchitectureGuardrails") {
 
         val settingsDestinations = extractEnumMembers(
             rootDir.resolve(
-                "app/src/main/java/com/antgskds/calendarassistant/ui/contract/SettingsNavigationContract.kt"
+                "app/src/main/java/com/antgskds/calendarassistant/app/ui/navigation/SettingsNavigationContract.kt"
             ),
             "SettingsDestination"
         )
