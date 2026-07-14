@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.quickmemo.audio
+package com.antgskds.calendarassistant.feature.quickmemo.application.audio
 
 import android.media.MediaPlayer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +10,7 @@ data class AudioPlaybackState(
     val isPlaying: Boolean = false
 )
 
-class AudioPlaybackCenter {
+class QuickMemoAudioPlayer {
     private val _playbackState = MutableStateFlow(AudioPlaybackState())
     val playbackState: StateFlow<AudioPlaybackState> = _playbackState.asStateFlow()
 
@@ -30,9 +30,9 @@ class AudioPlaybackCenter {
         stop()
         val player = MediaPlayer().apply {
             setDataSource(audioPath)
-            setOnCompletionListener { this@AudioPlaybackCenter.stop() }
+            setOnCompletionListener { this@QuickMemoAudioPlayer.stop() }
             setOnErrorListener { _, _, _ ->
-                this@AudioPlaybackCenter.stop()
+                this@QuickMemoAudioPlayer.stop()
                 true
             }
             prepare()

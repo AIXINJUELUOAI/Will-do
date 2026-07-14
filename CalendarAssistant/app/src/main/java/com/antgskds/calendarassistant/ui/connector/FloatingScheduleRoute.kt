@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.ui.connector
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings

@@ -165,7 +165,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiActions
 import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiState

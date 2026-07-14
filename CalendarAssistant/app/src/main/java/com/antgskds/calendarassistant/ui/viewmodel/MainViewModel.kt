@@ -13,7 +13,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.PromptU
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateChecker
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateCheckResult
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
-import com.antgskds.calendarassistant.core.center.NoteCenter
+import com.antgskds.calendarassistant.feature.note.application.NoteService
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
@@ -38,8 +38,8 @@ import com.antgskds.calendarassistant.feature.note.data.transfer.NoteTransferMan
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.QuickMemoAudioPlayer
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseMeta
 import com.antgskds.calendarassistant.feature.schedule.domain.course.calculateSemesterWeek
@@ -90,9 +90,9 @@ data class AppUpdateUiState(
 class MainViewModel(
     private val appContext: Context,
     private val scheduleCenter: ScheduleCenter,
-    private val noteCenter: NoteCenter,
+    private val noteCenter: NoteService,
     private val quickMemoCenter: QuickMemoCenter,
-    private val audioPlaybackCenter: AudioPlaybackCenter,
+    private val audioPlaybackCenter: QuickMemoAudioPlayer,
     private val capsuleQueryApi: CapsuleQueryApi,
     private val settingsQueryApi: SettingsQueryApi,
     private val homeQueryApi: HomeQueryApi,

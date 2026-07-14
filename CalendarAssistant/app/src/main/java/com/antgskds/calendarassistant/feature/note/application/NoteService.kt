@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.note.application
 
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class NoteCenter(
+class NoteService(
     private val repository: NoteRepository,
     private val appScope: CoroutineScope
 ) {

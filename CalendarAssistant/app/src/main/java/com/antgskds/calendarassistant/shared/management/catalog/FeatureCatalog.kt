@@ -66,7 +66,7 @@ object FeatureCatalog {
         FeatureEntry("课程表", Chain.SCHEDULE, "core/course", "课程并入事件模型、课表设置"),
         FeatureEntry("快捷备忘", Chain.SCHEDULE, "core/center/QuickMemoCenter", "语音/文字快捷备忘"),
         FeatureEntry("图片随口记", Chain.SCHEDULE, "core/center/QuickMemoCenter", "系统图片/分享图片保存为随口记素材"),
-        FeatureEntry("便签笔记", Chain.SCHEDULE, "core/center/NoteCenter", "便签编辑与存储"),
+        FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "便签编辑与存储"),
 
         // —— 横切支撑 ——
         FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),

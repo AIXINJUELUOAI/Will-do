@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.ui.contract
 
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
-import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 
 data class QuickMemoListUiState(
     val memos: List<QuickMemoEntity>,
