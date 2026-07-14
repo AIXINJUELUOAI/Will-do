@@ -111,7 +111,7 @@ import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditor
 import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType

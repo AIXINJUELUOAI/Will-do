@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.page_display.settings
+package com.antgskds.calendarassistant.app.ui.theme.material.background
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

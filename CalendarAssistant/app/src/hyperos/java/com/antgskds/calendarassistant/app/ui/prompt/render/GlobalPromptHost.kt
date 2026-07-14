@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiAction
 import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiState
-import com.antgskds.calendarassistant.ui.page_display.MaterialGlobalPromptHost
+import com.antgskds.calendarassistant.app.ui.prompt.render.material.MaterialGlobalPromptHost
 
 @Composable
 fun GlobalPromptHost(

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.quickmemo.audio
+package com.antgskds.calendarassistant.feature.quickmemo.domain.model
 
 enum class QuickMemoVoiceCaptureStatus {
     IDLE,

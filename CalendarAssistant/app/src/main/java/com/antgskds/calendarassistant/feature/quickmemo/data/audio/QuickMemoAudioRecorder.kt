@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.quickmemo.audio
+package com.antgskds.calendarassistant.feature.quickmemo.data.audio
 
 import android.content.Context
 import android.media.AudioFormat

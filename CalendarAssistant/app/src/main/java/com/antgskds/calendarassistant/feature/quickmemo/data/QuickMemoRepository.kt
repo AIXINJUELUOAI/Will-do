@@ -1,5 +1,12 @@
-package com.antgskds.calendarassistant.core.quickmemo
+package com.antgskds.calendarassistant.feature.quickmemo.data
 
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoAnalysisStatus
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoDao
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 

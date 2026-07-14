@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.page_display.settings
+package com.antgskds.calendarassistant.shared.ui.material.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -31,8 +31,8 @@ import kotlin.math.roundToInt
  * 不读写 MySettings，不依赖 App / SettingsOperationApi / Repository / Center 等业务层。
  * 带业务流程的（定位选择、API Key 校验、权限申请、draft 保存、通知/胶囊预览）不要放进来。
  *
- * 与各设置页同包（com.antgskds.calendarassistant.ui.page_display.settings），
- * 因此调用方无需新增 import；从 PreferenceSettingsPage 抽出以降低其行数、消除组件散落。
+ * 位于共享 Material 设置组件包，调用方通过显式 import 复用；
+ * 从 PreferenceSettingsPage 抽出以降低其行数、消除组件散落。
  */
 
 /** 标题 + 说明 + 开关 行。 */

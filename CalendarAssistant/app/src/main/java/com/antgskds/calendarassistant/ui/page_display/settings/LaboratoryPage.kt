@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,8 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStatus
-import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStore
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStore
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode

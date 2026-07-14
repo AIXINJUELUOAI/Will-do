@@ -10,7 +10,7 @@ import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoAnalysisStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoRepository
+import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
@@ -18,9 +18,9 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionType
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
-import com.antgskds.calendarassistant.core.quickmemo.asr.NoopSpeechTranscriber
-import com.antgskds.calendarassistant.core.quickmemo.asr.SpeechTranscriber
-import com.antgskds.calendarassistant.core.quickmemo.asr.TranscriptionResult
+import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.NoopSpeechTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -75,10 +75,10 @@ import com.antgskds.calendarassistant.ui.page_display.HomeScreen
 import com.antgskds.calendarassistant.ui.connector.NoteEditorRoute
 import com.antgskds.calendarassistant.ui.connector.QuickMemoDetailPage
 import com.antgskds.calendarassistant.ui.connector.SettingsDetailRoute
-import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundRootSize
-import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundWallpaperBitmap
-import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundAverageLuminance
-import com.antgskds.calendarassistant.ui.page_display.settings.shouldUseLightSystemBarsForAppBackground
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundRootSize
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundWallpaperBitmap
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundAverageLuminance
+import com.antgskds.calendarassistant.app.ui.theme.material.background.shouldUseLightSystemBarsForAppBackground
 import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme

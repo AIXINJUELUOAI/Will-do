@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.page_display
+package com.antgskds.calendarassistant.app.ui.prompt.render.material
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier

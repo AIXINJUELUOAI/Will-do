@@ -66,9 +66,9 @@ import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
-import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
-import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
-import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
+import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils

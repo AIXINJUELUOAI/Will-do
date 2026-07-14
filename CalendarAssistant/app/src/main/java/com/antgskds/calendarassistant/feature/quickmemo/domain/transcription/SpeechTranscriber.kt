@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.quickmemo.asr
+package com.antgskds.calendarassistant.feature.quickmemo.domain.transcription
 
 sealed class TranscriptionResult {
     data class Success(val text: String) : TranscriptionResult()
