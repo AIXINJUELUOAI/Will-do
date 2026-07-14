@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.management.catalog
 
-import com.antgskds.calendarassistant.ui.components.SettingsDestination
+import com.antgskds.calendarassistant.ui.contract.SettingsDestination
 
 /**
  * 页面登记清单（代码内台账，不暴露给 App 用户）。

@@ -40,7 +40,7 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
-import com.antgskds.calendarassistant.ui.components.SettingsDestination
+import com.antgskds.calendarassistant.ui.contract.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast

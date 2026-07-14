@@ -37,45 +37,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antgskds.calendarassistant.ui.contract.SettingsDestination
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
-
-// 定义设置导航的目标
-enum class SettingsDestination {
-    // 课表相关（新细分）
-    CourseManage,      // 课表管理
-    TimeTableManage,   // 作息表管理
-    SemesterConfig,    // 学期配置
-
-    // 课表相关（旧版，保持兼容）
-    Schedule,          // 综合课表设置（已废弃，建议使用上述细分选项）
-
-    // 其他设置
-    AI,                // 模型配置
-    Weather,           // 天气设置
-    Preference,        // 偏好设置
-    ScheduleColors,    // 日程颜色（从偏好设置入口进入）
-    Archives,          // 日程归档
-    Backup,            // 数据备份
-    AppUpdate,         // 软件更新
-
-    // 操作类（不导航，直接执行）
-    Theme,             // 主题设置
-    Logout,            // 退出登录
-    About,             // 关于软件
-    Donate,            // 捐赠开发者
-
-    // 实验室
-    Laboratory,        // 实验室功能
-    Developer,         // 开发者页（从实验室入口进入）
-    ConfigEditor,      // 配置编辑页（从开发者页入口进入）
-    RegexRuleEditor,   // 正则规则编辑页（从开发者页入口进入）
-    BottomBarEditor,   // 底栏编辑（从偏好设置入口进入）
-    WidgetSettings     // 桌面小组件（从偏好设置入口进入）
-}
 
 @Composable
 fun SettingsSidebar(
