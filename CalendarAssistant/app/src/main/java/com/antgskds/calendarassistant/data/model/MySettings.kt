@@ -183,7 +183,8 @@ data class MySettings(
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
     val uiSize: Int = 2,
-    val uiStyle: String = UiStyle.MATERIAL3.name,
+    @Deprecated("UI edition is selected by product flavor; retained only for backup compatibility")
+    val uiStyle: String = "MATERIAL3",
 
     // 桌面小组件：0=跟随软件, 1=浅色, 2=深色
     val widgetThemeMode: Int = WidgetThemeMode.FOLLOW_APP,

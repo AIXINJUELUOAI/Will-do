@@ -79,7 +79,6 @@ import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
 import com.antgskds.calendarassistant.ui.floating.FloatingDragTextOptions
@@ -392,7 +391,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val themeColorSchemeEnum = ThemeColorScheme.fromName(settings.themeColorScheme)
 
                 CalendarAssistantStyleTheme(
-                    uiStyle = UiStyle.fromName(settings.uiStyle),
                     darkTheme = isDarkTheme,
                     dynamicColor = themeColorSchemeEnum == ThemeColorScheme.DEFAULT,
                     themeColorScheme = themeColorSchemeEnum,
@@ -411,58 +409,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                     requestClose()
                                 }
                             )
-                        } else when (UiStyle.fromName(settings.uiStyle)) {
-                            UiStyle.MIUI -> com.antgskds.calendarassistant.miui.floating.FloatingScheduleScreen(
-                                scheduleItems = scheduleItems,
-                                weatherData = if (settings.hasWeatherConfig() && settings.showWeatherInFloating) weatherData else null,
-                                weatherForecastRange = settings.floatingWeatherForecastRange,
-                                expandSide = settings.floatingExpandSide,
-                                hapticEnabled = settings.hapticFeedbackEnabled,
-                                onClose = { requestClose() },
-                                onManualInput = { text, onComplete ->
-                                    handleManualInput(text = text, onComplete = onComplete)
-                                },
-                                onPickImageRequest = { _, onComplete ->
-                                    startScreenshotAnalysisFlow(asQuickMemo = false, onComplete = onComplete)
-                                },
-                                onUpdateEvent = { updatedEvent, onComplete ->
-                                    serviceScope.launch {
-                                        try {
-                                            scheduleCenter.updateEvent(updatedEvent)
-                                            Toast.makeText(applicationContext, "已更新", Toast.LENGTH_SHORT).show()
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "Failed to update event", e)
-                                            Toast.makeText(applicationContext, "更新失败", Toast.LENGTH_SHORT).show()
-                                        } finally {
-                                            onComplete()
-                                        }
-                                    }
-                                },
-                                onUpdateScheduleItem = { item, patch, onComplete ->
-                                    handleUpdateScheduleItem(item, patch, onComplete)
-                                },
-                                onArchiveScheduleItem = { item ->
-                                    serviceScope.launch {
-                                        try {
-                                            scheduleCenter.archiveItem(item.action)
-                                            Toast.makeText(applicationContext, "已归档", Toast.LENGTH_SHORT).show()
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "Failed to archive item", e)
-                                            Toast.makeText(applicationContext, "归档失败", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onStatusAction = { item ->
-                                    scheduleCenter.performPrimaryActionOnItemWithUndo(item)
-                                },
-                                pendingStatusKeys = pendingItemStates.keys,
-                                undoPendingLabel = undoPending?.label,
-                                onUndoAction = {
-                                    scheduleCenter.undoStatusAction()
-                                },
-                                onLoadingChange = { _ -> }
-                            )
-                            UiStyle.MATERIAL3 -> FloatingScheduleScreen(
+                        } else FloatingScheduleScreen(
                         scheduleItems = scheduleItems,
                         quickMemos = quickMemos,
                         voiceCaptureState = currentVoiceCaptureState,
@@ -582,7 +529,6 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         },
                         onLoadingChange = { _ -> }
                     )
-                        }
                     }
                     floatingContent()
                 }

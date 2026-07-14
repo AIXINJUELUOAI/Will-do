@@ -6,7 +6,6 @@ data class ThemeSettingsUiState(val settings: MySettings, val isBackgroundImport
 
 sealed interface ThemeSettingsUiAction {
     data class UpdateThemeMode(val mode: Int) : ThemeSettingsUiAction
-    data class UpdateUiStyle(val style: String) : ThemeSettingsUiAction
     data class UpdateColorScheme(val scheme: String) : ThemeSettingsUiAction
     data class UpdateCustomColor(val hex: String) : ThemeSettingsUiAction
     data class UpdateImageColor(val enabled: Boolean) : ThemeSettingsUiAction
