@@ -9,7 +9,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
-import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import java.util.concurrent.Executors
 
 class CalDAVUpdateListener : JobService() {
@@ -48,7 +48,7 @@ class CalDAVUpdateListener : JobService() {
             // ✅ 关键修复：在后台线程执行同步，避免主线程 Room IllegalStateException
             executor.execute {
                 try {
-                    CalendarCenter.getInstance(applicationContext).onSystemCalendarChanged()
+                    ScheduleStoreGateway.getInstance(applicationContext).onSystemCalendarChanged()
                     // ✅ 同步完成后刷新内存中的事件列表，让 UI 能看到导入的事件
                     (applicationContext as? com.antgskds.calendarassistant.App)?.scheduleCenter?.refreshEvents()
                 } catch (e: Exception) {

@@ -14,7 +14,7 @@ import com.antgskds.calendarassistant.feature.schedule.data.maintenance.Duplicat
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleanupResult
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
-import com.antgskds.calendarassistant.core.center.SyncCenter
+import com.antgskds.calendarassistant.feature.schedule.application.sync.CalendarSyncService
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
@@ -46,7 +46,7 @@ class SettingsViewModel(
     appContext: Context,
     private val scheduleCenter: ScheduleCenter,
     private val backupCenter: BackupCenter,
-    private val syncCenter: SyncCenter,
+    private val syncCenter: CalendarSyncService,
     private val diagnosticLogCenter: DiagnosticLogExporter,
     private val settingsOperationApi: SettingsOperationApi,
     private val settingsQueryApi: SettingsQueryApi,

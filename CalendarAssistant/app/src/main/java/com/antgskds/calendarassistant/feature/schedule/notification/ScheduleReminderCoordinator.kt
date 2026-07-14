@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.schedule.notification
 
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -6,6 +6,8 @@ import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
+import com.antgskds.calendarassistant.core.center.CapsuleCenter
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.event.DomainEventBus
@@ -32,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import java.time.LocalDate
 
-class ReminderCenter(
+class ScheduleReminderCoordinator(
     private val appContext: Context,
     private val capsuleCenter: CapsuleCenter,
     private val settingsQueryApi: SettingsQueryApi,
@@ -308,7 +310,7 @@ class ReminderCenter(
     }
 
     companion object {
-        private const val TAG = "ReminderCenter"
+        private const val TAG = "ScheduleReminder"
         private const val NOTIFICATION_WINDOW_DAYS = 7L
     }
 

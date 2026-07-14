@@ -4,7 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import com.antgskds.calendarassistant.data.model.Course
@@ -27,7 +27,7 @@ class LegacyMigrationInstrumentedTest {
         val importId = "instrumented-v3-import-idempotent-001"
         val coordinator = LegacyDataMigrationCoordinator(
             context = context,
-            calendarCenter = CalendarCenter.getInstance(context),
+            calendarCenter = ScheduleStoreGateway.getInstance(context),
             settingsRepository = SettingsRepository(context)
         )
 
@@ -93,7 +93,7 @@ class LegacyMigrationInstrumentedTest {
         val originalSettings = settingsRepository.loadSettings()
         val coordinator = LegacyDataMigrationCoordinator(
             context = context,
-            calendarCenter = CalendarCenter.getInstance(context),
+            calendarCenter = ScheduleStoreGateway.getInstance(context),
             settingsRepository = settingsRepository
         )
 

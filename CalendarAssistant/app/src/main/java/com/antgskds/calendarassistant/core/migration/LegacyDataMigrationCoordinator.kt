@@ -20,7 +20,7 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
 import com.antgskds.calendarassistant.calendar.sync.SystemCalendarSyncManager
-import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.ImportResult
@@ -45,7 +45,7 @@ import kotlin.math.max
 
 class LegacyDataMigrationCoordinator(
     context: Context,
-    private val calendarCenter: CalendarCenter,
+    private val calendarCenter: ScheduleStoreGateway,
     private val settingsRepository: SettingsRepository
 ) {
     private val appContext = context.applicationContext

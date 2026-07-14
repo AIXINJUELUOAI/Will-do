@@ -1,14 +1,10 @@
 # Existing transitional Center implementations, relative to the repository root.
 # New *Center.kt files are forbidden.
 app/src/main/java/com/antgskds/calendarassistant/core/center/BackupCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/CalendarCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/CapsuleCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/NoteCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/NotificationCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/QuickMemoCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/ReminderCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/RuntimeCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/ScheduleCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/SyncCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/note/LegacyNoteMigrationCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/quickmemo/audio/AudioPlaybackCenter.kt

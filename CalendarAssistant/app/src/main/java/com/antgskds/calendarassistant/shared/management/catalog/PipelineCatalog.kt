@@ -76,7 +76,7 @@ object PipelineCatalog {
 
         // —— 同步 ——
         PipelineEntry(
-            "同步主流程", Chain.SYNC, "core/center/SyncCenter",
+            "同步主流程", Chain.SYNC, "feature/schedule/application/sync/CalendarSyncService",
             Maturity.TRANSITION,
             "本地日程 ↔ 系统日历同步编排；失败不回滚本地入库（重试 Worker 见 WorkerCatalog，规划中）",
         ),
@@ -97,7 +97,7 @@ object PipelineCatalog {
         PipelineEntry(
             "本地存储分流", Chain.SCHEDULE, "store/StoreDispatcher",
             Maturity.TRANSITION,
-            "日程写入主链路 ScheduleCenter → CalendarCenter → StoreDispatcher → StoreRootNode 的分流节点",
+            "日程写入主链路 ScheduleCenter → ScheduleStoreGateway → StoreDispatcher → StoreRootNode 的分流节点",
         ),
     )
 }

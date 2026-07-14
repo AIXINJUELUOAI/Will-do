@@ -1,7 +1,8 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.app.runtime
 
 import android.content.Context
 import android.util.Log
+import com.antgskds.calendarassistant.core.center.CapsuleCenter
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
@@ -16,7 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-class RuntimeCenter(
+class AppRuntimeCoordinator(
     private val appContext: Context,
     private val settingsQueryApi: SettingsQueryApi,
     private val permissionCenter: AndroidPermissionChecker,
@@ -26,7 +27,7 @@ class RuntimeCenter(
     private val appScope: CoroutineScope
 ) {
     companion object {
-        private const val TAG = "RuntimeCenter"
+        private const val TAG = "AppRuntime"
     }
 
     private var networkSpeedMonitorJob: Job? = null

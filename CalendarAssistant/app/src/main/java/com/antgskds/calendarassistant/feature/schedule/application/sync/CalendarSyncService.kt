@@ -1,9 +1,9 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.schedule.application.sync
 
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import com.antgskds.calendarassistant.core.center.CalendarCenter
+import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.calendar.helpers.CalendarConfig
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
@@ -12,10 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 日历同步中心 — 包装 willdo CalendarCenter 的同步能力。
+ * 日历同步服务——包装 ScheduleStoreGateway 的同步能力。
  */
-class SyncCenter(
-    private val calendarCenter: CalendarCenter,
+class CalendarSyncService(
+    private val calendarCenter: ScheduleStoreGateway,
     private val context: Context
 ) : com.antgskds.calendarassistant.core.operation.SyncApi {
     private val appContext = context.applicationContext

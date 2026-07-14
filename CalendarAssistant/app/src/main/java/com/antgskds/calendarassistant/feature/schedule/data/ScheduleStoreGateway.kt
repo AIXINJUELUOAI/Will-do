@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.schedule.data
 
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.models.Event
@@ -20,7 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 
-class CalendarCenter private constructor(context: Context) : CalendarOperationApi, CalendarQueryApi {
+class ScheduleStoreGateway private constructor(context: Context) : CalendarOperationApi, CalendarQueryApi {
     private val dispatcher = StoreDispatcher.getInstance(context.applicationContext)
     private val eventScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val entityVersion = AtomicLong(System.currentTimeMillis())
@@ -130,11 +130,11 @@ class CalendarCenter private constructor(context: Context) : CalendarOperationAp
 
     companion object {
         @Volatile
-        private var instance: CalendarCenter? = null
+        private var instance: ScheduleStoreGateway? = null
 
-        fun getInstance(context: Context): CalendarCenter {
+        fun getInstance(context: Context): ScheduleStoreGateway {
             return instance ?: synchronized(this) {
-                instance ?: CalendarCenter(context).also { instance = it }
+                instance ?: ScheduleStoreGateway(context).also { instance = it }
             }
         }
     }
