@@ -29,7 +29,6 @@ import com.antgskds.calendarassistant.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
 import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.UiStyle
 import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
 import com.antgskds.calendarassistant.feature.appearance.domain.AppBackgroundImageStore
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
@@ -596,13 +595,6 @@ class SettingsViewModel(
     fun updateUiSize(size: Int) {
         viewModelScope.launch {
             settingsOperationApi.updateSettings(settings.value.copy(uiSize = size))
-        }
-    }
-
-    fun updateUiStyle(style: String) {
-        val normalizedStyle = UiStyle.fromName(style).name
-        viewModelScope.launch {
-            settingsOperationApi.updateSettings(settings.value.copy(uiStyle = normalizedStyle))
         }
     }
 
