@@ -55,10 +55,10 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
+import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
@@ -66,7 +66,7 @@ import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight

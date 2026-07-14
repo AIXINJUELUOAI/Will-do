@@ -49,8 +49,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutConfig
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutConfig
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.ui.components.AppAlertDialog
 import com.antgskds.calendarassistant.ui.components.AppCard

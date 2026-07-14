@@ -5,9 +5,9 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiActions
 import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions

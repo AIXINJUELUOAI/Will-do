@@ -40,12 +40,12 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
-import com.antgskds.calendarassistant.core.model.RepeatSpec
-import com.antgskds.calendarassistant.core.rule.RecognitionRuleCatalog
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
-import com.antgskds.calendarassistant.data.model.EditDraft
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog

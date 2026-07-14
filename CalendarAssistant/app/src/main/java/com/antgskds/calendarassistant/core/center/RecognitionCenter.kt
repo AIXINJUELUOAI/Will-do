@@ -2,17 +2,17 @@ package com.antgskds.calendarassistant.core.center
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.event.DomainEventBus
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.node.recognition.RecognitionMultimodalNode
-import com.antgskds.calendarassistant.data.node.recognition.RecognitionOcrNode
-import com.antgskds.calendarassistant.data.node.recognition.RecognitionTextNode
+import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionMultimodalNode
+import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionOcrNode
+import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionTextNode
 class RecognitionCenter(
     private val domainEventBus: DomainEventBus
 ) : com.antgskds.calendarassistant.core.operation.RecognitionApi {

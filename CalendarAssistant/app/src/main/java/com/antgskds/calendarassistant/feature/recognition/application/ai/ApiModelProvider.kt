@@ -1,0 +1,818 @@
+package com.antgskds.calendarassistant.feature.recognition.application.ai
+
+import android.util.Base64
+import android.util.Log
+import com.antgskds.calendarassistant.data.model.ModelRequest
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.request.url
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+
+// 假设的 ModelRequest/Response 定义，如果 data/model 下没有，请补充
+// @Serializable data class ModelMessage(val role: String, val content: String)
+// @Serializable data class ModelRequest(val model: String, val messages: List<ModelMessage>, val temperature: Double = 0.7)
+// @Serializable data class ModelResponse(val choices: List<ModelChoice>)
+// @Serializable data class ModelChoice(val message: ModelMessage)
+
+enum class ApiErrorKind {
+    HTTP,
+    NETWORK,
+    PARSE,
+    CONFIG,
+    UNKNOWN
+}
+
+sealed class ApiCallResult {
+    data class Success(val content: String) : ApiCallResult()
+    data class Failure(
+        val kind: ApiErrorKind,
+        val statusCode: Int? = null,
+        val message: String = "",
+        val rawBody: String? = null
+    ) : ApiCallResult()
+}
+
+sealed class ModelListResult {
+    data class Success(val models: List<String>) : ModelListResult()
+    data class Failure(val message: String) : ModelListResult()
+}
+
+object ApiModelProvider {
+
+    private val reasoningSupportCache = ConcurrentHashMap<String, Boolean>()
+
+    // 建议在 App.kt 中初始化一个全局 Client 传进来，或者在这里 lazy
+    private val client by lazy {
+        HttpClient(Android) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+    }
+
+    suspend fun generate(
+        request: ModelRequest,
+        apiKey: String,
+        baseUrl: String,
+        modelName: String,
+        disableThinking: Boolean = false
+    ): ApiCallResult {
+        return try {
+            if (baseUrl.isBlank() || apiKey.isBlank()) {
+                Log.e("ApiModelProvider", "API URL or Key not configured")
+                return ApiCallResult.Failure(ApiErrorKind.CONFIG, message = "配置缺失")
+            }
+
+            Log.d("ApiModelProvider", "Requesting: $baseUrl (Model: $modelName)")
+
+            // --- Gemini 原生支持分支 ---
+            if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
+                return generateGemini(client, baseUrl, apiKey, request)
+            }
+
+            // --- 标准 OpenAI 格式分支 ---
+            val shouldAttemptReasoning = shouldAttemptReasoning(disableThinking, baseUrl, modelName)
+            val requestBody = request.copy(
+                model = modelName,
+                reasoningEffort = if (shouldAttemptReasoning) "low" else null
+            )
+
+            val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
+            Log.d("DEBUG_HTTP", "服务器原始响应: $rawBody")
+
+            if (statusCode in 200..299) {
+                if (shouldAttemptReasoning) {
+                    markReasoningSupport(baseUrl, modelName, true)
+                }
+                return parseModelResponse(rawBody)
+            }
+
+            if (shouldAttemptReasoning && isRetryableReasoningError(statusCode, rawBody)) {
+                markReasoningSupport(baseUrl, modelName, false)
+                val fallbackRequest = request.copy(model = modelName, reasoningEffort = null)
+                val (fallbackStatus, fallbackBody) = postJsonWithAuth(baseUrl, apiKey, fallbackRequest)
+                Log.d("DEBUG_HTTP", "服务器重试响应: $fallbackBody")
+                if (fallbackStatus in 200..299) {
+                    return parseModelResponse(fallbackBody)
+                }
+                Log.e("ApiModelProvider", "Retry failed: HTTP $fallbackStatus - $fallbackBody")
+                return ApiCallResult.Failure(
+                    ApiErrorKind.HTTP,
+                    statusCode = fallbackStatus,
+                    rawBody = fallbackBody
+                )
+            }
+
+            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode - $rawBody")
+            return ApiCallResult.Failure(
+                ApiErrorKind.HTTP,
+                statusCode = statusCode,
+                rawBody = rawBody
+            )
+
+        } catch (e: Exception) {
+            Log.e("ApiModelProvider", "Network/Parse error", e)
+            ApiCallResult.Failure(
+                ApiErrorKind.NETWORK,
+                message = "${e.javaClass.simpleName} - ${e.message}".trim()
+            )
+        }
+    }
+
+    suspend fun generateWithImage(
+        prompt: String,
+        imageBytes: ByteArray,
+        mimeType: String,
+        apiKey: String,
+        baseUrl: String,
+        modelName: String,
+        disableThinking: Boolean = false
+    ): ApiCallResult {
+        return try {
+            if (baseUrl.isBlank() || apiKey.isBlank()) {
+                Log.e("ApiModelProvider", "API URL or Key not configured")
+                return ApiCallResult.Failure(ApiErrorKind.CONFIG, message = "配置缺失")
+            }
+
+            Log.d("ApiModelProvider", "Requesting (vision): $baseUrl (Model: $modelName)")
+            Log.d(
+                "DEBUG_HTTP_VISION",
+                "vision request summary: model=$modelName, url=$baseUrl, mimeType=$mimeType, imageBytes=${imageBytes.size}, promptChars=${prompt.length}"
+            )
+
+            if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
+                return generateGeminiWithImage(client, baseUrl, apiKey, prompt, imageBytes, mimeType)
+            }
+
+            val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            val dataUrl = "data:$mimeType;base64,$base64"
+            val shouldAttemptReasoning = shouldAttemptReasoning(disableThinking, baseUrl, modelName)
+            val requestBody = buildVisionRequestBody(
+                modelName = modelName,
+                prompt = prompt,
+                dataUrl = dataUrl,
+                reasoningEffort = if (shouldAttemptReasoning) "low" else null
+            )
+            Log.d(
+                "DEBUG_HTTP_VISION",
+                "vision request envelope: reasoning=${if (shouldAttemptReasoning) "low" else "off"}, dataUrlPrefix=${dataUrl.take(32)}..., payloadChars=${requestBody.toString().length}"
+            )
+
+            val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
+            Log.d("DEBUG_HTTP_VISION", "服务器原始响应: $rawBody")
+
+            if (statusCode in 200..299) {
+                if (shouldAttemptReasoning) {
+                    markReasoningSupport(baseUrl, modelName, true)
+                }
+                return parseModelResponse(rawBody)
+            }
+
+            if (shouldAttemptReasoning && isRetryableReasoningError(statusCode, rawBody)) {
+                markReasoningSupport(baseUrl, modelName, false)
+                val fallbackBody = buildVisionRequestBody(
+                    modelName = modelName,
+                    prompt = prompt,
+                    dataUrl = dataUrl,
+                    reasoningEffort = null
+                )
+                val (fallbackStatus, fallbackRaw) = postJsonWithAuth(baseUrl, apiKey, fallbackBody)
+                Log.d("DEBUG_HTTP_VISION", "服务器重试响应: $fallbackRaw")
+                if (fallbackStatus in 200..299) {
+                    return parseModelResponse(fallbackRaw)
+                }
+                Log.e("ApiModelProvider", "Vision retry failed: HTTP $fallbackStatus - $fallbackRaw")
+                return ApiCallResult.Failure(
+                    ApiErrorKind.HTTP,
+                    statusCode = fallbackStatus,
+                    rawBody = fallbackRaw
+                )
+            }
+
+            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode - $rawBody")
+            return ApiCallResult.Failure(
+                ApiErrorKind.HTTP,
+                statusCode = statusCode,
+                rawBody = rawBody
+            )
+
+        } catch (e: Exception) {
+            Log.e("ApiModelProvider", "Vision network/parse error", e)
+            ApiCallResult.Failure(
+                ApiErrorKind.NETWORK,
+                message = "${e.javaClass.simpleName} - ${e.message}".trim()
+            )
+        }
+    }
+
+    suspend fun fetchAvailableModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        if (apiKey.isBlank() || baseUrl.isBlank()) {
+            return ModelListResult.Failure("请先填写 API 地址和 API Key")
+        }
+
+        return try {
+            if (isGeminiEndpoint(baseUrl)) {
+                fetchGeminiModels(apiKey, baseUrl)
+            } else {
+                fetchOpenAiCompatibleModels(apiKey, baseUrl)
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("${e.javaClass.simpleName}: ${e.message.orEmpty()}")
+        }
+    }
+
+    private suspend fun postJsonWithAuth(
+        baseUrl: String,
+        apiKey: String,
+        body: Any
+    ): Pair<Int, String> {
+        val payload = if (body is JsonObject) body.toString() else body
+        val response = client.post {
+            url(baseUrl)
+            contentType(ContentType.Application.Json)
+            bearerAuth(apiKey)
+            setBody(payload)
+        }
+        return response.status.value to response.bodyAsText()
+    }
+
+    private fun parseModelResponse(rawBody: String): ApiCallResult {
+        return try {
+            parseSseModelResponse(rawBody)?.let { return it }
+
+            val root = JSONObject(rawBody)
+            extractErrorMessage(root)?.let { message ->
+                return ApiCallResult.Failure(ApiErrorKind.UNKNOWN, message = message, rawBody = rawBody)
+            }
+
+            val outputText = extractResponsesApiText(root)
+            if (!outputText.isNullOrBlank()) {
+                Log.d("DEBUG_HTTP_VISION", "parsed response via responses-style output")
+                return ApiCallResult.Success(outputText)
+            }
+
+            val choices = root.optJSONArray("choices")
+            if (choices == null || choices.length() == 0) {
+                Log.w("DEBUG_HTTP_VISION", "parseModelResponse: no choices field, rootKeys=${root.names()}")
+                return ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Choices", rawBody = rawBody)
+            }
+
+            val choicesText = extractChoicesText(choices)
+            if (choicesText.isNullOrBlank()) {
+                val firstChoice = choices.optJSONObject(0)
+                val message = firstChoice?.optJSONObject("message")
+                val finishReason = firstChoice?.optString("finish_reason")
+                val nativeFinishReason = firstChoice?.optString("native_finish_reason")
+                val reasoningContent = message?.opt("reasoning_content")
+                val refusal = message?.opt("refusal")
+                Log.w(
+                    "DEBUG_HTTP_VISION",
+                    "parseModelResponse: empty content, finishReason=$finishReason, nativeFinishReason=$nativeFinishReason, reasoningContent=$reasoningContent, refusal=$refusal, message=$message"
+                )
+                ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
+            } else {
+                ApiCallResult.Success(choicesText)
+            }
+        } catch (e: Exception) {
+            ApiCallResult.Failure(
+                ApiErrorKind.PARSE,
+                message = "${e.javaClass.simpleName} - ${e.message}".trim(),
+                rawBody = rawBody
+            )
+        }
+    }
+
+    private fun parseSseModelResponse(rawBody: String): ApiCallResult? {
+        val dataLines = rawBody.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("data:") }
+            .map { it.removePrefix("data:").trim() }
+            .filter { it.isNotBlank() && it != "[DONE]" }
+            .toList()
+
+        if (dataLines.isEmpty()) return null
+
+        val text = buildString {
+            for (line in dataLines) {
+                val chunk = runCatching { JSONObject(line) }.getOrNull() ?: continue
+                extractErrorMessage(chunk)?.let { return ApiCallResult.Failure(ApiErrorKind.UNKNOWN, message = it, rawBody = rawBody) }
+
+                val responseText = chunk.optJSONObject("response")?.let(::extractResponsesApiText)
+                if (!responseText.isNullOrBlank()) {
+                    append(responseText)
+                    continue
+                }
+
+                val outputText = extractResponsesApiText(chunk)
+                if (!outputText.isNullOrBlank()) {
+                    append(outputText)
+                    continue
+                }
+
+                val delta = nonBlankJsonString(chunk, "delta")
+                if (!delta.isNullOrBlank()) {
+                    append(delta)
+                    continue
+                }
+
+                val partText = extractContentPartText(chunk.optJSONObject("part"))
+                if (!partText.isNullOrBlank()) {
+                    append(partText)
+                    continue
+                }
+
+                val itemText = extractContentPartText(chunk.optJSONObject("item"))
+                if (!itemText.isNullOrBlank()) {
+                    append(itemText)
+                    continue
+                }
+
+                val choicesText = extractChoicesText(chunk.optJSONArray("choices"))
+                if (!choicesText.isNullOrBlank()) {
+                    append(choicesText)
+                }
+            }
+        }.trim()
+
+        Log.d("DEBUG_HTTP_VISION", "parsed response via sse chunks, chars=${text.length}")
+        return if (text.isBlank()) {
+            ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
+        } else {
+            ApiCallResult.Success(text)
+        }
+    }
+
+    private fun extractChoicesText(choices: JSONArray?): String? {
+        if (choices == null || choices.length() == 0) return null
+
+        val text = buildString {
+            for (index in 0 until choices.length()) {
+                val choice = choices.optJSONObject(index) ?: continue
+                val deltaContent = extractMessageContent(choice.optJSONObject("delta"))
+                val messageContent = extractMessageContent(choice.optJSONObject("message"))
+                val content = when {
+                    !deltaContent.isNullOrBlank() -> deltaContent
+                    !messageContent.isNullOrBlank() -> messageContent
+                    else -> nonBlankJsonString(choice, "text")
+                }
+                if (!content.isNullOrBlank()) append(content)
+            }
+        }
+
+        return text.ifBlank { null }
+    }
+
+    private fun extractMessageContent(message: JSONObject?): String? {
+        val content = message?.opt("content") ?: return null
+        return when {
+            content is String && content.isNotBlank() -> content
+            content is JSONArray -> extractTextFromContentParts(content)
+            else -> null
+        }
+    }
+
+    private fun extractContentPartText(part: JSONObject?): String? {
+        if (part == null) return null
+        val directText = nonBlankJsonString(part, "text")
+        if (!directText.isNullOrBlank()) return directText
+        val content = part.optJSONArray("content")
+        return extractTextFromContentParts(content)
+    }
+
+    private fun extractErrorMessage(root: JSONObject): String? {
+        val error = root.opt("error")
+        val message = when (error) {
+            is JSONObject -> {
+                val detail = nonBlankJsonString(error, "message")
+                    ?: nonBlankJsonString(error, "detail")
+                    ?: nonBlankJsonString(error, "code")
+                val code = nonBlankJsonString(error, "code")
+                val type = nonBlankJsonString(error, "type")
+                listOfNotNull(detail, code?.let { "code=$it" }, type?.let { "type=$it" })
+                    .distinct()
+                    .joinToString("; ")
+            }
+            is String -> error.trim()
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+
+        return message
+            ?: nonBlankJsonString(root, "error_message")
+            ?: nonBlankJsonString(root, "message")?.takeIf { root.has("code") || root.has("status") }
+    }
+
+    private fun nonBlankJsonString(root: JSONObject, key: String): String? {
+        return root.optString(key)
+            .trim()
+            .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    }
+
+    private fun extractTextFromContentParts(parts: JSONArray?): String? {
+        if (parts == null || parts.length() == 0) return null
+
+        val text = buildString {
+            for (index in 0 until parts.length()) {
+                val item = parts.opt(index)
+                when (item) {
+                    is String -> append(item)
+                    is JSONObject -> {
+                        val value = when (item.optString("type")) {
+                            "text", "output_text" -> item.optString("text")
+                            else -> item.optString("text")
+                        }
+                        if (value.isNotBlank()) {
+                            if (isNotEmpty()) append('\n')
+                            append(value)
+                        }
+                    }
+                }
+            }
+        }.trim()
+
+        return text.ifBlank { null }
+    }
+
+    private fun extractResponsesApiText(root: JSONObject): String? {
+        val output = root.optJSONArray("output") ?: return null
+        val text = buildString {
+            for (i in 0 until output.length()) {
+                val item = output.optJSONObject(i) ?: continue
+                val content = item.optJSONArray("content") ?: continue
+                for (j in 0 until content.length()) {
+                    val part = content.optJSONObject(j) ?: continue
+                    val partText = when (part.optString("type")) {
+                        "output_text", "text" -> part.optString("text")
+                        else -> part.optString("text")
+                    }
+                    if (partText.isNotBlank()) {
+                        if (isNotEmpty()) append('\n')
+                        append(partText)
+                    }
+                }
+            }
+        }.trim()
+        return text.ifBlank { null }
+    }
+
+    private fun isOpenAiEndpoint(baseUrl: String): Boolean {
+        val lower = baseUrl.lowercase()
+        return lower.contains("openai.com") || lower.contains("/v1/chat/completions")
+    }
+
+    private fun isGeminiEndpoint(baseUrl: String): Boolean {
+        val lower = baseUrl.lowercase()
+        return lower.contains("googleapis") || lower.contains("generativelanguage") || lower.contains("gemini")
+    }
+
+    private fun shouldAttemptReasoning(
+        disableThinking: Boolean,
+        baseUrl: String,
+        modelName: String
+    ): Boolean {
+        if (!disableThinking) return false
+        if (!isOpenAiEndpoint(baseUrl)) return false
+        val cached = reasoningSupportCache[cacheKey(baseUrl, modelName)]
+        return cached != false
+    }
+
+    private fun markReasoningSupport(baseUrl: String, modelName: String, supported: Boolean) {
+        reasoningSupportCache[cacheKey(baseUrl, modelName)] = supported
+    }
+
+    private fun isRetryableReasoningError(statusCode: Int, rawBody: String): Boolean {
+        if (statusCode != 400 && statusCode != 422) return false
+        val lower = rawBody.lowercase()
+        return lower.contains("unknown field") ||
+            lower.contains("unrecognized") ||
+            lower.contains("invalid request") ||
+            lower.contains("invalid_request") ||
+            lower.contains("unsupported")
+    }
+
+    private fun cacheKey(baseUrl: String, modelName: String): String {
+        return "${baseUrl}|${modelName}"
+    }
+
+    private fun buildVisionRequestBody(
+        modelName: String,
+        prompt: String,
+        dataUrl: String,
+        reasoningEffort: String?
+    ): JsonObject {
+        return buildJsonObject {
+            put("model", modelName)
+            putJsonArray("messages") {
+                add(buildJsonObject {
+                    put("role", "system")
+                    put("content", prompt)
+                })
+                add(buildJsonObject {
+                    put("role", "user")
+                    putJsonArray("content") {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", "请解析图片并输出JSON")
+                        })
+                        add(buildJsonObject {
+                            put("type", "image_url")
+                            putJsonObject("image_url") {
+                                put("url", dataUrl)
+                            }
+                        })
+                    }
+                })
+            }
+            put("temperature", 0.1)
+            if (!reasoningEffort.isNullOrBlank()) {
+                put("reasoning_effort", reasoningEffort)
+            }
+        }
+    }
+
+    private suspend fun fetchOpenAiCompatibleModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        val modelsUrl = normalizeOpenAiModelsUrl(baseUrl)
+        val response = client.get {
+            url(modelsUrl)
+            bearerAuth(apiKey)
+        }
+        val rawBody = response.bodyAsText()
+
+        if (response.status.value !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val data = root.optJSONArray("data") ?: return ModelListResult.Failure("接口返回中无模型列表")
+            val models = mutableListOf<String>()
+            for (i in 0 until data.length()) {
+                val item = data.optJSONObject(i) ?: continue
+                val id = item.optString("id").trim()
+                if (id.isNotBlank()) {
+                    models += id
+                }
+            }
+
+            if (models.isEmpty()) {
+                ModelListResult.Failure("接口未返回可用模型")
+            } else {
+                ModelListResult.Success(models.distinct().sorted())
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
+        }
+    }
+
+    private suspend fun fetchGeminiModels(
+        apiKey: String,
+        baseUrl: String
+    ): ModelListResult {
+        val modelsUrl = normalizeGeminiModelsUrl(baseUrl)
+        val finalUrl = if (modelsUrl.contains("?")) "$modelsUrl&key=$apiKey" else "$modelsUrl?key=$apiKey"
+
+        val response = client.get {
+            url(finalUrl)
+        }
+        val rawBody = response.bodyAsText()
+
+        if (response.status.value !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val data = root.optJSONArray("models") ?: return ModelListResult.Failure("接口返回中无模型列表")
+            val models = mutableListOf<String>()
+            for (i in 0 until data.length()) {
+                val item = data.optJSONObject(i) ?: continue
+                val methods = item.optJSONArray("supportedGenerationMethods")
+                val supportsGenerateContent = methods?.let { arr ->
+                    (0 until arr.length()).any { idx -> arr.optString(idx) == "generateContent" }
+                } ?: true
+                if (!supportsGenerateContent) continue
+
+                val rawName = item.optString("name").trim()
+                val cleaned = rawName.removePrefix("models/")
+                if (cleaned.isNotBlank()) {
+                    models += cleaned
+                }
+            }
+
+            if (models.isEmpty()) {
+                ModelListResult.Failure("接口未返回可用模型")
+            } else {
+                ModelListResult.Success(models.distinct().sorted())
+            }
+        } catch (e: Exception) {
+            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
+        }
+    }
+
+    private fun normalizeOpenAiModelsUrl(baseUrl: String): String {
+        val noQuery = baseUrl.trim().substringBefore("?").trimEnd('/')
+        return when {
+            noQuery.endsWith("/v1/models") -> noQuery
+            noQuery.endsWith("/v1") -> "$noQuery/models"
+            noQuery.endsWith("/chat/completions") -> {
+                noQuery.removeSuffix("/chat/completions") + "/models"
+            }
+            noQuery.contains("/v1/") -> {
+                noQuery.substringBefore("/v1/") + "/v1/models"
+            }
+            else -> "$noQuery/v1/models"
+        }
+    }
+
+    private fun normalizeGeminiModelsUrl(baseUrl: String): String {
+        val noQuery = baseUrl.trim().substringBefore("?").trimEnd('/')
+        return when {
+            noQuery.contains("/v1beta/models/") -> {
+                noQuery.substringBefore("/v1beta/models/") + "/v1beta/models"
+            }
+            noQuery.endsWith("/v1beta/models") -> noQuery
+            noQuery.endsWith(":generateContent") -> {
+                noQuery.substringBefore("/v1beta/models/") + "/v1beta/models"
+            }
+            noQuery.contains("/v1beta/") -> {
+                noQuery.substringBefore("/v1beta/") + "/v1beta/models"
+            }
+            else -> "$noQuery/v1beta/models"
+        }
+    }
+
+    private suspend fun generateGemini(
+        client: HttpClient,
+        baseUrl: String,
+        apiKey: String,
+        request: ModelRequest
+    ): ApiCallResult {
+        val finalUrl = if (baseUrl.contains("?")) "$baseUrl&key=$apiKey" else "$baseUrl?key=$apiKey"
+
+        val fullPrompt = request.messages.joinToString("\n\n") { msg ->
+            "【${msg.role}】: ${msg.content}"
+        }
+
+        val geminiJson = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    putJsonArray("parts") {
+                        add(buildJsonObject {
+                            put("text", fullPrompt)
+                        })
+                    }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("temperature", request.temperature)
+            }
+        }
+
+        val response = client.post {
+            url(finalUrl)
+            contentType(ContentType.Application.Json)
+            setBody(geminiJson)
+        }
+
+        val rawBody = response.bodyAsText()
+        Log.d("DEBUG_HTTP_GEMINI", "Gemini 响应: $rawBody")
+
+        if (response.status.value !in 200..299) {
+            return ApiCallResult.Failure(
+                ApiErrorKind.HTTP,
+                statusCode = response.status.value,
+                rawBody = rawBody
+            )
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val candidates = root.optJSONArray("candidates")
+            if (candidates != null && candidates.length() > 0) {
+                val content = candidates.getJSONObject(0).optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                if (parts != null && parts.length() > 0) {
+                    val text = parts.getJSONObject(0).optString("text", "")
+                    if (text.isBlank()) {
+                        ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Parts", rawBody = rawBody)
+                    } else {
+                        ApiCallResult.Success(text)
+                    }
+                } else {
+                    ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Parts", rawBody = rawBody)
+                }
+            } else {
+                ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Candidates", rawBody = rawBody)
+            }
+        } catch (e: Exception) {
+            ApiCallResult.Failure(
+                ApiErrorKind.PARSE,
+                message = "${e.javaClass.simpleName} - ${e.message}".trim(),
+                rawBody = rawBody
+            )
+        }
+    }
+
+    private suspend fun generateGeminiWithImage(
+        client: HttpClient,
+        baseUrl: String,
+        apiKey: String,
+        prompt: String,
+        imageBytes: ByteArray,
+        mimeType: String
+    ): ApiCallResult {
+        val finalUrl = if (baseUrl.contains("?")) "$baseUrl&key=$apiKey" else "$baseUrl?key=$apiKey"
+        val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+
+        val geminiJson = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    putJsonArray("parts") {
+                        add(buildJsonObject {
+                            put("text", prompt)
+                        })
+                        add(buildJsonObject {
+                            putJsonObject("inline_data") {
+                                put("mime_type", mimeType)
+                                put("data", base64)
+                            }
+                        })
+                    }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("temperature", 0.1)
+            }
+        }
+
+        val response = client.post {
+            url(finalUrl)
+            contentType(ContentType.Application.Json)
+            setBody(geminiJson)
+        }
+
+        val rawBody = response.bodyAsText()
+        Log.d("DEBUG_HTTP_GEMINI", "Gemini 视觉响应: $rawBody")
+
+        if (response.status.value !in 200..299) {
+            return ApiCallResult.Failure(
+                ApiErrorKind.HTTP,
+                statusCode = response.status.value,
+                rawBody = rawBody
+            )
+        }
+
+        return try {
+            val root = JSONObject(rawBody)
+            val candidates = root.optJSONArray("candidates")
+            if (candidates != null && candidates.length() > 0) {
+                val content = candidates.getJSONObject(0).optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                if (parts != null && parts.length() > 0) {
+                    val text = parts.getJSONObject(0).optString("text", "")
+                    if (text.isBlank()) {
+                        ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Parts", rawBody = rawBody)
+                    } else {
+                        ApiCallResult.Success(text)
+                    }
+                } else {
+                    ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Parts", rawBody = rawBody)
+                }
+            } else {
+                ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Candidates", rawBody = rawBody)
+            }
+        } catch (e: Exception) {
+            ApiCallResult.Failure(
+                ApiErrorKind.PARSE,
+                message = "${e.javaClass.simpleName} - ${e.message}".trim(),
+                rawBody = rawBody
+            )
+        }
+    }
+}

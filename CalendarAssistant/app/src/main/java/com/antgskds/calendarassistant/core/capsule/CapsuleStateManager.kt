@@ -30,7 +30,7 @@ import com.antgskds.calendarassistant.feature.weather.domain.WeatherWarningText
 import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

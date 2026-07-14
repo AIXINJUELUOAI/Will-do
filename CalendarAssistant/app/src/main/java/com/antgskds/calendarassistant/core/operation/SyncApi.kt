@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.core.operation
 
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
 
 /**
  * 同步链路的统一入口契约。

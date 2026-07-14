@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
 import com.antgskds.calendarassistant.data.model.MySettings
 import kotlinx.coroutines.flow.StateFlow
 

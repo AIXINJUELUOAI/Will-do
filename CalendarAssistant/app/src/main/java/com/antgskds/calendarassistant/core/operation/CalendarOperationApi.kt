@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.core.operation
 
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventType
 
@@ -33,5 +33,5 @@ interface CalendarOperationApi {
     fun setSyncedCalendarIds(ids: String)
     fun onScheduledSyncTick()
     fun onSystemCalendarChanged()
-    fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>)
+    fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem>)
 }

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.domain
 
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
 import java.time.DayOfWeek

@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.connector
 
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime

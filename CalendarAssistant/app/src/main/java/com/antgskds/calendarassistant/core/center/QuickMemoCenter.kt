@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.core.center
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi

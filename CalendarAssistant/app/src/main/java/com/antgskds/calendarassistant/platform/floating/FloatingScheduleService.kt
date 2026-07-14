@@ -52,10 +52,10 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
-import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
+import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
@@ -72,13 +72,13 @@ import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCapture
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
-import com.antgskds.calendarassistant.core.model.RecurringMode
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.contract.FloatingInputMode
 import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions
@@ -1456,7 +1456,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private fun convertToEvent(eventData: RecognitionDraft, sourceImagePath: String?): Event {
         val settings = settingsQueryApi.settings.value
-        return com.antgskds.calendarassistant.core.ai.convertDraftToEvent(
+        return com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent(
             eventData,
             sourceImagePath,
             defaultDurationMinutes = settings.defaultEventDurationMinutes,

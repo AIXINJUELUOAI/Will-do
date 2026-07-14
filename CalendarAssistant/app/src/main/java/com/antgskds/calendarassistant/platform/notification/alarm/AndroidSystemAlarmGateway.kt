@@ -6,11 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationFailureReason
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKey
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationResult
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationState
-import com.antgskds.calendarassistant.feature.api.notification.ports.SystemAlarmGateway
+import com.antgskds.calendarassistant.feature.notification.model.NotificationFailureReason
+import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
+import com.antgskds.calendarassistant.feature.notification.model.NotificationResult
+import com.antgskds.calendarassistant.feature.notification.model.NotificationState
+import com.antgskds.calendarassistant.feature.notification.api.ports.SystemAlarmGateway
 import com.antgskds.calendarassistant.platform.notification.receiver.NotificationAlarmReceiver
 
 class AndroidSystemAlarmGateway(context: Context) : SystemAlarmGateway {

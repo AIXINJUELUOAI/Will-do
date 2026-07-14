@@ -13,8 +13,8 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.EventType
 import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationErrorCode
 import com.antgskds.calendarassistant.core.operation.OperationResult
 import com.antgskds.calendarassistant.store.config.SyncConfigStore
@@ -392,7 +392,7 @@ class StoreRootNode(context: Context) {
     }
 
     fun refreshNotificationsForWindow(
-        displayItems: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>
+        displayItems: List<com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem>
     ) {
     }
 

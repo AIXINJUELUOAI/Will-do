@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.core.rule
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.ai.RulePatchProvider
+import com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider
 import com.antgskds.calendarassistant.core.rule.RuleIconSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,7 +35,7 @@ object RuleRegistry {
      */
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
-            val builtins = com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules()
+            val builtins = com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider.builtinRules()
             
             // 规则
             rules = builtins.associateBy { it.ruleId }

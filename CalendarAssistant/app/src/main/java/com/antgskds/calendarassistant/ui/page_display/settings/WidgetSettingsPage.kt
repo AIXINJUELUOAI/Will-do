@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherDailyForecast
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast

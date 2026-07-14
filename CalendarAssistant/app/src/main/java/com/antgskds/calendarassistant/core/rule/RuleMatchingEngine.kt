@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.core.rule
 
+import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*

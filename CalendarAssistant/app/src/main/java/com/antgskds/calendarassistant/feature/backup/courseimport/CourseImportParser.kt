@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.backup.courseimport
 
 import android.graphics.Color
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.TimeNode
 import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpCourseBaseDTO

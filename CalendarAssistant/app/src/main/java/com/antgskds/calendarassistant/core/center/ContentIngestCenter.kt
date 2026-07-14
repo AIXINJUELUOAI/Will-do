@@ -7,12 +7,12 @@ import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
-import com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator
+import com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.core.rule.RecognitionModePolicy
+import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionModePolicy
 import com.antgskds.calendarassistant.data.model.MySettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

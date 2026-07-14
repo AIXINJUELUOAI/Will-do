@@ -34,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.instantcode.InstantCodeQrSupport
+import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeQrSupport
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiAction
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiState
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics

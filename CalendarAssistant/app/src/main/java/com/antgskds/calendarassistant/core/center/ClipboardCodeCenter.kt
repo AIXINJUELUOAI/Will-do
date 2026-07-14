@@ -4,9 +4,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
-import com.antgskds.calendarassistant.core.instantcode.InstantCodeCandidate
-import com.antgskds.calendarassistant.core.instantcode.InstantCodeParseMode
-import com.antgskds.calendarassistant.core.instantcode.InstantCodeParser
+import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeCandidate
+import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParseMode
+import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint

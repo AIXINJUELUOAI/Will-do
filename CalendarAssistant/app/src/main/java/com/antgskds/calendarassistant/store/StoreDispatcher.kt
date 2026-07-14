@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.store
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventType
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationResult
 import com.antgskds.calendarassistant.store.StoreRootNode
 
@@ -77,7 +77,7 @@ class StoreDispatcher private constructor(context: Context) {
     fun onScheduledSyncTick() = rootNode.onScheduledSyncTick()
     fun onSystemCalendarChanged() = rootNode.onSystemCalendarChanged()
 
-    fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>) = rootNode.refreshNotificationsForWindow(items)
+    fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem>) = rootNode.refreshNotificationsForWindow(items)
     fun reconcileNotificationsFromStore(windowDays: Long = 7L) = rootNode.reconcileNotificationsFromStore(windowDays)
 
     companion object {

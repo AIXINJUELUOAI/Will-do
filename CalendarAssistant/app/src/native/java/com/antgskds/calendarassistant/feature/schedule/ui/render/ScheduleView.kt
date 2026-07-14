@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.schedule.ui.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.page_display.MaterialScheduleView
 import java.time.LocalDate
 

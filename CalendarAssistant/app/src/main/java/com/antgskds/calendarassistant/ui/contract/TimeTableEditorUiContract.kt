@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutConfig
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutConfig
 
 data class TimeTableEditorUiState(
     val resolvedConfig: TimeTableLayoutConfig,

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.ui.contract
 
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import java.time.LocalDate
 

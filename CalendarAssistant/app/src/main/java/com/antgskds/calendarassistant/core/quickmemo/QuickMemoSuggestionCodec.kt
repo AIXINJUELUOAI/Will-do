@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.core.quickmemo
 
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.google.gson.Gson
 
 object QuickMemoSuggestionCodec {
