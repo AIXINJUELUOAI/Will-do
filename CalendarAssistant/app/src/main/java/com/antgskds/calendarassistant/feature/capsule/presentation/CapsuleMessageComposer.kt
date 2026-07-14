@@ -57,7 +57,7 @@ object CapsuleMessageComposer {
         alert: WeatherAlertData,
         templateMode: String = LiveNotificationTemplateMode.AUTO
     ): CapsuleDisplayModel {
-        return NotificationTemplateCenter.composeOfficialWeatherAlert(locationName, alert, templateMode)
+        return NotificationTemplateComposer.composeOfficialWeatherAlert(locationName, alert, templateMode)
     }
 
     fun composeWeatherRisk(
@@ -65,7 +65,7 @@ object CapsuleMessageComposer {
         risk: WeatherRiskAlert,
         templateMode: String = LiveNotificationTemplateMode.AUTO
     ): CapsuleDisplayModel {
-        return NotificationTemplateCenter.composeWeatherRisk(locationName, risk, templateMode)
+        return NotificationTemplateComposer.composeWeatherRisk(locationName, risk, templateMode)
     }
 
     // --- 事件类胶囊 (委托 EventPresenter) ---

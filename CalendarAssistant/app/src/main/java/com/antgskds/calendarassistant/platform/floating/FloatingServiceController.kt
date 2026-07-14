@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.platform.floating
 
 import android.content.Context
 import android.content.Intent
@@ -6,18 +6,15 @@ import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
-import com.antgskds.calendarassistant.platform.floating.EdgeBarService
-import com.antgskds.calendarassistant.platform.floating.FloatingBallService
-import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
-import com.antgskds.calendarassistant.platform.floating.QuickMemoVoiceCaptureService
+import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 
-class FloatingCenter(
+class FloatingServiceController(
     private val appContext: Context,
-    private val permissionCenter: PermissionCenter,
+    private val permissionCenter: AndroidPermissionChecker,
     private val settingsQueryApi: SettingsQueryApi
 ) {
     companion object {
-        private const val TAG = "FloatingCenter"
+        private const val TAG = "FloatingController"
     }
 
     fun canDrawOverlays(context: Context = appContext): Boolean {

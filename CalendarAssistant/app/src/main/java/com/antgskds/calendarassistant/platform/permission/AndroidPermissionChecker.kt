@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.platform.permission
 
 import android.Manifest
 import android.content.Context
@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 
-class PermissionCenter {
+class AndroidPermissionChecker {
     fun hasCalendarPermissions(context: Context): Boolean {
         return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED &&
                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED

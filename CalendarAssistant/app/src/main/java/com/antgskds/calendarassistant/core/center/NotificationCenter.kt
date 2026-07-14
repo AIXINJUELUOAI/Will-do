@@ -24,7 +24,7 @@ import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
-import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateCenter
+import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateComposer
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.platform.capsule.render.IconUtils
 import com.antgskds.calendarassistant.platform.capsule.provider.FlymeCapsuleProvider
@@ -466,7 +466,7 @@ class NotificationCenter(
 
         val settings = (appContext as? App)?.settingsQueryApi?.settings?.value
         val notification = if (settings?.isLiveCapsuleEnabled == true) {
-            val display = NotificationTemplateCenter.composeDailySchedule(
+            val display = NotificationTemplateComposer.composeDailySchedule(
                 title = payload.title,
                 shortTitle = payload.shortTitle,
                 fullLines = payload.fullLines,

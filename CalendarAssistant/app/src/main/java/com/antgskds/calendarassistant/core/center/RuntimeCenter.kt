@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
+import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.platform.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.platform.receiver.KeepAliveReceiver
 import com.antgskds.calendarassistant.platform.receiver.ReminderReconcileReceiver
@@ -17,8 +19,8 @@ import kotlinx.coroutines.launch
 class RuntimeCenter(
     private val appContext: Context,
     private val settingsQueryApi: SettingsQueryApi,
-    private val permissionCenter: PermissionCenter,
-    private val floatingCenter: FloatingCenter,
+    private val permissionCenter: AndroidPermissionChecker,
+    private val floatingCenter: FloatingServiceController,
     private val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi,
     private val capsuleCenter: CapsuleCenter,
     private val appScope: CoroutineScope
