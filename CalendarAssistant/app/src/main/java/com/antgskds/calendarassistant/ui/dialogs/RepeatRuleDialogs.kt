@@ -44,7 +44,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 @Composable
-fun RepeatRulePickerDialog(
+fun MaterialRepeatRulePickerDialog(
     currentSpec: RepeatSpec?,
     startDate: LocalDate,
     onDismiss: () -> Unit,
