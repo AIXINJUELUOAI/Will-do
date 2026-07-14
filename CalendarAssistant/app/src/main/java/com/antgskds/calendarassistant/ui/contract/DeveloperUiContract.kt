@@ -4,7 +4,9 @@ import com.antgskds.calendarassistant.data.model.MySettings
 
 data class DeveloperActionUi(val id: String, val label: String, val category: String, val dangerous: Boolean)
 data class DeveloperUiState(val settings: MySettings, val actions: List<DeveloperActionUi>)
-data class DebugBatchResult(val successCount: Int, val failedCount: Int)
+data class DebugBatchResult(val successCount: Int, val failedMessages: List<String>) {
+    val failedCount: Int get() = failedMessages.size
+}
 
 enum class DeveloperListKind { HOME, ALL_EVENTS, FLOATING, ARCHIVES }
 enum class DeveloperDragField { TITLE, TIME, LOCATION, DESCRIPTION }

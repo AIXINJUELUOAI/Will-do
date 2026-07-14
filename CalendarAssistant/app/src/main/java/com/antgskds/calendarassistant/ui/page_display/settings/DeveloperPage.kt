@@ -55,6 +55,7 @@ import com.antgskds.calendarassistant.ui.contract.*
 import com.antgskds.calendarassistant.ui.flavor.DeveloperScreen
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -113,11 +114,23 @@ fun DeveloperPage(
             DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
         } },
         runDebugActions = { ids ->
-            val target = app ?: return@DeveloperScreen DebugBatchResult(0, ids.size)
+            val target = app ?: return@DeveloperScreen DebugBatchResult(0, listOf("应用上下文不可用"))
             var success = 0
-            var failed = 0
-            ids.mapNotNull { id -> DebugActionRegistry.actions.firstOrNull { it.id == id } }.forEach { action ->
-                runCatching { action.execute(target) }.onSuccess { success++ }.onFailure { failed++ }
+            val failed = mutableListOf<String>()
+            ids.forEach { id ->
+                val action = DebugActionRegistry.actions.firstOrNull { it.id == id }
+                if (action == null) {
+                    failed += "未知调试动作：$id"
+                    return@forEach
+                }
+                try {
+                    action.execute(target)
+                    success++
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    failed += "${action.label}：${error.message ?: error::class.java.simpleName}"
+                }
             }
             DebugBatchResult(success, failed)
         },
@@ -258,7 +271,11 @@ fun MaterialDeveloperScreen(
             runningId = action.id
             try {
                 val result = runDebugActions(listOf(action.id))
-                Toast.makeText(context, if (result.failedCount == 0) "已执行 ${action.label}" else "执行失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (result.failedCount == 0) "已执行 ${action.label}" else "执行失败：${result.failedMessages.first()}",
+                    Toast.LENGTH_SHORT
+                ).show()
             } finally {
                 runningId = null
             }
