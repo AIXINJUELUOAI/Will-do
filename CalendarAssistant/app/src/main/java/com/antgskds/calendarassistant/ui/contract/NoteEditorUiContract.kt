@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 
 data class NoteEditorUiState(
     val editorSessionKey: Int,

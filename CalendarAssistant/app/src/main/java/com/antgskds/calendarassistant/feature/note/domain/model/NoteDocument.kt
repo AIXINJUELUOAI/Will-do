@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.domain.model
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString

@@ -7,8 +7,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteParagraphType
-import com.antgskds.calendarassistant.core.note.plainTextContent
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
+import com.antgskds.calendarassistant.feature.note.domain.model.plainTextContent
 import com.antgskds.calendarassistant.ui.contract.NoteListItemUiModel
 import com.antgskds.calendarassistant.ui.contract.NoteListUiAction
 import com.antgskds.calendarassistant.ui.contract.NoteListUiState
@@ -120,7 +120,7 @@ private fun NoteEntity.toNoteListItemUiModel(key: String): NoteListItemUiModel {
     )
 }
 
-private fun buildNotePreview(paragraphs: List<com.antgskds.calendarassistant.core.note.NoteParagraph>): String? {
+private fun buildNotePreview(paragraphs: List<com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph>): String? {
     val summary = paragraphs
         .asSequence()
         .filterNot { it.type == NoteParagraphType.TODO }

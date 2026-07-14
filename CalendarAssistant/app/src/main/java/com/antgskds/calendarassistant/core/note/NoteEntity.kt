@@ -4,6 +4,8 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocumentCodec
 
 @Entity(
     tableName = "notes",

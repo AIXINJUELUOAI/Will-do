@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.ui.connector
 
-import com.antgskds.calendarassistant.core.note.NoteDocument
-import com.antgskds.calendarassistant.core.note.NoteDocumentCodec
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocumentCodec
 import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteParagraph
+import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph
 import com.antgskds.calendarassistant.data.model.MySettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
