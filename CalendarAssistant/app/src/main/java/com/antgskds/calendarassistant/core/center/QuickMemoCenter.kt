@@ -21,6 +21,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.NoopSpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
+import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +35,7 @@ class QuickMemoCenter(
     private val repository: QuickMemoRepository,
     private val appScope: CoroutineScope,
     private val speechTranscriber: SpeechTranscriber = NoopSpeechTranscriber(),
-    private val recognitionCenter: RecognitionCenter? = null,
+    private val recognitionCenter: RecognitionOrchestrator? = null,
     private val settingsQueryApi: SettingsQueryApi? = null,
     private val appContext: Context? = null,
     private val notificationCenter: NotificationCenter? = null,

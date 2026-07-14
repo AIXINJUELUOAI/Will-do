@@ -11,10 +11,10 @@ import com.antgskds.calendarassistant.data.model.MySettings
  * 识别链路的统一入口契约。
  *
  * 「入口可以很多（截图/图片/文本/语音/分享…），主流程只能有一条」——所有识别入口都应只依赖本
- * 接口，而不是直接拿 [com.antgskds.calendarassistant.core.center.RecognitionCenter] 实现类。
+ * 接口，而不是直接拿 [com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator] 实现类。
  * 输出统一为 [AnalysisResult]<[RecognitionDraft]>，后续入库由 [IngestCommandApi] 接手。
  *
- * 由 RecognitionCenter 实现。方法签名与其现有实现一致（纯增量契约，不改行为）。
+ * 由 RecognitionOrchestrator 实现。方法签名与其现有实现一致（纯增量契约，不改行为）。
  */
 interface RecognitionApi {
 

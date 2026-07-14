@@ -10,17 +10,17 @@ import com.antgskds.calendarassistant.core.util.AnrMonitor
 import com.antgskds.calendarassistant.core.util.AppLogger
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
 import com.antgskds.calendarassistant.core.center.CapsuleCenter
-import com.antgskds.calendarassistant.core.center.ContentIngestCenter
+import com.antgskds.calendarassistant.feature.recognition.application.ingest.IngestPipeline
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
 import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
-import com.antgskds.calendarassistant.core.center.ImportCenter
+import com.antgskds.calendarassistant.feature.recognition.application.ingest.ScheduleIngestWriter
 import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
-import com.antgskds.calendarassistant.core.center.RecognitionCenter
+import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
 import com.antgskds.calendarassistant.core.center.ReminderCenter
 import com.antgskds.calendarassistant.core.center.RuntimeCenter
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
@@ -73,7 +73,7 @@ import com.antgskds.calendarassistant.feature.notification.data.local.SharedPref
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
 import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
 import com.antgskds.calendarassistant.core.center.CalendarCenter
-import com.antgskds.calendarassistant.core.center.ClipboardCodeCenter
+import com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardCodeIngestCoordinator
 import com.antgskds.calendarassistant.core.sms.SmsContentObserver
 import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
@@ -212,8 +212,8 @@ class App : Application() {
     // 识别 / 入库
     // ══════════════════════════════════════════════════════════════════════
 
-    val recognitionCenter: RecognitionCenter by lazy {
-        RecognitionCenter(domainEventBus = domainEventBus)
+    val recognitionCenter: RecognitionOrchestrator by lazy {
+        RecognitionOrchestrator(domainEventBus = domainEventBus)
     }
 
     private val regexAiReviewCoordinator: com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator by lazy {
@@ -224,16 +224,16 @@ class App : Application() {
         )
     }
 
-    private val importCenter: ImportCenter by lazy {
-        ImportCenter(
+    private val importCenter: ScheduleIngestWriter by lazy {
+        ScheduleIngestWriter(
             scheduleCenter = scheduleCenter,
             settingsQueryApi = settingsQueryApi,
             attachmentManager = eventAttachmentManager
         )
     }
 
-    val contentIngestCenter: ContentIngestCenter by lazy {
-        ContentIngestCenter(
+    val contentIngestCenter: IngestPipeline by lazy {
+        IngestPipeline(
             importCenter = importCenter,
             domainEventBus = domainEventBus,
             appScope = appScope,
@@ -245,8 +245,8 @@ class App : Application() {
 
     val ingestCommandApi: IngestCommandApi by lazy { contentIngestCenter }
 
-    val clipboardCodeCenter: ClipboardCodeCenter by lazy {
-        ClipboardCodeCenter(
+    val clipboardCodeCenter: ClipboardCodeIngestCoordinator by lazy {
+        ClipboardCodeIngestCoordinator(
             appContext = applicationContext,
             settingsQueryApi = settingsQueryApi,
             ingestCommandApi = ingestCommandApi,

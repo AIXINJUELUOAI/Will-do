@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.center.ClipboardCodePrompt
+import com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardCodePrompt
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.event.DomainEventType
