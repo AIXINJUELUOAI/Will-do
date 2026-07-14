@@ -100,20 +100,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.isTextRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.textRecognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteAttachmentStore
-import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NoteListStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraph
 import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
 import com.antgskds.calendarassistant.core.note.NoteParagraphType
 import com.antgskds.calendarassistant.core.note.NoteTextStyle
 import com.antgskds.calendarassistant.core.note.plainTextContent
-import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
@@ -121,51 +115,77 @@ import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyl
 import com.antgskds.calendarassistant.ui.components.PlainNoteEditor
 import com.antgskds.calendarassistant.ui.components.PlainNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.contract.NoteEditorAnalysisOutcome
+import com.antgskds.calendarassistant.ui.contract.NoteEditorExportFormat
+import com.antgskds.calendarassistant.ui.contract.NoteEditorMessageKind
+import com.antgskds.calendarassistant.ui.contract.NoteEditorUiAction
+import com.antgskds.calendarassistant.ui.contract.NoteEditorUiState
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import android.graphics.BitmapFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NoteEditorScreen(
-    initialNote: NoteEntity?,
-    editorSessionKey: Int = 0,
-    settings: MySettings,
-    onDismiss: () -> Unit,
-    onSave: (Long?, String, NoteDocument, Long?, (Long) -> Unit) -> Unit,
-    onDelete: (Long, () -> Unit) -> Unit,
-    onSetPinned: (Long, Boolean) -> Unit,
-    onExportNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
-    onExportMarkdownNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit,
-    onImportNote: (android.net.Uri, (Result<Long>) -> Unit) -> Unit,
-    onOpenImportedNote: (Long) -> Unit,
-    onToggleAudioAttachment: (String) -> Unit = {},
-    onShowMessage: (String, ToastType) -> Unit,
+fun MaterialNoteEditorScreen(
+    state: NoteEditorUiState,
+    onAction: (NoteEditorUiAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val editorSessionKey = state.editorSessionKey
+    val onDismiss = { onAction(NoteEditorUiAction.Dismiss) }
+    val onSave: (Long?, String, NoteDocument, Long?, (Long) -> Unit) -> Unit = { id, title, document, createdAt, onSaved ->
+        onAction(NoteEditorUiAction.Save(id, title, document, createdAt, onSaved))
+    }
+    val onDelete: (Long, () -> Unit) -> Unit = { id, onDeleted ->
+        onAction(NoteEditorUiAction.Delete(id, onDeleted))
+    }
+    val onSetPinned: (Long, Boolean) -> Unit = { id, pinned ->
+        onAction(NoteEditorUiAction.SetPinned(id, pinned))
+    }
+    val onExportNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit = { id, uri, onResult ->
+        onAction(NoteEditorUiAction.Export(id, uri.toString(), NoteEditorExportFormat.DEFAULT, onResult))
+    }
+    val onExportMarkdownNote: (Long, android.net.Uri, (Result<Unit>) -> Unit) -> Unit = { id, uri, onResult ->
+        onAction(NoteEditorUiAction.Export(id, uri.toString(), NoteEditorExportFormat.MARKDOWN, onResult))
+    }
+    val onImportNote: (android.net.Uri, (Result<Long>) -> Unit) -> Unit = { uri, onResult ->
+        onAction(NoteEditorUiAction.Import(uri.toString(), onResult))
+    }
+    val onOpenImportedNote: (Long) -> Unit = { id ->
+        onAction(NoteEditorUiAction.OpenImportedNote(id))
+    }
+    val onToggleAudioAttachment: (String) -> Unit = { path ->
+        onAction(NoteEditorUiAction.ToggleAudioAttachment(path))
+    }
+    val onShowMessage: (String, ToastType) -> Unit = { message, type ->
+        val kind = when (type) {
+            ToastType.SUCCESS -> NoteEditorMessageKind.SUCCESS
+            ToastType.ERROR -> NoteEditorMessageKind.ERROR
+            ToastType.INFO -> NoteEditorMessageKind.INFO
+        }
+        onAction(NoteEditorUiAction.ShowMessage(message, kind))
+    }
+    val haptics = rememberAppHaptics(state.hapticEnabled)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
+    val hasAppBackground = state.backgroundEnabled
     val pageContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
-    val savedTitle = initialNote?.title.orEmpty()
-    val savedDocument = initialNote?.document() ?: NoteDocument()
+    val savedTitle = state.initialTitle
+    val savedDocument = state.initialDocument
     val editorController = remember(editorSessionKey) { PlainNoteEditorController() }
-    var noteId by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.id) }
+    var noteId by rememberSaveable(editorSessionKey) { mutableStateOf(state.initialNoteId) }
     var titleText by rememberSaveable(editorSessionKey) { mutableStateOf(savedTitle) }
     var document by remember(editorSessionKey) { mutableStateOf(savedDocument) }
-    var createdAtMillis by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.createdAt) }
+    var createdAtMillis by rememberSaveable(editorSessionKey) { mutableStateOf(state.initialCreatedAt) }
     var isAnalyzing by remember(editorSessionKey) { mutableStateOf(false) }
     var isMoreExpanded by remember(editorSessionKey) { mutableStateOf(false) }
     var hasDeleted by remember(editorSessionKey) { mutableStateOf(false) }
     var pendingDelete by remember(editorSessionKey) { mutableStateOf(false) }
     var pendingExportChoice by remember(editorSessionKey) { mutableStateOf(false) }
-    var isPinned by rememberSaveable(editorSessionKey) { mutableStateOf(initialNote?.pinnedAt != null) }
+    var isPinned by rememberSaveable(editorSessionKey) { mutableStateOf(state.initiallyPinned) }
     var previewImage by remember(editorSessionKey) { mutableStateOf<NoteParagraph?>(null) }
     var saveJob by remember(editorSessionKey) { mutableStateOf<Job?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -270,9 +290,9 @@ fun NoteEditorScreen(
     }
 
     fun runAiAnalyze() {
-        if (!settings.isTextRecognitionConfigReady()) {
+        if (!state.recognitionReady) {
             haptics.error()
-            onShowMessage(settings.textRecognitionConfigMissingMessage(), ToastType.ERROR)
+            onShowMessage(state.recognitionMissingMessage, ToastType.ERROR)
             return
         }
         val text = buildString {
@@ -285,30 +305,16 @@ fun NoteEditorScreen(
             onShowMessage("便签内容为空", ToastType.INFO)
             return
         }
-        scope.launch {
-            haptics.confirm()
-            isAnalyzing = true
-            try {
-                when (withContext(Dispatchers.IO) {
-                    (context.applicationContext as App)
-                        .recognitionCenter
-                        .parseUserText(
-                            text = text,
-                            settings = settings,
-                            context = context.applicationContext,
-                            sourceType = RecognitionFeedbackSource.NOTE_SOURCE_TYPE,
-                            sourceId = RecognitionFeedbackSource.NOTE_SOURCE_ID,
-                            ingestRequested = true
-                        )
-                }) {
-                    is AnalysisResult.Success -> onShowMessage("识别完成，正在保存...", ToastType.INFO)
-                    is AnalysisResult.Empty -> Unit
-                    is AnalysisResult.Failure -> Unit
+        haptics.confirm()
+        isAnalyzing = true
+        onAction(
+            NoteEditorUiAction.AnalyzeText(text) { outcome ->
+                if (outcome == NoteEditorAnalysisOutcome.SUCCESS) {
+                    onShowMessage("识别完成，正在保存...", ToastType.INFO)
                 }
-            } finally {
                 isAnalyzing = false
             }
-        }
+        )
     }
 
     fun openAttachment(paragraph: NoteParagraph) {
@@ -357,8 +363,8 @@ fun NoteEditorScreen(
 
     AppBackgroundStyleTheme(
         enabled = hasAppBackground,
-        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
-        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
+        miuiBlurEnabled = state.backgroundBlurEnabled,
+        cardAlphaPercent = state.backgroundCardAlphaPercent
     ) {
     Box(
         modifier = modifier
@@ -542,7 +548,7 @@ fun NoteEditorScreen(
         dismissText = "取消",
         isDestructive = true,
         isLoading = false,
-        predictiveBackEnabled = settings.predictiveBackEnabled,
+        predictiveBackEnabled = state.predictiveBackEnabled,
         onConfirm = {
             val id = noteId ?: return@PredictiveFloatingActionCard
             hasDeleted = true

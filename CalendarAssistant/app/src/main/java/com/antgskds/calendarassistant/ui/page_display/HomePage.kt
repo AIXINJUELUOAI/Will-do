@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -60,43 +61,39 @@ import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
-import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.theme.SectionTitleTextStyle
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
-import com.antgskds.calendarassistant.ui.connector.NoteListRoute
+import com.antgskds.calendarassistant.ui.contract.HomePageUiAction
+import com.antgskds.calendarassistant.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.appBackgroundSurfaceAlpha
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomePage(
-    viewModel: MainViewModel,
+fun MaterialHomePage(
+    state: HomePageUiState,
+    onAction: (HomePageUiAction) -> Unit,
+    scheduleContent: @Composable () -> Unit,
+    allEventsContent: @Composable (String, Dp) -> Unit,
+    noteListContent: @Composable (String, Dp) -> Unit,
+    quickMemoContent: @Composable (String, Dp) -> Unit,
     currentPageKey: String,
     uiSize: Int = 2,
     pickupTimestamp: Long = 0L,
@@ -111,22 +108,17 @@ fun HomePage(
     onAddEventClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
-    onEditNote: (NoteEntity) -> Unit = {},
     onCreateNote: () -> Unit = {},
-    onRequestDeleteNote: (NoteEntity) -> Unit = {},
-    onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
     onRequestClearQuickMemos: () -> Unit = {},
     quickMemoCount: Int = 0,
-    onOpenQuickMemoDetail: (Long) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {}
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val haptics = rememberAppHaptics(uiState.settings.hapticFeedbackEnabled)
+    val haptics = rememberAppHaptics(state.settings.hapticFeedbackEnabled)
 
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
@@ -157,7 +149,7 @@ fun HomePage(
         imageImportJob = scope.launch {
             isImageImporting = true
             try {
-                val settings = uiState.settings
+                val settings = state.settings
                 if (!settings.isRecognitionConfigReady()) {
                     Toast.makeText(context, settings.recognitionConfigMissingMessage(), Toast.LENGTH_SHORT).show()
                     return@launch
@@ -435,17 +427,7 @@ fun HomePage(
                 }
         ) {
 
-            val maxNodes = remember(uiState.settings.timeTableJson) {
-                TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
-            }
-            ScheduleView(
-                items = uiState.courseScheduleItems,
-                semesterStartDateStr = uiState.settings.semesterStartDate,
-                totalWeeks = uiState.settings.totalWeeks,
-                maxNodes = maxNodes,
-                selectedDate = uiState.selectedDate,
-                onCourseClick = { item -> onEditItem(item) }
-            )
+            scheduleContent()
 
         }
 
@@ -467,13 +449,13 @@ fun HomePage(
                                     else -> todaySearchQuery = ""
                                 }
                             }
-                            else -> viewModel.onRevealItem(null)
+                            else -> onAction(HomePageUiAction.RevealItem(null))
                         }
                     })
                 }
         ) {
             Scaffold(
-                containerColor = if (uiState.settings.appBackgroundImagePath.isNotBlank()) {
+                containerColor = if (state.settings.appBackgroundImagePath.isNotBlank()) {
                     Color.Transparent
                 } else {
                     MaterialTheme.colorScheme.background
@@ -545,22 +527,22 @@ fun HomePage(
 
                     if (animatedIsTodayPage) {
                         // === 今日视图内容 ===
-                        val todayEvents = remember(uiState.currentDateEvents, todaySearchQuery) {
+                        val todayEvents = remember(state.currentDateEvents, todaySearchQuery) {
                             if (todaySearchQuery.isBlank()) {
-                                uiState.currentDateEvents
+                                state.currentDateEvents
                             } else {
-                                uiState.currentDateEvents.filter { event ->
+                                state.currentDateEvents.filter { event ->
                                     event.title.contains(todaySearchQuery, ignoreCase = true) ||
                                             event.description.contains(todaySearchQuery, ignoreCase = true) ||
                                             event.location.contains(todaySearchQuery, ignoreCase = true)
                                 }
                             }
                         }
-                        val tomorrowEvents = remember(uiState.tomorrowEvents, todaySearchQuery) {
+                        val tomorrowEvents = remember(state.tomorrowEvents, todaySearchQuery) {
                             if (todaySearchQuery.isBlank()) {
-                                uiState.tomorrowEvents
+                                state.tomorrowEvents
                             } else {
-                                uiState.tomorrowEvents.filter { event ->
+                                state.tomorrowEvents.filter { event ->
                                     event.title.contains(todaySearchQuery, ignoreCase = true) ||
                                             event.description.contains(todaySearchQuery, ignoreCase = true) ||
                                             event.location.contains(todaySearchQuery, ignoreCase = true)
@@ -579,11 +561,11 @@ fun HomePage(
 
                             // 日期卡片
                             item {
-                                val hasAppBackground = uiState.settings.appBackgroundImagePath.isNotBlank()
+                                val hasAppBackground = state.settings.appBackgroundImagePath.isNotBlank()
                                 val themePrimary = MaterialTheme.colorScheme.primary
                                 val themeOnPrimary = MaterialTheme.colorScheme.onPrimary
-                                val isToday = uiState.selectedDate == uiState.today
-                                val weatherData = uiState.weatherData
+                                val isToday = state.selectedDate == state.today
+                                val weatherData = state.weatherData
                                 val topBaseColor = when {
                                     isToday -> themePrimary
                                     else -> MaterialTheme.colorScheme.surfaceVariant
@@ -594,9 +576,9 @@ fun HomePage(
                                 }
                                 val topBarColor = if (hasAppBackground) {
                                     val glassAlpha = appBackgroundSurfaceAlpha(
-                                        cardAlphaPercent = uiState.settings.appBackgroundCardAlphaPercent,
+                                        cardAlphaPercent = state.settings.appBackgroundCardAlphaPercent,
                                         dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
-                                        miuiBlurEnabled = uiState.settings.appBackgroundMiuiBlurTestEnabled
+                                        miuiBlurEnabled = state.settings.appBackgroundMiuiBlurTestEnabled
                                     )
                                     topBaseColor.copy(alpha = glassAlpha)
                                 } else {
@@ -619,8 +601,11 @@ fun HomePage(
                                             var totalDrag = 0f
                                             detectHorizontalDragGestures(
                                                 onDragEnd = {
-                                                    if (totalDrag < -50) viewModel.updateSelectedDate(uiState.selectedDate.plusDays(1))
-                                                    else if (totalDrag > 50) viewModel.updateSelectedDate(uiState.selectedDate.minusDays(1))
+                                                    if (totalDrag < -50) {
+                                                        onAction(HomePageUiAction.SelectDate(state.selectedDate.plusDays(1)))
+                                                    } else if (totalDrag > 50) {
+                                                        onAction(HomePageUiAction.SelectDate(state.selectedDate.minusDays(1)))
+                                                    }
                                                     totalDrag = 0f
                                                 },
                                                 onHorizontalDrag = { change, dragAmount ->
@@ -648,7 +633,9 @@ fun HomePage(
                                                 .weight(0.2f)
                                                 .fillMaxWidth()
                                                 .background(topBarColor)
-                                                .clickable { viewModel.updateSelectedDate(uiState.today) }
+                                                .clickable {
+                                                    onAction(HomePageUiAction.SelectDate(state.today))
+                                                }
                                         ) {
                                             if (weatherData != null) {
                                                 Row(
@@ -689,19 +676,19 @@ fun HomePage(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                                                 Text(
-                                                    uiState.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
+                                                    state.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
                                                     style = MaterialTheme.typography.titleLarge,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Spacer(Modifier.width(8.dp))
                                                 Text(
-                                                    LunarCalendarUtils.getLunarDate(uiState.selectedDate),
+                                                    LunarCalendarUtils.getLunarDate(state.selectedDate),
                                                     style = MaterialTheme.typography.titleLarge,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
                                             Text(
-                                                text = uiState.selectedDate.dayOfMonth.toString(),
+                                                text = state.selectedDate.dayOfMonth.toString(),
                                                 fontSize = 140.sp,
                                                 fontWeight = FontWeight.Black,
                                                 lineHeight = 140.sp,
@@ -711,11 +698,11 @@ fun HomePage(
                                                     indication = null
                                                 ) {
                                                     haptics.selection()
-                                                    viewModel.updateSelectedDate(uiState.today)
+                                                    onAction(HomePageUiAction.SelectDate(state.today))
                                                 }
                                             )
                                             Text(
-                                                "${uiState.selectedDate.year}年${uiState.selectedDate.monthValue}月",
+                                                "${state.selectedDate.year}年${state.selectedDate.monthValue}月",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
                                             )
@@ -727,7 +714,7 @@ fun HomePage(
                             if (!serviceEnabled) item { PermissionWarningCard(Icons.Default.Warning, "无障碍服务未开启", { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }) }) }
                             if (!notificationEnabled) item { PermissionWarningCard(Icons.Default.NotificationsOff, "通知权限未开启", { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply { putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName); flags = Intent.FLAG_ACTIVITY_NEW_TASK }) }) }
 
-                            item { SectionHeader(if (uiState.selectedDate == uiState.today) "今日安排" else "${uiState.selectedDate.monthValue}月${uiState.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
+                            item { SectionHeader(if (state.selectedDate == state.today) "今日安排" else "${state.selectedDate.monthValue}月${state.selectedDate.dayOfMonth}日 安排", MaterialTheme.colorScheme.primary) }
 
                             if (todayEvents.isEmpty()) {
                                 val emptyText = if (todaySearchQuery.isBlank()) "今日暂无日程" else "未找到相关日程"
@@ -736,71 +723,63 @@ fun HomePage(
                                 items(todayEvents, key = { "today_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
                                         item = item,
-                                        isRevealed = uiState.revealedItemKey == item.stableKey,
-                                        timeRefreshToken = uiState.timeRefreshToken,
-                                        onExpand = { viewModel.onRevealItem(item.stableKey) },
-                                        onCollapse = { viewModel.onRevealItem(null) },
-                                        onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
+                                        isRevealed = state.revealedItemKey == item.stableKey,
+                                        timeRefreshToken = state.timeRefreshToken,
+                                        onExpand = {
+                                            onAction(HomePageUiAction.RevealItem(item.stableKey))
+                                        },
+                                        onCollapse = {
+                                            onAction(HomePageUiAction.RevealItem(null))
+                                        },
+                                        onDelete = { onAction(HomePageUiAction.DeleteItem(item)) },
                                         onEdit = { onEditItem(item) },
                                         onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveItem(item.action) },
-                                        hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                                        onArchive = { onAction(HomePageUiAction.ArchiveItem(item)) },
+                                        hapticEnabled = state.settings.hapticFeedbackEnabled
                                     )
                                 }
                             }
 
-                            if (uiState.selectedDate == uiState.today && tomorrowEvents.isNotEmpty()) {
+                            if (state.selectedDate == state.today && tomorrowEvents.isNotEmpty()) {
                                 item { SectionHeader("明日安排", MaterialTheme.colorScheme.tertiary) }
                                 items(tomorrowEvents, key = { "tomorrow_${it.stableKey}" }) { item ->
                                     SwipeableEventItem(
                                         item = item,
-                                        isRevealed = uiState.revealedItemKey == item.stableKey,
-                                        timeRefreshToken = uiState.timeRefreshToken,
-                                        onExpand = { viewModel.onRevealItem(item.stableKey) },
-                                        onCollapse = { viewModel.onRevealItem(null) },
-                                        onDelete = { item.eventId?.let { id -> viewModel.deleteEvent(id) } },
+                                        isRevealed = state.revealedItemKey == item.stableKey,
+                                        timeRefreshToken = state.timeRefreshToken,
+                                        onExpand = {
+                                            onAction(HomePageUiAction.RevealItem(item.stableKey))
+                                        },
+                                        onCollapse = {
+                                            onAction(HomePageUiAction.RevealItem(null))
+                                        },
+                                        onDelete = { onAction(HomePageUiAction.DeleteItem(item)) },
                                         onEdit = { onEditItem(item) },
                                         onLongPress = { onRequestDeleteItem(item) },
                                         uiSize = uiSize,
                                         isArchivePage = false,
-                                        onArchive = { viewModel.archiveItem(item.action) },
-                                        hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                                        onArchive = { onAction(HomePageUiAction.ArchiveItem(item)) },
+                                        hapticEnabled = state.settings.hapticFeedbackEnabled
                                     )
                                 }
                             }
                         }
                     } else if (animatedIsAllPage) {
-                        AllEventsPage(
-                            viewModel = viewModel,
-                            onEditItem = { onEditItem(it) },
-                            uiSize = uiSize,
-                            // 【修改 2】透传给 AllEventsPage
-                            pickupTimestamp = pickupTimestamp,
-                            searchQuery = allSearchQuery,
-                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onRequestDeleteItem = onRequestDeleteItem,
-                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                        allEventsContent(
+                            allSearchQuery,
+                            if (showSearchBar) searchBarOffset else 0.dp,
                         )
                     } else if (animatedIsNotePage && isLegacyNoteMode) {
-                        NoteListRoute(
-                            viewModel = viewModel,
-                            searchQuery = noteSearchQuery,
-                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onEditNote = onEditNote,
-                            onRequestDeleteNote = onRequestDeleteNote,
-                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                        noteListContent(
+                            noteSearchQuery,
+                            if (showSearchBar) searchBarOffset else 0.dp,
                         )
                     } else {
-                        QuickMemoPage(
-                            viewModel = viewModel,
-                            searchQuery = noteSearchQuery,
-                            uiSize = uiSize,
-                            extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
-                            onOpenDetail = onOpenQuickMemoDetail,
-                            onPendingDeleteChange = { memo -> memo?.let(onRequestDeleteQuickMemo) },
-                            hapticEnabled = uiState.settings.hapticFeedbackEnabled
+                        quickMemoContent(
+                            noteSearchQuery,
+                            if (showSearchBar) searchBarOffset else 0.dp,
                         )
                     }
                     }
@@ -914,7 +893,7 @@ fun HomePage(
             isLoading = true,
             allowDismissWhileLoading = true,
             dismissOnClickOutside = false,
-            predictiveBackEnabled = uiState.settings.predictiveBackEnabled,
+            predictiveBackEnabled = state.settings.predictiveBackEnabled,
             onConfirm = {},
             onDismiss = cancelImageImport,
             modifier = Modifier

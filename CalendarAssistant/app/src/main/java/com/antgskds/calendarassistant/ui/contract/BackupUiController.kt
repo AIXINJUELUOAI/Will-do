@@ -2,8 +2,8 @@ package com.antgskds.calendarassistant.ui.contract
 
 import android.net.Uri
 import com.antgskds.calendarassistant.core.ai.AiPrompts
-import com.antgskds.calendarassistant.core.center.ImportMode
-import com.antgskds.calendarassistant.core.center.ParsedCourseImport
+import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
+import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.data.model.MySettings

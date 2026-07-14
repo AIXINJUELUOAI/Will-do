@@ -17,6 +17,7 @@ import com.antgskds.calendarassistant.core.event.events.ScheduleChangeType
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangedEvent
 
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
 import com.antgskds.calendarassistant.store.reminder.ReminderStoreNode
 import kotlinx.coroutines.CoroutineScope

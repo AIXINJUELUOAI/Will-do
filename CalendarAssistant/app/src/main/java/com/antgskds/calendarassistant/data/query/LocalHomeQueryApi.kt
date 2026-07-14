@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.data.query
 
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.HomeSnapshot
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem

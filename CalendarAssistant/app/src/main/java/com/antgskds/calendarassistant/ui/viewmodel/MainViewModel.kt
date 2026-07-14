@@ -10,8 +10,8 @@ import com.antgskds.calendarassistant.core.ai.AiPrompts
 import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.ai.PromptCheckResult
 import com.antgskds.calendarassistant.core.ai.PromptUpdater
-import com.antgskds.calendarassistant.core.update.AppUpdateChecker
-import com.antgskds.calendarassistant.core.update.AppUpdateCheckResult
+import com.antgskds.calendarassistant.feature.update.domain.AppUpdateChecker
+import com.antgskds.calendarassistant.feature.update.domain.AppUpdateCheckResult
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.NoteCenter
 import com.antgskds.calendarassistant.core.center.QuickMemoCenter
@@ -27,11 +27,11 @@ import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.RemotePrompts
-import com.antgskds.calendarassistant.data.model.RemoteAppUpdateInfo
+import com.antgskds.calendarassistant.feature.update.model.RemoteAppUpdateInfo
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.note.NoteTransferManager

@@ -53,7 +53,7 @@ object HelperCatalog {
 
         // —— 入库 / 日程 ——
         HelperEntry("课程事件映射", Chain.INGEST, "core/course/CourseEventMapper", "课程表数据 → Event"),
-        HelperEntry("日程展示助手", Chain.SCHEDULE, "core/center/ScheduleDisplayHelper", "日程展示字段拼装"),
+        HelperEntry("日程展示助手", Chain.SCHEDULE, "feature/schedule/domain/ScheduleDisplayHelper", "日程展示字段拼装"),
 
         // —— 通知 ——
         HelperEntry("日程实况展示支持", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/ScheduleLiveDisplaySupport", "日程胶囊展示字段裁剪/拼接"),

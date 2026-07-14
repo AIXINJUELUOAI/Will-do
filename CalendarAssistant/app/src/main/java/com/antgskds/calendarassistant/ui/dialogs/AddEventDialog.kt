@@ -208,7 +208,7 @@ private fun resolveManualEndChange(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AddEventDialog(
+fun MaterialAddEventDialog(
     editDraft: EditDraft? = null,
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),

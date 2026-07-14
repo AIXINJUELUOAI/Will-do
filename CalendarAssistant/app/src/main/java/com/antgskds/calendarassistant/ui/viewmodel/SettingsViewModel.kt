@@ -12,10 +12,10 @@ import com.antgskds.calendarassistant.core.center.BackupCenter
 import com.antgskds.calendarassistant.core.center.DiagnosticLogCenter
 import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupCenter
 import com.antgskds.calendarassistant.core.center.DuplicateEventCleanupResult
-import com.antgskds.calendarassistant.core.center.ParsedCourseImport
+import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
-import com.antgskds.calendarassistant.core.center.ImportMode
+import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter

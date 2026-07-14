@@ -1,13 +1,11 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import androidx.activity.compose.BackHandler
 import com.antgskds.calendarassistant.calendar.models.stubs.RecurringEventUtils
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -40,13 +38,17 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarToastGap
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
+import com.antgskds.calendarassistant.ui.contract.HomeShellUiAction
+import com.antgskds.calendarassistant.ui.contract.HomeShellUiState
 import com.antgskds.calendarassistant.ui.contract.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
+import com.antgskds.calendarassistant.ui.connector.HomePageRoute
 import com.antgskds.calendarassistant.ui.dialogs.*
-import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.ui.flavor.AddEventDialog
+import com.antgskds.calendarassistant.ui.flavor.CourseSingleEditDialog
+import com.antgskds.calendarassistant.ui.flavor.HomeScreenContent
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -412,70 +414,66 @@ fun HomeScreen(
             bottomInset
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
 
-    AppBackgroundStyleTheme(
-        enabled = hasAppBackground,
-        miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
-        cardAlphaPercent = settings.appBackgroundCardAlphaPercent
-    ) {
-        Box(modifier = Modifier) {
-        BackHandler(enabled = isSidebarOpen) {
-            isSidebarOpen = false
-        }
-
-        // 核心布局
-        PushSlideLayout(
-            isOpen = isSidebarOpen,
-            onOpenChange = { isSidebarOpen = it },
-            enableGesture = !isScheduleExpanded, // 课表展开时禁用侧边栏手势
-            contentContainerColor = if (hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background,
-            sidebar = {
-                SettingsSidebar(
-                    isDarkMode = settings.isDarkMode,
-                    glassMode = hasAppBackground,
-                    hasAppUpdate = appUpdateUiState.hasUpdate,
-                    onThemeToggle = { isDark ->
-                        settingsViewModel.updateDarkMode(isDark)
-                    },
-                    onNavigate = { destination ->
-                        // 关闭侧边栏并触发导航
-                        isSidebarOpen = false
-                        onNavigateToSettings(destination)
-                    }
-                )
-            },
-            bottomBar = {},
-            content = {
-                    HomePage(
-                        viewModel = mainViewModel,
-                        currentPageKey = effectiveSelectedPageKey,
-                        uiSize = settings.uiSize,
-                        pickupTimestamp = pickupTimestamp,
-                        openCourseRequestId = openCourseRequestId,
-                        courseFeatureEnabled = settings.courseFeatureEnabled,
-                        isActionExpanded = isActionExpanded,
-                        onActionExpandedChange = { isActionExpanded = it },
-                        searchRequestId = searchRequestId,
-                        imageRequestId = imageRequestId,
-                        isSidebarOpen = isSidebarOpen,
-                        onPageChange = onSelectedPageKeyChange,
-                        onAddEventClick = { openPrimaryCreateDialog() },
-                        onEditItem = { item -> beginEditItem(item) },
-                        onRequestDeleteItem = { item -> requestDeleteItem(item) },
-                        onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
-                        onCreateNote = { onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg) },
-                        onRequestDeleteNote = { note -> selectedNoteAction = note },
-                        onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
-                        onRequestClearQuickMemos = { showClearQuickMemosConfirm = true },
-                        quickMemoCount = quickMemoCount,
-                        onOpenQuickMemoDetail = onOpenQuickMemoDetail,
-                        onScheduleExpandedChange = { isScheduleExpanded = it },
-                        onScheduleProgressChange = { scheduleProgress = it },
-                        onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
-                        onOpenWeatherDetail = onOpenWeatherDetail
-                    )
+    HomeScreenContent(
+        state = HomeShellUiState(
+            backgroundEnabled = hasAppBackground,
+            backgroundMiuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+            backgroundCardAlphaPercent = settings.appBackgroundCardAlphaPercent,
+            isSidebarOpen = isSidebarOpen,
+            sidebarGestureEnabled = !isScheduleExpanded,
+        ),
+        onAction = { action ->
+            when (action) {
+                is HomeShellUiAction.SetSidebarOpen -> isSidebarOpen = action.isOpen
             }
-        )
-
+        },
+        sidebar = {
+            SettingsSidebar(
+                isDarkMode = settings.isDarkMode,
+                glassMode = hasAppBackground,
+                hasAppUpdate = appUpdateUiState.hasUpdate,
+                onThemeToggle = { isDark ->
+                    settingsViewModel.updateDarkMode(isDark)
+                },
+                onNavigate = { destination ->
+                    isSidebarOpen = false
+                    onNavigateToSettings(destination)
+                },
+            )
+        },
+        content = {
+            HomePageRoute(
+                viewModel = mainViewModel,
+                currentPageKey = effectiveSelectedPageKey,
+                uiSize = settings.uiSize,
+                pickupTimestamp = pickupTimestamp,
+                openCourseRequestId = openCourseRequestId,
+                courseFeatureEnabled = settings.courseFeatureEnabled,
+                isActionExpanded = isActionExpanded,
+                onActionExpandedChange = { isActionExpanded = it },
+                searchRequestId = searchRequestId,
+                imageRequestId = imageRequestId,
+                isSidebarOpen = isSidebarOpen,
+                onPageChange = onSelectedPageKeyChange,
+                onAddEventClick = { openPrimaryCreateDialog() },
+                onEditItem = { item -> beginEditItem(item) },
+                onRequestDeleteItem = { item -> requestDeleteItem(item) },
+                onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
+                onCreateNote = {
+                    onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg)
+                },
+                onRequestDeleteNote = { note -> selectedNoteAction = note },
+                onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
+                onRequestClearQuickMemos = { showClearQuickMemosConfirm = true },
+                quickMemoCount = quickMemoCount,
+                onOpenQuickMemoDetail = onOpenQuickMemoDetail,
+                onScheduleExpandedChange = { isScheduleExpanded = it },
+                onScheduleProgressChange = { scheduleProgress = it },
+                onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
+                onOpenWeatherDetail = onOpenWeatherDetail,
+            )
+        },
+        chrome = {
         IntegratedFloatingBar(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
@@ -520,7 +518,8 @@ fun HomeScreen(
                 }
                 .zIndex(3f)
         )
-
+        },
+        overlay = {
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
         val clipboardPromptItem = clipboardPrompt
@@ -681,8 +680,8 @@ fun HomeScreen(
                 UniversalToast(message = snackbarData.visuals.message, type = currentToastType)
             }
         )
-        }
-    }
+        },
+    )
 
     // --- 全局弹窗处理 (仅保留日常操作) ---
 

@@ -79,7 +79,7 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 @Composable
-fun CourseEditDialog(
+fun MaterialCourseEditDialog(
     course: Course?,
     maxNodes: Int = 12,
     timeTableJson: String = "",
@@ -352,7 +352,7 @@ private fun CoursePreviewCard(
 }
 
 @Composable
-fun CourseSingleEditDialog(
+fun MaterialCourseSingleEditDialog(
     initialName: String,
     initialLocation: String,
     initialStartNode: Int,

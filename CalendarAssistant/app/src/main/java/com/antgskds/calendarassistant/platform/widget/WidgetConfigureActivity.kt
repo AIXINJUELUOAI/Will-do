@@ -1,28 +1,30 @@
 package com.antgskds.calendarassistant.platform.widget
 
-import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.SeekBar
-import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
+import com.antgskds.calendarassistant.ui.contract.WidgetConfigureThemeOption
+import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiAction
+import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiState
+import com.antgskds.calendarassistant.ui.flavor.WidgetConfigureScreen
+import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
+import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlin.math.roundToInt
 
-open class WidgetConfigureActivity : Activity() {
+open class WidgetConfigureActivity : ComponentActivity() {
     protected open val widgetType: WidgetType = WidgetType.SCHEDULE
 
     private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
     private lateinit var store: WidgetInstanceConfigStore
-    private var selectedThemeMode: Int = WidgetThemeMode.FOLLOW_APP
-    private var selectedAlpha: Float = 0.9f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,94 +43,61 @@ open class WidgetConfigureActivity : Activity() {
         store = WidgetInstanceConfigStore(applicationContext)
         val settings = app.settingsQueryApi.settings.value
         val config = store.ensureConfig(appWidgetId, widgetType, settings)
-        selectedThemeMode = config.appearance.themeMode
-        selectedAlpha = config.appearance.backgroundAlpha
+        val initialState = WidgetConfigureUiState(
+            widgetName = widgetType.displayName,
+            selectedTheme = config.appearance.themeMode.toConfigureThemeOption(),
+            backgroundAlphaPercent = (config.appearance.backgroundAlpha * 100f)
+                .roundToInt()
+                .coerceIn(60, 100)
+        )
+        val themeColorScheme = ThemeColorScheme.fromName(settings.themeColorScheme)
+        val isDarkTheme = when (settings.themeMode) {
+            1 -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            2 -> false
+            3 -> true
+            else -> false
+        }
 
-        setContentView(buildContentView())
+        setContent {
+            var state by remember(initialState) { mutableStateOf(initialState) }
+            CalendarAssistantStyleTheme(
+                darkTheme = isDarkTheme,
+                dynamicColor = themeColorScheme == ThemeColorScheme.DEFAULT,
+                themeColorScheme = themeColorScheme,
+                customThemeColorHex = settings.customThemeColorHex
+            ) {
+                WidgetConfigureScreen(
+                    state = state,
+                    onAction = { action ->
+                        when (action) {
+                            is WidgetConfigureUiAction.SelectTheme -> {
+                                state = state.copy(selectedTheme = action.theme)
+                            }
+
+                            is WidgetConfigureUiAction.ChangeBackgroundAlpha -> {
+                                state = state.copy(
+                                    backgroundAlphaPercent = action.percent.coerceIn(60, 100)
+                                )
+                            }
+
+                            WidgetConfigureUiAction.Save -> saveAndFinish(state)
+                            WidgetConfigureUiAction.Exit -> finish()
+                        }
+                    }
+                )
+            }
+        }
     }
 
-    private fun buildContentView(): LinearLayout {
-        val density = resources.displayMetrics.density
-        fun dp(value: Int) = (value * density).roundToInt()
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(24), dp(24), dp(24))
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        }
-
-        root.addView(TextView(this).apply {
-            text = widgetType.displayName
-            textSize = 22f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
-        root.addView(TextView(this).apply {
-            text = "这些设置只作用于当前桌面小组件。"
-            textSize = 14f
-            setPadding(0, dp(8), 0, dp(20))
-        })
-
-        root.addView(TextView(this).apply {
-            text = "主题"
-            textSize = 16f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
-        val radioGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.VERTICAL
-            setPadding(0, dp(8), 0, dp(16))
-        }
-        listOf(
-            WidgetThemeMode.FOLLOW_APP to "跟随软件",
-            WidgetThemeMode.LIGHT to "浅色",
-            WidgetThemeMode.DARK to "深色"
-        ).forEach { (mode, label) ->
-            radioGroup.addView(RadioButton(this).apply {
-                id = mode + 100
-                text = label
-                textSize = 15f
-                isChecked = selectedThemeMode == mode
-            })
-        }
-        radioGroup.setOnCheckedChangeListener { _, checkedId ->
-            selectedThemeMode = (checkedId - 100).coerceIn(WidgetThemeMode.FOLLOW_APP, WidgetThemeMode.DARK)
-        }
-        root.addView(radioGroup)
-
-        val alphaLabel = TextView(this).apply {
-            text = alphaText(selectedAlpha)
-            textSize = 16f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-        root.addView(alphaLabel)
-        root.addView(SeekBar(this).apply {
-            max = 40
-            progress = ((selectedAlpha - 0.6f) * 100f).roundToInt().coerceIn(0, 40)
-            setPadding(0, dp(8), 0, dp(20))
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    selectedAlpha = (0.6f + progress / 100f).coerceIn(0.6f, 1f)
-                    alphaLabel.text = alphaText(selectedAlpha)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        })
-
-        root.addView(Button(this).apply {
-            text = "保存"
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setOnClickListener { saveAndFinish() }
-        })
-        return root
-    }
-
-    private fun saveAndFinish() {
+    private fun saveAndFinish(state: WidgetConfigureUiState) {
         val app = applicationContext as App
         store.saveConfig(
             appWidgetId,
             store.getConfig(appWidgetId, widgetType, app.settingsQueryApi.settings.value).copy(
-                appearance = WidgetAppearanceConfig(selectedThemeMode, selectedAlpha)
+                appearance = WidgetAppearanceConfig(
+                    themeMode = state.selectedTheme.toWidgetThemeMode(),
+                    backgroundAlpha = (state.backgroundAlphaPercent / 100f).coerceIn(0.6f, 1f)
+                )
             )
         )
         val manager = AppWidgetManager.getInstance(applicationContext)
@@ -138,7 +107,17 @@ open class WidgetConfigureActivity : Activity() {
         finish()
     }
 
-    private fun alphaText(value: Float): String = "背景不透明度 ${(value * 100f).roundToInt()}%"
+    private fun Int.toConfigureThemeOption(): WidgetConfigureThemeOption = when (this) {
+        WidgetThemeMode.LIGHT -> WidgetConfigureThemeOption.LIGHT
+        WidgetThemeMode.DARK -> WidgetConfigureThemeOption.DARK
+        else -> WidgetConfigureThemeOption.FOLLOW_APP
+    }
+
+    private fun WidgetConfigureThemeOption.toWidgetThemeMode(): Int = when (this) {
+        WidgetConfigureThemeOption.FOLLOW_APP -> WidgetThemeMode.FOLLOW_APP
+        WidgetConfigureThemeOption.LIGHT -> WidgetThemeMode.LIGHT
+        WidgetConfigureThemeOption.DARK -> WidgetThemeMode.DARK
+    }
 }
 
 class ScheduleWidgetConfigureActivity : WidgetConfigureActivity() {
