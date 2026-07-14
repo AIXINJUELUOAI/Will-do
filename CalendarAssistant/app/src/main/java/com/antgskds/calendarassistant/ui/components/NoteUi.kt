@@ -33,11 +33,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteParagraph
-import com.antgskds.calendarassistant.core.note.NoteParagraphType
-import com.antgskds.calendarassistant.core.note.plainTextContent
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.ui.contract.NoteListItemUiModel
+import com.antgskds.calendarassistant.ui.contract.NoteTaskPreviewUiModel
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
 import java.time.Instant
 import java.time.LocalDateTime
@@ -51,7 +49,7 @@ private val noteFullDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPatte
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
-    note: NoteEntity,
+    note: NoteListItemUiModel,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onToggleTodo: (String) -> Unit = {},
@@ -59,13 +57,11 @@ fun NoteCard(
     modifier: Modifier = Modifier
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
-    val document = remember(note.documentJson, note.plainText) { note.document() }
-    val tasks = remember(document) { document.paragraphs.filter { it.type == NoteParagraphType.TODO } }
-    val previewTasks = remember(tasks) { tasks.take(3) }
-    val remainingTaskCount = remember(tasks, previewTasks) { (tasks.size - previewTasks.size).coerceAtLeast(0) }
-    val previewText = remember(document) { buildNotePreview(document.paragraphs) }
+    val previewTasks = note.previewTasks
+    val remainingTaskCount = note.remainingTaskCount
+    val previewText = note.previewText
     val updatedLabel = remember(note.updatedAt) { formatNoteUpdatedText(note.updatedAt) }
-    val isCompleted = document.allTodosCompleted()
+    val isCompleted = note.allTodosCompleted
     val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
     val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
     val secondaryTextColor = if (usesWallpaperText) {
@@ -110,16 +106,16 @@ fun NoteCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = note.displayTitle,
+                text = note.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                textDecoration = if (isCompleted && tasks.isNotEmpty()) TextDecoration.LineThrough else null,
+                textDecoration = if (isCompleted && previewTasks.isNotEmpty()) TextDecoration.LineThrough else null,
                 color = titleColor,
                 modifier = Modifier.weight(1f)
             )
-            if (note.pinnedAt != null) {
+            if (note.pinned) {
                 Icon(
                     imageVector = Icons.Default.PushPin,
                     contentDescription = "已置顶",
@@ -141,7 +137,7 @@ fun NoteCard(
                         task = task,
                         onToggle = {
                             haptics.click()
-                            onToggleTodo(task.id)
+                            onToggleTodo(task.paragraphId)
                         }
                     )
                 }
@@ -186,7 +182,7 @@ fun NoteCard(
 }
 
 @Composable
-private fun NoteTaskPreviewRow(task: NoteParagraph, onToggle: () -> Unit) {
+private fun NoteTaskPreviewRow(task: NoteTaskPreviewUiModel, onToggle: () -> Unit) {
     val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
     val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
     Row(
@@ -241,7 +237,7 @@ private fun NoteTaskMark(done: Boolean, onClick: () -> Unit) {
     }
 }
 
-private fun styledPreviewText(paragraph: NoteParagraph) = buildAnnotatedString {
+private fun styledPreviewText(paragraph: NoteTaskPreviewUiModel) = buildAnnotatedString {
     val text = paragraph.text.ifBlank { "未命名待办" }
     append(text)
     paragraph.spans.forEach { span ->
@@ -264,19 +260,6 @@ private fun styledPreviewText(paragraph: NoteParagraph) = buildAnnotatedString {
             )
         }
     }
-}
-
-private fun buildNotePreview(paragraphs: List<NoteParagraph>): String? {
-    val summary = paragraphs
-        .asSequence()
-        .filterNot { it.type == NoteParagraphType.TODO }
-        .map { it.plainTextContent().trim() }
-        .filter { it.isNotBlank() }
-        .joinToString(" ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-
-    return summary.takeIf { it.isNotBlank() }
 }
 
 private fun formatNoteUpdatedText(lastModified: Long): String {

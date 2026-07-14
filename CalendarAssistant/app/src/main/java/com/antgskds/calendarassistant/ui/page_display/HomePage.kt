@@ -76,6 +76,7 @@ import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilitySe
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualHeight
+import com.antgskds.calendarassistant.ui.connector.NoteListRoute
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.appBackgroundSurfaceAlpha
@@ -783,12 +784,12 @@ fun HomePage(
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     } else if (animatedIsNotePage && isLegacyNoteMode) {
-                        NotePage(
+                        NoteListRoute(
                             viewModel = viewModel,
                             searchQuery = noteSearchQuery,
                             extraBottomPadding = if (showSearchBar) searchBarOffset else 0.dp,
                             onEditNote = onEditNote,
-                            onPendingDeleteChange = { note -> note?.let(onRequestDeleteNote) },
+                            onRequestDeleteNote = onRequestDeleteNote,
                             hapticEnabled = uiState.settings.hapticFeedbackEnabled
                         )
                     } else {
