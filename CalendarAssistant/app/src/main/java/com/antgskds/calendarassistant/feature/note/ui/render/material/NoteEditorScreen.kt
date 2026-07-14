@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.page_display
+package com.antgskds.calendarassistant.feature.note.ui.render.material
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -112,8 +112,8 @@ import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
-import com.antgskds.calendarassistant.ui.components.PlainNoteEditor
-import com.antgskds.calendarassistant.ui.components.PlainNoteEditorController
+import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditor
+import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditorController
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.contract.NoteEditorAnalysisOutcome
 import com.antgskds.calendarassistant.ui.contract.NoteEditorExportFormat

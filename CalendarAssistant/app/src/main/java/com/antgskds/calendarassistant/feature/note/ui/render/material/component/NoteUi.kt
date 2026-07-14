@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.components
+package com.antgskds.calendarassistant.feature.note.ui.render.material.component
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.components
+package com.antgskds.calendarassistant.feature.note.ui.render.material.component
 
 import android.text.TextUtils
 import android.widget.TextView
@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import com.antgskds.calendarassistant.ui.components.markdown.LinksPlusArrowKeysMovementMethod
+import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.markdown.LinksPlusArrowKeysMovementMethod
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
