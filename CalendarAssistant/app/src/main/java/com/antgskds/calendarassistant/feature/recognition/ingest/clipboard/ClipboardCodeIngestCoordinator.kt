@@ -9,7 +9,7 @@ import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.Ins
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint
+import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

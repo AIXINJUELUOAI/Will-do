@@ -6,7 +6,7 @@ import android.content.Intent
 import android.telephony.SmsMessage
 import android.util.Log
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.sms.SmsPickupSource
+import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

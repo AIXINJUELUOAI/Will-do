@@ -5,7 +5,7 @@ import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint
+import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
