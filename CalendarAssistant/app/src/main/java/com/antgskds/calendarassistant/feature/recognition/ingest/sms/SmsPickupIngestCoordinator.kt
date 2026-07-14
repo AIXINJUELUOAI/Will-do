@@ -1,7 +1,8 @@
-package com.antgskds.calendarassistant.core.sms
+package com.antgskds.calendarassistant.feature.recognition.ingest.sms
 
 import android.util.Log
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
+import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay

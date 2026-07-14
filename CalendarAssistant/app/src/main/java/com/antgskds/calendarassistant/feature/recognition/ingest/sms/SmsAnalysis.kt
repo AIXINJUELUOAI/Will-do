@@ -4,7 +4,7 @@
  * 核心规则已统一迁移到 core.instantcode，方便短信、剪贴板等入口共用维护。
  */
 
-package com.antgskds.calendarassistant.core.sms
+package com.antgskds.calendarassistant.feature.recognition.ingest.sms
 
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft

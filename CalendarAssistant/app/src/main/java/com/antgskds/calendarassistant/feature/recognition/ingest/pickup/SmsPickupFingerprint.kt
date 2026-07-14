@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.sms
+package com.antgskds.calendarassistant.feature.recognition.ingest.pickup
 
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags

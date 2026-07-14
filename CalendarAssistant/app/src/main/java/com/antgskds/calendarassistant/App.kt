@@ -74,8 +74,8 @@ import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemA
 import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardCodeIngestCoordinator
-import com.antgskds.calendarassistant.core.sms.SmsContentObserver
-import com.antgskds.calendarassistant.core.sms.SmsPickupIngestCoordinator
+import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupIngestCoordinator
+import com.antgskds.calendarassistant.platform.receiver.sms.SmsContentObserver
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

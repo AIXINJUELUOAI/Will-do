@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.sms
+package com.antgskds.calendarassistant.platform.receiver.sms
 
 import android.content.Context
 import android.database.ContentObserver
@@ -8,6 +8,8 @@ import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
+import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupIngestCoordinator
+import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

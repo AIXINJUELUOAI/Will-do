@@ -10,7 +10,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.sms.SmsPickupSource
+import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupSource
 import com.antgskds.calendarassistant.data.source.SettingsDataSource
 
 /**
