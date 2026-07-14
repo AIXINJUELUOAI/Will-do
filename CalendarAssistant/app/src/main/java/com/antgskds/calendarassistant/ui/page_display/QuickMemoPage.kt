@@ -125,7 +125,7 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
-import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
@@ -135,9 +135,9 @@ import com.antgskds.calendarassistant.ui.contract.QuickMemoDetailUiState
 import com.antgskds.calendarassistant.ui.contract.QuickMemoListUiState
 import com.antgskds.calendarassistant.ui.contract.QuickMemoUiAction
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
-import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
-import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
+import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime

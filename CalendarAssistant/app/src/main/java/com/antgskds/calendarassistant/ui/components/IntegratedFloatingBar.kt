@@ -51,7 +51,7 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
+import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 
 // 统一高度设定为 68dp
 val IntegratedFloatingBarHeight = 68.dp

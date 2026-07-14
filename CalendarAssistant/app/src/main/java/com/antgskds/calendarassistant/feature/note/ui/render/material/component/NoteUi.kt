@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.contract.NoteListItemUiModel
 import com.antgskds.calendarassistant.ui.contract.NoteTaskPreviewUiModel
-import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId

@@ -46,7 +46,7 @@ import com.antgskds.calendarassistant.app.ui.navigation.navBackwardEnterTransiti
 import com.antgskds.calendarassistant.app.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 
 private fun NavGraphBuilder.settingsPageComposable(
     route: String,

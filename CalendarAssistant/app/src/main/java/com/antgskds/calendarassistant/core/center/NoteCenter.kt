@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.core.center
 
 import com.antgskds.calendarassistant.core.note.NoteDocument
 import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.note.NoteRepository
+import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

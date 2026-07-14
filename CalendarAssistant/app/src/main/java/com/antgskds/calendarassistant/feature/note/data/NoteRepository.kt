@@ -1,5 +1,16 @@
-package com.antgskds.calendarassistant.core.note
+package com.antgskds.calendarassistant.feature.note.data
 
+import com.antgskds.calendarassistant.core.note.NoteDocument
+import com.antgskds.calendarassistant.core.note.NoteDocumentCodec
+import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.core.note.NoteListStyle
+import com.antgskds.calendarassistant.core.note.NoteParagraph
+import com.antgskds.calendarassistant.core.note.NoteParagraphStyle
+import com.antgskds.calendarassistant.core.note.NoteParagraphType
+import com.antgskds.calendarassistant.core.note.NotesDao
+import com.antgskds.calendarassistant.core.note.effectiveListStyle
+import com.antgskds.calendarassistant.core.note.effectiveParagraphStyle
+import com.antgskds.calendarassistant.core.note.withMigratedParagraphStyles
 import kotlinx.coroutines.flow.Flow
 
 class NoteRepository(

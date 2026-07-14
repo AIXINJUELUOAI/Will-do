@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display.settings
 
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

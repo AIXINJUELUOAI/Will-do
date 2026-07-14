@@ -31,10 +31,10 @@ import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.content.ContentDefinition
 import com.antgskds.calendarassistant.core.content.ContentRegistry
 import com.antgskds.calendarassistant.core.content.ContentSourceType
-import com.antgskds.calendarassistant.core.note.NoteRepository
+import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoRepository
-import com.antgskds.calendarassistant.core.quickmemo.asr.SherpaParaformerTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaParaformerTranscriber
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi

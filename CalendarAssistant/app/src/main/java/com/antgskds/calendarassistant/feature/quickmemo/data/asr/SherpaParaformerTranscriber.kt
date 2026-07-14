@@ -1,7 +1,9 @@
-package com.antgskds.calendarassistant.core.quickmemo.asr
+package com.antgskds.calendarassistant.feature.quickmemo.data.asr
 
 import android.content.Context
 import android.util.Log
+import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig

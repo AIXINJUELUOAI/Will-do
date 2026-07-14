@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 import com.antgskds.calendarassistant.ui.contract.HomeShellUiAction
 import com.antgskds.calendarassistant.ui.contract.HomeShellUiState
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
-import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 
 @Composable
 fun MaterialHomeScreen(

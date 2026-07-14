@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.core.quickmemo.asr.QuickMemoAsrModelStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStatus
 import com.antgskds.calendarassistant.data.model.MySettings
 
 data class LaboratoryUiState(val settings: MySettings?, val asrModelStatus: QuickMemoAsrModelStatus)

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.ui.page_display.settings
+package com.antgskds.calendarassistant.platform.widget.ui.render.material
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

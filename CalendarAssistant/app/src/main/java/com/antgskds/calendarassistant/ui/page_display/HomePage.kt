@@ -75,7 +75,7 @@ import com.antgskds.calendarassistant.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.page_display.settings.appBackgroundSurfaceAlpha
+import com.antgskds.calendarassistant.app.ui.theme.material.background.appBackgroundSurfaceAlpha
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
