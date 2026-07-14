@@ -19,6 +19,9 @@ data class ArchitectureGuardrailRule(
 
 val architectureGuardrailsBaselineFile = file("gradle/architecture-guardrails-baseline.txt")
 val centerFilesBaselineFile = file("gradle/center-files-baseline.txt")
+val mainUiEditionMetadataAllowlist = setOf(
+    "app/src/main/java/com/antgskds/calendarassistant/ui/page_display/settings/AboutPage.kt"
+)
 
 fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String>, List<Int>> {
     val rules = listOf(
@@ -56,6 +59,12 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
             id = "RUNTIME_UI_STYLE",
             regex = Regex("\\bUiStyle\\b|updateUiStyle|settings\\.uiStyle|calendarassistant\\.miui"),
             description = "UI edition is selected at build time, not at runtime"
+        ),
+        ArchitectureGuardrailRule(
+            id = "MAIN_UI_EDITION_USAGE",
+            regex = Regex("\\bBuildConfig\\.UI_EDITION\\b"),
+            description = "Shared main code must not branch business behavior by UI edition",
+            pathRegex = Regex("app/src/main/.*")
         )
     )
 
@@ -70,7 +79,10 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
         val lines = target.readLines()
         val relativePath = target.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
 
-        rules.filter { it.pathRegex.matches(relativePath) }.forEach { rule ->
+        rules.filter { rule ->
+            rule.pathRegex.matches(relativePath) &&
+                !(rule.id == "MAIN_UI_EDITION_USAGE" && relativePath in mainUiEditionMetadataAllowlist)
+        }.forEach { rule ->
             lines.forEachIndexed { index, line ->
                 if (rule.regex.containsMatchIn(line)) {
                     val key = rule.id to relativePath
@@ -101,6 +113,66 @@ fun loadArchitectureGuardrailBaseline(file: File): Set<Pair<String, String>> {
         parsed.add(parts[0].trim() to parts[1].trim().replace('\\', '/'))
     }
     return parsed
+}
+
+fun extractEnumMembers(sourceFile: File, enumName: String): Set<String> {
+    if (!sourceFile.exists()) {
+        throw GradleException("Architecture guardrail source not found: ${sourceFile.path}")
+    }
+
+    val source = sourceFile.readText()
+    val declaration = Regex(
+        "\\benum\\s+class\\s+${Regex.escape(enumName)}\\b[^\\{]*\\{"
+    ).find(source) ?: throw GradleException(
+        "Architecture guardrail could not find enum $enumName in ${sourceFile.path}"
+    )
+    val openingBrace = declaration.range.last
+    var depth = 0
+    var closingBrace = -1
+    for (index in openingBrace until source.length) {
+        when (source[index]) {
+            '{' -> depth += 1
+            '}' -> {
+                depth -= 1
+                if (depth == 0) {
+                    closingBrace = index
+                    break
+                }
+            }
+        }
+    }
+    if (closingBrace < 0) {
+        throw GradleException("Architecture guardrail found an unterminated enum $enumName in ${sourceFile.path}")
+    }
+
+    val simpleEntry = Regex("^([A-Za-z_][A-Za-z0-9_]*)\\s*,?\\s*$")
+    val members = source.substring(openingBrace + 1, closingBrace)
+        .lineSequence()
+        .map { it.substringBefore("//").trim() }
+        .mapNotNull { simpleEntry.matchEntire(it)?.groupValues?.get(1) }
+        .toCollection(linkedSetOf())
+    if (members.isEmpty()) {
+        throw GradleException("Architecture guardrail found no enum members for $enumName in ${sourceFile.path}")
+    }
+    return members
+}
+
+fun extractRegisteredEnumMembers(
+    catalogFile: File,
+    entryConstructor: String,
+    enumName: String
+): Set<String> {
+    if (!catalogFile.exists()) {
+        throw GradleException("Architecture guardrail catalog not found: ${catalogFile.path}")
+    }
+
+    val entryRegex = Regex(
+        "\\b${Regex.escape(entryConstructor)}\\s*\\(\\s*" +
+            "${Regex.escape(enumName)}\\.([A-Za-z_][A-Za-z0-9_]*)\\b"
+    )
+    return entryRegex.findAll(catalogFile.readText())
+        .map { it.groupValues[1] }
+        .toCollection(linkedSetOf())
 }
 
 tasks.register("checkArchitectureGuardrails") {
@@ -150,11 +222,43 @@ tasks.register("checkArchitectureGuardrails") {
         val missingInHyperos = nativeHosts - hyperosHosts
         val missingInNative = hyperosHosts - nativeHosts
 
+        val settingsDestinations = extractEnumMembers(
+            rootDir.resolve(
+                "app/src/main/java/com/antgskds/calendarassistant/ui/components/SettingsSidebar.kt"
+            ),
+            "SettingsDestination"
+        )
+        val registeredPages = extractRegisteredEnumMembers(
+            rootDir.resolve(
+                "app/src/main/java/com/antgskds/calendarassistant/shared/management/catalog/PageCatalog.kt"
+            ),
+            "PageEntry",
+            "SettingsDestination"
+        )
+        val pagesNotRegistered = settingsDestinations - registeredPages
+
+        val notificationKinds = extractEnumMembers(
+            rootDir.resolve(
+                "app/src/main/java/com/antgskds/calendarassistant/feature/api/notification/model/NotificationModels.kt"
+            ),
+            "NotificationKind"
+        )
+        val registeredKinds = extractRegisteredEnumMembers(
+            rootDir.resolve(
+                "app/src/main/java/com/antgskds/calendarassistant/shared/management/catalog/NotificationKindCatalog.kt"
+            ),
+            "KindEntry",
+            "NotificationKind"
+        )
+        val kindsNotRegistered = notificationKinds - registeredKinds
+
         if (
             unexpected.isEmpty() &&
             newCenters.isEmpty() &&
             missingInHyperos.isEmpty() &&
-            missingInNative.isEmpty()
+            missingInNative.isEmpty() &&
+            pagesNotRegistered.isEmpty() &&
+            kindsNotRegistered.isEmpty()
         ) {
             println("Architecture guardrails passed.")
             return@doLast
@@ -172,6 +276,12 @@ tasks.register("checkArchitectureGuardrails") {
         }
         missingInNative.sorted().forEach {
             println("- [FLAVOR_HOST_MISSING_IN_NATIVE] $it")
+        }
+        pagesNotRegistered.sorted().forEach {
+            println("- [PAGE_NOT_REGISTERED] SettingsDestination.$it")
+        }
+        kindsNotRegistered.sorted().forEach {
+            println("- [KIND_NOT_REGISTERED] NotificationKind.$it")
         }
 
         throw GradleException(
