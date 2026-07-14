@@ -57,7 +57,7 @@ private val SidebarWidth = 35.dp
 private val HeaderIconSize = 28.dp
 
 @Composable
-fun ScheduleView(
+fun MaterialScheduleView(
     items: List<ScheduleDisplayItem>,
     semesterStartDateStr: String?,
     totalWeeks: Int,

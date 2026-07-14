@@ -51,7 +51,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
@@ -80,12 +80,12 @@ import com.antgskds.calendarassistant.data.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
-import com.antgskds.calendarassistant.ui.floating.FloatingInputMode
-import com.antgskds.calendarassistant.ui.floating.FloatingDragTextOptions
+import com.antgskds.calendarassistant.ui.contract.FloatingInputMode
+import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions
 import com.antgskds.calendarassistant.ui.connector.PickupQrFloatingCardRoute
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
-import com.antgskds.calendarassistant.ui.floating.FloatingScheduleScreen
+import com.antgskds.calendarassistant.ui.connector.FloatingScheduleRoute
 import com.antgskds.calendarassistant.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
@@ -409,7 +409,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                     requestClose()
                                 }
                             )
-                        } else FloatingScheduleScreen(
+                        } else FloatingScheduleRoute(
                         scheduleItems = scheduleItems,
                         quickMemos = quickMemos,
                         voiceCaptureState = currentVoiceCaptureState,

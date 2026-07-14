@@ -18,6 +18,9 @@ import com.antgskds.calendarassistant.data.model.AppBackupQuickMemoDto
 import com.antgskds.calendarassistant.data.model.AppBackupQuickMemoSuggestionDto
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.ImportResult
+import com.antgskds.calendarassistant.feature.backup.courseimport.CourseImportParser
+import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
+import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus

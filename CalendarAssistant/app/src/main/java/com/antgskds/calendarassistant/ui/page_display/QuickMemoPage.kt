@@ -1,7 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -82,7 +81,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,16 +128,16 @@ import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.util.ImageImportUtils
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarShadowPadding
+import com.antgskds.calendarassistant.ui.contract.QuickMemoDetailUiState
+import com.antgskds.calendarassistant.ui.contract.QuickMemoListUiState
+import com.antgskds.calendarassistant.ui.contract.QuickMemoUiAction
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundStyleEnabled
 import com.antgskds.calendarassistant.ui.page_display.settings.rememberAppBackgroundStylePalette
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -158,24 +156,19 @@ import kotlinx.coroutines.withContext
 private val quickMemoTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val quickMemoDateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M月d日 HH:mm")
 private val quickMemoDateGroupFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINESE)
-private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
-
 @Composable
-fun QuickMemoPage(
-    viewModel: MainViewModel,
+fun MaterialQuickMemoScreen(
+    state: QuickMemoListUiState,
     searchQuery: String = "",
     uiSize: Int = 2,
     extraBottomPadding: Dp = 0.dp,
-    onOpenDetail: (Long) -> Unit = {},
-    onPendingDeleteChange: (QuickMemoEntity?) -> Unit = {},
-    hapticEnabled: Boolean = true
+    hapticEnabled: Boolean = true,
+    onAction: (QuickMemoUiAction) -> Unit
 ) {
-    val quickMemos by viewModel.quickMemos.collectAsState()
-    val suggestions by viewModel.quickMemoSuggestions.collectAsState()
-    val playbackState by viewModel.audioPlaybackState.collectAsState()
-    val capsuleUiState by viewModel.capsuleUiState.collectAsState()
-    val pinnedQuickMemoId = remember(capsuleUiState) { activeTextQuickMemoId(capsuleUiState) }
-    val context = LocalContext.current
+    val quickMemos = state.memos
+    val suggestions = state.suggestions
+    val playbackState = state.playbackState
+    val pinnedQuickMemoId = state.pinnedMemoId
     val metrics = quickMemoUiMetrics(uiSize)
     val bottomSafePadding = 112.dp + extraBottomPadding
     val listState = rememberLazyListState()
@@ -256,21 +249,26 @@ fun QuickMemoPage(
                     suggestions = memo.id?.let { suggestionsByMemo[it] }.orEmpty(),
                     playbackState = playbackState,
                     isPinned = memo.id == pinnedQuickMemoId,
-                    onToggleTodo = { memo.id?.let { viewModel.toggleQuickMemoTodoCompletion(it) } },
+                    onToggleTodo = {
+                        memo.id?.let { onAction(QuickMemoUiAction.ToggleTodoCompletion(it)) }
+                    },
                     onToggleTodoMode = {
                         memo.id?.let { id ->
-                            if (memo.isTodo) viewModel.removeQuickMemoTodo(id) else viewModel.markQuickMemoTodo(id)
+                            onAction(
+                                if (memo.isTodo) QuickMemoUiAction.RemoveTodo(id)
+                                else QuickMemoUiAction.MarkTodo(id)
+                            )
                         }
                     },
                     onTogglePinned = {
                         memo.id?.let { id ->
-                            toggleQuickMemoPinned(viewModel, id, memo.id == pinnedQuickMemoId, context)
+                            onAction(QuickMemoUiAction.TogglePinned(id, memo.id == pinnedQuickMemoId))
                         }
                     },
-                    onDelete = { onPendingDeleteChange(memo) },
-                    onToggleAudio = { path -> viewModel.toggleAudioPlayback(path) },
-                    onOpenDetail = { memo.id?.let(onOpenDetail) },
-                    onLongPress = { onPendingDeleteChange(memo) },
+                    onDelete = { onAction(QuickMemoUiAction.RequestDelete(memo)) },
+                    onToggleAudio = { path -> onAction(QuickMemoUiAction.ToggleAudio(path)) },
+                    onOpenDetail = { memo.id?.let { onAction(QuickMemoUiAction.OpenDetail(it)) } },
+                    onLongPress = { onAction(QuickMemoUiAction.RequestDelete(memo)) },
                     hapticEnabled = hapticEnabled,
                     uiSize = uiSize,
                     modifier = Modifier.padding(
@@ -285,29 +283,17 @@ fun QuickMemoPage(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuickMemoDetailPage(
-    memoId: Long,
-    viewModel: MainViewModel,
+fun MaterialQuickMemoDetailScreen(
+    state: QuickMemoDetailUiState,
     onBack: () -> Unit,
     uiSize: Int = 2,
     hapticEnabled: Boolean = true,
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
-    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
+    onAction: (QuickMemoUiAction) -> Unit
 ) {
-    val quickMemos by viewModel.quickMemos.collectAsState()
-    val suggestions by viewModel.quickMemoSuggestions.collectAsState()
-    val playbackState by viewModel.audioPlaybackState.collectAsState()
-    val capsuleUiState by viewModel.capsuleUiState.collectAsState()
-    val pinnedQuickMemoId = remember(capsuleUiState) { activeTextQuickMemoId(capsuleUiState) }
-    val context = LocalContext.current
-    val memo = remember(quickMemos, memoId) { quickMemos.firstOrNull { it.id == memoId } }
-    val pendingSuggestions = remember(suggestions, memoId) {
-        suggestions.filter {
-            it.quickMemoId == memoId &&
-                (it.status == QuickMemoSuggestionStatus.PENDING || it.status == QuickMemoSuggestionStatus.CREATED)
-        }
-    }
+    val memo = state.memo
     val haptics = rememberAppHaptics(hapticEnabled)
 
     AppBackgroundStyleTheme(
@@ -355,15 +341,17 @@ fun QuickMemoDetailPage(
 
                 QuickMemoDetailContent(
                     memo = memo,
-                    suggestions = pendingSuggestions,
-                    playbackState = playbackState,
-                    onSaveBody = { body -> memo.id?.let { viewModel.updateQuickMemoBody(it, body) } },
+                    suggestions = state.suggestions,
+                    playbackState = state.playbackState,
+                    onSaveBody = { body ->
+                        memo.id?.let { onAction(QuickMemoUiAction.UpdateBody(it, body)) }
+                    },
                     onAttachImage = { imagePath, onResult ->
                         val id = memo.id
                         if (id == null) {
                             onResult(Result.failure(IllegalStateException("随口记不存在")))
                         } else {
-                            viewModel.attachImageToQuickMemo(id, imagePath, onResult)
+                            onAction(QuickMemoUiAction.AttachImage(id, imagePath, onResult))
                         }
                     },
                     onRemoveImage = { onResult ->
@@ -371,7 +359,7 @@ fun QuickMemoDetailPage(
                         if (id == null) {
                             onResult(Result.failure(IllegalStateException("随口记不存在")))
                         } else {
-                            viewModel.removeImageFromQuickMemo(id, onResult)
+                            onAction(QuickMemoUiAction.RemoveImage(id, onResult))
                         }
                     },
                     onAttachVoice = { audioPath, durationMs, onResult ->
@@ -379,23 +367,29 @@ fun QuickMemoDetailPage(
                         if (id == null) {
                             onResult(Result.failure(IllegalStateException("随口记不存在")))
                         } else {
-                            viewModel.attachVoiceToQuickMemo(id, audioPath, durationMs, onResult)
+                            onAction(
+                                QuickMemoUiAction.AttachVoice(id, audioPath, durationMs, onResult)
+                            )
                         }
                     },
-                    onToggleTodo = { memo.id?.let { viewModel.toggleQuickMemoTodoCompletion(it) } },
-                    onMarkTodo = { memo.id?.let { viewModel.markQuickMemoTodo(it) } },
-                    onToggleAudio = { path -> viewModel.toggleAudioPlayback(path) },
-                    isPinned = memo.id == pinnedQuickMemoId,
+                    onToggleTodo = {
+                        memo.id?.let { onAction(QuickMemoUiAction.ToggleTodoCompletion(it)) }
+                    },
+                    onMarkTodo = { memo.id?.let { onAction(QuickMemoUiAction.MarkTodo(it)) } },
+                    onToggleAudio = { path -> onAction(QuickMemoUiAction.ToggleAudio(path)) },
+                    isPinned = state.isPinned,
                     onTogglePinned = {
                         memo.id?.let { id ->
-                            toggleQuickMemoPinned(viewModel, id, memo.id == pinnedQuickMemoId, context)
+                            onAction(QuickMemoUiAction.TogglePinned(id, state.isPinned))
                         }
                     },
-                    onRetryTranscription = { memo.id?.let { viewModel.retryQuickMemoTranscription(it) } },
+                    onRetryTranscription = {
+                        memo.id?.let { onAction(QuickMemoUiAction.RetryTranscription(it)) }
+                    },
                     onCreateSuggestion = { suggestion ->
                         suggestion.id?.let { id ->
                             haptics.confirm()
-                            viewModel.createEventFromQuickMemoSuggestion(id)
+                            onAction(QuickMemoUiAction.CreateSuggestionEvent(id))
                         }
                     },
                     uiSize = uiSize,
@@ -2115,35 +2109,6 @@ private fun QuickMemoImageBox(
                     )
                 }
             }
-        }
-    }
-}
-
-private fun activeTextQuickMemoId(state: CapsuleUiState): Long? {
-    val active = state as? CapsuleUiState.Active ?: return null
-    return active.capsules.firstOrNull { it.type == CapsuleType.TEXT_QUICK_MEMO }
-        ?.id
-        ?.removePrefix(TEXT_QUICK_MEMO_ID_PREFIX)
-        ?.toLongOrNull()
-}
-
-private fun toggleQuickMemoPinned(
-    viewModel: MainViewModel,
-    memoId: Long,
-    isPinned: Boolean,
-    context: Context
-) {
-    if (isPinned) {
-        viewModel.clearPinnedQuickMemo(memoId) { result ->
-            result
-                .onSuccess { Toast.makeText(context, "已移除挂起", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, it.message ?: "移除挂起失败", Toast.LENGTH_SHORT).show() }
-        }
-    } else {
-        viewModel.pinQuickMemo(memoId) { result ->
-            result
-                .onSuccess { Toast.makeText(context, "已挂起到胶囊", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, it.message ?: "挂起失败", Toast.LENGTH_SHORT).show() }
         }
     }
 }

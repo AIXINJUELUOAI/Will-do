@@ -21,7 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.ui.contract.ArchivesDateGroupUi
 import com.antgskds.calendarassistant.ui.contract.ArchivesUiAction
 import com.antgskds.calendarassistant.ui.contract.ArchivesUiState

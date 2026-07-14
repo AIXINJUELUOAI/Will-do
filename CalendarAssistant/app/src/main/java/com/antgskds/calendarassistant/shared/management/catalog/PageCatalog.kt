@@ -11,12 +11,12 @@ import com.antgskds.calendarassistant.ui.contract.SettingsDestination
  *
  * ## 怎么登记（agent 加新页面必须做）
  * 加一个新设置页时，**必须先在下面 [pages] 里登记一条 [PageEntry]**（带说明注释），
- * 然后才去 SettingsDetailScreen 接渲染。架构守卫 PAGE_NOT_REGISTERED 会强制这条规则：
+ * 然后才去设置页 connector 接渲染。架构守卫 PAGE_NOT_REGISTERED 会强制这条规则：
  * SettingsDestination 枚举里出现、但这里没登记的页面，会让 `checkArchitectureGuardrails` 失败。
  *
  * ## 边界
  * - 本清单只登记「元信息」（名字/路由/标题/可见级别/说明），不持有页面渲染逻辑。
- * - 渲染仍在 SettingsDetailScreen（各页参数不同，暂不强行统一）。本台账只保证「先登记」。
+ * - 各页业务装配仍在 main connector；导航壳从本台账读取 route/title，避免维护重复映射。
  * - 不要把本清单做成给 App 用户看的 UI——它是代码内的管理台账。
  */
 object PageCatalog {
@@ -34,8 +34,8 @@ object PageCatalog {
     /**
      * 一个页面的登记项。
      * @param destination 页面的导航枚举值（SettingsDestination）。
-     * @param route 内部路由名（与 SettingsDetailScreen 的 SettingsRoutes 对应；ACTION 类可为 null）。
-     * @param title 页面标题（与 settingsTitle 对应）。
+     * @param route 内部路由名；ACTION 类可为 null。
+     * @param title 页面标题，也是导航壳的唯一标题来源。
      * @param visibility 可见级别。
      * @param note 一句话说明这页是干嘛的（给维护者看）。
      */
@@ -45,6 +45,13 @@ object PageCatalog {
         val title: String,
         val visibility: PageVisibility,
         val note: String,
+    )
+
+    /** 不单独占用 SettingsDestination 的子页面。 */
+    data class NestedPageEntry(
+        val route: String,
+        val parentDestination: SettingsDestination,
+        val title: String,
     )
 
     val pages: List<PageEntry> = listOf(
@@ -78,9 +85,33 @@ object PageCatalog {
         PageEntry(SettingsDestination.RegexRuleEditor, "settings_regex_rule_editor", "正则规则", PageVisibility.DEVELOPER, "编辑本地正则日程识别规则并测试匹配结果"),
     )
 
+    val weatherDetailPage = NestedPageEntry(
+        route = "settings_weather_detail",
+        parentDestination = SettingsDestination.Weather,
+        title = "天气详情",
+    )
+
+    private val destinationAliases = mapOf(
+        "course_manager" to SettingsDestination.CourseManage,
+        "timetable_editor" to SettingsDestination.TimeTableManage,
+    )
+
     /** 按枚举值查登记项。 */
     fun find(destination: SettingsDestination): PageEntry? =
         pages.firstOrNull { it.destination == destination }
+
+    fun resolveDestination(value: String): SettingsDestination =
+        destinationAliases[value]
+            ?: SettingsDestination.entries.firstOrNull { it.name == value }
+            ?: SettingsDestination.Preference
+
+    fun routeFor(destination: SettingsDestination): String? = find(destination)?.route
+
+    fun titleFor(destination: SettingsDestination): String =
+        requireNotNull(find(destination)) { "Settings destination is not registered: $destination" }.title
+
+    val navigablePages: List<PageEntry>
+        get() = pages.filter { it.route != null }
 
     /** 按可见级别筛选。 */
     fun byVisibility(visibility: PageVisibility): List<PageEntry> =

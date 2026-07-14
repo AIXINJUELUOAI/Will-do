@@ -11,7 +11,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.AlarmRoute
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*

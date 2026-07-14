@@ -56,21 +56,25 @@ import com.antgskds.calendarassistant.core.util.PrivilegeManager
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
-import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.ui.contract.GlobalPromptKind
+import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiAction
+import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiModel
+import com.antgskds.calendarassistant.ui.contract.GlobalPromptUiState
+import com.antgskds.calendarassistant.ui.flavor.GlobalPromptHost
 import com.antgskds.calendarassistant.ui.navigation.AppRoutes
 import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.HomeScreen
-import com.antgskds.calendarassistant.ui.page_display.NoteEditorScreen
-import com.antgskds.calendarassistant.ui.page_display.QuickMemoDetailPage
-import com.antgskds.calendarassistant.ui.page_display.SettingsDetailScreen
+import com.antgskds.calendarassistant.ui.connector.NoteEditorRoute
+import com.antgskds.calendarassistant.ui.connector.QuickMemoDetailPage
+import com.antgskds.calendarassistant.ui.connector.SettingsDetailRoute
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundRootSize
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundWallpaperBitmap
 import com.antgskds.calendarassistant.ui.page_display.settings.LocalAppBackgroundAverageLuminance
@@ -305,6 +309,66 @@ class MainActivity : ComponentActivity() {
                     CrashHandler.clearCrashState(this@MainActivity)
                 }
 
+                val activeGlobalPrompt = when {
+                    showCrashDialog -> GlobalPromptUiModel(
+                        kind = GlobalPromptKind.CRASH_REPORT,
+                        title = "APP发生异常",
+                        content = "APP刚刚发生了崩溃，崩溃日志已记录到:\n\n/Download/WillDo/crash/exception.log\n\n您可以通过文件管理器查看并分享给开发者。",
+                        confirmText = "确定",
+                        dismissText = "关闭"
+                    )
+
+                    showCleanupDialog -> GlobalPromptUiModel(
+                        kind = GlobalPromptKind.CLEANUP_REPORT,
+                        title = "异常数据已清除",
+                        content = "检测到异常$cleanupInfo，当前已清除。",
+                        confirmText = "确定",
+                        dismissText = "关闭"
+                    )
+
+                    showLocalModelResiduePrompt -> {
+                        val prompt = localModelResiduePrompt!!
+                        GlobalPromptUiModel(
+                            kind = GlobalPromptKind.LOCAL_MODEL_RESIDUE,
+                            title = "检测到本地模型文件",
+                            content = "本地模型文件占用约 ${formatLocalModelResidueSize(prompt.sizeBytes)}，标准版不会使用它们，是否清理以释放空间？",
+                            confirmText = "清理",
+                            dismissText = "稍后",
+                            isDestructive = true,
+                            useFloatingBottomPadding = true
+                        )
+                    }
+
+                    showClipboardPromptGlobally -> {
+                        val prompt = clipboardPrompt!!
+                        GlobalPromptUiModel(
+                            kind = GlobalPromptKind.CLIPBOARD_CODE,
+                            title = "识别到剪贴板中的${prompt.candidate.type.displayLabel}",
+                            content = "${prompt.candidate.type.displayLabel}：${prompt.candidate.code}",
+                            confirmText = "入库",
+                            dismissText = "忽略",
+                            useFloatingBottomPadding = true
+                        )
+                    }
+
+                    showPromptDialog -> {
+                        val dialogState = promptUpdateDialogState!!
+                        GlobalPromptUiModel(
+                            kind = GlobalPromptKind.PROMPT_UPDATE,
+                            title = "Prompt 更新",
+                            content = "本地版本：v${dialogState.localVersion}\n云端版本：v${dialogState.remoteVersion}",
+                            confirmText = "更新",
+                            dismissText = "取消"
+                        )
+                    }
+
+                    else -> null
+                }
+                val globalPromptState = GlobalPromptUiState(
+                    prompt = activeGlobalPrompt,
+                    predictiveBackEnabled = predictiveBackEnabled
+                )
+
                 LaunchedEffect(homeBottomItems, homeStartPageKey, selectedHomePageKey) {
                     if (selectedHomePageKey !in homeBottomItems) {
                         selectedHomePageKey = homeStartPageKey
@@ -461,52 +525,18 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             }
                             val noteId = backStackEntry.arguments?.getLong(AppRoutes.NoteEditorArg) ?: AppRoutes.NoteEditorNewArg
-                            val uiState by mainViewModel.uiState.collectAsState()
-                            var initialNote by remember(noteId) { mutableStateOf<com.antgskds.calendarassistant.core.note.NoteEntity?>(null) }
-                            var noteLoaded by remember(noteId) { mutableStateOf(noteId == AppRoutes.NoteEditorNewArg) }
-                            LaunchedEffect(noteId) {
-                                initialNote = if (noteId == AppRoutes.NoteEditorNewArg) null else mainViewModel.getNoteById(noteId)
-                                noteLoaded = true
-                            }
-                            if (noteLoaded) {
-                                NoteEditorScreen(
-                                    initialNote = initialNote,
-                                    editorSessionKey = noteId.hashCode(),
-                                    settings = uiState.settings,
-                                    onDismiss = { navController.popBackStack() },
-                                    onSave = { id, title, document, createdAt, onSaved ->
-                                        mainViewModel.saveNote(id, title, document, createdAt, onSaved)
-                                    },
-                                    onDelete = { id, onDeleted ->
-                                        mainViewModel.deleteNote(id, onDeleted)
-                                    },
-                                    onSetPinned = { id, pinned ->
-                                        mainViewModel.setNotePinned(id, pinned)
-                                    },
-                                    onExportNote = { id, uri, onResult ->
-                                        mainViewModel.exportNote(id, uri, onResult)
-                                    },
-                                    onExportMarkdownNote = { id, uri, onResult ->
-                                        mainViewModel.exportMarkdownNote(id, uri, onResult)
-                                    },
-                                    onImportNote = { uri, onResult ->
-                                        mainViewModel.importNote(uri, onResult)
-                                    },
-                                    onOpenImportedNote = { importedId ->
-                                        navController.navigate(AppRoutes.noteEditor(importedId))
-                                    },
-                                    onToggleAudioAttachment = { path ->
-                                        mainViewModel.toggleAudioPlayback(path)
-                                    },
-                                    onShowMessage = { message, _ ->
-                                        android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                )
-                            } else {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator()
+                            NoteEditorRoute(
+                                noteId = noteId,
+                                newNoteId = AppRoutes.NoteEditorNewArg,
+                                viewModel = mainViewModel,
+                                onDismiss = { navController.popBackStack() },
+                                onOpenImportedNote = { importedId ->
+                                    navController.navigate(AppRoutes.noteEditor(importedId))
+                                },
+                                onShowMessage = { message, _ ->
+                                    android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
                                 }
-                            }
+                            )
                         }
 
                         composable(
@@ -562,7 +592,7 @@ class MainActivity : ComponentActivity() {
                                 navController.popBackStack()
                             }
                             val typeName = backStackEntry.arguments?.getString(AppRoutes.SettingsTypeArg) ?: ""
-                            SettingsDetailScreen(
+                            SettingsDetailRoute(
                                     destinationStr = typeName,
                                     mainViewModel = mainViewModel,
                                     settingsViewModel = settingsViewModel,
@@ -573,96 +603,35 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                // --- 弹窗区域 ---
-
-                // 1. Prompt 更新弹窗（优先级最低）
-                if (showPromptDialog) {
-                    val dialogState = promptUpdateDialogState!!
-                    PredictiveFloatingActionCard(
-                        visible = showPromptDialog,
-                        title = "Prompt 更新",
-                        content = "本地版本：v${dialogState.localVersion}\n云端版本：v${dialogState.remoteVersion}",
-                        confirmText = "更新",
-                        dismissText = "取消",
-                        isDestructive = false,
-                        isLoading = false,
-                        predictiveBackEnabled = predictiveBackEnabled,
-                        onConfirm = { mainViewModel.confirmPromptUpdate() },
-                        onDismiss = { mainViewModel.dismissPromptUpdate() }
-                    )
-                }
-
-                if (showLocalModelResiduePrompt) {
-                    val prompt = localModelResiduePrompt!!
-                    PredictiveFloatingActionCard(
-                        visible = showLocalModelResiduePrompt,
-                        title = "检测到本地模型文件",
-                        content = "本地模型文件占用约 ${formatLocalModelResidueSize(prompt.sizeBytes)}，标准版不会使用它们，是否清理以释放空间？",
-                        confirmText = "清理",
-                        dismissText = "稍后",
-                        isDestructive = true,
-                        isLoading = false,
-                        predictiveBackEnabled = predictiveBackEnabled,
-                        onConfirm = { app.localModelResidueCenter.clearResidue() },
-                        onDismiss = { app.localModelResidueCenter.dismissPendingPrompt() },
-                        modifier = Modifier.padding(bottom = floatingActionCardBottomPadding)
-                    )
-                }
-
-                if (showClipboardPromptGlobally) {
-                    val prompt = clipboardPrompt!!
-                    PredictiveFloatingActionCard(
-                        visible = showClipboardPrompt,
-                        title = "识别到剪贴板中的${prompt.candidate.type.displayLabel}",
-                        content = "${prompt.candidate.type.displayLabel}：${prompt.candidate.code}",
-                        confirmText = "入库",
-                        dismissText = "忽略",
-                        isDestructive = false,
-                        isLoading = false,
-                        predictiveBackEnabled = predictiveBackEnabled,
-                        onConfirm = { app.clipboardCodeCenter.confirmPendingPrompt() },
-                        onDismiss = { app.clipboardCodeCenter.dismissPendingPrompt() },
-                        modifier = Modifier.padding(bottom = floatingActionCardBottomPadding)
-                    )
-                }
-
                 LaunchedEffect(Unit) {
                     if (CrashHandler.isCrashedLastTime(this@MainActivity)) {
                         crashDialogShown = true
                     }
                 }
 
-                // 2. 崩溃提示弹窗
-                if (showCrashDialog) {
-                    PredictiveFloatingActionCard(
-                        visible = showCrashDialog,
-                        title = "APP发生异常",
-                        content = "APP刚刚发生了崩溃，崩溃日志已记录到:\n\n/Download/WillDo/crash/exception.log\n\n您可以通过文件管理器查看并分享给开发者。",
-                        confirmText = "确定",
-                        dismissText = "关闭",
-                        isDestructive = false,
-                        isLoading = false,
-                        predictiveBackEnabled = predictiveBackEnabled,
-                        onConfirm = handleCrashDismiss,
-                        onDismiss = handleCrashDismiss
-                    )
-                }
+                GlobalPromptHost(
+                    state = globalPromptState,
+                    floatingBottomPadding = floatingActionCardBottomPadding,
+                    onAction = { action ->
+                        when (action) {
+                            is GlobalPromptUiAction.Confirm -> when (action.kind) {
+                                GlobalPromptKind.PROMPT_UPDATE -> mainViewModel.confirmPromptUpdate()
+                                GlobalPromptKind.LOCAL_MODEL_RESIDUE -> app.localModelResidueCenter.clearResidue()
+                                GlobalPromptKind.CLIPBOARD_CODE -> app.clipboardCodeCenter.confirmPendingPrompt()
+                                GlobalPromptKind.CRASH_REPORT -> handleCrashDismiss()
+                                GlobalPromptKind.CLEANUP_REPORT -> cleanupDialogShown = false
+                            }
 
-                // 3. 异常数据清理弹窗
-                if (showCleanupDialog) {
-                    PredictiveFloatingActionCard(
-                        visible = showCleanupDialog,
-                        title = "异常数据已清除",
-                        content = "检测到异常$cleanupInfo，当前已清除。",
-                        confirmText = "确定",
-                        dismissText = "关闭",
-                        isDestructive = false,
-                        isLoading = false,
-                        predictiveBackEnabled = predictiveBackEnabled,
-                        onConfirm = { cleanupDialogShown = false },
-                        onDismiss = { cleanupDialogShown = false }
-                    )
+                            is GlobalPromptUiAction.Dismiss -> when (action.kind) {
+                                GlobalPromptKind.PROMPT_UPDATE -> mainViewModel.dismissPromptUpdate()
+                                GlobalPromptKind.LOCAL_MODEL_RESIDUE -> app.localModelResidueCenter.dismissPendingPrompt()
+                                GlobalPromptKind.CLIPBOARD_CODE -> app.clipboardCodeCenter.dismissPendingPrompt()
+                                GlobalPromptKind.CRASH_REPORT -> handleCrashDismiss()
+                                GlobalPromptKind.CLEANUP_REPORT -> cleanupDialogShown = false
+                            }
                         }
+                    }
+                )
                     }
                 }
             }

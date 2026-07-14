@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.core.capsule
 
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
-import com.antgskds.calendarassistant.core.center.ScheduleDisplayHelper
+import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build

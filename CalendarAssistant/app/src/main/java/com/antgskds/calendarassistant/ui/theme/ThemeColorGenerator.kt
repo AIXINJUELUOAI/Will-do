@@ -5,8 +5,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import com.antgskds.calendarassistant.materialcolor.hct.Hct
-import com.antgskds.calendarassistant.materialcolor.scheme.SchemeTonalSpot
+import com.antgskds.calendarassistant.shared.vendor.materialcolor.hct.Hct
+import com.antgskds.calendarassistant.shared.vendor.materialcolor.scheme.SchemeTonalSpot
 import kotlin.math.pow
 
 object ThemeColorGenerator {

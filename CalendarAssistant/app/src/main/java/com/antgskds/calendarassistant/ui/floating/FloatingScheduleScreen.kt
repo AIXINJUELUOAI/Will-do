@@ -167,6 +167,10 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatu
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureState
+import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiActions
+import com.antgskds.calendarassistant.ui.contract.FloatingScheduleUiState
+import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions
+import com.antgskds.calendarassistant.ui.contract.FloatingInputMode
 import com.antgskds.calendarassistant.core.quickmemo.audio.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.components.WheelTimePicker
@@ -201,57 +205,50 @@ private val FloatingDragDescriptionLabels = mapOf(
     RuleMatchingEngine.RULE_SENDER to listOf("寄件码", "品牌", "地点")
 )
 
-enum class FloatingInputMode { SCHEDULE, NOTE }
-
-data class FloatingDragTextOptions(
-    val includeTitle: Boolean = true,
-    val includeTime: Boolean = false,
-    val includeLocation: Boolean = false,
-    val includeDescription: Boolean = true
-)
-
 @Composable
-fun FloatingScheduleScreen(
-    scheduleItems: List<ScheduleDisplayItem>,
-    quickMemos: List<QuickMemoEntity> = emptyList(),
-    voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
-    recentVoiceMemoId: Long? = null,
-    audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
-    weatherData: WeatherData? = null,
-    weatherForecastRange: Int = 0,
-    expandSide: String = "RIGHT",
-    initialMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
-    initialModeRequestKey: Long = 0L,
-    onClose: () -> Unit,
-    onManualInput: (text: String, isQuickMemo: Boolean, onComplete: () -> Unit) -> Unit,
-    onPickImageRequest: (isQuickMemo: Boolean, onComplete: () -> Unit) -> Unit,
-    onUpdateEvent: (Event, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onUpdateScheduleItem: (ScheduleDisplayItem, EventPatch, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
-    onArchiveScheduleItem: (ScheduleDisplayItem) -> Unit = {},
-    onStatusAction: (ScheduleDisplayItem) -> Unit = {},
-    pendingStatusKeys: Set<String> = emptySet(),
-    undoPendingLabel: String? = null,
-    onUndoAction: () -> Unit = {},
-    onMarkQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
-    onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
-    onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
-    onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
-    onReorderQuickMemos: (List<Long>) -> Unit = {},
-    floatingScheduleOrderKeys: List<String> = emptyList(),
-    onReorderScheduleItems: (List<String>) -> Unit = {},
-    dragHotZonePercent: Int = MySettings.FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT,
-    dragTextOptions: FloatingDragTextOptions = FloatingDragTextOptions(),
-    onStartPlainTextDrag: (String, String, () -> Unit) -> Boolean = { _, _, _ -> false },
-    onConfirmVoiceCapture: (Boolean) -> Unit = {},
-    onPostVoiceTranscription: (QuickMemoEntity) -> Unit = {},
-    onStartVoiceCapture: () -> Unit = {},
-    onStopVoiceCapture: () -> Unit = {},
-    onToggleAudioPlayback: (String?) -> Unit = {},
-    onLoadingChange: (Boolean) -> Unit = {},
-    hapticEnabled: Boolean = true,
-    reverseScheduleOrder: Boolean = true
+fun MaterialFloatingScheduleScreen(
+    state: FloatingScheduleUiState,
+    actions: FloatingScheduleUiActions
 ) {
+    val scheduleItems = state.scheduleItems
+    val quickMemos = state.quickMemos
+    val voiceCaptureState = state.voiceCaptureState
+    val recentVoiceMemoId = state.recentVoiceMemoId
+    val audioPlaybackState = state.audioPlaybackState
+    val weatherData = state.weatherData
+    val weatherForecastRange = state.weatherForecastRange
+    val expandSide = state.expandSide
+    val initialMode = state.initialMode
+    val initialModeRequestKey = state.initialModeRequestKey
+    val pendingStatusKeys = state.pendingStatusKeys
+    val undoPendingLabel = state.undoPendingLabel
+    val floatingScheduleOrderKeys = state.floatingScheduleOrderKeys
+    val dragHotZonePercent = state.dragHotZonePercent
+    val dragTextOptions = state.dragTextOptions
+    val hapticEnabled = state.hapticEnabled
+    val reverseScheduleOrder = state.reverseScheduleOrder
+    val onClose = actions.onClose
+    val onManualInput = actions.onManualInput
+    val onPickImageRequest = actions.onPickImageRequest
+    val onUpdateEvent = actions.onUpdateEvent
+    val onUpdateScheduleItem = actions.onUpdateScheduleItem
+    val onArchiveScheduleItem = actions.onArchiveScheduleItem
+    val onStatusAction = actions.onStatusAction
+    val onUndoAction = actions.onUndoAction
+    val onMarkQuickMemoTodo = actions.onMarkQuickMemoTodo
+    val onRemoveQuickMemoTodo = actions.onRemoveQuickMemoTodo
+    val onToggleQuickMemoTodo = actions.onToggleQuickMemoTodo
+    val onDeleteQuickMemo = actions.onDeleteQuickMemo
+    val onSaveQuickMemo = actions.onSaveQuickMemo
+    val onReorderQuickMemos = actions.onReorderQuickMemos
+    val onReorderScheduleItems = actions.onReorderScheduleItems
+    val onStartPlainTextDrag = actions.onStartPlainTextDrag
+    val onConfirmVoiceCapture = actions.onConfirmVoiceCapture
+    val onPostVoiceTranscription = actions.onPostVoiceTranscription
+    val onStartVoiceCapture = actions.onStartVoiceCapture
+    val onStopVoiceCapture = actions.onStopVoiceCapture
+    val onToggleAudioPlayback = actions.onToggleAudioPlayback
+    val onLoadingChange = actions.onLoadingChange
     var manualInputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var pickerRequest by remember { mutableStateOf<FloatingPickerRequest?>(null) }
