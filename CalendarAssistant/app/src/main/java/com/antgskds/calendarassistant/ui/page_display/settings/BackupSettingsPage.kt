@@ -37,6 +37,7 @@ import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.BackupUiController
+import com.antgskds.calendarassistant.ui.connector.BackupUiControllerAdapter
 import com.antgskds.calendarassistant.ui.flavor.BackupSettingsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,7 +49,7 @@ import java.util.Locale
 
 @Composable
 fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewModel, uiSize: Int = 2) {
-    BackupSettingsScreen(remember(viewModel, mainViewModel) { BackupUiController(viewModel, mainViewModel) }, uiSize)
+    BackupSettingsScreen(remember(viewModel, mainViewModel) { BackupUiControllerAdapter(viewModel, mainViewModel) }, uiSize)
 }
 
 @Composable

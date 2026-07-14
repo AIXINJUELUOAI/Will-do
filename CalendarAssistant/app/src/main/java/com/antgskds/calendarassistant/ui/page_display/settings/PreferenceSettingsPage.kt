@@ -52,6 +52,7 @@ import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.PreferenceUiController
+import com.antgskds.calendarassistant.ui.connector.PreferenceUiControllerAdapter
 import com.antgskds.calendarassistant.ui.flavor.PreferenceSettingsScreen
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -68,7 +69,7 @@ fun PreferenceSettingsPage(
     onNavigateToTimeTableManage: () -> Unit = {}
 ) {
     PreferenceSettingsScreen(
-        controller = remember(viewModel) { PreferenceUiController(viewModel) },
+        controller = remember(viewModel) { PreferenceUiControllerAdapter(viewModel) },
         uiSize = uiSize,
         onNavigateToBottomBarEditor = onNavigateToBottomBarEditor,
         onNavigateToWidgetSettings = onNavigateToWidgetSettings,
