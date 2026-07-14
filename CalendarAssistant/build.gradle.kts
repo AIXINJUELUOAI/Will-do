@@ -13,47 +13,56 @@ plugins {
 data class ArchitectureGuardrailRule(
     val id: String,
     val regex: Regex,
-    val description: String
+    val description: String,
+    val pathRegex: Regex = Regex(".*")
 )
 
 val architectureGuardrailsBaselineFile = file("gradle/architecture-guardrails-baseline.txt")
+val centerFilesBaselineFile = file("gradle/center-files-baseline.txt")
 
 fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String>, List<Int>> {
     val rules = listOf(
         ArchitectureGuardrailRule(
             id = "REPO_GET_INSTANCE",
             regex = Regex("\\bAppRepository\\.getInstance\\s*\\("),
-            description = "Do not call AppRepository.getInstance in caller layers"
+            description = "Do not call AppRepository.getInstance in caller layers",
+            pathRegex = Regex("app/src/main/.*/(ui|service)/.*|app/src/main/.*Worker\\.kt")
         ),
         ArchitectureGuardrailRule(
             id = "APP_REPOSITORY_PROPERTY",
             regex = Regex("\\(\\s*applicationContext\\s+as\\s+App\\s*\\)\\.repository"),
-            description = "Do not access (applicationContext as App).repository in caller layers"
+            description = "Do not access (applicationContext as App).repository in caller layers",
+            pathRegex = Regex("app/src/main/.*/(ui|service)/.*|app/src/main/.*Worker\\.kt")
         ),
         ArchitectureGuardrailRule(
             id = "DB_GET_INSTANCE",
             regex = Regex("\\bAppDatabase\\.getInstance\\s*\\("),
-            description = "Do not call AppDatabase.getInstance in caller layers"
+            description = "Do not call AppDatabase.getInstance in caller layers",
+            pathRegex = Regex("app/src/main/.*/(ui|service)/.*|app/src/main/.*Worker\\.kt")
+        ),
+        ArchitectureGuardrailRule(
+            id = "CONTRACT_VIEWMODEL_IMPORT",
+            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.ui\\.viewmodel"),
+            description = "UI contracts must not depend on concrete ViewModels",
+            pathRegex = Regex("app/src/main/.*/ui/contract/.*")
+        ),
+        ArchitectureGuardrailRule(
+            id = "FLAVOR_CONCRETE_BUSINESS_IMPORT",
+            regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.(ui\\.viewmodel|core\\.center|data\\.(repository|store))"),
+            description = "Flavor UI must consume contracts instead of concrete business implementations",
+            pathRegex = Regex("app/src/(native|hyperos)/.*")
+        ),
+        ArchitectureGuardrailRule(
+            id = "RUNTIME_UI_STYLE",
+            regex = Regex("\\bUiStyle\\b|updateUiStyle|settings\\.uiStyle|calendarassistant\\.miui"),
+            description = "UI edition is selected at build time, not at runtime"
         )
     )
 
-    val guardedRoots = listOf(
-        projectRoot.resolve("app/src/main/java/com/antgskds/calendarassistant/ui"),
-        projectRoot.resolve("app/src/main/java/com/antgskds/calendarassistant/service")
-    )
-
-    val workerFiles = fileTree(projectRoot.resolve("app/src/main/java/com/antgskds/calendarassistant")) {
-        include("**/*Worker.kt")
-    }.files
-
     val candidateFiles = linkedSetOf<File>()
-
-    guardedRoots.filter { it.exists() }.forEach { root ->
-        fileTree(root) {
-            include("**/*.kt")
-        }.files.forEach(candidateFiles::add)
+    listOf("app/src/main", "app/src/native", "app/src/hyperos").forEach { sourceRoot ->
+        fileTree(projectRoot.resolve(sourceRoot)) { include("**/*.kt") }.files.forEach(candidateFiles::add)
     }
-    workerFiles.filter { it.isFile }.forEach(candidateFiles::add)
 
     val hits = linkedMapOf<Pair<String, String>, MutableSet<Int>>()
 
@@ -61,7 +70,7 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
         val lines = target.readLines()
         val relativePath = target.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
 
-        rules.forEach { rule ->
+        rules.filter { it.pathRegex.matches(relativePath) }.forEach { rule ->
             lines.forEachIndexed { index, line ->
                 if (rule.regex.containsMatchIn(line)) {
                     val key = rule.id to relativePath
@@ -96,7 +105,7 @@ fun loadArchitectureGuardrailBaseline(file: File): Set<Pair<String, String>> {
 
 tasks.register("checkArchitectureGuardrails") {
     group = "verification"
-    description = "Checks forbidden repository/database access in caller layers"
+    description = "Checks architecture boundaries, Center allowlist, and flavor host symmetry"
 
     doLast {
         val hits = collectArchitectureGuardrailHits(rootDir)
@@ -106,21 +115,68 @@ tasks.register("checkArchitectureGuardrails") {
             .filterKeys { key -> key !in baseline }
             .toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
 
-        if (unexpected.isEmpty()) {
-            println("Architecture guardrails passed (no unexpected direct access).")
+        val allowedCenters = centerFilesBaselineFile.takeIf(File::exists)
+            ?.readLines()
+            ?.map(String::trim)
+            ?.filter { it.isNotEmpty() && !it.startsWith("#") }
+            ?.map { it.replace('\\', '/') }
+            ?.toSet()
+            .orEmpty()
+        val currentCenters = listOf("app/src/main", "app/src/native", "app/src/hyperos")
+            .flatMap { sourceRoot ->
+                fileTree(rootDir.resolve(sourceRoot)) {
+                    include("**/*Center.kt")
+                }.files
+            }
+            .map { centerFile ->
+                centerFile.relativeTo(rootDir).path.replace(File.separatorChar, '/')
+            }
+            .toSet()
+        val newCenters = currentCenters - allowedCenters
+
+        fun collectFlavorHosts(flavor: String): Set<String> {
+            val hostRoot = rootDir.resolve(
+                "app/src/$flavor/java/com/antgskds/calendarassistant/ui/flavor"
+            )
+            return fileTree(hostRoot) {
+                include("**/*.kt")
+            }.files.map { hostFile ->
+                hostFile.relativeTo(hostRoot).path.replace(File.separatorChar, '/')
+            }.toSet()
+        }
+
+        val nativeHosts = collectFlavorHosts("native")
+        val hyperosHosts = collectFlavorHosts("hyperos")
+        val missingInHyperos = nativeHosts - hyperosHosts
+        val missingInNative = hyperosHosts - nativeHosts
+
+        if (
+            unexpected.isEmpty() &&
+            newCenters.isEmpty() &&
+            missingInHyperos.isEmpty() &&
+            missingInNative.isEmpty()
+        ) {
+            println("Architecture guardrails passed.")
             return@doLast
         }
 
-        println("Architecture guardrails failed. Unexpected direct access found:")
+        println("Architecture guardrails failed:")
         unexpected.forEach { (key, lines) ->
             val (ruleId, path) = key
             val lineDesc = lines.joinToString(",")
             println("- [$ruleId] $path:$lineDesc")
         }
+        newCenters.sorted().forEach { println("- [NEW_CENTER_FILE] $it") }
+        missingInHyperos.sorted().forEach {
+            println("- [FLAVOR_HOST_MISSING_IN_HYPEROS] $it")
+        }
+        missingInNative.sorted().forEach {
+            println("- [FLAVOR_HOST_MISSING_IN_NATIVE] $it")
+        }
 
         throw GradleException(
             "Unexpected architecture guardrail violations detected. " +
-                "Fix direct access or baseline approved legacy hits in gradle/architecture-guardrails-baseline.txt"
+                "Fix the reported violations or update the appropriate approved legacy baseline."
         )
     }
 }
