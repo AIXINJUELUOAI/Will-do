@@ -32,9 +32,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.feature.recognition.data.preferences.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRecognizer
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRule
-import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiState

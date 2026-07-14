@@ -239,7 +239,7 @@ tasks.register("checkArchitectureGuardrails") {
 
         val notificationKinds = extractEnumMembers(
             rootDir.resolve(
-                "app/src/main/java/com/antgskds/calendarassistant/feature/api/notification/model/NotificationModels.kt"
+                "app/src/main/java/com/antgskds/calendarassistant/feature/notification/model/NotificationModels.kt"
             ),
             "NotificationKind"
         )

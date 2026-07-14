@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.core.note
 import android.content.Context
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
