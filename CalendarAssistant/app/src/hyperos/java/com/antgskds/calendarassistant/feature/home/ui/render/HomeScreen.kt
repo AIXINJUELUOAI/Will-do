@@ -2,9 +2,9 @@ package com.antgskds.calendarassistant.feature.home.ui.render
 
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.HomeShellUiAction
-import com.antgskds.calendarassistant.ui.contract.HomeShellUiState
-import com.antgskds.calendarassistant.ui.page_display.MaterialHomeScreen
+import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiAction
+import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiState
+import com.antgskds.calendarassistant.feature.home.ui.render.material.MaterialHomeScreen
 
 @Composable
 fun HomeScreenContent(

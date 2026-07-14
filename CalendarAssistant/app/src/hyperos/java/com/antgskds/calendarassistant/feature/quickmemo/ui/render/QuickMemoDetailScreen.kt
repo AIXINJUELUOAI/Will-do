@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.quickmemo.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.QuickMemoDetailUiState
-import com.antgskds.calendarassistant.ui.contract.QuickMemoUiAction
-import com.antgskds.calendarassistant.ui.page_display.MaterialQuickMemoDetailScreen
+import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoDetailUiState
+import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoUiAction
+import com.antgskds.calendarassistant.feature.quickmemo.ui.render.material.MaterialQuickMemoDetailScreen
 
 @Composable
 fun QuickMemoDetailScreen(

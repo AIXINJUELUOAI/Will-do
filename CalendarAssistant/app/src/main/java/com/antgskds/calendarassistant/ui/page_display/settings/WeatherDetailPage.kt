@@ -71,12 +71,12 @@ import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.model.displayLocationName
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiAction
-import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiState
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiAction
+import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiState
 import com.antgskds.calendarassistant.feature.weather.ui.render.WeatherDetailPageContent
 import com.antgskds.calendarassistant.feature.weather.ui.render.WeatherDetailScreenContent
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter

@@ -2,9 +2,9 @@ package com.antgskds.calendarassistant.feature.settings.shell.ui.render
 
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
-import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiAction
-import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiState
-import com.antgskds.calendarassistant.ui.page_display.MaterialSettingsDetailScreen
+import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiAction
+import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiState
+import com.antgskds.calendarassistant.feature.settings.shell.ui.render.material.MaterialSettingsDetailScreen
 
 @Composable
 fun SettingsDetailScreenContent(

@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEvent
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseMeta
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.theme.EventColors
+import com.antgskds.calendarassistant.app.ui.theme.material.EventColors
 import java.time.LocalDateTime
 import java.time.ZoneId
 

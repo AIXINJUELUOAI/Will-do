@@ -34,14 +34,14 @@ import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
 import com.antgskds.calendarassistant.data.model.eventColorHexToArgb
 import com.antgskds.calendarassistant.data.model.normalizeEventColorHex
 import com.antgskds.calendarassistant.data.model.sanitizeEventColorPaletteHex
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.components.AppModalBottomSheet
-import com.antgskds.calendarassistant.ui.haptic.HapticValueChangeEffect
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.haptic.sliderHapticBucket
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
+import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.interaction.sliderHapticBucket
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
-import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiAction
-import com.antgskds.calendarassistant.ui.contract.ScheduleColorUiState
+import com.antgskds.calendarassistant.feature.schedule.ui.contract.ScheduleColorUiAction
+import com.antgskds.calendarassistant.feature.schedule.ui.contract.ScheduleColorUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleColorScreen
 import kotlin.math.roundToInt
 

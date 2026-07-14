@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.preference.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.PreferenceUiController
+import com.antgskds.calendarassistant.feature.settings.preference.ui.contract.PreferenceUiController
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialPreferenceSettingsScreen
 
 @Composable

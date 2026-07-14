@@ -6,7 +6,7 @@ import com.antgskds.calendarassistant.calendar.models.EventAttachment
 import com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.dialogs.MaterialAddEventDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog.MaterialAddEventDialog
 
 @Composable
 fun AddEventDialog(

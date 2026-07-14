@@ -108,19 +108,19 @@ import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphSty
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteTextStyle
 import com.antgskds.calendarassistant.feature.note.domain.model.plainTextContent
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarExtraHeight
-import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarExtraHeight
+import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditor
 import com.antgskds.calendarassistant.feature.note.ui.render.material.editor.PlainNoteEditorController
-import com.antgskds.calendarassistant.ui.components.ToastType
-import com.antgskds.calendarassistant.ui.contract.NoteEditorAnalysisOutcome
-import com.antgskds.calendarassistant.ui.contract.NoteEditorExportFormat
-import com.antgskds.calendarassistant.ui.contract.NoteEditorMessageKind
-import com.antgskds.calendarassistant.ui.contract.NoteEditorUiAction
-import com.antgskds.calendarassistant.ui.contract.NoteEditorUiState
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorAnalysisOutcome
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorExportFormat
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorMessageKind
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorUiAction
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorUiState
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -540,7 +540,7 @@ fun MaterialNoteEditorScreen(
         )
     }
 
-    com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard(
+    com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard(
         visible = pendingDelete,
         title = "删除便签",
         content = "删除后无法恢复，确认删除这条便签吗？",

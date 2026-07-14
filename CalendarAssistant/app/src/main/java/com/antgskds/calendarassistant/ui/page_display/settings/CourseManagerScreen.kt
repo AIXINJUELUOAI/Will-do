@@ -31,10 +31,10 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEvent
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseEditDialog
-import com.antgskds.calendarassistant.ui.dialogs.CourseItem
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.contract.CourseManagerUiAction
-import com.antgskds.calendarassistant.ui.contract.CourseManagerUiState
+import com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog.CourseItem
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.feature.schedule.ui.contract.CourseManagerUiAction
+import com.antgskds.calendarassistant.feature.schedule.ui.contract.CourseManagerUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseManagerContent
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 

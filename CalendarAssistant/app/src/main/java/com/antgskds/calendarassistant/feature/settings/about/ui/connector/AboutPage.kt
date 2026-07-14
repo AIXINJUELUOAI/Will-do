@@ -8,8 +8,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.core.util.PrivilegeManager
-import com.antgskds.calendarassistant.ui.contract.AboutUiAction
-import com.antgskds.calendarassistant.ui.contract.AboutUiState
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiAction
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiState
 import com.antgskds.calendarassistant.feature.settings.about.ui.render.AboutScreen
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 

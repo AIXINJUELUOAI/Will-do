@@ -25,7 +25,7 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity
 import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.ui.theme.ThemeColorGenerator
+import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

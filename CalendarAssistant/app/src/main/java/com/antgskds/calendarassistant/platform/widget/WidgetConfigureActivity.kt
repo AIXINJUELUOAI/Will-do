@@ -12,9 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureThemeOption
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiAction
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiState
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureThemeOption
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiAction
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiState
 import com.antgskds.calendarassistant.platform.widget.ui.render.WidgetConfigureScreen
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme

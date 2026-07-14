@@ -33,9 +33,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
-import com.antgskds.calendarassistant.ui.contract.NoteListItemUiModel
-import com.antgskds.calendarassistant.ui.contract.NoteTaskPreviewUiModel
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteListItemUiModel
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteTaskPreviewUiModel
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
 import java.time.Instant
 import java.time.LocalDateTime

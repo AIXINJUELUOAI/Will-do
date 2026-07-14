@@ -65,12 +65,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.contract.DonateQrCode
-import com.antgskds.calendarassistant.ui.contract.DonateUiAction
-import com.antgskds.calendarassistant.ui.contract.DonateUiState
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.DonateQrCode
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.DonateUiAction
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.DonateUiState
 import com.antgskds.calendarassistant.feature.settings.about.ui.render.DonateScreen
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
 import java.io.File

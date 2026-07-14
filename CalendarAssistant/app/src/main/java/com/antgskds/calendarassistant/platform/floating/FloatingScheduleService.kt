@@ -80,12 +80,12 @@ import com.antgskds.calendarassistant.feature.schedule.application.model.EventPa
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
-import com.antgskds.calendarassistant.ui.contract.FloatingInputMode
-import com.antgskds.calendarassistant.ui.contract.FloatingDragTextOptions
-import com.antgskds.calendarassistant.ui.connector.PickupQrFloatingCardRoute
+import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingInputMode
+import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingDragTextOptions
+import com.antgskds.calendarassistant.platform.floating.ui.connector.PickupQrFloatingCardRoute
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
-import com.antgskds.calendarassistant.ui.connector.FloatingScheduleRoute
+import com.antgskds.calendarassistant.platform.floating.ui.connector.FloatingScheduleRoute
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope

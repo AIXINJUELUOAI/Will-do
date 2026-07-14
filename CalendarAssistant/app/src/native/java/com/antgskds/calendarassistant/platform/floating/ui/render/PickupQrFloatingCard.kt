@@ -2,9 +2,9 @@ package com.antgskds.calendarassistant.platform.floating.ui.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiAction
-import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiState
-import com.antgskds.calendarassistant.ui.floating.MaterialPickupQrFloatingCard
+import com.antgskds.calendarassistant.platform.floating.ui.contract.PickupQrFloatingCardUiAction
+import com.antgskds.calendarassistant.platform.floating.ui.contract.PickupQrFloatingCardUiState
+import com.antgskds.calendarassistant.platform.floating.ui.render.material.MaterialPickupQrFloatingCard
 
 @Composable
 fun PickupQrFloatingCardContent(

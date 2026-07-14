@@ -26,9 +26,9 @@ import com.antgskds.calendarassistant.feature.schedule.presentation.model.Schedu
 import com.antgskds.calendarassistant.data.model.WidgetScheduleEntry
 import com.antgskds.calendarassistant.data.model.WidgetScheduleSnapshot
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
-import com.antgskds.calendarassistant.ui.theme.ThemeColorGenerator
+import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
-import com.antgskds.calendarassistant.ui.theme.parseThemeHexColor
+import com.antgskds.calendarassistant.app.ui.theme.material.parseThemeHexColor
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

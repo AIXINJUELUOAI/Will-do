@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiAction
-import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiState
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.RegexRuleEditorUiAction
+import com.antgskds.calendarassistant.feature.recognition.ui.contract.RegexRuleEditorUiState
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialRegexRuleEditorScreen
 
 @Composable

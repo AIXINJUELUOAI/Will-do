@@ -3,9 +3,9 @@ package com.antgskds.calendarassistant.feature.home.ui.render
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.ui.contract.HomePageUiAction
-import com.antgskds.calendarassistant.ui.contract.HomePageUiState
-import com.antgskds.calendarassistant.ui.page_display.MaterialHomePage
+import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
+import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
+import com.antgskds.calendarassistant.feature.home.ui.render.material.MaterialHomePage
 
 @Composable
 fun HomePageScreen(

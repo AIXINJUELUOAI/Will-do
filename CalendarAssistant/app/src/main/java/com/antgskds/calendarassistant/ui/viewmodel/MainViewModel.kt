@@ -46,8 +46,8 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.calculateSe
 import com.antgskds.calendarassistant.feature.schedule.domain.course.resolveSemesterAnchor
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
-import com.antgskds.calendarassistant.ui.components.ToastType
-import com.antgskds.calendarassistant.ui.contract.PromptCheckFeedback
+import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
+import com.antgskds.calendarassistant.feature.backup.ui.contract.PromptCheckFeedback
 import com.antgskds.calendarassistant.data.model.Course
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*

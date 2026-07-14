@@ -36,10 +36,10 @@ import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigControl
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigDomain
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigItem
-import com.antgskds.calendarassistant.ui.components.AppCard
-import com.antgskds.calendarassistant.ui.components.AppSettingsCard
-import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiAction
-import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiState
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
+import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiAction
+import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiState
 import com.antgskds.calendarassistant.feature.settings.developer.ui.render.ConfigEditorScreen
 
 /**

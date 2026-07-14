@@ -18,8 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.note.ui.render.material.component.NoteCard
-import com.antgskds.calendarassistant.ui.contract.NoteListUiAction
-import com.antgskds.calendarassistant.ui.contract.NoteListUiState
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteListUiAction
+import com.antgskds.calendarassistant.feature.note.ui.contract.NoteListUiState
 
 @Composable
 fun MaterialNoteListScreen(

@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.weather.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiAction
-import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiState
+import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiAction
+import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiState
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialWeatherDetailPage
 import com.antgskds.calendarassistant.ui.page_display.settings.MaterialWeatherDetailScreen
 

@@ -37,9 +37,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.ui.contract.AboutUiAction
-import com.antgskds.calendarassistant.ui.contract.AboutUiState
-import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiAction
+import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiState
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 
 @Composable
 fun MaterialAboutScreen(state: AboutUiState, onAction: (AboutUiAction) -> Unit) {

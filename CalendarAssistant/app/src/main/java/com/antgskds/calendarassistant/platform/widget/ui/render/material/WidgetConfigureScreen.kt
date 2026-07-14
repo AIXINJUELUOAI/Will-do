@@ -28,9 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureThemeOption
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiAction
-import com.antgskds.calendarassistant.ui.contract.WidgetConfigureUiState
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureThemeOption
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiAction
+import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiState
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -36,7 +36,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
-import com.antgskds.calendarassistant.ui.theme.ThemeColorGenerator
+import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
 import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
