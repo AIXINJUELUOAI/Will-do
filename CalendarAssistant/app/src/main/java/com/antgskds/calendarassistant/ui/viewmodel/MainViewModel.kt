@@ -47,6 +47,7 @@ import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
 import com.antgskds.calendarassistant.core.model.RecurringMode
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.ui.components.ToastType
+import com.antgskds.calendarassistant.ui.contract.PromptCheckFeedback
 import com.antgskds.calendarassistant.data.model.Course
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -76,11 +77,6 @@ data class MainUiState(
 data class PromptUpdateDialogState(
     val localVersion: Int,
     val remoteVersion: Int
-)
-
-data class PromptCheckFeedback(
-    val message: String,
-    val type: ToastType
 )
 
 data class AppUpdateUiState(
