@@ -29,7 +29,7 @@ import java.time.ZoneId
  * 广播接收器：AlarmReceiver —— 【已降级为胶囊闹钟广播接收器】
  *
  * 历史上也处理普通提醒，但普通提醒早已迁到新通知链路（NotificationAlarmReceiver →
- * NotificationApi → NotificationCenter）。现职责仅剩胶囊：
+ * NotificationApi → NotificationOrchestrator）。现职责仅剩胶囊：
  * 1. 胶囊开始(CAPSULE_START) -> 刷新胶囊状态(forceRefresh)，胶囊已关时兜底发普通通知
  * 2. 胶囊结束(CAPSULE_END)   -> 刷新胶囊状态
  * 3. 胶囊刷新(CAPSULE_REFRESH)-> 刷新胶囊状态（准点切「进行中」）
@@ -103,7 +103,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             AlarmRoute.REMINDER -> {
                 // 已退役：单次/重复日程的普通提醒统一走新通知链路
-                // （ScheduleNotificationBridge → NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher）。
+                // （ScheduleNotificationBridge → NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher）。
                 // 不再有任何代码排 ACTION_REMINDER 闹钟；此分支仅为路由穷尽性保留，到达即忽略。
                 Log.d(TAG, "ACTION_REMINDER 已退役（普通提醒走新链路），忽略: $eventId")
             }

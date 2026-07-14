@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.core.capsule
 
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import android.app.NotificationManager
 import android.content.Context
@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 胶囊状态管理器 - 主动唤醒模式
  */
 class CapsuleStateManager(
-    private val scheduleCenter: ScheduleCenter,
+    private val scheduleCenter: ScheduleFacade,
     private val settingsQueryApi: SettingsQueryApi,
     private val appScope: CoroutineScope,
     private val context: Context

@@ -6,7 +6,7 @@ import java.time.LocalTime
 /**
  * 编辑草稿 —— 编辑弹窗的初始填充数据。
  *
- * 由 ScheduleCenter.prepareEdit*() 生成。
+ * 由 ScheduleFacade.prepareEdit*() 生成。
  * 刻意不包含 importId / source / rrule / parentId 等同步字段，
  * 防止 UI 层误操作导致同步身份污染。
  */

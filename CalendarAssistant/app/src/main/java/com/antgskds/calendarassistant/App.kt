@@ -9,7 +9,7 @@ import com.antgskds.calendarassistant.core.util.CrashHandler
 import com.antgskds.calendarassistant.core.util.AnrMonitor
 import com.antgskds.calendarassistant.core.util.AppLogger
 import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
-import com.antgskds.calendarassistant.core.center.CapsuleCenter
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
 import com.antgskds.calendarassistant.feature.recognition.application.ingest.IngestPipeline
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
@@ -17,13 +17,13 @@ import com.antgskds.calendarassistant.platform.floating.FloatingServiceControlle
 import com.antgskds.calendarassistant.feature.recognition.application.ingest.ScheduleIngestWriter
 import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
 import com.antgskds.calendarassistant.feature.note.application.NoteService
-import com.antgskds.calendarassistant.core.center.NotificationCenter
+import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
-import com.antgskds.calendarassistant.core.center.QuickMemoCenter
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
 import com.antgskds.calendarassistant.feature.schedule.notification.ScheduleReminderCoordinator
 import com.antgskds.calendarassistant.app.runtime.AppRuntimeCoordinator
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.schedule.application.sync.CalendarSyncService
 import com.antgskds.calendarassistant.platform.widget.WidgetController
 import com.antgskds.calendarassistant.core.event.DomainEventBus
@@ -40,7 +40,7 @@ import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
 import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
 import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
@@ -105,8 +105,8 @@ class App : Application() {
         ScheduleStoreGateway.getInstance(this)
     }
 
-    val scheduleCenter: ScheduleCenter by lazy {
-        ScheduleCenter(
+    val scheduleCenter: ScheduleFacade by lazy {
+        ScheduleFacade(
             calendarCenter = calendarCenter,
             appScope = appScope,
             notificationApi = notificationCenter,
@@ -137,8 +137,8 @@ class App : Application() {
 
     val audioPlaybackCenter: QuickMemoAudioPlayer by lazy { QuickMemoAudioPlayer() }
 
-    val quickMemoCenter: QuickMemoCenter by lazy {
-        QuickMemoCenter(
+    val quickMemoCenter: QuickMemoFacade by lazy {
+        QuickMemoFacade(
             repository = quickMemoRepository,
             appScope = appScope,
             speechTranscriber = SherpaParaformerTranscriber(applicationContext),
@@ -296,8 +296,8 @@ class App : Application() {
     val capsuleCommandApi: CapsuleCommandApi by lazy { CapsuleStateManagerCommandApi(capsuleStateManager) }
     val capsuleQueryApi: CapsuleQueryApi by lazy { CapsuleStateManagerQueryApi(capsuleStateManager) }
 
-    val capsuleCenter: CapsuleCenter by lazy {
-        CapsuleCenter(capsuleCommandApi = capsuleCommandApi, capsuleQueryApi = capsuleQueryApi)
+    val capsuleCenter: CapsuleController by lazy {
+        CapsuleController(capsuleCommandApi = capsuleCommandApi, capsuleQueryApi = capsuleQueryApi)
     }
 
     val floatingCenter: FloatingServiceController by lazy {
@@ -320,8 +320,8 @@ class App : Application() {
         AndroidNormalNotificationPublisher(applicationContext)
     }
 
-    val notificationCenter: NotificationCenter by lazy {
-        NotificationCenter(
+    val notificationCenter: NotificationOrchestrator by lazy {
+        NotificationOrchestrator(
             appContext = applicationContext,
             registryStore = notificationRegistryStore,
             systemAlarmGateway = systemAlarmGateway,
@@ -356,8 +356,8 @@ class App : Application() {
     // 短信内容观察者
     private var smsObserver: SmsContentObserver? = null
 
-    val backupCenter: BackupCenter by lazy {
-        BackupCenter(
+    val backupCenter: BackupCoordinator by lazy {
+        BackupCoordinator(
             context = applicationContext,
             scheduleCenter = scheduleCenter,
             settingsQueryApi = settingsQueryApi,

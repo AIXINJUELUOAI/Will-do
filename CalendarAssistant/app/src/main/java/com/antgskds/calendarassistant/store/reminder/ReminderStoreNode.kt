@@ -54,7 +54,7 @@ class ReminderStoreNode(context: Context) {
         }
 
         // Phase 2：单次事件的「普通提醒」已切到新通知链路
-        // （ScheduleNotificationBridge → NotificationApi → NotificationCenter → AndroidNormalNotificationPublisher）。
+        // （ScheduleNotificationBridge → NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher）。
         // 此处不再排 EventReminderReceiver 闹钟，避免与新链路双弹；上方的取消/清理与胶囊 early-return 保留不变。
         // 「错过即时补发(missed-immediate)」已由新链路 ScheduleNotificationBridge.shouldFireMissedImmediate 恢复
         // （事件创建/更新/reconcile/开机重排时判定补发，带 state!=POSTED 去重），此处无需再做。

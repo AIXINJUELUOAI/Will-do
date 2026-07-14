@@ -56,7 +56,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.Analysi
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
@@ -170,7 +170,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private var voiceForegroundActive: Boolean = false
 
     private val app by lazy { applicationContext as App }
-    private val scheduleCenter: ScheduleCenter by lazy { app.scheduleCenter }
+    private val scheduleCenter: ScheduleFacade by lazy { app.scheduleCenter }
     private val quickMemoCenter by lazy { app.quickMemoCenter }
     private val audioPlaybackCenter by lazy { app.audioPlaybackCenter }
     private val scheduleQueryApi: ScheduleQueryApi by lazy { app.scheduleQueryApi }

@@ -6,8 +6,8 @@ import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
-import com.antgskds.calendarassistant.core.center.CapsuleCenter
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
 import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.core.event.DomainEventBus
@@ -36,9 +36,9 @@ import java.time.LocalDate
 
 class ScheduleReminderCoordinator(
     private val appContext: Context,
-    private val capsuleCenter: CapsuleCenter,
+    private val capsuleCenter: CapsuleController,
     private val settingsQueryApi: SettingsQueryApi,
-    private val scheduleCenter: ScheduleCenter,
+    private val scheduleCenter: ScheduleFacade,
     private val domainEventBus: DomainEventBus,
     private val appScope: CoroutineScope
 ) {

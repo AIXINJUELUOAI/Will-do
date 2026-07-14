@@ -57,22 +57,22 @@ object FeatureCatalog {
         FeatureEntry("系统日历同步", Chain.SYNC, "feature/schedule/application/sync/CalendarSyncService", "本地日程 ↔ 系统日历双向同步"),
 
         // —— 通知 ——
-        FeatureEntry("通知主链路", Chain.NOTIFICATION, "feature/api/notification/NotificationApi", "普通通知统一发布（NotificationCenter + Publisher）"),
+        FeatureEntry("通知主链路", Chain.NOTIFICATION, "feature/notification/api/NotificationApi", "普通通知统一发布（NotificationOrchestrator + Publisher）"),
         FeatureEntry("实况胶囊", Chain.NOTIFICATION, "core/capsule/CapsuleStateManager", "胶囊状态计算 + CapsuleDispatcher 发布（原生/魅族/小米超级岛）"),
         FeatureEntry("提醒调度", Chain.NOTIFICATION, "feature/schedule/notification/ScheduleReminderCoordinator", "提醒生命周期、胶囊闹钟、reconcile"),
 
         // —— 日程主体 ——
-        FeatureEntry("日程管理", Chain.SCHEDULE, "core/center/ScheduleCenter", "事件 CRUD、展示模型、重复日程"),
+        FeatureEntry("日程管理", Chain.SCHEDULE, "feature/schedule/application/ScheduleFacade", "事件 CRUD、展示模型、重复日程"),
         FeatureEntry("课程表", Chain.SCHEDULE, "core/course", "课程并入事件模型、课表设置"),
-        FeatureEntry("快捷备忘", Chain.SCHEDULE, "core/center/QuickMemoCenter", "语音/文字快捷备忘"),
-        FeatureEntry("图片随口记", Chain.SCHEDULE, "core/center/QuickMemoCenter", "系统图片/分享图片保存为随口记素材"),
+        FeatureEntry("快捷备忘", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "语音/文字快捷备忘"),
+        FeatureEntry("图片随口记", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "系统图片/分享图片保存为随口记素材"),
         FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "便签编辑与存储"),
 
         // —— 横切支撑 ——
         FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),
         FeatureEntry("天气", Chain.SUPPORT, "core/weather", "天气预警/风险，位置选择"),
         FeatureEntry("背景自定义", Chain.SUPPORT, "feature/appearance/domain/AppBackgroundImageStore", "用户图片背景导入、私有存储与背景取色"),
-        FeatureEntry("数据备份", Chain.SUPPORT, "core/center/BackupCenter", "导入导出备份"),
+        FeatureEntry("数据备份", Chain.SUPPORT, "feature/backup/application/BackupCoordinator", "导入导出备份"),
         FeatureEntry("桌面小组件", Chain.SUPPORT, "platform/widget/WidgetController", "日程/课程桌面小组件"),
         FeatureEntry("悬浮窗/EdgeBar", Chain.SUPPORT, "platform/floating/FloatingServiceController", "悬浮窗与侧边栏快捷入口"),
         FeatureEntry("诊断日志", Chain.SUPPORT, "feature/settings/diagnostics/application/DiagnosticLogExporter", "异常日志捕获与导出"),

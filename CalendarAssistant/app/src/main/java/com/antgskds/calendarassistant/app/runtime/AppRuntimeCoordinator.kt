@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.app.runtime
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.core.center.CapsuleCenter
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
 import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
@@ -23,7 +23,7 @@ class AppRuntimeCoordinator(
     private val permissionCenter: AndroidPermissionChecker,
     private val floatingCenter: FloatingServiceController,
     private val networkSpeedProbeQueryApi: NetworkSpeedProbeQueryApi,
-    private val capsuleCenter: CapsuleCenter,
+    private val capsuleCenter: CapsuleController,
     private val appScope: CoroutineScope
 ) {
     companion object {

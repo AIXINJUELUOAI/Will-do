@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.notification.application
 
 import android.app.Notification
 import android.app.NotificationManager
@@ -59,7 +59,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-class NotificationCenter(
+class NotificationOrchestrator(
     private val appContext: Context,
     private val registryStore: NotificationRegistryStore,
     private val systemAlarmGateway: SystemAlarmGateway? = null,
@@ -67,7 +67,7 @@ class NotificationCenter(
     private val liveCapsuleEnabledProvider: () -> Boolean = { false }
 ) : NotificationApi {
     companion object {
-        private const val TAG = "NotificationCenter"
+        private const val TAG = "NotifyOrchestrator"
         private const val GROUP_CREATED_EVENTS = "calendar_assistant_created_events"
         private const val GROUP_QUICK_MEMO_SUGGESTIONS = "calendar_assistant_quick_memo_suggestions"
         private val RESULT_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm")

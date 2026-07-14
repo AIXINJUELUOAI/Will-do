@@ -8,12 +8,12 @@ import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
 import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.antgskds.calendarassistant.core.center.BackupCenter
+import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleanupResult
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
-import com.antgskds.calendarassistant.core.center.ScheduleCenter
+import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.schedule.application.sync.CalendarSyncService
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
@@ -44,8 +44,8 @@ import java.time.ZoneId
 
 class SettingsViewModel(
     appContext: Context,
-    private val scheduleCenter: ScheduleCenter,
-    private val backupCenter: BackupCenter,
+    private val scheduleCenter: ScheduleFacade,
+    private val backupCenter: BackupCoordinator,
     private val syncCenter: CalendarSyncService,
     private val diagnosticLogCenter: DiagnosticLogExporter,
     private val settingsOperationApi: SettingsOperationApi,
