@@ -105,6 +105,7 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.WeatherSettingsUiState
 import com.antgskds.calendarassistant.ui.flavor.WeatherSettingsScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,7 +125,7 @@ fun WeatherSettingsPage(
         state = WeatherSettingsUiState(settings, weatherData, locationCatalog),
         uiSize = uiSize,
         onOpenDetail = onOpenWeatherDetail,
-        saveWeather = { draft ->
+        persistWeather = { draft ->
             viewModel.updateWeatherSettings(
                 enabled = draft.weatherEnabled, provider = WeatherApiAdapter.PROVIDER_QWEATHER,
                 apiUrl = draft.weatherApiUrl, apiKey = draft.weatherApiKey,
@@ -141,8 +142,8 @@ fun WeatherSettingsPage(
                 app.weatherOperationApi.clearCache()
             }
             WeatherSyncWorker.syncForSettings(appContext, draft)
-            if (draft.weatherEnabled) app.weatherOperationApi.forceRefresh(draft).map { Unit } else Result.success(Unit)
-        }
+        },
+        refreshWeather = { draft -> app.weatherOperationApi.forceRefresh(draft).map { Unit } }
     )
 }
 
@@ -152,7 +153,8 @@ fun MaterialWeatherSettingsScreen(
     state: WeatherSettingsUiState,
     uiSize: Int = 2,
     onOpenWeatherDetail: () -> Unit,
-    saveWeather: suspend (MySettings) -> Result<Unit>
+    persistWeather: suspend (MySettings) -> Unit,
+    refreshWeather: suspend (MySettings) -> Result<Unit>
 ) {
     val settings = state.settings
     val weatherData = state.weatherData
@@ -616,12 +618,19 @@ fun MaterialWeatherSettingsScreen(
                         return@launch
                     }
 
+                    persistWeather(draft)
+                    haptics.confirm()
+                    showToast("天气配置已保存", ToastType.SUCCESS)
+                    if (!draft.weatherEnabled) return@launch
                     actionLoading = true
                     try {
-                        val result = saveWeather(draft)
-                        haptics.confirm()
-                        showToast("天气配置已保存", ToastType.SUCCESS)
-                        if (!draft.weatherEnabled) return@launch
+                        val result = try {
+                            refreshWeather(draft)
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            Result.failure(error)
+                        }
                         if (result.isSuccess) {
                             showToast("天气连接成功", ToastType.SUCCESS)
                         } else {
