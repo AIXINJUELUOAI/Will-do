@@ -24,7 +24,7 @@ object RuleDisplayTemplateResolver {
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
             val allStates = mutableMapOf<String, String>()
-            com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules().forEach { rule ->
+            com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider.builtinRules().forEach { rule ->
                 val defaults = RuleActionDefaults.defaultsFor(rule.ruleId)
                 RuleActionDefaults.buildStates(rule.ruleId, defaults).forEach { state ->
                     if (state.displayTemplate.isNotBlank()) {

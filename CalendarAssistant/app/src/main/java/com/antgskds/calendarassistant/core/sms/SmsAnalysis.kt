@@ -6,8 +6,8 @@
 
 package com.antgskds.calendarassistant.core.sms
 
-import com.antgskds.calendarassistant.core.instantcode.InstantCodeParser
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 
 object SmsAnalysis {
     fun parse(

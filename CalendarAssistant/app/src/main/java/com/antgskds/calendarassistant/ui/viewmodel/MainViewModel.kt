@@ -6,10 +6,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.antgskds.calendarassistant.core.ai.AiPrompts
-import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
-import com.antgskds.calendarassistant.core.ai.PromptCheckResult
-import com.antgskds.calendarassistant.core.ai.PromptUpdater
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
+import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
+import com.antgskds.calendarassistant.feature.recognition.application.ai.PromptCheckResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.PromptUpdater
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateChecker
 import com.antgskds.calendarassistant.feature.update.domain.AppUpdateCheckResult
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
@@ -28,7 +28,7 @@ import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.RemotePrompts
 import com.antgskds.calendarassistant.feature.update.model.RemoteAppUpdateInfo
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WeatherData
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
@@ -40,11 +40,11 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackCenter
 import com.antgskds.calendarassistant.core.quickmemo.audio.AudioPlaybackState
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.CourseMeta
-import com.antgskds.calendarassistant.core.course.calculateSemesterWeek
-import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseMeta
+import com.antgskds.calendarassistant.feature.schedule.domain.course.calculateSemesterWeek
+import com.antgskds.calendarassistant.feature.schedule.domain.course.resolveSemesterAnchor
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.contract.PromptCheckFeedback
@@ -316,7 +316,7 @@ class MainViewModel(
         }
     }
 
-    private fun presentPromptUpdate(candidate: com.antgskds.calendarassistant.core.ai.PromptUpdateCandidate) {
+    private fun presentPromptUpdate(candidate: com.antgskds.calendarassistant.feature.recognition.application.ai.PromptUpdateCandidate) {
         pendingPromptUpdate = candidate.remotePrompts
         Log.d(
             "MainViewModel",
@@ -549,7 +549,7 @@ class MainViewModel(
     ) = viewModelScope.launch {
         scheduleCenter.editRecurringEvent(
             parentEventId, detachedEvent,
-            com.antgskds.calendarassistant.core.model.RecurringMode.THIS,
+            com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode.THIS,
             occurrenceTs
         )
     }
@@ -567,19 +567,19 @@ class MainViewModel(
 
     // ── 新 API：EditDraft / EventPatch 操作 ──
 
-    fun prepareEditSingle(eventId: Long): com.antgskds.calendarassistant.data.model.EditDraft? {
+    fun prepareEditSingle(eventId: Long): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft? {
         return scheduleCenter.prepareEditSingle(eventId)
     }
 
-    fun prepareEditRecurringOccurrence(parentId: Long, occurrenceTs: Long): com.antgskds.calendarassistant.data.model.EditDraft? {
+    fun prepareEditRecurringOccurrence(parentId: Long, occurrenceTs: Long): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft? {
         return scheduleCenter.prepareEditRecurringOccurrence(parentId, occurrenceTs)
     }
 
-    fun prepareNewEvent(): com.antgskds.calendarassistant.data.model.EditDraft {
+    fun prepareNewEvent(): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft {
         return scheduleCenter.prepareNewEvent()
     }
 
-    fun addEventFromPatch(patch: com.antgskds.calendarassistant.data.model.EventPatch) = viewModelScope.launch {
+    fun addEventFromPatch(patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch) = viewModelScope.launch {
         val eventId = scheduleCenter.addEventFromPatchWithResult(patch)
         kotlinx.coroutines.withContext(Dispatchers.IO) {
             patch.pendingAttachmentUris.forEach { uri ->
@@ -588,11 +588,11 @@ class MainViewModel(
         }
     }
 
-    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long {
+    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch): Long {
         return scheduleCenter.addEventFromPatchWithResult(patch)
     }
 
-    fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.data.model.EventPatch) = viewModelScope.launch {
+    fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch) = viewModelScope.launch {
         scheduleCenter.updateSingleFromPatch(eventId, patch)
     }
 
@@ -600,7 +600,7 @@ class MainViewModel(
         parentId: Long,
         occurrenceTs: Long,
         mode: RecurringMode,
-        patch: com.antgskds.calendarassistant.data.model.EventPatch
+        patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
     ) = viewModelScope.launch {
         val editedId = scheduleCenter.editRecurringFromPatch(
             parentId, occurrenceTs,
@@ -614,7 +614,7 @@ class MainViewModel(
         parentId: Long,
         occurrenceTs: Long,
         mode: RecurringMode,
-        patch: com.antgskds.calendarassistant.data.model.EventPatch
+        patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
     ): Long? {
         val editedId = scheduleCenter.editRecurringFromPatch(parentId, occurrenceTs, mode, patch)
         editedId?.let { refreshAttachmentKey(it) }
@@ -776,7 +776,7 @@ class MainViewModel(
                 scheduleCenter.editRecurringEvent(
                     target.parentId,
                     detached,
-                    com.antgskds.calendarassistant.core.model.RecurringMode.THIS,
+                    com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode.THIS,
                     target.occurrenceTs
                 )
             }
@@ -819,7 +819,7 @@ class MainViewModel(
                 scheduleCenter.deleteRecurringFromUi(
                     target.parentId,
                     target.occurrenceTs,
-                    com.antgskds.calendarassistant.core.model.RecurringMode.THIS
+                    com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode.THIS
                 )
             }
             is ScheduleDisplayItem.ActionTarget.Single -> {
@@ -933,24 +933,24 @@ class MainViewModel(
 
     // ── 新 API：面向 ActionTarget 的操作 ──
 
-    fun archiveItem(target: com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget) {
+    fun archiveItem(target: com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget) {
         viewModelScope.launch {
             scheduleCenter.archiveItem(target)
             _revealedItemKey.value = null
         }
     }
 
-    fun completeItem(target: com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget) {
+    fun completeItem(target: com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget) {
         scheduleCenter.completeItem(target)
         _revealedItemKey.value = null
     }
 
-    fun checkInItem(target: com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget) {
+    fun checkInItem(target: com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget) {
         scheduleCenter.checkInItem(target)
         _revealedItemKey.value = null
     }
 
-    fun performPrimaryActionOnItem(item: com.antgskds.calendarassistant.data.model.ScheduleDisplayItem) {
+    fun performPrimaryActionOnItem(item: com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem) {
         scheduleCenter.performPrimaryActionOnItem(item)
         _revealedItemKey.value = null
     }

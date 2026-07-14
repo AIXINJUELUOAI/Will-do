@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.core.center
 
 import android.util.Log
-import com.antgskds.calendarassistant.core.undo.UndoManager
+import com.antgskds.calendarassistant.feature.schedule.application.undo.UndoManager
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
@@ -12,14 +12,14 @@ import com.antgskds.calendarassistant.calendar.models.isCompleted
 import com.antgskds.calendarassistant.calendar.models.isCourse
 import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
 import com.antgskds.calendarassistant.calendar.models.isTransit
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.OperationResult
 import com.antgskds.calendarassistant.core.query.EventActionQueryApi
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem.ActionTarget
-import com.antgskds.calendarassistant.feature.api.notification.NotificationApi
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
+import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.feature.schedule.notification.ScheduleNotificationBridge
 import kotlinx.coroutines.CoroutineScope
@@ -281,9 +281,9 @@ class ScheduleCenter(
     /**
      * 为新建事件准备编辑草稿。
      */
-    fun prepareNewEvent(): com.antgskds.calendarassistant.data.model.EditDraft {
+    fun prepareNewEvent(): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft {
         val now = java.time.LocalDateTime.now().withSecond(0).withNano(0)
-        return com.antgskds.calendarassistant.data.model.EditDraft(
+        return com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft(
             startDate = now.toLocalDate(),
             startTime = now.toLocalTime(),
             endDate = now.toLocalDate(),
@@ -294,7 +294,7 @@ class ScheduleCenter(
     /**
      * 为编辑单次事件准备草稿：从内存事件列表读取（避免主线程 DB 访问）。
      */
-    fun prepareEditSingle(eventId: Long): com.antgskds.calendarassistant.data.model.EditDraft? {
+    fun prepareEditSingle(eventId: Long): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft? {
         val event = _events.value.find { it.id == eventId } ?: return null
         return eventToEditDraft(event, null)
     }
@@ -305,7 +305,7 @@ class ScheduleCenter(
     fun prepareEditRecurringOccurrence(
         parentId: Long,
         occurrenceTs: Long
-    ): com.antgskds.calendarassistant.data.model.EditDraft? {
+    ): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft? {
         val parent = _events.value.find { it.id == parentId } ?: return null
         val duration = parent.endTS - parent.startTS
         return eventToEditDraft(
@@ -321,7 +321,7 @@ class ScheduleCenter(
         hint: String?,
         overrideStartTS: Long = event.startTS,
         overrideEndTS: Long = event.endTS
-    ): com.antgskds.calendarassistant.data.model.EditDraft {
+    ): com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft {
         val zone = try { java.time.ZoneId.of(event.getTimeZoneString()) } catch (_: Exception) { java.time.ZoneId.systemDefault() }
         val start = java.time.Instant.ofEpochSecond(overrideStartTS).atZone(zone).toLocalDateTime()
         val end = java.time.Instant.ofEpochSecond(overrideEndTS).atZone(zone).toLocalDateTime()
@@ -330,7 +330,7 @@ class ScheduleCenter(
             event.reminder2Minutes.takeIf { it != com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF },
             event.reminder3Minutes.takeIf { it != com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF }
         )
-        return com.antgskds.calendarassistant.data.model.EditDraft(
+        return com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft(
             title = event.title,
             startDate = start.toLocalDate(),
             startTime = start.toLocalTime(),
@@ -353,7 +353,7 @@ class ScheduleCenter(
     /**
      * 从 patch 新建事件。
      */
-    suspend fun addEventFromPatch(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long = withContext(Dispatchers.IO) {
+    suspend fun addEventFromPatch(patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch): Long = withContext(Dispatchers.IO) {
         val event = patchToNewEvent(patch)
         val id = calendarCenter.createEvent(event)
         notificationBridge?.onEventCreated(event.copy(id = id))
@@ -361,7 +361,7 @@ class ScheduleCenter(
         id
     }
 
-    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.data.model.EventPatch): Long {
+    suspend fun addEventFromPatchWithResult(patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch): Long {
         return addEventFromPatch(patch)
     }
 
@@ -369,7 +369,7 @@ class ScheduleCenter(
      * 用 patch 更新已存在的单次事件。
      * 内部从 DB 读取完整事件，只覆盖用户可编辑字段，保留同步身份。
      */
-    suspend fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.data.model.EventPatch) = withContext(Dispatchers.IO) {
+    suspend fun updateSingleFromPatch(eventId: Long, patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch) = withContext(Dispatchers.IO) {
         val existing = calendarCenter.getEvent(eventId) ?: return@withContext
         val merged = normalizeActiveWindowEdit(existing, applyPatchToEvent(existing, patch), "updateSingleFromPatch")
         calendarCenter.updateEvent(merged)
@@ -387,7 +387,7 @@ class ScheduleCenter(
         parentId: Long,
         occurrenceTs: Long,
         mode: RecurringMode,
-        patch: com.antgskds.calendarassistant.data.model.EventPatch
+        patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
     ): Long? = withContext(Dispatchers.IO) {
         val parent = calendarCenter.getEvent(parentId) ?: return@withContext null
         val effectivePatch = if (mode == RecurringMode.ALL) {
@@ -672,7 +672,7 @@ class ScheduleCenter(
 
     // ── Patch 转换工具 ────────────────────────────────────────────
 
-    private fun patchToNewEvent(patch: com.antgskds.calendarassistant.data.model.EventPatch): Event {
+    private fun patchToNewEvent(patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch): Event {
         return Event(
             id = null,
             title = patch.title,
@@ -689,7 +689,7 @@ class ScheduleCenter(
         )
     }
 
-    private fun applyPatchToEvent(existing: Event, patch: com.antgskds.calendarassistant.data.model.EventPatch): Event {
+    private fun applyPatchToEvent(existing: Event, patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch): Event {
         val shouldReactivate = (existing.state == STATE_COMPLETED || existing.state == STATE_CHECKED_IN) &&
             patch.endTS >= System.currentTimeMillis() / 1000L
         val shouldRestoreArchived = existing.archivedAt != null && patch.endTS >= System.currentTimeMillis() / 1000L

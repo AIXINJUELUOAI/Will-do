@@ -1564,7 +1564,7 @@ private fun TwoOptionSettingItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SourceCalendarPickerSheet(
-    calendars: List<com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo>,
+    calendars: List<com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager.CalendarInfo>,
     initialSelection: Set<Long>,
     onDismiss: () -> Unit,
     onConfirm: (List<Long>) -> Unit
@@ -1671,7 +1671,7 @@ private fun SourceCalendarPickerSheet(
 
 private fun formatSelectedCalendarSummary(
     selectedIds: List<Long>,
-    selectedCalendars: List<com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo>
+    selectedCalendars: List<com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager.CalendarInfo>
 ): String {
     if (selectedIds.isEmpty()) {
         return "请选择需要从系统同步进 APP 的日历"
@@ -1690,7 +1690,7 @@ private fun formatSelectedCalendarSummary(
 }
 
 private fun buildAccountGroupTitle(
-    calendar: com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo
+    calendar: com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager.CalendarInfo
 ): String {
     val accountName = calendar.accountName?.takeIf { it.isNotBlank() } ?: "本地账户"
     val accountType = calendar.accountType?.takeIf { it.isNotBlank() }
@@ -1702,7 +1702,7 @@ private fun buildAccountGroupTitle(
 }
 
 private fun buildCalendarMetaLine(
-    calendar: com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager.CalendarInfo
+    calendar: com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager.CalendarInfo
 ): String {
     val tags = mutableListOf<String>()
     if (!calendar.isVisible) tags += "已隐藏"

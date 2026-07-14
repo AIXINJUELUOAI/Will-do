@@ -5,7 +5,7 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec

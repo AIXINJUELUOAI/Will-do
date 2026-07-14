@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.core.center
 
-import com.antgskds.calendarassistant.core.ai.convertDraftToEvent
+import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint
 import com.antgskds.calendarassistant.calendar.models.Event

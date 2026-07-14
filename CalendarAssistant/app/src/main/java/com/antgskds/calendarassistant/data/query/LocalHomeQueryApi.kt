@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.data.query
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.core.query.HomeQueryApi
 import com.antgskds.calendarassistant.core.query.HomeSnapshot
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.MySettings

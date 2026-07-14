@@ -4,9 +4,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.CourseMeta
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseMeta
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.theme.EventColors
 import java.time.LocalDateTime

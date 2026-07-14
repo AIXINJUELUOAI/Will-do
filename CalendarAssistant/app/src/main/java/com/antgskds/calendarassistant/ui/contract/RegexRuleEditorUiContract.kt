@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.core.rule.RegexScheduleRule
+import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRule
 
 data class RegexRuleEditorUiState(
     val rules: List<RegexScheduleRule>,

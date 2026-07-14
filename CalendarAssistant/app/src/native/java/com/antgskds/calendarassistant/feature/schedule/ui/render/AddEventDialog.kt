@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.feature.schedule.ui.render
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import com.antgskds.calendarassistant.calendar.models.EventAttachment
-import com.antgskds.calendarassistant.data.model.EditDraft
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.dialogs.MaterialAddEventDialog
 

@@ -17,10 +17,10 @@ import android.view.Display
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
-import com.antgskds.calendarassistant.core.ai.isRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.recognitionConfigMissingMessage
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
+import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
+import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.EventIdentity
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent

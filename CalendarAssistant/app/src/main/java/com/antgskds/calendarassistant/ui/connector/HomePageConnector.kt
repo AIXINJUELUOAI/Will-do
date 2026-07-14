@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen

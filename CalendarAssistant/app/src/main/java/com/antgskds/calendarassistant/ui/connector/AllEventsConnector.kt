@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.contract.AllEventsDateGroupUiModel
 import com.antgskds.calendarassistant.ui.contract.AllEventsUiAction
 import com.antgskds.calendarassistant.ui.contract.AllEventsUiState

@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.data.model
 
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import java.time.LocalDate
 
 data class WidgetScheduleSnapshot(

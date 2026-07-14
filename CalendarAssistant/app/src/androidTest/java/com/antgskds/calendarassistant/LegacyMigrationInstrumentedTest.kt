@@ -5,7 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.center.CalendarCenter
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import com.antgskds.calendarassistant.data.model.Course
 import com.antgskds.calendarassistant.data.model.MySettings

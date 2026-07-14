@@ -12,7 +12,7 @@ object RuleIconResolver {
 
     suspend fun refresh(context: Context) {
         withContext(Dispatchers.IO) {
-            val rules = com.antgskds.calendarassistant.core.ai.RulePatchProvider.builtinRules()
+            val rules = com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider.builtinRules()
             val updated = mutableMapOf<String, Int>()
             rules.forEach { rule ->
                 val fallbackResName = buildFallbackResName(rule.ruleId)

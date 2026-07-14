@@ -69,8 +69,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.ai.ApiModelProvider
-import com.antgskds.calendarassistant.core.ai.ModelListResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.ApiModelProvider
+import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast

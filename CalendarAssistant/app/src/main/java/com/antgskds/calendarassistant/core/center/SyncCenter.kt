@@ -5,8 +5,8 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.core.center.CalendarCenter
 import com.antgskds.calendarassistant.calendar.helpers.CalendarConfig
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
 import com.antgskds.calendarassistant.calendar.sync.SystemCalendarSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

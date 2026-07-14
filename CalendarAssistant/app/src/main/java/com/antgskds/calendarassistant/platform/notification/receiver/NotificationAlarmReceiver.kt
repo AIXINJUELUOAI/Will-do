@@ -6,8 +6,8 @@ import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKey
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationTrigger
+import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
+import com.antgskds.calendarassistant.feature.notification.model.NotificationTrigger
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.core.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.ui.dialogs.MaterialRepeatRulePickerDialog
 import java.time.LocalDate
 

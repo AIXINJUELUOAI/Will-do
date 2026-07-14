@@ -3,9 +3,9 @@ package com.antgskds.calendarassistant.core.center
 import android.content.Context
 import android.net.Uri
 import com.antgskds.calendarassistant.calendar.data.EventsDatabase
-import com.antgskds.calendarassistant.core.ai.AiPrompts
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi

@@ -2,9 +2,9 @@ package com.antgskds.calendarassistant.core.operation
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.core.event.EventIdentity
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.data.model.MySettings
 
 /**

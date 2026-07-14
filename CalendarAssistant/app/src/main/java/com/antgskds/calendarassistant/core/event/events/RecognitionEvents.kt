@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.core.event.events
 
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 
 data class RecognitionCompletedEvent(
     val sourceType: String,

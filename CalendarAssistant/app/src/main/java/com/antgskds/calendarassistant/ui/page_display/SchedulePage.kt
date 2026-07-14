@@ -43,10 +43,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.hasConfiguredSemesterAnchor
-import com.antgskds.calendarassistant.core.course.resolveSemesterAnchor
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.hasConfiguredSemesterAnchor
+import com.antgskds.calendarassistant.feature.schedule.domain.course.resolveSemesterAnchor
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.components.AppCard
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit

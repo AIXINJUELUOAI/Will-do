@@ -158,9 +158,9 @@ import com.antgskds.calendarassistant.core.rule.StatusColor
 import com.antgskds.calendarassistant.core.util.extractSourceImagePath
 import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
-import com.antgskds.calendarassistant.data.model.EventPatch
+import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus

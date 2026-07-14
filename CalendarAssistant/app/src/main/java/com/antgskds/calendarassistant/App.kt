@@ -69,7 +69,7 @@ import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
 import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
 import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
 import com.antgskds.calendarassistant.data.repository.SettingsRepository
-import com.antgskds.calendarassistant.feature.api.notification.data.SharedPreferencesNotificationRegistryStore
+import com.antgskds.calendarassistant.feature.notification.data.local.SharedPreferencesNotificationRegistryStore
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
 import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
 import com.antgskds.calendarassistant.core.center.CalendarCenter
@@ -216,8 +216,8 @@ class App : Application() {
         RecognitionCenter(domainEventBus = domainEventBus)
     }
 
-    private val regexAiReviewCoordinator: com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator by lazy {
-        com.antgskds.calendarassistant.core.rule.RegexAiReviewCoordinator(
+    private val regexAiReviewCoordinator: com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator by lazy {
+        com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator(
             appContext = applicationContext,
             scheduleCenter = scheduleCenter,
             appScope = appScope

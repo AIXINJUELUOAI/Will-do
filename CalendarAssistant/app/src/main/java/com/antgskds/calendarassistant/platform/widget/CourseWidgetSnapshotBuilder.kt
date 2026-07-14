@@ -3,10 +3,10 @@ package com.antgskds.calendarassistant.platform.widget
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.core.course.calculateSemesterWeek
-import com.antgskds.calendarassistant.core.course.currentWeekMonday
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.feature.schedule.domain.course.calculateSemesterWeek
+import com.antgskds.calendarassistant.feature.schedule.domain.course.currentWeekMonday
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.TimeNode
 import java.time.LocalDate

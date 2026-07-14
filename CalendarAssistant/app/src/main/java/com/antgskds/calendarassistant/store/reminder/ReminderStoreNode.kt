@@ -7,7 +7,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
 import com.antgskds.calendarassistant.calendar.models.Event

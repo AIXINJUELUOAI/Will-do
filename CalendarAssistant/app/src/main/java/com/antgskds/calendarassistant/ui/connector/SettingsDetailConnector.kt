@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiAction

@@ -15,9 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.ai.isTextRecognitionConfigReady
-import com.antgskds.calendarassistant.core.ai.textRecognitionConfigMissingMessage
+import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
+import com.antgskds.calendarassistant.feature.recognition.application.ai.isTextRecognitionConfigReady
+import com.antgskds.calendarassistant.feature.recognition.application.ai.textRecognitionConfigMissingMessage
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.contract.NoteEditorAnalysisOutcome

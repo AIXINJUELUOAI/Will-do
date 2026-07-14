@@ -8,8 +8,8 @@ import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangeOrigin
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangeType
 import com.antgskds.calendarassistant.core.event.events.ScheduleChangedEvent
-import com.antgskds.calendarassistant.core.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.core.operation.CalendarOperationApi
 import com.antgskds.calendarassistant.core.operation.OperationResult
 import com.antgskds.calendarassistant.core.query.CalendarQueryApi
@@ -113,7 +113,7 @@ class CalendarCenter private constructor(context: Context) : CalendarOperationAp
         .also { emitScheduleChanged(ScheduleChangeType.BULK, emptyList(), ScheduleChangeOrigin.SYNC) }
     override fun onSystemCalendarChanged() = dispatcher.onSystemCalendarChanged()
         .also { emitScheduleChanged(ScheduleChangeType.BULK, emptyList(), ScheduleChangeOrigin.SYNC) }
-    override fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.data.model.ScheduleDisplayItem>) = dispatcher.refreshNotificationsForWindow(items)
+    override fun refreshNotificationsForWindow(items: List<com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem>) = dispatcher.refreshNotificationsForWindow(items)
     fun reconcileNotificationsFromStore(windowDays: Long = 7L) = dispatcher.reconcileNotificationsFromStore(windowDays)
 
     // ── CalendarQueryApi ──

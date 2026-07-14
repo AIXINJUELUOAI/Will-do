@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.management.catalog
 
-import com.antgskds.calendarassistant.feature.api.notification.model.NotificationKind
+import com.antgskds.calendarassistant.feature.notification.model.NotificationKind
 
 /**
  * 通知类型登记清单（代码内台账，不暴露给 App 用户）。

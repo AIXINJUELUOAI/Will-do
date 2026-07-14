@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.contract
 
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import java.time.LocalDate
 
 data class ArchivesUiState(

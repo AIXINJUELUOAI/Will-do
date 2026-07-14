@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.ui.page_display
 
-import com.antgskds.calendarassistant.calendar.models.stubs.RecurringEventUtils
+import com.antgskds.calendarassistant.feature.schedule.presentation.RecurringEventUtils
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,19 +13,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.core.center.ClipboardCodePrompt
-import com.antgskds.calendarassistant.core.model.RecurringMode
-import com.antgskds.calendarassistant.core.ai.RecognitionFailureMessageMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
+import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.core.event.DomainEventType
 import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.HomeEntryKey
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -64,7 +64,7 @@ private data class RecurringEditSession(
 private data class RecurringEditCommitSession(
     val parentId: Long,
     val occurrenceTs: Long,
-    val patch: com.antgskds.calendarassistant.data.model.EventPatch,
+    val patch: com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch,
     val attachments: List<EventAttachment> = emptyList()
 )
 
@@ -201,7 +201,7 @@ fun HomeScreen(
 
     // 弹窗状态管理
     var showAddEventDialog by remember { mutableStateOf(false) }
-    var editDraft by remember { mutableStateOf<com.antgskds.calendarassistant.data.model.EditDraft?>(null) }
+    var editDraft by remember { mutableStateOf<com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft?>(null) }
     var editContext by remember { mutableStateOf<EditContext?>(null) }
     var eventToEdit by remember { mutableStateOf<Event?>(null) }
     var draftEventToAdd by remember { mutableStateOf<Event?>(null) }

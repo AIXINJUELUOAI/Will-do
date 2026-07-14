@@ -22,7 +22,7 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
+import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.data.model.WidgetScheduleEntry
 import com.antgskds.calendarassistant.data.model.WidgetScheduleSnapshot
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode

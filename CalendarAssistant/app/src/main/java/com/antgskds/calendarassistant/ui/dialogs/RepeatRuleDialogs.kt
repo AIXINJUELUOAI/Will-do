@@ -34,9 +34,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.model.RepeatEnd
-import com.antgskds.calendarassistant.core.model.RepeatFrequency
-import com.antgskds.calendarassistant.core.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.core.model.shortCn
 import com.antgskds.calendarassistant.ui.components.WheelDatePicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics

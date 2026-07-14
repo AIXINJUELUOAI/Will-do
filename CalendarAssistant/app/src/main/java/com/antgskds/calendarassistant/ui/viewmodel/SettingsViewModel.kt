@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.ui.viewmodel
 import android.content.Context
 import android.net.Uri
 import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarSyncManager
-import com.antgskds.calendarassistant.calendar.models.stubs.CalendarManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
+import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
 import com.antgskds.calendarassistant.calendar.models.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,7 +16,7 @@ import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseIm
 import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.core.center.SyncCenter
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
-import com.antgskds.calendarassistant.core.course.CourseEventMapper
+import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationCenter
 import com.antgskds.calendarassistant.core.note.LegacyNoteMigrationResult
