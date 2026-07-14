@@ -12,43 +12,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.note.NoteEntity
 import com.antgskds.calendarassistant.ui.components.NoteCard
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.ui.contract.NoteListUiAction
+import com.antgskds.calendarassistant.ui.contract.NoteListUiState
 
 @Composable
-fun NotePage(
-    viewModel: MainViewModel,
-    searchQuery: String = "",
+fun MaterialNoteListScreen(
+    state: NoteListUiState,
     extraBottomPadding: Dp = 0.dp,
-    onEditNote: (NoteEntity) -> Unit = {},
-    onPendingDeleteChange: (NoteEntity?) -> Unit = {},
-    hapticEnabled: Boolean = true
+    onAction: (NoteListUiAction) -> Unit
 ) {
-    val notes by viewModel.notes.collectAsState()
     val bottomSafePadding = 112.dp + extraBottomPadding
-    val filteredNotes = remember(notes, searchQuery) {
-        notes.filter { note ->
-            if (searchQuery.isBlank()) {
-                true
-            } else {
-                note.document().searchableText(note.title).contains(searchQuery, ignoreCase = true)
-            }
-        }
-    }
-    val pendingTaskCount = remember(filteredNotes) {
-        filteredNotes.sumOf { it.document().pendingTodoCount() }
-    }
 
-    if (filteredNotes.isEmpty()) {
+    if (state.items.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
                 modifier = Modifier.padding(horizontal = 28.dp),
@@ -56,11 +37,11 @@ fun NotePage(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = if (searchQuery.isBlank()) "还没有便签" else "未找到相关便签",
+                    text = if (state.searchQuery.isBlank()) "还没有便签" else "未找到相关便签",
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = if (searchQuery.isBlank()) {
+                    text = if (state.searchQuery.isBlank()) {
                         "试试用底部按钮记下一条想法、清单或临时备忘。"
                     } else {
                         "换个关键词，或者到编辑页里补充更明确的标题和正文。"
@@ -85,9 +66,9 @@ fun NotePage(
             item(key = "summary") {
                 Text(
                     text = buildNoteSummaryText(
-                        noteCount = filteredNotes.size,
-                        pendingTaskCount = pendingTaskCount,
-                        searchQuery = searchQuery
+                        noteCount = state.items.size,
+                        pendingTaskCount = state.pendingTaskCount,
+                        searchQuery = state.searchQuery
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -98,16 +79,16 @@ fun NotePage(
                 )
             }
 
-            items(filteredNotes, key = { it.id ?: 0L }) { note ->
+            items(state.items, key = { it.key }) { note ->
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     NoteCard(
                         note = note,
-                        onClick = { onEditNote(note) },
-                        onLongClick = { onPendingDeleteChange(note) },
+                        onClick = { onAction(NoteListUiAction.OpenNote(note.key)) },
+                        onLongClick = { onAction(NoteListUiAction.RequestDelete(note.key)) },
                         onToggleTodo = { paragraphId ->
-                            note.id?.let { viewModel.toggleNoteTodo(it, paragraphId) }
+                            onAction(NoteListUiAction.ToggleTodo(note.key, paragraphId))
                         },
-                        hapticEnabled = hapticEnabled
+                        hapticEnabled = state.hapticEnabled
                     )
                 }
             }
