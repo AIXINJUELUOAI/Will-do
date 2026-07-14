@@ -16,7 +16,7 @@ import com.antgskds.calendarassistant.core.query.AlarmRoute
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
+import com.antgskds.calendarassistant.platform.capsule.miui.MiuiIslandManager
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.ScheduleNormalDisplay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

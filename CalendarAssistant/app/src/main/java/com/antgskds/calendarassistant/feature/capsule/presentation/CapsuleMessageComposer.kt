@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule
+package com.antgskds.calendarassistant.feature.capsule.presentation
 
 import android.content.Context
 import com.antgskds.calendarassistant.core.content.EventCapsulePresenter
@@ -7,6 +7,9 @@ import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
+import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.RecognitionLiveDisplay
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.SystemLiveDisplay

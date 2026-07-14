@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule
+package com.antgskds.calendarassistant.platform.capsule.network
 
 import android.net.TrafficStats
 import kotlinx.coroutines.delay

@@ -88,7 +88,7 @@ object PipelineCatalog {
             "NotificationApi 请求 → NotificationCenter 分流 → Publisher 发布；目标迁为 NotificationOrchestrator",
         ),
         PipelineEntry(
-            "胶囊发布流程", Chain.NOTIFICATION, "service/capsule/CapsuleDispatcher",
+            "胶囊发布流程", Chain.NOTIFICATION, "platform/capsule/CapsuleDispatcher",
             Maturity.TRANSITION,
             "CapsuleStateManager 只算状态，发布交 CapsuleDispatcher 分流原生/魅族/小米超级岛",
         ),

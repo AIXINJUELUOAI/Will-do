@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule.provider
+package com.antgskds.calendarassistant.platform.capsule.provider
 
 import android.app.Notification
 import android.app.PendingIntent
@@ -14,8 +14,8 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
 import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.platform.capsule.render.CapsuleUiUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 

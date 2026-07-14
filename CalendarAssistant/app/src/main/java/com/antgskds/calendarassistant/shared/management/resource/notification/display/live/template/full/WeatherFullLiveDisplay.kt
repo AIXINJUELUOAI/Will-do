@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.shared.management.resource.notification.d
 
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.WeatherLiveDisplaySupport
 
 object WeatherFullLiveDisplay {

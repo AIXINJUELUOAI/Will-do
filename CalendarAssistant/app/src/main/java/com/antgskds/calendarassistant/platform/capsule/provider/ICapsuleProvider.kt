@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule.provider
+package com.antgskds.calendarassistant.platform.capsule.provider
 
 import android.app.Notification
 import android.content.Context

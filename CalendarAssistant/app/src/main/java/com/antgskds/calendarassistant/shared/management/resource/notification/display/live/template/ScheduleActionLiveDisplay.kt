@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template
 
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 
 object ScheduleActionLiveDisplay {
     fun actionItem(

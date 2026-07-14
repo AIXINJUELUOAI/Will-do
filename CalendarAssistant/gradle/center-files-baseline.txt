@@ -22,4 +22,4 @@ app/src/main/java/com/antgskds/calendarassistant/core/center/SyncCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/WidgetCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/note/LegacyNoteMigrationCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/quickmemo/audio/AudioPlaybackCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/service/capsule/NotificationTemplateCenter.kt
+app/src/main/java/com/antgskds/calendarassistant/feature/capsule/presentation/NotificationTemplateCenter.kt
