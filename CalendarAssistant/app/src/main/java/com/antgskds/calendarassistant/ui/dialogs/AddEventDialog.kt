@@ -50,6 +50,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelTimePickerDialog
+import com.antgskds.calendarassistant.ui.flavor.RepeatRulePickerDialog
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.motion.PredictiveBottomDialogHost
 import com.antgskds.calendarassistant.ui.theme.resolveEventColors
