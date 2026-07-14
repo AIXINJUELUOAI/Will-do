@@ -104,7 +104,7 @@ import com.antgskds.calendarassistant.ui.haptic.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.WeatherSettingsUiState
-import com.antgskds.calendarassistant.ui.flavor.WeatherSettingsScreen
+import com.antgskds.calendarassistant.feature.weather.ui.render.WeatherSettingsScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 

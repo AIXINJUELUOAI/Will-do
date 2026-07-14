@@ -26,7 +26,7 @@ import com.antgskds.calendarassistant.ui.contract.ArchivesDateGroupUi
 import com.antgskds.calendarassistant.ui.contract.ArchivesUiAction
 import com.antgskds.calendarassistant.ui.contract.ArchivesUiState
 import com.antgskds.calendarassistant.ui.event_display.SwipeableEventItem
-import com.antgskds.calendarassistant.ui.flavor.ArchivesScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.render.ArchivesScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import java.time.format.DateTimeFormatter
 

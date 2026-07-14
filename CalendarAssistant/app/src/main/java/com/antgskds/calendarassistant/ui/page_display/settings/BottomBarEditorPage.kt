@@ -62,7 +62,7 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.BottomBarEditorUiState
-import com.antgskds.calendarassistant.ui.flavor.BottomBarEditorScreen
+import com.antgskds.calendarassistant.feature.home.ui.render.BottomBarEditorScreen
 
 @Composable
 fun getHomeEntryIcon(key: String): Painter {

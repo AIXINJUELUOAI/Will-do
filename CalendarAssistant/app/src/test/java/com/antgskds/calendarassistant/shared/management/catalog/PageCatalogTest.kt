@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.management.catalog
 
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

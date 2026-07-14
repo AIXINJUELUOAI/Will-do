@@ -19,13 +19,13 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.ui.components.AppAlertDialog as AlertDialog
 import com.antgskds.calendarassistant.ui.components.AppCard as Card
 import com.antgskds.calendarassistant.ui.components.CenteredDialogTitle
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.WheelDatePickerDialog
 import com.antgskds.calendarassistant.ui.components.WheelPicker
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.contract.ScheduleSettingsUiAction
 import com.antgskds.calendarassistant.ui.contract.ScheduleSettingsUiState
-import com.antgskds.calendarassistant.ui.flavor.ScheduleSettingsScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleSettingsScreen
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit

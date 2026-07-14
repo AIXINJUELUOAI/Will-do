@@ -30,12 +30,12 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.core.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.ui.flavor.CourseEditDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseEditDialog
 import com.antgskds.calendarassistant.ui.dialogs.CourseItem
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.contract.CourseManagerUiAction
 import com.antgskds.calendarassistant.ui.contract.CourseManagerUiState
-import com.antgskds.calendarassistant.ui.flavor.CourseManagerContent
+import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseManagerContent
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable

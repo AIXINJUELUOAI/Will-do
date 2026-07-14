@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.calendar.models.EventTags
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiAction
 import com.antgskds.calendarassistant.ui.contract.PickupQrFloatingCardUiState
-import com.antgskds.calendarassistant.ui.flavor.PickupQrFloatingCardContent
+import com.antgskds.calendarassistant.platform.floating.ui.render.PickupQrFloatingCardContent
 
 @Composable
 fun PickupQrFloatingCardRoute(

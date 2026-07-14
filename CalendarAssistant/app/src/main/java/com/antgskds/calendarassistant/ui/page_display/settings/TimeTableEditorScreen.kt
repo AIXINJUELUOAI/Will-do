@@ -64,7 +64,7 @@ import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.TimeTableEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.TimeTableEditorUiState
-import com.antgskds.calendarassistant.ui.flavor.TimeTableEditorContent
+import com.antgskds.calendarassistant.feature.schedule.ui.render.TimeTableEditorContent
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

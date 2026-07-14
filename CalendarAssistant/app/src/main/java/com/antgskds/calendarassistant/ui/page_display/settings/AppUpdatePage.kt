@@ -44,7 +44,7 @@ import com.antgskds.calendarassistant.ui.contract.AppUpdateScreenState
 import com.antgskds.calendarassistant.ui.contract.AppUpdateSectionUi
 import com.antgskds.calendarassistant.ui.contract.AppUpdateUiAction
 import com.antgskds.calendarassistant.ui.contract.AppUpdateVersionUi
-import com.antgskds.calendarassistant.ui.flavor.AppUpdateScreen
+import com.antgskds.calendarassistant.feature.update.ui.render.AppUpdateScreen
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable

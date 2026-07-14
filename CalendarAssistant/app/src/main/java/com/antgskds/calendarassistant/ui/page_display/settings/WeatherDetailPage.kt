@@ -73,8 +73,8 @@ import com.antgskds.calendarassistant.data.model.displayLocationName
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiAction
 import com.antgskds.calendarassistant.ui.contract.WeatherDetailUiState
-import com.antgskds.calendarassistant.ui.flavor.WeatherDetailPageContent
-import com.antgskds.calendarassistant.ui.flavor.WeatherDetailScreenContent
+import com.antgskds.calendarassistant.feature.weather.ui.render.WeatherDetailPageContent
+import com.antgskds.calendarassistant.feature.weather.ui.render.WeatherDetailScreenContent
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import java.time.LocalDate
 import java.time.OffsetDateTime

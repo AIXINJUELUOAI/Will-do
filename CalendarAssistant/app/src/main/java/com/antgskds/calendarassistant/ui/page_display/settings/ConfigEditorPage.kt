@@ -39,7 +39,7 @@ import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.components.AppSettingsCard
 import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.ConfigEditorUiState
-import com.antgskds.calendarassistant.ui.flavor.ConfigEditorScreen
+import com.antgskds.calendarassistant.feature.settings.developer.ui.render.ConfigEditorScreen
 
 /**
  * 配置编辑页 —— 完全由 [ConfigCatalog] 驱动。

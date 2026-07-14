@@ -38,7 +38,7 @@ import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.BackupUiController
 import com.antgskds.calendarassistant.ui.connector.BackupUiControllerAdapter
-import com.antgskds.calendarassistant.ui.flavor.BackupSettingsScreen
+import com.antgskds.calendarassistant.feature.backup.ui.render.BackupSettingsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

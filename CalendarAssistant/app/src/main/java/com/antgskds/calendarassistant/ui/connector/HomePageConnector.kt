@@ -10,8 +10,8 @@ import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
 import com.antgskds.calendarassistant.data.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.ui.contract.HomePageUiState
-import com.antgskds.calendarassistant.ui.flavor.HomePageScreen
-import com.antgskds.calendarassistant.ui.flavor.ScheduleView
+import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleView
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 
 @Composable

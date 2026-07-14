@@ -38,7 +38,7 @@ import com.antgskds.calendarassistant.core.rule.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.ui.components.AppCard
 import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiAction
 import com.antgskds.calendarassistant.ui.contract.RegexRuleEditorUiState
-import com.antgskds.calendarassistant.ui.flavor.RegexRuleEditorScreen
+import com.antgskds.calendarassistant.feature.recognition.ui.render.RegexRuleEditorScreen
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

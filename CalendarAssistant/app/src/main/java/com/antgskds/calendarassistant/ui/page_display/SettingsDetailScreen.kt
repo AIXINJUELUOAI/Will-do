@@ -37,15 +37,15 @@ import androidx.navigation.compose.rememberNavController
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiAction
 import com.antgskds.calendarassistant.ui.contract.SettingsDetailUiState
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.layout.PushSlideLayout
-import com.antgskds.calendarassistant.ui.navigation.navBackwardEnterTransition
-import com.antgskds.calendarassistant.ui.navigation.navBackwardExitTransition
-import com.antgskds.calendarassistant.ui.navigation.navForwardEnterTransition
-import com.antgskds.calendarassistant.ui.navigation.navForwardExitTransition
+import com.antgskds.calendarassistant.app.ui.navigation.navBackwardEnterTransition
+import com.antgskds.calendarassistant.app.ui.navigation.navBackwardExitTransition
+import com.antgskds.calendarassistant.app.ui.navigation.navForwardEnterTransition
+import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.ui.page_display.settings.AppBackgroundStyleTheme
 
 private fun NavGraphBuilder.settingsPageComposable(

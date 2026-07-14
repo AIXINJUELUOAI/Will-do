@@ -52,7 +52,7 @@ import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.haptic.rememberAppHaptics
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import com.antgskds.calendarassistant.ui.contract.*
-import com.antgskds.calendarassistant.ui.flavor.DeveloperScreen
+import com.antgskds.calendarassistant.feature.settings.developer.ui.render.DeveloperScreen
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException

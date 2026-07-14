@@ -40,15 +40,15 @@ import com.antgskds.calendarassistant.ui.components.IntegratedFloatingBarVisualH
 import com.antgskds.calendarassistant.ui.components.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.ui.contract.HomeShellUiAction
 import com.antgskds.calendarassistant.ui.contract.HomeShellUiState
-import com.antgskds.calendarassistant.ui.contract.SettingsDestination
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.ui.components.SettingsSidebar
 import com.antgskds.calendarassistant.ui.components.ToastType
 import com.antgskds.calendarassistant.ui.components.UniversalToast
 import com.antgskds.calendarassistant.ui.connector.HomePageRoute
 import com.antgskds.calendarassistant.ui.dialogs.*
-import com.antgskds.calendarassistant.ui.flavor.AddEventDialog
-import com.antgskds.calendarassistant.ui.flavor.CourseSingleEditDialog
-import com.antgskds.calendarassistant.ui.flavor.HomeScreenContent
+import com.antgskds.calendarassistant.feature.schedule.ui.render.AddEventDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseSingleEditDialog
+import com.antgskds.calendarassistant.feature.home.ui.render.HomeScreenContent
 import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
 import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
 import java.time.LocalDate
@@ -460,7 +460,7 @@ fun HomeScreen(
                 onRequestDeleteItem = { item -> requestDeleteItem(item) },
                 onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
                 onCreateNote = {
-                    onOpenNoteEditor(com.antgskds.calendarassistant.ui.navigation.AppRoutes.NoteEditorNewArg)
+                    onOpenNoteEditor(com.antgskds.calendarassistant.app.ui.navigation.AppRoutes.NoteEditorNewArg)
                 },
                 onRequestDeleteNote = { note -> selectedNoteAction = note },
                 onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },

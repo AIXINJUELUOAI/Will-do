@@ -17,7 +17,7 @@ import com.antgskds.calendarassistant.core.util.DensityConfigManager
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.model.WidgetThemeMode
 import com.antgskds.calendarassistant.ui.theme.ThemeColorGenerator
-import com.antgskds.calendarassistant.ui.theme.ThemeColorScheme
+import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.ui.theme.parseThemeHexColor
 import kotlin.math.roundToInt
 

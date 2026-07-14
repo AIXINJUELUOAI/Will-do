@@ -71,7 +71,7 @@ import com.antgskds.calendarassistant.platform.widget.WidgetInstanceConfigStore
 import com.antgskds.calendarassistant.platform.widget.WidgetType
 import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiAction
 import com.antgskds.calendarassistant.ui.contract.WidgetSettingsUiState
-import com.antgskds.calendarassistant.ui.flavor.WidgetSettingsScreen
+import com.antgskds.calendarassistant.platform.widget.ui.render.WidgetSettingsScreen
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
