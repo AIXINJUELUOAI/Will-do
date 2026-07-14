@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.recognition.application.ingest
 
 import android.util.Log
 import com.antgskds.calendarassistant.core.event.DomainEventBus
@@ -9,6 +9,7 @@ import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
 import com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator
 import com.antgskds.calendarassistant.core.operation.IngestCommandApi
+import com.antgskds.calendarassistant.core.center.NotificationCenter
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
@@ -19,8 +20,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-class ContentIngestCenter(
-    private val importCenter: ImportCenter,
+class IngestPipeline(
+    private val importCenter: ScheduleIngestWriter,
     private val domainEventBus: DomainEventBus,
     private val appScope: CoroutineScope,
     private val notificationCenter: NotificationCenter? = null,
@@ -62,7 +63,7 @@ class ContentIngestCenter(
                         is RecognizedIngestTask -> processRecognizedTask(task)
                     }
                 } catch (e: Exception) {
-                    Log.e("ContentIngestCenter", "处理入库任务失败", e)
+                    Log.e("IngestPipeline", "处理入库任务失败", e)
                     when (task) {
                         is SmsIngestTask -> {
                             task.result.completeExceptionally(e)
@@ -101,14 +102,14 @@ class ContentIngestCenter(
                     val payload = event.payload
                     if (!payload.ingestRequested || payload.candidates.isEmpty()) {
                         Log.d(
-                            "ContentIngestCenter",
+            "IngestPipeline",
                             "跳过识别结果入库: ingestRequested=${payload.ingestRequested}, candidates=${payload.candidates.size}"
                         )
                         return@collect
                     }
 
                     Log.d(
-                        "ContentIngestCenter",
+            "IngestPipeline",
                         "收到识别结果准备入库: candidates=${payload.candidates.size}, traceId=${event.traceId}"
                     )
 
@@ -205,7 +206,7 @@ class ContentIngestCenter(
 
     private suspend fun processRecognizedTask(task: RecognizedIngestTask) {
         Log.d(
-            "ContentIngestCenter",
+            "IngestPipeline",
             "开始入库识别结果: events=${task.events.size}, sourceType=${task.sourceType}, traceId=${task.traceId}"
         )
         val created = importCenter.ingestRecognizedEvents(task.events, task.sourceImagePath)
@@ -214,7 +215,7 @@ class ContentIngestCenter(
         val dedupedCount = (task.events.size - created.size).coerceAtLeast(0)
         if (created.isNotEmpty()) {
             Log.d(
-                "ContentIngestCenter",
+            "IngestPipeline",
                 "识别结果入库成功: created=${created.size}, deduped=$dedupedCount, traceId=${task.traceId}"
             )
             emitIngestSucceeded(
@@ -229,7 +230,7 @@ class ContentIngestCenter(
             notificationCenter?.showCreatedEventResultNotifications(task.sourceType, created)
         } else {
             Log.d(
-                "ContentIngestCenter",
+            "IngestPipeline",
                 "识别结果未入库: candidates=${task.events.size}, traceId=${task.traceId}"
             )
             emitIngestFailed(

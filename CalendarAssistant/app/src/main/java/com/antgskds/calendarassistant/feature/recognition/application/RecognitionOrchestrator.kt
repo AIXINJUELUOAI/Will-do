@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.recognition.application
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,7 +13,7 @@ import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionMultimodalNode
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionOcrNode
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionTextNode
-class RecognitionCenter(
+class RecognitionOrchestrator(
     private val domainEventBus: DomainEventBus
 ) : com.antgskds.calendarassistant.core.operation.RecognitionApi {
     override suspend fun recognizeText(bitmap: Bitmap): String {

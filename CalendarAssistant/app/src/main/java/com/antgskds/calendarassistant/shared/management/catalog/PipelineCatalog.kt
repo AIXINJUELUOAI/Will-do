@@ -57,7 +57,7 @@ object PipelineCatalog {
     val pipelines: List<PipelineEntry> = listOf(
         // —— 识别 ——
         PipelineEntry(
-            "识别主流程", Chain.RECOGNITION, "core/center/RecognitionCenter",
+            "识别主流程", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator",
             Maturity.TRANSITION,
             "所有识别入口（截图/图片/文本/语音）统一走 RecognitionApi → 输出 AnalysisResult<RecognitionDraft>",
         ),
@@ -69,7 +69,7 @@ object PipelineCatalog {
 
         // —— 入库 ——
         PipelineEntry(
-            "内容入库主流程", Chain.INGEST, "core/center/ContentIngestCenter",
+            "内容入库主流程", Chain.INGEST, "feature/recognition/application/ingest/IngestPipeline",
             Maturity.TRANSITION,
             "识别结果/短信/导入经 Actor/Channel 雏形 pipeline 去重转换写库；目标迁为正式 IngestPipeline",
         ),

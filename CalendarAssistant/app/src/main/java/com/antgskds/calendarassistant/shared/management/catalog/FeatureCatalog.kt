@@ -43,15 +43,15 @@ object FeatureCatalog {
 
     val features: List<FeatureEntry> = listOf(
         // —— 识别 ——
-        FeatureEntry("AI 识别", Chain.RECOGNITION, "core/center/RecognitionCenter", "截图/图片/文本/语音 → OCR/多模态/文本解析 → 日程草稿"),
+        FeatureEntry("AI 识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "截图/图片/文本/语音 → OCR/多模态/文本解析 → 日程草稿"),
         FeatureEntry("正则日程识别", Chain.RECOGNITION, "data/node/recognition/RecognitionRegexNode", "文本/语音转写先走可配置正则规则生成日程草稿"),
         FeatureEntry("随口记", Chain.RECOGNITION, "core/service/voice/VoiceCaptureHandleActivity", "长按音量+或悬浮窗入口录音，转写为随口记/识别输入"),
         FeatureEntry("短信取件码", Chain.RECOGNITION, "core/sms/SmsPickupIngestCoordinator", "监听短信、本地解析取件码"),
-        FeatureEntry("剪贴板识别", Chain.RECOGNITION, "core/center/ClipboardCodeCenter", "剪贴板取件码识别"),
+        FeatureEntry("剪贴板识别", Chain.RECOGNITION, "feature/recognition/ingest/clipboard/ClipboardCodeIngestCoordinator", "剪贴板取件码识别"),
 
         // —— 入库 ——
-        FeatureEntry("内容入库", Chain.INGEST, "core/center/ContentIngestCenter", "识别结果/短信/导入 → 去重转换 → 写库主线"),
-        FeatureEntry("日程导入", Chain.INGEST, "core/center/ImportCenter", "各来源草稿转 Event、本地去重写库"),
+        FeatureEntry("内容入库", Chain.INGEST, "feature/recognition/application/ingest/IngestPipeline", "识别结果/短信/导入 → 去重转换 → 写库主线"),
+        FeatureEntry("日程导入", Chain.INGEST, "feature/recognition/application/ingest/ScheduleIngestWriter", "各来源草稿转 Event、本地去重写库"),
 
         // —— 同步 ——
         FeatureEntry("系统日历同步", Chain.SYNC, "core/center/SyncCenter", "本地日程 ↔ 系统日历双向同步"),

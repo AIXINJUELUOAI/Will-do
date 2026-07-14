@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.recognition.application.ingest
 
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
@@ -6,13 +6,14 @@ import com.antgskds.calendarassistant.core.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.core.query.SettingsQueryApi
 import com.antgskds.calendarassistant.core.sms.SmsPickupFingerprint
+import com.antgskds.calendarassistant.core.center.ScheduleCenter
 import com.antgskds.calendarassistant.calendar.models.Event
 import com.antgskds.calendarassistant.calendar.models.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
-class ImportCenter(
+class ScheduleIngestWriter(
     private val scheduleCenter: ScheduleCenter,
     private val settingsQueryApi: SettingsQueryApi,
     private val attachmentManager: EventAttachmentManager

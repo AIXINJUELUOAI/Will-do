@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.core.center
+package com.antgskds.calendarassistant.feature.recognition.ingest.clipboard
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -39,7 +39,7 @@ private data class ClipboardInstance(
     var lastSeenElapsed: Long
 )
 
-class ClipboardCodeCenter(
+class ClipboardCodeIngestCoordinator(
     private val appContext: Context,
     private val settingsQueryApi: SettingsQueryApi,
     private val ingestCommandApi: IngestCommandApi,
@@ -324,7 +324,7 @@ class ClipboardCodeCenter(
     }
 
     private companion object {
-        private const val TAG = "ClipboardCodeCenter"
+        private const val TAG = "ClipboardIngest"
         private const val ENTRY_TTL_MS = 10 * 60 * 1000L
         private const val FAILED_TTL_MS = 15 * 1000L
         private const val INSTANCE_REUSE_MS = 5 * 1000L
