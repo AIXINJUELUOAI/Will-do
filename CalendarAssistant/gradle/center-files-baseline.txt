@@ -16,7 +16,6 @@ app/src/main/java/com/antgskds/calendarassistant/core/center/PermissionCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/QuickMemoCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/RecognitionCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/ReminderCenter.kt
-app/src/main/java/com/antgskds/calendarassistant/core/center/RuleCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/RuntimeCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/ScheduleCenter.kt
 app/src/main/java/com/antgskds/calendarassistant/core/center/SyncCenter.kt
