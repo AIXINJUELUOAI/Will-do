@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.data.state
 
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 
 sealed class CapsuleUiState {
 

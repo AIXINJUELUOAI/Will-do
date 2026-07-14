@@ -8,9 +8,9 @@ import com.antgskds.calendarassistant.calendar.models.*
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
-import com.antgskds.calendarassistant.service.capsule.NotificationTemplateCenter
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateCenter
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import java.time.LocalDate
 import java.time.LocalDateTime

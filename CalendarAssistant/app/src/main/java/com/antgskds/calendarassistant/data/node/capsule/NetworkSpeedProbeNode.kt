@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.data.node.capsule
 
-import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 import kotlinx.coroutines.flow.Flow
 
 object NetworkSpeedProbeNode {

@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule
+package com.antgskds.calendarassistant.platform.capsule
 
 import android.app.NotificationManager
 import android.content.Context
@@ -10,10 +10,11 @@ import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.data.model.MySettings
 import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.miui.MiuiIslandManager
-import com.antgskds.calendarassistant.service.capsule.provider.FlymeCapsuleProvider
-import com.antgskds.calendarassistant.service.capsule.provider.ICapsuleProvider
-import com.antgskds.calendarassistant.service.capsule.provider.NativeCapsuleProvider
+import com.antgskds.calendarassistant.platform.capsule.miui.MiuiIslandManager
+import com.antgskds.calendarassistant.platform.capsule.provider.FlymeCapsuleProvider
+import com.antgskds.calendarassistant.platform.capsule.provider.ICapsuleProvider
+import com.antgskds.calendarassistant.platform.capsule.provider.NativeCapsuleProvider
+import com.antgskds.calendarassistant.platform.capsule.render.IconUtils
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.xposed.XposedModuleStatus
 import kotlinx.coroutines.CoroutineScope

@@ -28,7 +28,7 @@
 业务层**不要**直接 `NotificationManager.notify()` 或建 `NotificationCompat.Builder`。
 - 普通通知：经 `feature/api/notification`（NotificationApi）→ `NotificationCenter` → `platform/notification` 的 Publisher。
 - 日程提醒：单次/重复/错过补发都走 `core/center/ScheduleNotificationBridge` → NotificationApi，已统一，勿走旧 `NotificationScheduler` 排普通提醒（它现在只排胶囊闹钟）。
-- 胶囊（实况通知）：`CapsuleStateManager` 只算状态，发布交 `service/capsule/CapsuleDispatcher`（内部分流原生/魅族/小米超级岛）。小米超级岛走 Xposed/SystemUI 跨进程，是底层 transport 例外。
+- 胶囊（实况通知）：`CapsuleStateManager` 只算状态，发布交 `platform/capsule/CapsuleDispatcher`（内部分流原生/魅族/小米超级岛）。小米超级岛走 Xposed/SystemUI 跨进程，是底层 transport 例外。
 - 通知「展示模板层」(`shared/management/resource/notification/display/`) 禁止 import NotificationManager/Compat/Builder/PendingIntent/Repository/Room/*Center（守卫 `TEMPLATE_NO_*` 强制）。
 
 ## 主链路：入口可多，主流程一条（同类能力统一入口）

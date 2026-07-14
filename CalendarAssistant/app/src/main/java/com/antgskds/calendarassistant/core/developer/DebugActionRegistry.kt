@@ -20,11 +20,11 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.query.DailySummaryPayload
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.ScheduleNormalDisplay
 import java.time.LocalDate
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureDisplay
-import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import com.antgskds.calendarassistant.shared.management.catalog.NotificationKindCatalog
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog

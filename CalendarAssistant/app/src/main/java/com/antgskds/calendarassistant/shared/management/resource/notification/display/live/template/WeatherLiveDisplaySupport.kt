@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.shared.management.resource.notification.d
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherWarningText
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter

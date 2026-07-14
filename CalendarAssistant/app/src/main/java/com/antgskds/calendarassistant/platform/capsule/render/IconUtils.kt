@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule
+package com.antgskds.calendarassistant.platform.capsule.render
 
 import android.content.Context
 import com.antgskds.calendarassistant.R

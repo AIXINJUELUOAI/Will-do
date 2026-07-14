@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi
 
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

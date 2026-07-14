@@ -8,7 +8,7 @@ import com.antgskds.calendarassistant.data.state.CapsuleType
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 
 data class FlymeLiveNotificationContent(
     val title: String,

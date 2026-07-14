@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule.miui
+package com.antgskds.calendarassistant.platform.capsule.miui
 
 import android.app.PendingIntent
 import android.content.Context
@@ -13,8 +13,8 @@ import com.antgskds.calendarassistant.core.util.OsUtils
 import com.antgskds.calendarassistant.core.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
 import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.service.capsule.CapsuleUiUtils
-import com.antgskds.calendarassistant.service.capsule.IconUtils
+import com.antgskds.calendarassistant.platform.capsule.render.CapsuleUiUtils
+import com.antgskds.calendarassistant.platform.capsule.render.IconUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveNotificationTemplate

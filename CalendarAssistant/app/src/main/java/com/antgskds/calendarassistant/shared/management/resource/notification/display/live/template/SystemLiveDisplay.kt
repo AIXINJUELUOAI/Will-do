@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template
 
-import com.antgskds.calendarassistant.service.capsule.CapsuleDisplayModel
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 
 object SystemLiveDisplay {
     private const val PRIMARY_TITLE_MAX_CHARS = 11

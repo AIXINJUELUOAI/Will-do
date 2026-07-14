@@ -1,4 +1,4 @@
-package com.antgskds.calendarassistant.service.capsule
+package com.antgskds.calendarassistant.feature.capsule.domain
 
 data class CapsuleActionSpec(
     val label: String,

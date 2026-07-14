@@ -5,8 +5,8 @@ import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.data.model.WeatherAlertData
 import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.service.capsule.CapsuleActionSpec
-import com.antgskds.calendarassistant.service.capsule.NetworkSpeedMonitor
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 
 class CapsuleCenter(
     private val capsuleCommandApi: CapsuleCommandApi,
