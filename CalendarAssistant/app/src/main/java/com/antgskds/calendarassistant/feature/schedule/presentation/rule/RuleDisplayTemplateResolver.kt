@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.schedule.presentation.rule
 
 import android.content.Context
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
+import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleActionDefaults
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine

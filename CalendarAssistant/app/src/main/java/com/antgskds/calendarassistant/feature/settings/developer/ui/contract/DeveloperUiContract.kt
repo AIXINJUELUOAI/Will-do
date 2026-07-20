@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.contract
 
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 data class DeveloperActionUi(val id: String, val label: String, val category: String, val dangerous: Boolean)
 data class DeveloperUiState(val settings: MySettings, val actions: List<DeveloperActionUi>)
@@ -20,4 +20,6 @@ sealed interface DeveloperUiAction {
     data object ResetListOrder : DeveloperUiAction
     data object OpenConfig : DeveloperUiAction
     data object OpenRegexRules : DeveloperUiAction
+    data object OpenOnboardingGuide : DeveloperUiAction
+    data object OpenOnboardingLiveCapsuleDemo : DeveloperUiAction
 }

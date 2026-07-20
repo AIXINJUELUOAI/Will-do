@@ -11,7 +11,7 @@ import com.antgskds.calendarassistant.feature.schedule.ui.contract.AllEventsDate
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.AllEventsUiAction
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.AllEventsUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.AllEventsScreen
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime
 

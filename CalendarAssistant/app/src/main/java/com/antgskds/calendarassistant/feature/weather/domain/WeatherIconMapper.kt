@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
-import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 
 object WeatherIconMapper {
     fun iconRes(data: WeatherData): Int {

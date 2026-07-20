@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.note.application
 
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
-import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

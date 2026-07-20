@@ -20,6 +20,8 @@ enum class SettingsDestination {
     Laboratory,
     Developer,
     ConfigEditor,
+    OnboardingGuide,
+    OnboardingLiveCapsuleDemo,
     RegexRuleEditor,
     BottomBarEditor,
     WidgetSettings

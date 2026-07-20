@@ -12,8 +12,8 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
-import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.platform.capsule.render.CapsuleUiUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver

@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.platform.widget
 
-import com.antgskds.calendarassistant.data.model.WidgetThemeMode
+import com.antgskds.calendarassistant.platform.widget.model.WidgetThemeMode
 
 enum class WidgetType(val storageKey: String, val displayName: String) {
     SCHEDULE("schedule", "日程小组件"),

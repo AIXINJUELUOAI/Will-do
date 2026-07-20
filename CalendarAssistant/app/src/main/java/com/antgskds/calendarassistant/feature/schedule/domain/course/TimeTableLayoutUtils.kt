@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.schedule.domain.course
 
-import com.antgskds.calendarassistant.data.model.TimeNode
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeNode
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString

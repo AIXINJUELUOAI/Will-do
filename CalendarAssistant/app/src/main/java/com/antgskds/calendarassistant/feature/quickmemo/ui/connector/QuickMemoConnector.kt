@@ -9,17 +9,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoDetailUiState
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoListUiState
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoUiAction
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailScreen
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoScreen
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 
 private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
 
@@ -125,6 +125,7 @@ private fun handleQuickMemoAction(
     when (action) {
         is QuickMemoUiAction.OpenDetail -> onOpenDetail(action.memoId)
         is QuickMemoUiAction.RequestDelete -> onPendingDeleteChange(action.memo)
+        is QuickMemoUiAction.Delete -> viewModel.deleteQuickMemo(action.memoId)
         is QuickMemoUiAction.ToggleTodoCompletion -> viewModel.toggleQuickMemoTodoCompletion(action.memoId)
         is QuickMemoUiAction.MarkTodo -> viewModel.markQuickMemoTodo(action.memoId)
         is QuickMemoUiAction.RemoveTodo -> viewModel.removeQuickMemoTodo(action.memoId)

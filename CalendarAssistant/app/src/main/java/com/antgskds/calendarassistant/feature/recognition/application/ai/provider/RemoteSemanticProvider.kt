@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionProcessor
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 object RemoteSemanticProvider : SemanticProvider {
     override suspend fun parseUserText(

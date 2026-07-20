@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
 import com.antgskds.calendarassistant.feature.note.domain.model.plainTextContent
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteListItemUiModel
@@ -15,7 +15,7 @@ import com.antgskds.calendarassistant.feature.note.ui.contract.NoteListUiState
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteTaskPreviewUiModel
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteTextSpanUiModel
 import com.antgskds.calendarassistant.feature.note.ui.render.NoteListScreen
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 
 internal data class NoteListConnection(
     val state: NoteListUiState,

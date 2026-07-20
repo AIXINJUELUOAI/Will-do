@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.home.ui.contract
 
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 import java.time.LocalDate
 
 data class HomePageUiState(

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.RecognitionMode
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
 
 data class AiModelConfig(
     val key: String,

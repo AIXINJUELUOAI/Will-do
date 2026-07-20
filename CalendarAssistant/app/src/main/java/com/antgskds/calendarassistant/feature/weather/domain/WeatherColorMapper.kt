@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
 import androidx.compose.ui.graphics.Color
-import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 
 object WeatherColorMapper {
     fun gradient(data: WeatherData): List<Color> {

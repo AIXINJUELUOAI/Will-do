@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.capsule.presentation
 
-import com.antgskds.calendarassistant.core.util.OsUtils
-import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.shared.util.OsUtils
+import com.antgskds.calendarassistant.feature.settings.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.ScheduleActionLiveDisplay

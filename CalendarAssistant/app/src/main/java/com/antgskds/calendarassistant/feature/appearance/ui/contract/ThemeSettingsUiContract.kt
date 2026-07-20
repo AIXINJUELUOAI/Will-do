@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.appearance.ui.contract
 
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 data class ThemeSettingsUiState(val settings: MySettings, val isBackgroundImporting: Boolean)
 

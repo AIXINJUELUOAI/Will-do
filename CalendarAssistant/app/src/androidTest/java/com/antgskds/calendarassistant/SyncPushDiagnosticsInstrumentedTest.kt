@@ -5,10 +5,10 @@ import android.content.pm.PackageManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.content.ContextCompat
-import com.antgskds.calendarassistant.calendar.helpers.CalendarConfig
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.store.SyncLoopGuard
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.CalendarConfig
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.data.store.SyncLoopGuard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNotNull

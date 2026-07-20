@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.domain.rule
 
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import kotlinx.serialization.Serializable
 
 @Serializable

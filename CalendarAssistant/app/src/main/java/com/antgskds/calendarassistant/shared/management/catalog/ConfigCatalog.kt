@@ -1,10 +1,10 @@
 package com.antgskds.calendarassistant.shared.management.catalog
 
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
-import com.antgskds.calendarassistant.data.model.FloatingEntryStyle
-import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
-import com.antgskds.calendarassistant.data.model.RecognitionMode
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
+import com.antgskds.calendarassistant.feature.settings.data.model.FloatingEntryStyle
+import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
+import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
 
 /**
  * 配置目录（catalog）—— 可调配置项的唯一声明清单。
@@ -285,7 +285,7 @@ object ConfigCatalog {
             domain = ConfigDomain.VOICE,
             kind = ConfigKind.USER_SETTING,
             key = "voice.floating_text_quick_memo.auto_pin_enabled",
-            label = "悬浮窗文本随口记同步挂起",
+            label = "文本随口记同步挂起",
             description = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知。",
             exposure = ConfigExposure.USER_EDITABLE,
             control = ConfigControl.Toggle,

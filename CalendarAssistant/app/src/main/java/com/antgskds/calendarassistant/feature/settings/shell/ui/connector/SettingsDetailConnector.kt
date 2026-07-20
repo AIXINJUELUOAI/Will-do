@@ -7,31 +7,33 @@ import androidx.compose.runtime.remember
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
+import com.antgskds.calendarassistant.feature.appearance.ui.connector.ThemeSettingsPage
+import com.antgskds.calendarassistant.feature.backup.ui.connector.BackupSettingsPage
+import com.antgskds.calendarassistant.feature.home.ui.connector.BottomBarEditorPage
+import com.antgskds.calendarassistant.feature.recognition.ui.connector.AiSettingsPage
+import com.antgskds.calendarassistant.feature.recognition.ui.connector.RegexRuleEditorPage
+import com.antgskds.calendarassistant.feature.schedule.ui.connector.ArchivesPage
+import com.antgskds.calendarassistant.feature.schedule.ui.connector.CourseManagerScreen
+import com.antgskds.calendarassistant.feature.schedule.ui.connector.ScheduleColorSettingsPage
+import com.antgskds.calendarassistant.feature.schedule.ui.connector.ScheduleSettingsPage
+import com.antgskds.calendarassistant.feature.schedule.ui.connector.TimeTableEditorScreen
+import com.antgskds.calendarassistant.feature.settings.about.ui.connector.DonatePage
+import com.antgskds.calendarassistant.feature.settings.developer.ui.connector.ConfigEditorPage
+import com.antgskds.calendarassistant.feature.settings.developer.ui.connector.DeveloperPage
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector.LaboratoryPage
+import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
+import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingLiveCapsuleDemoPage
+import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSettingsPage
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiAction
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiState
 import com.antgskds.calendarassistant.feature.settings.shell.ui.render.SettingsDetailScreenContent
 import com.antgskds.calendarassistant.feature.settings.about.ui.connector.AboutPage
-import com.antgskds.calendarassistant.ui.page_display.settings.AiSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.AppUpdatePage
-import com.antgskds.calendarassistant.ui.page_display.settings.ArchivesPage
-import com.antgskds.calendarassistant.ui.page_display.settings.BackupSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.BottomBarEditorPage
-import com.antgskds.calendarassistant.ui.page_display.settings.ConfigEditorPage
-import com.antgskds.calendarassistant.ui.page_display.settings.CourseManagerScreen
-import com.antgskds.calendarassistant.ui.page_display.settings.DeveloperPage
-import com.antgskds.calendarassistant.ui.page_display.settings.DonatePage
-import com.antgskds.calendarassistant.ui.page_display.settings.LaboratoryPage
-import com.antgskds.calendarassistant.ui.page_display.settings.PreferenceSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.RegexRuleEditorPage
-import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleColorSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.ScheduleSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.ThemeSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.TimeTableEditorScreen
-import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailPage
-import com.antgskds.calendarassistant.ui.page_display.settings.WeatherSettingsPage
-import com.antgskds.calendarassistant.ui.page_display.settings.WidgetSettingsPage
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.feature.update.ui.connector.AppUpdatePage
+import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherDetailPage
+import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherSettingsPage
+import com.antgskds.calendarassistant.platform.widget.ui.connector.WidgetSettingsPage
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 
 @Composable
 fun SettingsDetailRoute(
@@ -110,7 +112,7 @@ private fun SettingsPageRouteContent(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
     uiSize: Int,
-    rawEvents: List<com.antgskds.calendarassistant.calendar.models.Event>,
+    rawEvents: List<com.antgskds.calendarassistant.feature.schedule.domain.model.Event>,
     onNavigateTo: (SettingsDestination) -> Unit,
     onNavigateRoute: (String) -> Unit,
 ) {
@@ -173,9 +175,17 @@ private fun SettingsPageRouteContent(
             uiSize = uiSize,
             onNavigateToConfig = { onNavigateTo(SettingsDestination.ConfigEditor) },
             onNavigateToRegexRules = { onNavigateTo(SettingsDestination.RegexRuleEditor) },
+            onNavigateToOnboardingGuide = { onNavigateTo(SettingsDestination.OnboardingGuide) },
+            onNavigateToOnboardingLiveCapsuleDemo = { onNavigateTo(SettingsDestination.OnboardingLiveCapsuleDemo) },
         )
 
         SettingsDestination.ConfigEditor -> ConfigEditorPage(uiSize = uiSize)
+        SettingsDestination.OnboardingGuide -> OnboardingGuidePage(
+            settingsViewModel = settingsViewModel,
+            uiSize = uiSize,
+            onImportConfig = { onNavigateTo(SettingsDestination.Backup) },
+        )
+        SettingsDestination.OnboardingLiveCapsuleDemo -> OnboardingLiveCapsuleDemoPage(uiSize = uiSize)
         SettingsDestination.RegexRuleEditor -> RegexRuleEditorPage(uiSize = uiSize)
         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
             settingsViewModel = settingsViewModel,

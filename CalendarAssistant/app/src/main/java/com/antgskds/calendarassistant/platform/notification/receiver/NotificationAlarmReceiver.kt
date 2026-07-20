@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.core.developer.DebugActionRegistry
+import com.antgskds.calendarassistant.feature.settings.developer.application.DebugActionRegistry
 import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
 import com.antgskds.calendarassistant.feature.notification.model.NotificationTrigger
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
@@ -21,6 +21,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
             Log.w(TAG, "Notification alarm received without key")
             return
         }
+        Log.d("WillDoNotify", "alarm received key=$key")
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {

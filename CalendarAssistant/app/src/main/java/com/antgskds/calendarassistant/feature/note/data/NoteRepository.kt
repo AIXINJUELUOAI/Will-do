@@ -2,12 +2,12 @@ package com.antgskds.calendarassistant.feature.note.data
 
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocumentCodec
-import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteListStyle
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraph
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphStyle
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteParagraphType
-import com.antgskds.calendarassistant.core.note.NotesDao
+import com.antgskds.calendarassistant.feature.note.data.local.NotesDao
 import com.antgskds.calendarassistant.feature.note.domain.model.effectiveListStyle
 import com.antgskds.calendarassistant.feature.note.domain.model.effectiveParagraphStyle
 import com.antgskds.calendarassistant.feature.note.domain.model.withMigratedParagraphStyles

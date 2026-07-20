@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
 
 object WeatherWarningText {
     const val MESSAGE_TYPE_ALERT = "alert"

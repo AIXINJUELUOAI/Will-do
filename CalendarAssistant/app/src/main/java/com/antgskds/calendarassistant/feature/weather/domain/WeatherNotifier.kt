@@ -6,8 +6,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.feature.notification.model.NotificationBehavior
 import com.antgskds.calendarassistant.feature.notification.model.NotificationDisplaySnapshot
 import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
@@ -41,6 +41,12 @@ class WeatherNotifier(context: Context) {
             notifyOfficialOnce(locationName, alert, title) {
                 if (showLiveNotification) {
                     app?.capsuleCenter?.showWeatherAlert(locationName, alert)
+                    app?.braceletNotificationCenter?.notifyWeatherWarning(
+                        sourceKey = "official:$locationName:${stableId(title)}",
+                        title = title,
+                        contentText = content,
+                        smallIcon = WeatherAlertIconMapper.officialIconRes(alert)
+                    )
                 } else {
                     val notificationId = OFFICIAL_BASE_ID + stableId(title)
                     app?.notificationCenter?.publishPlainNotification(
@@ -54,6 +60,12 @@ class WeatherNotifier(context: Context) {
                             source = "weather_official"
                         )
                     )
+                    app?.braceletNotificationCenter?.notifyWeatherWarning(
+                        sourceKey = "official:$locationName:${stableId(title)}",
+                        title = title,
+                        contentText = content,
+                        smallIcon = WeatherAlertIconMapper.officialIconRes(alert)
+                    )
                 }
             }
         }
@@ -64,6 +76,12 @@ class WeatherNotifier(context: Context) {
             notifyRiskOnce(locationName, risk, title) {
                 if (showLiveNotification) {
                     app?.capsuleCenter?.showWeatherRisk(locationName, risk)
+                    app?.braceletNotificationCenter?.notifyWeatherForecast(
+                        sourceKey = "risk:$locationName:${riskEventBucket(risk)}",
+                        title = title,
+                        contentText = content,
+                        smallIcon = WeatherAlertIconMapper.riskIconRes(risk)
+                    )
                 } else {
                     val notificationId = RISK_BASE_ID + stableId(title)
                     app?.notificationCenter?.publishPlainNotification(
@@ -76,6 +94,12 @@ class WeatherNotifier(context: Context) {
                             timeoutMs = weatherTimeoutMs,
                             source = "weather_risk"
                         )
+                    )
+                    app?.braceletNotificationCenter?.notifyWeatherForecast(
+                        sourceKey = "risk:$locationName:${riskEventBucket(risk)}",
+                        title = title,
+                        contentText = content,
+                        smallIcon = WeatherAlertIconMapper.riskIconRes(risk)
                     )
                 }
             }

@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.recognition.ingest.pickup
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.inferEventTagFromDescription
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 

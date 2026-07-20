@@ -5,8 +5,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
@@ -15,7 +15,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoPa
 import com.antgskds.calendarassistant.feature.schedule.ui.connector.AllEventsRoute
 import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen
 import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleView
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 
 @Composable
 fun HomePageRoute(

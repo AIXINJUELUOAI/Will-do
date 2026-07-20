@@ -7,12 +7,12 @@ import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
-import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
-import com.antgskds.calendarassistant.core.util.OsUtils
+import com.antgskds.calendarassistant.shared.util.OsUtils
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.data.state.CapsuleType
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
 import com.antgskds.calendarassistant.platform.capsule.render.CapsuleUiUtils
 import com.antgskds.calendarassistant.platform.capsule.render.IconUtils
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver

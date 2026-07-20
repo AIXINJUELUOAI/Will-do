@@ -18,8 +18,8 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isTextRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.textRecognitionConfigMissingMessage
-import com.antgskds.calendarassistant.core.note.NoteEntity
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorAnalysisOutcome
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorExportFormat
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorMessageKind
@@ -27,7 +27,7 @@ import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorUiActio
 import com.antgskds.calendarassistant.feature.note.ui.contract.NoteEditorUiState
 import com.antgskds.calendarassistant.feature.note.ui.render.NoteEditorScreen
 import com.antgskds.calendarassistant.feature.recognition.ui.feedback.RecognitionFeedbackSource
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

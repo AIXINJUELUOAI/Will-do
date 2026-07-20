@@ -2,11 +2,11 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.inferEventTagFromDescription
-import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
-import com.antgskds.calendarassistant.data.model.eventColorPaletteToArgb
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.inferEventTagFromDescription
+import com.antgskds.calendarassistant.shared.util.mergeSourceImageMarker
+import com.antgskds.calendarassistant.feature.settings.data.model.eventColorPaletteToArgb
 import com.antgskds.calendarassistant.app.ui.theme.material.AppEventColors
 import java.time.Instant
 import java.time.LocalTime

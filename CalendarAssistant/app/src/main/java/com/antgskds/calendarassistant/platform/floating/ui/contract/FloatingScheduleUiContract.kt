@@ -1,13 +1,13 @@
 package com.antgskds.calendarassistant.platform.floating.ui.contract
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 
 enum class FloatingInputMode { SCHEDULE, NOTE }
 
@@ -35,6 +35,9 @@ data class FloatingScheduleUiState(
     val dragHotZonePercent: Int = MySettings.FLOATING_DRAG_HOT_ZONE_DEFAULT_PERCENT,
     val dragTextOptions: FloatingDragTextOptions = FloatingDragTextOptions(),
     val hapticEnabled: Boolean = true,
+    val scheduleFloatingEnabled: Boolean = true,
+    val quickMemoFloatingEnabled: Boolean = true,
+    val floatingVoiceLongPressEnabled: Boolean = true,
     val reverseScheduleOrder: Boolean = true
 )
 

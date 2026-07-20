@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
-import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 
 data class RecognitionFailureDisplay(
     val reason: String,

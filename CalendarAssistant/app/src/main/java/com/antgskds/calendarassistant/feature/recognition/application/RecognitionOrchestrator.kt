@@ -3,19 +3,19 @@ package com.antgskds.calendarassistant.feature.recognition.application
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
-import com.antgskds.calendarassistant.core.event.DomainEventBus
-import com.antgskds.calendarassistant.core.event.DomainEventType
-import com.antgskds.calendarassistant.core.event.EventIdentity
-import com.antgskds.calendarassistant.core.event.events.RecognitionCompletedEvent
-import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.shared.event.DomainEventBus
+import com.antgskds.calendarassistant.shared.event.DomainEventType
+import com.antgskds.calendarassistant.shared.event.EventIdentity
+import com.antgskds.calendarassistant.shared.event.events.RecognitionCompletedEvent
+import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionMultimodalNode
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionOcrNode
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionTextNode
 class RecognitionOrchestrator(
     private val domainEventBus: DomainEventBus
-) : com.antgskds.calendarassistant.core.operation.RecognitionApi {
+) : com.antgskds.calendarassistant.shared.operation.RecognitionApi {
     override suspend fun recognizeText(bitmap: Bitmap): String {
         return RecognitionOcrNode.recognizeText(bitmap)
     }

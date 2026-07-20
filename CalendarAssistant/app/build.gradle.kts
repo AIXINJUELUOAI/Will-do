@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 87
+        versionCode = 90
         versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

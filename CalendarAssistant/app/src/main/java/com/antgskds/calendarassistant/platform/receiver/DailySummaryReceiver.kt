@@ -11,7 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

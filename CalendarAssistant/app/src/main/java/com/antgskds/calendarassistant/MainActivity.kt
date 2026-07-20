@@ -51,15 +51,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
-import com.antgskds.calendarassistant.core.util.PrivilegeManager
-import com.antgskds.calendarassistant.data.model.HomeEntryKey
-import com.antgskds.calendarassistant.data.model.sanitizeHomeStartPageKey
-import com.antgskds.calendarassistant.data.model.visibleHomeBottomItems
+import com.antgskds.calendarassistant.shared.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
+import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
+import com.antgskds.calendarassistant.feature.home.domain.sanitizeHomeStartPageKey
+import com.antgskds.calendarassistant.feature.home.domain.visibleHomeBottomItems
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
-import com.antgskds.calendarassistant.core.util.CrashHandler
-import com.antgskds.calendarassistant.core.util.DensityConfigManager
+import com.antgskds.calendarassistant.shared.util.CrashHandler
+import com.antgskds.calendarassistant.shared.util.DensityConfigManager
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.app.ui.prompt.contract.GlobalPromptKind
 import com.antgskds.calendarassistant.app.ui.prompt.contract.GlobalPromptUiAction
@@ -74,16 +74,18 @@ import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.feature.home.ui.connector.HomeScreen
 import com.antgskds.calendarassistant.feature.note.ui.connector.NoteEditorRoute
 import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoDetailPage
+import com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource
+import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
 import com.antgskds.calendarassistant.feature.settings.shell.ui.connector.SettingsDetailRoute
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundRootSize
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundWallpaperBitmap
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundAverageLuminance
 import com.antgskds.calendarassistant.app.ui.theme.material.background.shouldUseLightSystemBarsForAppBackground
-import com.antgskds.calendarassistant.ui.page_display.settings.WeatherDetailScreen
+import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherDetailScreen
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -121,6 +123,23 @@ class MainActivity : ComponentActivity() {
     private val pendingWidgetAction = mutableStateOf<PendingWidgetLaunchAction?>(null)
     private val pendingQuickMemoDetailLaunch = mutableStateOf<PendingQuickMemoDetailLaunch?>(null)
     private val pendingEventDialogLaunch = mutableStateOf<PendingEventDialogLaunch?>(null)
+
+    private fun shouldShowOnboardingOnFirstLaunch(): Boolean {
+        val onboardingPrefs = getSharedPreferences(ONBOARDING_PREFS_NAME, Context.MODE_PRIVATE)
+        if (onboardingPrefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)) return false
+
+        val settingsPrefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val hasModernSettings = settingsPrefs.contains(SettingsDataSource.KEY_JSON)
+        val hasLegacySettings = settingsPrefs.contains("model_key") || settingsPrefs.contains("semester_start_date")
+        return !hasModernSettings && !hasLegacySettings
+    }
+
+    private fun markOnboardingCompleted() {
+        getSharedPreferences(ONBOARDING_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+            .apply()
+    }
 
     override fun attachBaseContext(newBase: Context) {
         val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
@@ -168,6 +187,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val app = application as App
+        val shouldShowInitialOnboarding = shouldShowOnboardingOnFirstLaunch()
 
         val viewModelFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -471,8 +491,35 @@ class MainActivity : ComponentActivity() {
                         NavHost(
                             modifier = Modifier.fillMaxSize(),
                             navController = navController,
-                            startDestination = AppRoutes.Home
+                            startDestination = if (shouldShowInitialOnboarding) AppRoutes.OnboardingGuide else AppRoutes.Home
                         ) {
+                        composable(
+                            route = AppRoutes.OnboardingGuide,
+                            enterTransition = { navForwardEnterTransition() },
+                            exitTransition = { null },
+                            popEnterTransition = { null },
+                            popExitTransition = { navBackwardExitTransition() }
+                        ) {
+                            OnboardingGuidePage(
+                                settingsViewModel = settingsViewModel,
+                                uiSize = settings.uiSize,
+                                onFinish = {
+                                    markOnboardingCompleted()
+                                    navController.navigate(AppRoutes.Home) {
+                                        launchSingleTop = true
+                                        popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
+                                    }
+                                },
+                                onImportConfig = {
+                                    markOnboardingCompleted()
+                                    navController.navigate(AppRoutes.settings(SettingsDestination.Backup.name)) {
+                                        launchSingleTop = true
+                                        popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+
                         composable(
                             route = AppRoutes.Home,
                             enterTransition = { navBackwardEnterTransition() },
@@ -727,6 +774,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val ONBOARDING_PREFS_NAME = "onboarding_prefs"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         const val EXTRA_REQUEST_RECORD_AUDIO_PERMISSION = "request_record_audio_permission"
         const val EXTRA_OPEN_QUICK_MEMO_ID = "open_quick_memo_id"
         const val EXTRA_OPEN_EVENT_ID = "open_event_id"

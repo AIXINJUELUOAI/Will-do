@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.app.ui.navigation
 
 object AppRoutes {
     const val Home = "home"
+    const val OnboardingGuide = "onboarding_guide"
     const val WeatherDetail = "weather_detail"
     const val NoteEditorBase = "note_editor"
     const val NoteEditorArg = "noteId"

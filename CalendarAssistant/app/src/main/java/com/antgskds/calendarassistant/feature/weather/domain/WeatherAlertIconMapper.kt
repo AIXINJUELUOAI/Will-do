@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 
 object WeatherAlertIconMapper {
     fun officialIconRes(alert: WeatherAlertData): Int {

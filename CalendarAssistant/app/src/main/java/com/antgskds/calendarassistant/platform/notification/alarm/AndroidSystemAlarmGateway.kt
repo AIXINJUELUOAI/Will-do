@@ -29,6 +29,7 @@ class AndroidSystemAlarmGateway(context: Context) : SystemAlarmGateway {
             } else {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtEpochMillis, pendingIntent)
             }
+            Log.d("WillDoNotify", "alarm armed key=${key.value} triggerAt=$triggerAtEpochMillis allowWhileIdle=$allowWhileIdle")
             NotificationResult.Success(key, NotificationState.SCHEDULED)
         } catch (error: SecurityException) {
             Log.e(TAG, "Missing alarm permission for notification key=${key.value}", error)
@@ -44,6 +45,7 @@ class AndroidSystemAlarmGateway(context: Context) : SystemAlarmGateway {
         if (pendingIntent != null) {
             alarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
+            Log.d("WillDoNotify", "alarm cancelled key=${key.value}")
         }
         return NotificationResult.Success(key, NotificationState.CANCELLED)
     }

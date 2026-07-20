@@ -31,9 +31,9 @@ import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity
-import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
+import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
@@ -115,7 +115,7 @@ class EdgeBarService : Service() {
 
         serviceScope.launch {
             settingsQueryApi.settings.collect { settings ->
-                if (!settings.edgeBarEnabled || !settings.isFloatingWindowEnabled) {
+                if (!settings.edgeBarEnabled || (!settings.isFloatingWindowEnabled && !settings.voiceInputEnabled)) {
                     removeBarView()
                     stopSelf()
                     return@collect
@@ -327,7 +327,7 @@ class EdgeBarService : Service() {
                     val directionOk = if (isRightSide) dx < 0 else dx > 0
                     if (shouldTrigger && directionOk && !FloatingScheduleService.isShowing) {
                         performHaptic(HapticFeedbackConstants.GESTURE_START)
-                        startFloatingSchedule()
+                        startFloatingSchedule(defaultFloatingInputMode(settingsQueryApi.settings.value))
                     } else if (!pointerMoved && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) <= touchSlop) {
                         handleTap()
                     }
@@ -369,11 +369,12 @@ class EdgeBarService : Service() {
     private fun startFloatingSchedule(inputMode: String = FloatingScheduleService.INPUT_MODE_SCHEDULE) {
         hiddenByFloating = true
         updateVisibility()
-        val intent = Intent(this, FloatingScheduleService::class.java).apply {
-            putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, inputMode)
-        }
         try {
-            startService(intent)
+            if (!app.floatingCenter.startFloatingService(inputMode)) {
+                hiddenByFloating = false
+                updateVisibility()
+                return
+            }
         } catch (e: Exception) {
             Log.e(TAG, "start floating failed", e)
             hiddenByFloating = false
@@ -390,13 +391,16 @@ class EdgeBarService : Service() {
     }
 
     private fun performGestureAction(action: Int, fromLongPress: Boolean): Boolean {
+        val settings = settingsQueryApi.settings.value
         return when (FloatingBallGestureAction.normalize(action)) {
             FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE -> {
-                startFloatingSchedule(FloatingScheduleService.INPUT_MODE_SCHEDULE)
+                startFloatingSchedule(defaultFloatingInputMode(settings))
                 false
             }
             FloatingBallGestureAction.OPEN_QUICK_MEMO -> {
-                startFloatingSchedule(FloatingScheduleService.INPUT_MODE_NOTE)
+                if (settings.voiceInputEnabled) {
+                    startFloatingSchedule(FloatingScheduleService.INPUT_MODE_NOTE)
+                }
                 false
             }
             FloatingBallGestureAction.QUICK_RECOGNITION -> {
@@ -409,6 +413,14 @@ class EdgeBarService : Service() {
                 false
             }
             else -> false
+        }
+    }
+
+    private fun defaultFloatingInputMode(settings: MySettings): String {
+        return if (settings.isFloatingWindowEnabled) {
+            FloatingScheduleService.INPUT_MODE_SCHEDULE
+        } else {
+            FloatingScheduleService.INPUT_MODE_NOTE
         }
     }
 

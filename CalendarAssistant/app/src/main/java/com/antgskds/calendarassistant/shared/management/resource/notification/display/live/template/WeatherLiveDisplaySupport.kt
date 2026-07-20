@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template
 
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherWarningText
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import java.time.Duration
 import java.time.OffsetDateTime

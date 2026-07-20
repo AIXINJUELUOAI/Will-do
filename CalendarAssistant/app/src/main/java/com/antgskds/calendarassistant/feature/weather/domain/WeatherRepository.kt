@@ -3,10 +3,10 @@ package com.antgskds.calendarassistant.feature.weather.domain
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.location.AndroidLocationProvider
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherData
-import com.antgskds.calendarassistant.data.model.displayLocationName
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get

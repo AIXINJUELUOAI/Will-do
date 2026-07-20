@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.preference.ui.connector
 
 import com.antgskds.calendarassistant.feature.settings.preference.ui.contract.PreferenceUiController
-import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 
 class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : PreferenceUiController {
     override val settings = viewModel.settings

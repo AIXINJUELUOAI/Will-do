@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
-import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.shared.util.AccessibilityGuardian
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

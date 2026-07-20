@@ -1,10 +1,10 @@
 package com.antgskds.calendarassistant.feature.capsule.application
 
-import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
-import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi
+import com.antgskds.calendarassistant.shared.query.CapsuleQueryApi
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonitor
 

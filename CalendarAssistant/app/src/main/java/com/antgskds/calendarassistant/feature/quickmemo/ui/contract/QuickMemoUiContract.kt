@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.quickmemo.ui.contract
 
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 
 data class QuickMemoListUiState(
@@ -21,6 +21,7 @@ data class QuickMemoDetailUiState(
 sealed interface QuickMemoUiAction {
     data class OpenDetail(val memoId: Long) : QuickMemoUiAction
     data class RequestDelete(val memo: QuickMemoEntity) : QuickMemoUiAction
+    data class Delete(val memoId: Long) : QuickMemoUiAction
     data class ToggleTodoCompletion(val memoId: Long) : QuickMemoUiAction
     data class MarkTodo(val memoId: Long) : QuickMemoUiAction
     data class RemoveTodo(val memoId: Long) : QuickMemoUiAction

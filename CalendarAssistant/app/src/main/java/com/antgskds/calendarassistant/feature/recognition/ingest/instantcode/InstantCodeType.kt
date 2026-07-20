@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.ingest.instantcode
 
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 
 enum class InstantCodeType(
     val tag: String,

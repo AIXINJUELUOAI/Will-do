@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
-import com.antgskds.calendarassistant.data.model.WeatherData
-import com.antgskds.calendarassistant.data.model.WeatherAlertData
-import com.antgskds.calendarassistant.data.model.WeatherDailyForecast
-import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherDailyForecast
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherHourlyForecast
 import org.json.JSONObject
 
 object WeatherApiAdapter {

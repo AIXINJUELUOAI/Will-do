@@ -14,7 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import kotlinx.coroutines.CoroutineScope

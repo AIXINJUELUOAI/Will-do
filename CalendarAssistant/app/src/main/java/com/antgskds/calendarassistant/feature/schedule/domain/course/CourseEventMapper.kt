@@ -1,12 +1,12 @@
 package com.antgskds.calendarassistant.feature.schedule.domain.course
 
-import com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF
-import com.antgskds.calendarassistant.calendar.helpers.SOURCE_SIMPLE_CALENDAR
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.toEpochSeconds
-import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.REMINDER_OFF
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.SOURCE_SIMPLE_CALENDAR
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.toEpochSeconds
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
