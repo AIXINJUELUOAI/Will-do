@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -298,7 +298,8 @@ private fun AppBackgroundBlurredBackdrop(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(width = rootWidth, height = rootHeight)
+                // 背景副本必须覆盖整个根容器，不能被卡片尺寸约束截断。
+                .requiredSize(width = rootWidth, height = rootHeight)
                 .offset {
                     IntOffset(
                         x = -positionInRoot.x.roundToInt(),

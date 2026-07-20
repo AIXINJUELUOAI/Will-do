@@ -86,6 +86,8 @@ import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppB
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundWallpaperBitmap
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundAverageLuminance
 import com.antgskds.calendarassistant.app.ui.theme.material.background.shouldUseLightSystemBarsForAppBackground
+import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
+import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
 import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherDetailScreen
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
@@ -478,11 +480,21 @@ class MainActivity : ComponentActivity() {
                 }
                 var appBackgroundRootSize by remember { mutableStateOf(IntSize.Zero) }
 
-                CompositionLocalProvider(
-                    LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
-                    LocalAppBackgroundRootSize provides appBackgroundRootSize,
-                    LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance
+                AppGlassSettingsProvider(
+                    settings = AppGlassSettings(
+                        enabled = settings.appBackgroundMiuiBlurTestEnabled && settings.appBackgroundImagePath.isNotBlank(),
+                        miuixEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                        overlayAlphaPercent = settings.appBackgroundCardAlphaPercent,
+                        wallpaperBitmap = appBackgroundBitmap,
+                        rootSize = appBackgroundRootSize,
+                        darkTheme = isDarkTheme
+                    )
                 ) {
+                    CompositionLocalProvider(
+                        LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
+                        LocalAppBackgroundRootSize provides appBackgroundRootSize,
+                        LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance
+                    ) {
                     // 最外层容器（包裹 NavHost 和所有弹窗）
                     Box(
                         modifier = Modifier
@@ -657,6 +669,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
 
                 LaunchedEffect(Unit) {
                     if (CrashHandler.isCrashedLastTime(this@MainActivity)) {
