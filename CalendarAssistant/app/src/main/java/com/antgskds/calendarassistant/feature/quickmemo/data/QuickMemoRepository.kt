@@ -5,6 +5,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoAnal
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoDao
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
@@ -258,8 +259,37 @@ class QuickMemoRepository(
         return quickMemoDao.getSuggestionsForMemo(quickMemoId)
     }
 
+    suspend fun cleanupDuplicateSuggestions(): Int {
+        val duplicateIds = quickMemoDao.getAllSuggestions()
+            .filter { it.id != null }
+            .groupBy(::suggestionDuplicateKey)
+            .values
+            .filter { it.size > 1 }
+            .flatMap { group ->
+                val keepId = selectSuggestionKeeper(group).id
+                group.mapNotNull { it.id }.filter { it != keepId }
+            }
+            .distinct()
+        if (duplicateIds.isEmpty()) return 0
+        return quickMemoDao.deleteSuggestionsByIds(duplicateIds)
+    }
+
     private fun normalizeBody(bodyText: String): String {
         return bodyText.replace("\r\n", "\n").replace('\r', '\n')
+    }
+
+    private fun suggestionDuplicateKey(suggestion: QuickMemoSuggestionEntity): String {
+        return "${suggestion.quickMemoId}|${suggestion.type.trim()}|${suggestion.candidateJson.trim()}"
+    }
+
+    private fun selectSuggestionKeeper(group: List<QuickMemoSuggestionEntity>): QuickMemoSuggestionEntity {
+        return group.maxWithOrNull(
+            compareBy<QuickMemoSuggestionEntity> { if (it.status == QuickMemoSuggestionStatus.CREATED) 1 else 0 }
+                .thenBy { if (it.eventId != null) 1 else 0 }
+                .thenBy { it.updatedAt }
+                .thenBy { it.createdAt }
+                .thenBy { it.id ?: 0L }
+        ) ?: group.first()
     }
 
     private fun mergeVoiceTranscription(currentBody: String, transcription: String): String {

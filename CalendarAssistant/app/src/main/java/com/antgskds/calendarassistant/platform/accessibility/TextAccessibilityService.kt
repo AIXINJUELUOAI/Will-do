@@ -27,7 +27,9 @@ import com.antgskds.calendarassistant.shared.event.events.IngestFailedEvent
 import com.antgskds.calendarassistant.shared.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.NormalNotificationContent
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.RecognitionNormalDisplay
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
@@ -73,7 +75,7 @@ class TextAccessibilityService : AccessibilityService() {
         private const val TAG = "TextAccessibilityService"
         private const val RECOGNITION_SOURCE_TYPE = "accessibility"
         private const val RECOGNITION_SOURCE_ID = "accessibility.screenshot"
-        private const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
+        const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
         const val ACTION_CLOSE_FLOATING = "com.antgskds.calendarassistant.ACTION_CLOSE_FLOATING"
         @Volatile var instance: TextAccessibilityService? = null
             private set
@@ -439,8 +441,10 @@ class TextAccessibilityService : AccessibilityService() {
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun cancelCurrentAnalysis() {
+    fun cancelCurrentAnalysis() {
         analysisJob?.cancel()
+        analysisJob = null
+        isAnalyzing.set(false)
         cancelProgressNotification()
     }
 
@@ -642,7 +646,16 @@ class TextAccessibilityService : AccessibilityService() {
 
     private fun showProgressNotification(content: NormalNotificationContent) {
         if (shouldUseOcrCapsule()) {
-            capsuleCenter.showOcrProgress(content.title, content.contentText)
+            capsuleCenter.showOcrProgress(
+                title = content.title,
+                content = content.contentText,
+                actions = listOf(
+                    CapsuleActionSpec(
+                        label = "取消",
+                        receiverAction = EventActionReceiver.ACTION_CANCEL_RECOGNITION
+                    )
+                )
+            )
         } else {
             app.notificationCenter.showRecognitionStatusNotification(
                 notificationId = NOTIFICATION_ID_PROGRESS,

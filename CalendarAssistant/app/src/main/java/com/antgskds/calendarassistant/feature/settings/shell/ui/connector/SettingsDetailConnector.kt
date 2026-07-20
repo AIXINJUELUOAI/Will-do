@@ -23,6 +23,7 @@ import com.antgskds.calendarassistant.feature.settings.developer.ui.connector.De
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector.LaboratoryPage
 import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
 import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingLiveCapsuleDemoPage
+import com.antgskds.calendarassistant.feature.settings.developer.ui.render.MiuiComponentLabScreen
 import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSettingsPage
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiAction
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiState
@@ -177,6 +178,7 @@ private fun SettingsPageRouteContent(
             onNavigateToRegexRules = { onNavigateTo(SettingsDestination.RegexRuleEditor) },
             onNavigateToOnboardingGuide = { onNavigateTo(SettingsDestination.OnboardingGuide) },
             onNavigateToOnboardingLiveCapsuleDemo = { onNavigateTo(SettingsDestination.OnboardingLiveCapsuleDemo) },
+            onNavigateToMiuiComponentLab = { onNavigateTo(SettingsDestination.MiuiComponentLab) },
         )
 
         SettingsDestination.ConfigEditor -> ConfigEditorPage(uiSize = uiSize)
@@ -186,6 +188,7 @@ private fun SettingsPageRouteContent(
             onImportConfig = { onNavigateTo(SettingsDestination.Backup) },
         )
         SettingsDestination.OnboardingLiveCapsuleDemo -> OnboardingLiveCapsuleDemoPage(uiSize = uiSize)
+        SettingsDestination.MiuiComponentLab -> MiuiComponentLabScreen(uiSize = uiSize)
         SettingsDestination.RegexRuleEditor -> RegexRuleEditorPage(uiSize = uiSize)
         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
             settingsViewModel = settingsViewModel,

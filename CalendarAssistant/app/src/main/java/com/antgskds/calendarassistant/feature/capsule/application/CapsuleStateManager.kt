@@ -163,9 +163,13 @@ class CapsuleStateManager(
         networkSpeedState.value = speed
     }
 
-    fun showOcrProgress(title: String, content: String) {
+    fun showOcrProgress(
+        title: String,
+        content: String,
+        actions: List<CapsuleActionSpec> = emptyList()
+    ) {
         val now = System.currentTimeMillis()
-        val display = CapsuleMessageComposer.composeOcrProgress(title, content)
+        val display = CapsuleMessageComposer.composeOcrProgress(title, content).copy(actions = actions)
         updateOcrCapsule(
             OcrCapsuleState(
                 id = OCR_PROGRESS_ID,
@@ -268,7 +272,8 @@ class CapsuleStateManager(
         val cleanTitle = title.trim().takeIf { it.isNotEmpty() } ?: return
         val effectiveDurationMs = if (durationMs > 0L) durationMs else quickMemoCapsuleTimeoutMs()
         val now = System.currentTimeMillis()
-        val display = CapsuleMessageComposer.composeTextQuickMemo(cleanTitle, memoId)
+        val fixedTitleEnabled = settingsQueryApi.settings.value.quickMemoPinnedFixedTitleEnabled
+        val display = CapsuleMessageComposer.composeTextQuickMemo(cleanTitle, memoId, fixedTitleEnabled)
         textQuickMemoCapsuleState.value = OcrCapsuleState(
             id = "$TEXT_QUICK_MEMO_ID_PREFIX$memoId",
             notifId = NotificationIds.quickMemoText(memoId),

@@ -76,10 +76,12 @@ fun DeveloperPage(
     onNavigateToRegexRules: () -> Unit = {},
     onNavigateToOnboardingGuide: () -> Unit = {},
     onNavigateToOnboardingLiveCapsuleDemo: () -> Unit = {},
+    onNavigateToMiuiComponentLab: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as? App
     val settings by settingsViewModel.settings.collectAsState()
+    val refreshScope = rememberCoroutineScope()
 
     LaunchedEffect(settings.developerOptionsUnlocked, settings.developerOptionsEnabled, settings.developerOptionsDisabledAtMillis) {
         if (settings.developerOptionsUnlocked && !settings.developerOptionsEnabled && settings.developerOptionsDisabledAtMillis > 0L) {
@@ -97,6 +99,13 @@ fun DeveloperPage(
         uiSize = uiSize,
         onAction = { action -> when (action) {
             is DeveloperUiAction.SetEnabled -> settingsViewModel.setDeveloperOptionsEnabled(action.enabled)
+            is DeveloperUiAction.SetQuickMemoPinnedFixedTitle -> {
+                settingsViewModel.setQuickMemoPinnedFixedTitleEnabled(action.enabled) {
+                    refreshScope.launch {
+                        app?.quickMemoCenter?.refreshActiveTextQuickMemoCapsule()
+                    }
+                }
+            }
             is DeveloperUiAction.SetLiveTemplateMode -> { settingsViewModel.updatePreference(liveNotificationTemplateMode = action.mode); app?.capsuleCenter?.forceRefresh() }
             is DeveloperUiAction.SetListReverse -> when (action.kind) {
                 DeveloperListKind.HOME -> settingsViewModel.updateListSortOrder(homeListReverseOrder = action.enabled)
@@ -116,6 +125,7 @@ fun DeveloperPage(
             DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
             DeveloperUiAction.OpenOnboardingGuide -> onNavigateToOnboardingGuide()
             DeveloperUiAction.OpenOnboardingLiveCapsuleDemo -> onNavigateToOnboardingLiveCapsuleDemo()
+            DeveloperUiAction.OpenMiuiComponentLab -> onNavigateToMiuiComponentLab()
         } },
         runDebugActions = { ids ->
             val target = app ?: return@MaterialDeveloperScreen DebugBatchResult(0, listOf("应用上下文不可用"))
@@ -416,12 +426,29 @@ fun MaterialDeveloperScreen(
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle
                 )
+                RowDivider()
+                ActionSettingItem(
+                    title = "MIUI 组件实验",
+                    subtitle = "参考 HyperCeiler，预览主题、设置控件、下拉弹层和弹窗",
+                    value = "",
+                    icon = Icons.Default.ChevronRight,
+                    enabled = true,
+                    onClick = { onAction(DeveloperUiAction.OpenMiuiComponentLab) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardSubtitleStyle
+                )
             }
 
             Text(text = "通知与日志", style = sectionTitleStyle)
             DeveloperOptionsCard(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
+                quickMemoPinnedFixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
                 onOpenLogExportSheet = { showLogExportSheet = true },
+                onQuickMemoPinnedFixedTitleChange = { enabled ->
+                    onAction(DeveloperUiAction.SetQuickMemoPinnedFixedTitle(enabled))
+                    Toast.makeText(context, if (enabled) "随口记挂起标题已固定" else "随口记挂起标题已恢复", Toast.LENGTH_SHORT).show()
+                },
                 onLiveNotificationTemplateModeChange = { mode ->
                     onAction(DeveloperUiAction.SetLiveTemplateMode(mode))
                     Toast.makeText(context, "原生实况通知模板已设为 ${liveTemplateModeLabel(mode)}", Toast.LENGTH_SHORT).show()
@@ -729,7 +756,9 @@ private fun DisabledDeveloperCard(
 @Composable
 private fun DeveloperOptionsCard(
     liveNotificationTemplateMode: String,
+    quickMemoPinnedFixedTitleEnabled: Boolean,
     onOpenLogExportSheet: () -> Unit,
+    onQuickMemoPinnedFixedTitleChange: (Boolean) -> Unit,
     onLiveNotificationTemplateModeChange: (String) -> Unit
 ) {
     val haptics = rememberAppHaptics()
@@ -789,6 +818,18 @@ private fun DeveloperOptionsCard(
                 }
             }
         }
+        RowDivider()
+        SwitchSettingItem(
+            title = "随口记挂起固定标题",
+            subtitle = "开启后真实挂起胶囊标题显示“随口记”，正文挪到内容；关闭后标题和内容都按当前正文显示。",
+            checked = quickMemoPinnedFixedTitleEnabled,
+            onCheckedChange = { checked ->
+                haptics.selection()
+                onQuickMemoPinnedFixedTitleChange(checked)
+            },
+            cardTitleStyle = titleStyle,
+            cardSubtitleStyle = subtitleStyle
+        )
         RowDivider()
         ActionSettingItem(
             title = "日志导出",

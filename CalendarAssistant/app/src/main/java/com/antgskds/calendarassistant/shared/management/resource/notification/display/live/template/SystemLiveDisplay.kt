@@ -38,11 +38,12 @@ object SystemLiveDisplay {
         )
     }
 
-    fun textQuickMemo(title: String): CapsuleDisplayModel {
+    fun textQuickMemo(title: String, fixedTitleEnabled: Boolean = false): CapsuleDisplayModel {
         val memoText = cleanTitle(title) ?: "随口记"
+        val primary = if (fixedTitleEnabled) "随口记" else memoText
         return CapsuleDisplayModel(
-            shortText = "随口记",
-            primaryText = "随口记",
+            shortText = if (fixedTitleEnabled) "随口记" else compactShortTitle(memoText),
+            primaryText = primary,
             secondaryText = memoText,
             expandedText = memoText
         )

@@ -224,6 +224,7 @@ fun AppBackgroundGlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(16.dp),
     borderWidth: Dp = 1.dp,
+    surfaceColor: Color? = null,
     content: @Composable () -> Unit
 ) {
     val effectiveEnabled = enabled ?: LocalAppBackgroundStyleEnabled.current
@@ -232,12 +233,13 @@ fun AppBackgroundGlassSurface(
         enabled = effectiveEnabled,
         miuiBlurEnabled = effectiveMiuiBlurEnabled
     )
+    val resolvedSurfaceColor = surfaceColor ?: palette.surface
     if (!effectiveEnabled) {
         Card(
             modifier = modifier,
             shape = shape,
             colors = CardDefaults.cardColors(
-                containerColor = palette.surface,
+                containerColor = resolvedSurfaceColor,
                 contentColor = palette.content
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -262,7 +264,7 @@ fun AppBackgroundGlassSurface(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .background(palette.surface, shape)
+                .background(resolvedSurfaceColor, shape)
         )
         content()
     }

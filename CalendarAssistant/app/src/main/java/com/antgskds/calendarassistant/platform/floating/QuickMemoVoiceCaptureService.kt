@@ -34,6 +34,8 @@ class QuickMemoVoiceCaptureService : Service() {
         private const val TAG = "QuickMemoVoiceCapture"
         const val ACTION_START = "com.antgskds.calendarassistant.voice_capture.START"
         const val ACTION_STOP = "com.antgskds.calendarassistant.voice_capture.STOP"
+        @Volatile var instance: QuickMemoVoiceCaptureService? = null
+            private set
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -55,7 +57,13 @@ class QuickMemoVoiceCaptureService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
     override fun onDestroy() {
+        instance = null
         tickerJob?.cancel()
         runCatching { recorder.stopAndDiscard() }
         app.capsuleCommandApi.clearQuickMemoRecording()
@@ -98,7 +106,10 @@ class QuickMemoVoiceCaptureService : Service() {
             stopRequested = true
             return
         }
-        if (!recording) return
+        if (!recording) {
+            stopSelf()
+            return
+        }
         recording = false
         starting = false
         tickerJob?.cancel()
@@ -129,6 +140,12 @@ class QuickMemoVoiceCaptureService : Service() {
                 clearRecordingStatus("录音失败")
             }
         }
+    }
+
+    fun stopCaptureFromNotification(): Boolean {
+        if (!starting && !recording) return false
+        stopCapture()
+        return true
     }
 
     private fun startTicker() {
@@ -166,11 +183,21 @@ class QuickMemoVoiceCaptureService : Service() {
             tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val stopIntent = Intent(this, QuickMemoVoiceCaptureService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            NotificationIds.QUICK_MEMO_VOICE_CAPTURE xor ACTION_STOP.hashCode(),
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(title)
             .setContentText(content)
             .setContentIntent(pendingIntent)
+            .addAction(R.drawable.ic_stat_recording, "结束录音", stopPendingIntent)
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)

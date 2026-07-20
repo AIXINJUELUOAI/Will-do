@@ -35,6 +35,10 @@ class ShortcutHandleActivity : AppCompatActivity() {
                 openFloatingWindow(FloatingScheduleService.INPUT_MODE_NOTE)
                 finishWithoutAnimation()
             }
+            ACTION_START_QUICK_MEMO_VOICE -> {
+                startQuickMemoVoiceCapture()
+                finishWithoutAnimation()
+            }
             else -> lifecycleScope.launch { runQuickCapture() }
         }
     }
@@ -76,6 +80,10 @@ class ShortcutHandleActivity : AppCompatActivity() {
         app.floatingCenter.startFloatingService(initialInputMode)
     }
 
+    private fun startQuickMemoVoiceCapture() {
+        (applicationContext as App).floatingCenter.startVoiceCaptureService()
+    }
+
     private fun finishWithoutAnimation() {
         finish()
         overridePendingTransition(0, 0)
@@ -91,5 +99,6 @@ class ShortcutHandleActivity : AppCompatActivity() {
         const val ACTION_QUICK_CAPTURE = "com.antgskds.calendarassistant.shortcut.QUICK_CAPTURE"
         const val ACTION_OPEN_FLOATING = "com.antgskds.calendarassistant.shortcut.OPEN_FLOATING"
         const val ACTION_OPEN_FLOATING_NOTE = "com.antgskds.calendarassistant.shortcut.OPEN_FLOATING_NOTE"
+        const val ACTION_START_QUICK_MEMO_VOICE = "com.antgskds.calendarassistant.shortcut.START_QUICK_MEMO_VOICE"
     }
 }

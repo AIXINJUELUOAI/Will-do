@@ -383,6 +383,13 @@ class SettingsViewModel(
         )
     }
 
+    fun setQuickMemoPinnedFixedTitleEnabled(enabled: Boolean, onUpdated: () -> Unit = {}) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(
+            settings.value.copy(quickMemoPinnedFixedTitleEnabled = enabled)
+        )
+        onUpdated()
+    }
+
     fun expireDeveloperOptionsUnlock() {
         updatePreference(
             developerOptionsUnlocked = false,

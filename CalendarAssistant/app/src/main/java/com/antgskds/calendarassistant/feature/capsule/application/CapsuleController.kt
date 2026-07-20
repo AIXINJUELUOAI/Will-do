@@ -26,8 +26,12 @@ class CapsuleController(
         capsuleCommandApi.updateNetworkSpeed(speed)
     }
 
-    fun showOcrProgress(title: String, content: String) {
-        capsuleCommandApi.showOcrProgress(title, content)
+    fun showOcrProgress(
+        title: String,
+        content: String,
+        actions: List<CapsuleActionSpec> = emptyList()
+    ) {
+        capsuleCommandApi.showOcrProgress(title, content, actions)
     }
 
     fun showOcrResult(

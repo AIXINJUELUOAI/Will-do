@@ -37,8 +37,12 @@ object CapsuleMessageComposer {
         return SystemLiveDisplay.voiceTranscription(title)
     }
 
-    fun composeTextQuickMemo(title: String, memoId: Long): CapsuleDisplayModel {
-        return SystemLiveDisplay.textQuickMemo(title).copy(
+    fun composeTextQuickMemo(
+        title: String,
+        memoId: Long,
+        fixedTitleEnabled: Boolean = false
+    ): CapsuleDisplayModel {
+        return SystemLiveDisplay.textQuickMemo(title, fixedTitleEnabled).copy(
             action = CapsuleActionSpec(
                 label = "移除",
                 receiverAction = EventActionReceiver.ACTION_CLEAR_TEXT_QUICK_MEMO,
@@ -49,7 +53,12 @@ object CapsuleMessageComposer {
     }
 
     fun composeQuickMemoRecording(title: String, content: String): CapsuleDisplayModel {
-        return SystemLiveDisplay.quickMemoRecording(title, content)
+        return SystemLiveDisplay.quickMemoRecording(title, content).copy(
+            action = CapsuleActionSpec(
+                label = "结束录音",
+                receiverAction = EventActionReceiver.ACTION_STOP_QUICK_MEMO_RECORDING
+            )
+        )
     }
 
     fun composeWeatherAlert(

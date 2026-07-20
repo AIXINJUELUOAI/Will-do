@@ -69,6 +69,10 @@ class QuickMemoFacade(
             }
         }
         appScope.launch(Dispatchers.IO) {
+            val deletedCount = repository.cleanupDuplicateSuggestions()
+            if (deletedCount > 0) {
+                Log.i(TAG, "cleanup duplicate quick memo suggestions deleted=$deletedCount")
+            }
             repository.suggestions.collect { list ->
                 _suggestions.value = list
             }
@@ -167,6 +171,16 @@ class QuickMemoFacade(
     suspend fun clearPinnedTextQuickMemo(id: Long? = null): Boolean = withContext(Dispatchers.IO) {
         if (id != null && activeTextQuickMemoId() != id) return@withContext false
         capsuleCommandApi?.clearTextQuickMemo()
+        true
+    }
+
+    suspend fun refreshActiveTextQuickMemoCapsule(): Boolean = withContext(Dispatchers.IO) {
+        val id = activeTextQuickMemoId() ?: return@withContext false
+        val memo = repository.getQuickMemo(id) ?: run {
+            capsuleCommandApi?.clearTextQuickMemo()
+            return@withContext false
+        }
+        refreshPinnedTextQuickMemo(memo)
         true
     }
 

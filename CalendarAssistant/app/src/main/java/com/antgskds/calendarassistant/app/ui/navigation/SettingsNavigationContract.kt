@@ -22,6 +22,7 @@ enum class SettingsDestination {
     ConfigEditor,
     OnboardingGuide,
     OnboardingLiveCapsuleDemo,
+    MiuiComponentLab,
     RegexRuleEditor,
     BottomBarEditor,
     WidgetSettings
