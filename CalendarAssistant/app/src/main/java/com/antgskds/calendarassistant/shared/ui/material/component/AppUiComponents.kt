@@ -85,7 +85,24 @@ fun AppCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val glassSettings = LocalAppGlassSettings.current
     val resolvedModifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
+    if (glassSettings.active) {
+        AppGlassSurface(
+            modifier = resolvedModifier,
+            shape = shape,
+            fallbackColor = colors.containerColor
+        ) {
+            androidx.compose.material3.Surface(
+                color = Color.Transparent,
+                contentColor = colors.contentColor
+            ) {
+                androidx.compose.foundation.layout.Column(content = content)
+            }
+        }
+        return
+    }
+
     Card(
         modifier = resolvedModifier,
         shape = shape,

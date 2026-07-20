@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -27,9 +27,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 
 data class AppGlassSettings(
@@ -42,7 +42,7 @@ data class AppGlassSettings(
     val darkTheme: Boolean = false
 ) {
     val active: Boolean
-        get() = false
+        get() = enabled && wallpaperBitmap != null && rootSize.width > 0 && rootSize.height > 0
 }
 
 val LocalAppGlassSettings = staticCompositionLocalOf { AppGlassSettings() }
@@ -132,7 +132,8 @@ private fun AppGlassBlurredBackdrop(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(rootWidth, rootHeight)
+                // requiredSize 允许背景副本突破卡片自身的测量约束，避免滚动列表中只覆盖局部区域。
+                .requiredSize(rootWidth, rootHeight)
                 .offset {
                     IntOffset(
                         x = -positionInRoot.x.roundToInt(),
@@ -151,9 +152,8 @@ private fun AppGlassBlurredBackdrop(
 }
 
 private fun glassOverlayColor(settings: AppGlassSettings, fallbackColor: Color): Color {
-    val alpha = (settings.overlayAlphaPercent.coerceIn(45, 92) / 100f).let { base ->
-        if (settings.miuixEnabled) (base - 0.08f).coerceAtLeast(0.42f) else base
-    }
+    // 透明度设置直接对应表面不透明度，100% 必须得到纯色表面。
+    val alpha = settings.overlayAlphaPercent.coerceIn(0, 100) / 100f
     val base = if (settings.darkTheme) Color.Black else fallbackColor
     return base.copy(alpha = alpha)
 }
