@@ -61,7 +61,6 @@ class FloatingServiceController(
     }
 
     fun stopVoiceCaptureService(): Boolean {
-        if (!canDrawOverlays()) return false
         return try {
             appContext.startService(voiceCaptureServiceIntent(FloatingScheduleService.ACTION_STOP_VOICE_CAPTURE, QuickMemoVoiceCaptureService.ACTION_STOP))
             true

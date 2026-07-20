@@ -50,8 +50,8 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
-import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundGlassSurface
 import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 
 // 统一高度设定为 68dp
@@ -102,8 +102,9 @@ fun IntegratedFloatingBar(
 
     val mdBlend = 1.0f
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val barSurfaceAlpha = MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent) / 100f
     val navBg = if (backgroundMode) {
-        backgroundPalette.surface
+        backgroundPalette.surface.copy(alpha = barSurfaceAlpha)
     } else {
         lerp(HydrogenBg, if (isDark) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, mdBlend)
     }
@@ -118,7 +119,7 @@ fun IntegratedFloatingBar(
         lerp(HydrogenContent, MaterialTheme.colorScheme.onSurfaceVariant, mdBlend)
     }
     val fabBg = if (backgroundMode) {
-        backgroundPalette.surfaceStrong
+        backgroundPalette.surfaceStrong.copy(alpha = barSurfaceAlpha)
     } else {
         lerp(HydrogenFab, MaterialTheme.colorScheme.primary, mdBlend)
     }
@@ -192,11 +193,12 @@ fun IntegratedFloatingBar(
         content: @Composable () -> Unit
     ) {
         if (backgroundMode) {
-            AppCard(
+            AppBackgroundGlassSurface(
+                enabled = true,
+                miuiBlurEnabled = miuiBlurEnabled,
                 modifier = modifier,
                 shape = shape,
-                containerColor = containerColor,
-                shadowElevation = 0.dp,
+                surfaceColor = containerColor,
             ) {
                 content()
             }

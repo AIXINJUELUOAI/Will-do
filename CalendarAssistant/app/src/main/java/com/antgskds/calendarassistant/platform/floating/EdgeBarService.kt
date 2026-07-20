@@ -34,6 +34,7 @@ import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivi
 import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
@@ -56,6 +57,8 @@ class EdgeBarService : Service() {
         private const val SIDE_LEFT = "LEFT"
         private const val LONG_PRESS_MS = 520L
         private const val TAP_WINDOW_MS = 320L
+        @Volatile var instance: EdgeBarService? = null
+            private set
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -97,6 +100,7 @@ class EdgeBarService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         if (!permissionCenter.canDrawOverlays(this)) {
             stopSelf()
             return
@@ -127,6 +131,7 @@ class EdgeBarService : Service() {
     }
 
     override fun onDestroy() {
+        instance = null
         edgeVoiceStartJob?.cancel()
         edgeVoiceTickerJob?.cancel()
         edgeVoiceStopJob?.cancel()
@@ -144,6 +149,13 @@ class EdgeBarService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    fun stopVoiceCaptureFromNotification(): Boolean {
+        if (!edgeVoiceUsingFloatingWindow && !edgeVoiceStarting && !edgeVoiceRecording) return false
+        toggleVoiceActive = false
+        stopEdgeVoiceCapture()
+        return true
+    }
 
     private fun ensureBarView(settings: MySettings) {
         if (barView != null) return
@@ -646,11 +658,21 @@ class EdgeBarService : Service() {
             tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val stopIntent = Intent(this, EventActionReceiver::class.java).apply {
+            action = EventActionReceiver.ACTION_STOP_QUICK_MEMO_RECORDING
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            this,
+            NotificationIds.QUICK_MEMO_VOICE_CAPTURE xor EventActionReceiver.ACTION_STOP_QUICK_MEMO_RECORDING.hashCode(),
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
             .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(title)
             .setContentText(content)
             .setContentIntent(pendingIntent)
+            .addAction(R.drawable.ic_stat_recording, "结束录音", stopPendingIntent)
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)

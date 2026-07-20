@@ -284,7 +284,8 @@ data class MySettings(
     // 开发者选项
     val developerOptionsUnlocked: Boolean = false,
     val developerOptionsEnabled: Boolean = false,
-    val developerOptionsDisabledAtMillis: Long = 0L
+    val developerOptionsDisabledAtMillis: Long = 0L,
+    val quickMemoPinnedFixedTitleEnabled: Boolean = false
 ) {
     companion object {
         const val SCREENSHOT_DELAY_MIN_MS = 500L

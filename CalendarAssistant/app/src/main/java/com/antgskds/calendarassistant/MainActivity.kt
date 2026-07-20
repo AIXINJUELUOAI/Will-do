@@ -7,9 +7,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -41,6 +44,8 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,6 +94,7 @@ import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 private data class PendingWidgetLaunchAction(
     val action: String,
@@ -226,7 +232,6 @@ class MainActivity : ComponentActivity() {
         }
 
         mainViewModel = ViewModelProvider(this, viewModelFactory)[MainViewModel::class.java]
-        setupDynamicShortcuts()
 
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
@@ -247,6 +252,9 @@ class MainActivity : ComponentActivity() {
                 if (previous != null && previous != appearanceConfig) {
                     recreate()
                 }
+            }
+            LaunchedEffect(settings.themeMode) {
+                setupDynamicShortcuts()
             }
 
             val isDarkTheme = when (settings.themeMode) {
@@ -741,6 +749,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupDynamicShortcuts() {
+        val settings = (application as App).settingsQueryApi.settings.value
+        val useLightShortcutIcons = when (settings.themeMode) {
+            1 -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            3 -> true
+            else -> false
+        }
+        val quickRecognitionIcon = if (useLightShortcutIcons) R.drawable.ic_qs_quick_recognition_light else R.drawable.ic_qs_quick_recognition
+        val eventIcon = if (useLightShortcutIcons) R.drawable.ic_shortcut_event_light else R.drawable.ic_shortcut_event
+        val quickMemoIcon = if (useLightShortcutIcons) R.drawable.ic_shortcut_quickmemo_light else R.drawable.ic_shortcut_quickmemo
+        val voiceMemoIcon = if (useLightShortcutIcons) R.drawable.ic_shortcut_voice_memo_light else R.drawable.ic_shortcut_voice_memo
+
         fun shortcutIntent(actionName: String) = Intent(this, com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity::class.java).apply {
             action = actionName
             flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
@@ -749,7 +768,7 @@ class MainActivity : ComponentActivity() {
         val quickCaptureShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "quick_capture")
             .setShortLabel(getString(R.string.shortcut_quick_recognition))
             .setLongLabel(getString(R.string.shortcut_quick_recognition_long))
-            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_qs_quick_recognition))
+            .setIcon(createShortcutIcon(quickRecognitionIcon, useLightShortcutIcons))
             .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_QUICK_CAPTURE))
             .setRank(0)
             .build()
@@ -757,7 +776,7 @@ class MainActivity : ComponentActivity() {
         val floatingShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "open_floating")
             .setShortLabel(getString(R.string.shortcut_open_floating))
             .setLongLabel(getString(R.string.shortcut_open_floating_long))
-            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_stat_event))
+            .setIcon(createShortcutIcon(eventIcon, useLightShortcutIcons))
             .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_OPEN_FLOATING))
             .setRank(1)
             .build()
@@ -765,12 +784,50 @@ class MainActivity : ComponentActivity() {
         val quickMemoShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "open_floating_quick_memo")
             .setShortLabel(getString(R.string.shortcut_open_quick_memo))
             .setLongLabel(getString(R.string.shortcut_open_quick_memo_long))
-            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(this, R.drawable.ic_stat_quickmemo))
+            .setIcon(createShortcutIcon(quickMemoIcon, useLightShortcutIcons))
             .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_OPEN_FLOATING_NOTE))
             .setRank(2)
             .build()
 
-        ShortcutManagerCompat.setDynamicShortcuts(this, listOf(quickCaptureShortcut, floatingShortcut, quickMemoShortcut))
+        val startQuickMemoVoiceShortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "start_quick_memo_voice")
+            .setShortLabel(getString(R.string.shortcut_start_quick_memo_voice))
+            .setLongLabel(getString(R.string.shortcut_start_quick_memo_voice_long))
+            .setIcon(createShortcutIcon(voiceMemoIcon, useLightShortcutIcons))
+            .setIntent(shortcutIntent(com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity.ACTION_START_QUICK_MEMO_VOICE))
+            .setRank(3)
+            .build()
+
+        val shortcuts = listOf(quickCaptureShortcut, floatingShortcut, quickMemoShortcut, startQuickMemoVoiceShortcut)
+        ShortcutManagerCompat.removeDynamicShortcuts(
+            this,
+            listOf("quick_capture", "open_floating", "open_floating_quick_memo", "start_quick_memo_voice")
+        )
+        ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
+        ShortcutManagerCompat.updateShortcuts(this, shortcuts)
+    }
+
+    private fun createShortcutIcon(
+        @DrawableRes iconRes: Int,
+        useLightIcon: Boolean
+    ): IconCompat {
+        val drawable = ContextCompat.getDrawable(this, iconRes)?.mutate()
+            ?: return IconCompat.createWithResource(this, iconRes)
+        val wrapped = DrawableCompat.wrap(drawable).mutate()
+        val tintColor = if (useLightIcon) {
+            android.graphics.Color.rgb(244, 239, 244)
+        } else {
+            android.graphics.Color.rgb(29, 27, 32)
+        }
+        DrawableCompat.setTint(wrapped, tintColor)
+
+        val density = resources.displayMetrics.density
+        val sizePx = (48f * density).roundToInt().coerceAtLeast(1)
+        val paddingPx = (8f * density).roundToInt().coerceAtLeast(0)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        wrapped.setBounds(paddingPx, paddingPx, sizePx - paddingPx, sizePx - paddingPx)
+        wrapped.draw(canvas)
+        return IconCompat.createWithBitmap(bitmap)
     }
 
     companion object {

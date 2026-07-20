@@ -128,8 +128,7 @@ fun MaterialAppUpdateScreen(
         if (versions.isEmpty()) {
             AppCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                shape = RoundedCornerShape(20.dp)
             ) {
                 Text(
                     text = state.errorMessage ?: "暂无更新日志",
@@ -172,8 +171,7 @@ private fun AppVersionCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier

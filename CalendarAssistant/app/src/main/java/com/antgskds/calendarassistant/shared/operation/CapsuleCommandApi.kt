@@ -8,7 +8,11 @@ import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 interface CapsuleCommandApi {
     fun forceRefresh()
     fun updateNetworkSpeed(speed: NetworkSpeedMonitor.NetworkSpeed?)
-    fun showOcrProgress(title: String, content: String)
+    fun showOcrProgress(
+        title: String,
+        content: String,
+        actions: List<CapsuleActionSpec> = emptyList()
+    )
     fun showOcrResult(
         title: String,
         content: String,

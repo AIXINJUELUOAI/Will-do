@@ -18,8 +18,12 @@ class CapsuleStateManagerCommandApi(
         capsuleStateManager.updateNetworkSpeed(speed)
     }
 
-    override fun showOcrProgress(title: String, content: String) {
-        capsuleStateManager.showOcrProgress(title, content)
+    override fun showOcrProgress(
+        title: String,
+        content: String,
+        actions: List<CapsuleActionSpec>
+    ) {
+        capsuleStateManager.showOcrProgress(title, content, actions)
     }
 
     override fun showOcrResult(

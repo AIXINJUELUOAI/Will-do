@@ -10,6 +10,10 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.convert
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleStateManager
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.platform.floating.EdgeBarService
+import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
+import com.antgskds.calendarassistant.platform.floating.QuickMemoVoiceCaptureService
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
@@ -30,6 +34,8 @@ class EventActionReceiver : BroadcastReceiver() {
         const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
         const val ACTION_CREATE_QUICK_MEMO_SUGGESTION = "com.antgskds.calendarassistant.action.CREATE_QUICK_MEMO_SUGGESTION"
         const val ACTION_CLEAR_TEXT_QUICK_MEMO = "com.antgskds.calendarassistant.action.CLEAR_TEXT_QUICK_MEMO"
+        const val ACTION_STOP_QUICK_MEMO_RECORDING = "com.antgskds.calendarassistant.action.STOP_QUICK_MEMO_RECORDING"
+        const val ACTION_CANCEL_RECOGNITION = "com.antgskds.calendarassistant.action.CANCEL_RECOGNITION"
         const val ACTION_DEBUG_PRIMARY = "com.antgskds.calendarassistant.action.DEBUG_PRIMARY"
         const val ACTION_DEBUG_SECONDARY = "com.antgskds.calendarassistant.action.DEBUG_SECONDARY"
         const val EXTRA_EVENT_ID = "event_id"
@@ -48,6 +54,34 @@ class EventActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_DEBUG_PRIMARY, ACTION_DEBUG_SECONDARY -> {
                 Log.d(TAG, "debug notification action clicked action=${intent.action}")
+            }
+            ACTION_STOP_QUICK_MEMO_RECORDING -> {
+                val quickMemoHandled = QuickMemoVoiceCaptureService.instance?.stopCaptureFromNotification() == true
+                val edgeHandled = EdgeBarService.instance?.stopVoiceCaptureFromNotification() == true
+                if (FloatingScheduleService.isShowing) {
+                    runCatching {
+                        context.startService(Intent(context, FloatingScheduleService::class.java).apply {
+                            action = FloatingScheduleService.ACTION_STOP_VOICE_CAPTURE
+                        })
+                    }.onFailure { t ->
+                        Log.w(TAG, "floating voice recording stop dispatch failed", t)
+                    }
+                }
+                if (!quickMemoHandled && !edgeHandled && !FloatingScheduleService.isShowing) {
+                    app.capsuleCommandApi.clearQuickMemoRecording()
+                    Log.w(TAG, "quick memo recording stop ignored: no active recording service")
+                }
+            }
+            ACTION_CANCEL_RECOGNITION -> {
+                val service = TextAccessibilityService.instance
+                if (service != null) {
+                    service.cancelCurrentAnalysis()
+                    Log.d(TAG, "recognition analysis cancelled from live capsule")
+                } else {
+                    app.capsuleCommandApi.clearOcrCapsule()
+                    app.capsuleCommandApi.clearModelLoading()
+                    Log.w(TAG, "recognition cancel ignored: accessibility service is not connected")
+                }
             }
             ACTION_CLEAR_TEXT_QUICK_MEMO -> {
                 val memoId = intent.getLongExtra(EXTRA_QUICK_MEMO_ID, -1L).takeIf { it > 0L }

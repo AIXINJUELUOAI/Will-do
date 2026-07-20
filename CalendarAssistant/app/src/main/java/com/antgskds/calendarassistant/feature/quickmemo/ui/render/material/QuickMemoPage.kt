@@ -135,7 +135,9 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoDet
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoListUiState
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoUiAction
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundGlassSurface
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundCardAlphaPercent
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
 import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 import java.time.Instant
@@ -334,7 +336,14 @@ fun MaterialQuickMemoDetailScreen(
             ) {
                 if (memo == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("随口记不存在或已删除", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "随口记不存在或已删除",
+                            color = if (backgroundMode) {
+                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
                     }
                     return@Surface
                 }
@@ -788,6 +797,17 @@ private fun QuickMemoDetailContent(
     var recordAudioGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val detailPrimaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val detailSecondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     fun startVoiceRecording() {
         if (isRecordingVoice || isSavingVoice) return
@@ -957,6 +977,7 @@ private fun QuickMemoDetailContent(
             Text(
                 text = "正文",
                 style = MaterialTheme.typography.titleMedium,
+                color = detailPrimaryTextColor,
                 fontWeight = FontWeight.Bold
             )
             if (isVoice) {
@@ -972,7 +993,7 @@ private fun QuickMemoDetailContent(
                     Text(
                         text = quickMemoStatusText(memo),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = detailSecondaryTextColor
                     )
                 }
             }
@@ -991,7 +1012,7 @@ private fun QuickMemoDetailContent(
                 }
                 .defaultMinSize(minHeight = 100.dp),
             textStyle = TextStyle(
-                color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f) else MaterialTheme.colorScheme.onSurface,
+                color = if (isCompleted) detailPrimaryTextColor.copy(alpha = 0.58f) else detailPrimaryTextColor,
                 fontSize = metrics.detailBodyFontSize,
                 lineHeight = metrics.detailBodyLineHeight,
                 fontWeight = FontWeight.Medium,
@@ -1003,7 +1024,7 @@ private fun QuickMemoDetailContent(
                     if (draftBody.isBlank()) {
                         Text(
                             text = "点击输入正文...",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            color = detailSecondaryTextColor.copy(alpha = 0.5f),
                             fontSize = metrics.detailBodyFontSize
                         )
                     }
@@ -1021,7 +1042,7 @@ private fun QuickMemoDetailContent(
             Text(
                 text = "${formatQuickMemoTime(memo.createdAt)} 创建",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                color = detailSecondaryTextColor.copy(alpha = 0.6f)
             )
         }
 
@@ -1031,6 +1052,7 @@ private fun QuickMemoDetailContent(
                 text = "日程待办",
                 modifier = Modifier.padding(bottom = 16.dp),
                 style = MaterialTheme.typography.titleMedium,
+                color = detailPrimaryTextColor,
                 fontWeight = FontWeight.Bold
             )
             suggestions.forEach { suggestion ->
@@ -1153,8 +1175,11 @@ private fun QuickMemoDetailBottomBar(
     val barHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
     val itemWidth = 72.dp
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val barSurfaceAlpha = MySettings.normalizeAppBackgroundCardAlphaPercent(
+        LocalAppBackgroundCardAlphaPercent.current
+    ) / 100f
     val containerColor = if (backgroundMode) {
-        backgroundPalette.surface
+        backgroundPalette.surface.copy(alpha = barSurfaceAlpha)
     } else if (isDark) {
         MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
@@ -1176,13 +1201,13 @@ private fun QuickMemoDetailBottomBar(
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
     }
     val todoIndicatorColor = when {
-        isCompleted -> MaterialTheme.colorScheme.surfaceVariant
-        isTodo -> Color(0xFFF2B705).copy(alpha = 0.24f)
+        isCompleted -> if (backgroundMode) backgroundPalette.accent else MaterialTheme.colorScheme.surfaceVariant
+        isTodo -> if (backgroundMode) backgroundPalette.accent else Color(0xFFF2B705).copy(alpha = 0.24f)
         else -> indicatorColor
     }
     val todoContentColor = when {
-        isCompleted -> MaterialTheme.colorScheme.outline
-        isTodo -> Color(0xFF8A6500)
+        isCompleted -> if (backgroundMode) disabledColor else MaterialTheme.colorScheme.outline
+        isTodo -> if (backgroundMode) contentColor else Color(0xFF8A6500)
         else -> contentColor
     }
 
@@ -1194,11 +1219,12 @@ private fun QuickMemoDetailBottomBar(
             .padding(bottom = IntegratedFloatingBarShadowPadding)
             .height(barHeight),
         shape = CircleShape,
-        color = containerColor,
+        color = if (backgroundMode) Color.Transparent else containerColor,
         contentColor = contentColor,
         shadowElevation = if (backgroundMode) 0.dp else 6.dp
     ) {
-        Row(
+        val barContent: @Composable () -> Unit = {
+            Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
@@ -1280,6 +1306,20 @@ private fun QuickMemoDetailBottomBar(
                     onClick = onVoiceClick,
                 )
             }
+        }
+        }
+        if (backgroundMode) {
+            AppBackgroundGlassSurface(
+                enabled = true,
+                miuiBlurEnabled = miuiBlurEnabled,
+                modifier = Modifier.fillMaxHeight(),
+                shape = CircleShape,
+                surfaceColor = containerColor,
+            ) {
+                barContent()
+            }
+        } else {
+            barContent()
         }
     }
 }
@@ -1617,7 +1657,33 @@ private fun QuickMemoSuggestionItem(
     val title = draft?.title?.takeIf { it.isNotBlank() } ?: "未命名日程"
     val timeText = draft?.let { formatSuggestionTime(it.startTS, it.endTS) }.orEmpty()
     val created = suggestion.status == QuickMemoSuggestionStatus.CREATED
-    val accentColor = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val accentColor = when {
+        created -> secondaryTextColor
+        usesWallpaperText -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val buttonContainerColor = when {
+        created && usesWallpaperText -> primaryTextColor.copy(alpha = 0.12f)
+        created -> MaterialTheme.colorScheme.surfaceVariant
+        usesWallpaperText -> primaryTextColor
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    }
+    val buttonTextColor = when {
+        created -> secondaryTextColor
+        usesWallpaperText -> if (primaryTextColor.luminance() > 0.5f) Color.Black else Color.White
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Row(
         modifier = Modifier
@@ -1638,7 +1704,7 @@ private fun QuickMemoSuggestionItem(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                color = if (created) secondaryTextColor else primaryTextColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1657,13 +1723,13 @@ private fun QuickMemoSuggestionItem(
         Surface(
             onClick = { if (!created) onCreate() },
             shape = RoundedCornerShape(999.dp),
-            color = if (created) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            color = buttonContainerColor
         ) {
             Text(
                 text = if (created) "已创建" else "添加",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                color = buttonTextColor,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -1679,6 +1745,17 @@ private fun QuickMemoSuggestionRow(
     val title = draft?.title?.takeIf { it.isNotBlank() } ?: "未命名日程"
     val timeText = draft?.let { formatSuggestionTime(it.startTS, it.endTS) }.orEmpty()
     val created = suggestion.status == QuickMemoSuggestionStatus.CREATED
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    }
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val containerColor = if (created) {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
     } else {
@@ -1708,7 +1785,7 @@ private fun QuickMemoSuggestionRow(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = if (created) secondaryTextColor else primaryTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1717,7 +1794,7 @@ private fun QuickMemoSuggestionRow(
                     Text(
                         text = timeText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        color = if (created) secondaryTextColor else primaryTextColor.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1732,7 +1809,7 @@ private fun QuickMemoSuggestionRow(
                     text = if (created) "已创建" else "添加",
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (created) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary,
+                    color = if (created) secondaryTextColor else MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }

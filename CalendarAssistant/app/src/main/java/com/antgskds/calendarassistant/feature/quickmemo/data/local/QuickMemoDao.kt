@@ -92,4 +92,7 @@ interface QuickMemoDao {
 
     @Query("DELETE FROM quick_memo_suggestions WHERE quick_memo_id = :quickMemoId")
     suspend fun deleteSuggestionsForMemo(quickMemoId: Long)
+
+    @Query("DELETE FROM quick_memo_suggestions WHERE id IN (:ids)")
+    suspend fun deleteSuggestionsByIds(ids: List<Long>): Int
 }

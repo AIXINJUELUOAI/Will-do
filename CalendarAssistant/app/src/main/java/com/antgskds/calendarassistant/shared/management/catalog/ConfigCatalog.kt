@@ -321,6 +321,17 @@ object ConfigCatalog {
         ),
         ConfigItem(
             domain = ConfigDomain.VOICE,
+            kind = ConfigKind.POLICY,
+            key = "developer.quick_memo.pinned_fixed_title_enabled",
+            label = "随口记挂起固定标题",
+            description = "开发者专用：开启后，随口记挂起胶囊标题固定为“随口记”，内容仍显示正文；关闭后保持标题和内容都使用正文。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.Toggle,
+            get = { if (it.quickMemoPinnedFixedTitleEnabled) 1 else 0 },
+            set = { s, v -> s.copy(quickMemoPinnedFixedTitleEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.VOICE,
             kind = ConfigKind.USER_SETTING,
             key = "voice.floating.entry_style",
             label = "悬浮入口样式",
