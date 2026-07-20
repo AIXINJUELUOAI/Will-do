@@ -82,6 +82,8 @@ object PageCatalog {
         PageEntry(SettingsDestination.Laboratory, "settings_laboratory", "实验室", PageVisibility.USER, "实验性功能开关与开发者选项入口"),
         PageEntry(SettingsDestination.Developer, "settings_developer", "开发者", PageVisibility.DEVELOPER, "测试中心：列表排序开关 + DebugActionRegistry 调试动作（从实验室进入）"),
         PageEntry(SettingsDestination.ConfigEditor, "settings_config_editor", "配置编辑", PageVisibility.DEVELOPER, "由 ConfigCatalog 驱动的底层配置编辑（从开发者页进入）"),
+        PageEntry(SettingsDestination.OnboardingGuide, "settings_onboarding_guide", "初始化引导", PageVisibility.DEVELOPER, "首次启动引导页调试入口：权限与一级功能开关体检"),
+        PageEntry(SettingsDestination.OnboardingLiveCapsuleDemo, "settings_onboarding_live_capsule_demo", "实况胶囊演示", PageVisibility.DEVELOPER, "开发者调试入口：单独预览初始化引导里的顶部实况胶囊动画"),
         PageEntry(SettingsDestination.RegexRuleEditor, "settings_regex_rule_editor", "正则规则", PageVisibility.DEVELOPER, "编辑本地正则日程识别规则并测试匹配结果"),
     )
 

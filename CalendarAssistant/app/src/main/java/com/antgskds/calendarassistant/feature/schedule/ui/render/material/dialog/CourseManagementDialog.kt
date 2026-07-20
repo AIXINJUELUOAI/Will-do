@@ -64,7 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker

@@ -13,9 +13,9 @@ import android.graphics.Paint
 import android.os.Bundle
 import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.MainActivity
-import com.antgskds.calendarassistant.core.util.DensityConfigManager
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.WidgetThemeMode
+import com.antgskds.calendarassistant.shared.util.DensityConfigManager
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.platform.widget.model.WidgetThemeMode
 import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.app.ui.theme.material.parseThemeHexColor

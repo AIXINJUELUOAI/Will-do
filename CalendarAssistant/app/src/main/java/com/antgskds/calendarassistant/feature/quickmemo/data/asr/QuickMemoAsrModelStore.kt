@@ -26,29 +26,24 @@ object QuickMemoAsrModelStore {
         val dir = modelDir(context)
         return QuickMemoAsrModelStatus(
             modelReady = modelFile(context) != null,
-            tokensReady = File(dir, TOKENS_FILE).isUsableFile(),
+            tokensReady = tokensFile(context) != null,
             modelDirectory = dir.absolutePath
         )
     }
 
     fun modelFile(context: Context): File? {
         val dir = modelDir(context)
-        return File(dir, MODEL_FILE).takeIf { it.isUsableFile() }
-            ?: File(dir, FALLBACK_MODEL_FILE).takeIf { it.isUsableFile() }
+        return File(dir, MODEL_FILE).takeIf { it.isValidModelFile() }
+            ?: File(dir, FALLBACK_MODEL_FILE).takeIf { it.isValidModelFile() }
     }
 
     fun tokensFile(context: Context): File? {
-        return File(modelDir(context), TOKENS_FILE).takeIf { it.isUsableFile() }
+        return File(modelDir(context), TOKENS_FILE).takeIf { it.isValidTokensFile() }
     }
 
     fun importModelFile(context: Context, uri: Uri): Result<String> = runCatching {
         val displayName = queryDisplayName(context, uri).lowercase()
-        val targetName = when {
-            displayName == TOKENS_FILE || displayName.endsWith(".txt") -> TOKENS_FILE
-            displayName == FALLBACK_MODEL_FILE -> FALLBACK_MODEL_FILE
-            displayName == MODEL_FILE || displayName.endsWith(".onnx") -> MODEL_FILE
-            else -> error("请选择 .onnx 模型文件或 tokens.txt")
-        }
+        val targetName = resolveTargetName(displayName)
         val target = File(modelDir(context).apply { mkdirs() }, targetName)
         val tmp = File(target.parentFile, "$targetName.import")
         tmp.delete()
@@ -56,11 +51,21 @@ object QuickMemoAsrModelStore {
             tmp.outputStream().use { output -> input.copyTo(output) }
         } ?: error("无法读取文件")
         if (!tmp.isUsableFile()) error("导入文件为空")
+        validateImportedFile(targetName, tmp)
         if (!tmp.renameTo(target)) {
             tmp.copyTo(target, overwrite = true)
             tmp.delete()
         }
         targetName
+    }
+
+    private fun resolveTargetName(displayName: String): String {
+        return when (displayName) {
+            TOKENS_FILE -> TOKENS_FILE
+            FALLBACK_MODEL_FILE, "$FALLBACK_MODEL_FILE.txt" -> FALLBACK_MODEL_FILE
+            MODEL_FILE, "$MODEL_FILE.txt" -> MODEL_FILE
+            else -> error("请选择 model.int8.onnx、model.int8.onnx.txt、model.onnx、model.onnx.txt 或 tokens.txt")
+        }
     }
 
     private fun queryDisplayName(context: Context, uri: Uri): String {
@@ -74,4 +79,39 @@ object QuickMemoAsrModelStore {
     }
 
     private fun File.isUsableFile(): Boolean = isFile && length() > 0L
+
+    private fun validateImportedFile(targetName: String, file: File) {
+        when (targetName) {
+            MODEL_FILE, FALLBACK_MODEL_FILE -> {
+                if (!file.isValidModelFile()) {
+                    error("模型文件异常，请确认导入的是 paraformer 的 $MODEL_FILE 或 $FALLBACK_MODEL_FILE")
+                }
+            }
+            TOKENS_FILE -> {
+                if (!file.isValidTokensFile()) {
+                    error("tokens.txt 内容异常，请导入语音模型目录中的原始 tokens.txt")
+                }
+            }
+        }
+    }
+
+    private fun File.isValidModelFile(): Boolean {
+        return isUsableFile() && length() >= MIN_MODEL_BYTES
+    }
+
+    private fun File.isValidTokensFile(): Boolean {
+        if (!isUsableFile() || length() < MIN_TOKENS_BYTES) return false
+        return runCatching {
+            bufferedReader().useLines { lines ->
+                lines
+                    .take(TOKENS_SAMPLE_LINE_LIMIT)
+                    .count { it.trim().isNotEmpty() } >= MIN_TOKENS_NON_EMPTY_LINES
+            }
+        }.getOrDefault(false)
+    }
+
+    private const val MIN_MODEL_BYTES = 1024L * 1024L
+    private const val MIN_TOKENS_BYTES = 128L
+    private const val TOKENS_SAMPLE_LINE_LIMIT = 512
+    private const val MIN_TOKENS_NON_EMPTY_LINES = 20
 }

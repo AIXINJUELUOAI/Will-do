@@ -7,7 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
-import com.antgskds.calendarassistant.data.source.SettingsDataSource
+import com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource
 import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupSource
 import kotlinx.coroutines.CoroutineScope

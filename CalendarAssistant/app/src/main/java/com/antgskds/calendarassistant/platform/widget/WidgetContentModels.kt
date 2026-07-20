@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.platform.widget
 
-import com.antgskds.calendarassistant.data.model.WeatherData
-import com.antgskds.calendarassistant.data.model.TimeNode
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeNode
 import java.time.LocalDate
 
 data class WeatherWidgetSnapshot(

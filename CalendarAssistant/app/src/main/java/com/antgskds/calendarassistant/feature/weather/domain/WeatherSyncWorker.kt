@@ -9,8 +9,8 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.repository.SettingsRepository
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.SettingsRepository
 import java.util.concurrent.TimeUnit
 
 class WeatherSyncWorker(

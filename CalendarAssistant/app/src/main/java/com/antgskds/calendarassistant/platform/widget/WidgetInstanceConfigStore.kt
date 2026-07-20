@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.platform.widget
 
 import android.content.Context
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 class WidgetInstanceConfigStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.platform.floating.ui.connector
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.platform.floating.ui.contract.PickupQrFloatingCardUiState
 import org.junit.Assert.assertEquals
 import org.junit.Test

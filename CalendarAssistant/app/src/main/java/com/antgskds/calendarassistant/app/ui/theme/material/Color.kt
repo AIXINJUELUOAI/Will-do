@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.app.ui.theme.material
 
 import androidx.compose.ui.graphics.Color
-import com.antgskds.calendarassistant.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
-import com.antgskds.calendarassistant.data.model.eventColorPaletteToArgb
+import com.antgskds.calendarassistant.feature.settings.data.model.DEFAULT_EVENT_COLOR_PALETTE_HEX
+import com.antgskds.calendarassistant.feature.settings.data.model.eventColorPaletteToArgb
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)

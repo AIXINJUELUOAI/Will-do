@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.app.runtime
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
-import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.query.NetworkSpeedProbeQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.platform.floating.FloatingServiceController
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.platform.receiver.DailySummaryReceiver
@@ -100,10 +100,11 @@ class AppRuntimeCoordinator(
     fun startEdgeBarIfNeeded() {
         try {
             val settings = settingsQueryApi.settings.value
-            if (settings.isFloatingWindowEnabled && settings.edgeBarEnabled && permissionCenter.canDrawOverlays(appContext)) {
+            val hasFloatingFeature = settings.isFloatingWindowEnabled || settings.voiceInputEnabled
+            if (hasFloatingFeature && settings.edgeBarEnabled && permissionCenter.canDrawOverlays(appContext)) {
                 floatingCenter.startEdgeBarServiceIfPermitted()
             }
-            if (settings.isFloatingWindowEnabled && settings.floatingBallEnabled && permissionCenter.canDrawOverlays(appContext)) {
+            if (hasFloatingFeature && settings.floatingBallEnabled && permissionCenter.canDrawOverlays(appContext)) {
                 floatingCenter.startFloatingBallServiceIfPermitted()
             }
         } catch (e: Exception) {

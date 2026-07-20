@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.domain.rule
 
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.RecognitionMode
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
 
 object RecognitionModePolicy {
     fun mode(settings: MySettings): Int = RecognitionMode.normalize(settings.recognitionMode)

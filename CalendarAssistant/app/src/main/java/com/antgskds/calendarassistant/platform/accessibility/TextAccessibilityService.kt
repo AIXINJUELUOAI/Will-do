@@ -21,12 +21,12 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.Analysi
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
-import com.antgskds.calendarassistant.core.event.DomainEventType
-import com.antgskds.calendarassistant.core.event.EventIdentity
-import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
-import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
-import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.shared.event.DomainEventType
+import com.antgskds.calendarassistant.shared.event.EventIdentity
+import com.antgskds.calendarassistant.shared.event.events.IngestFailedEvent
+import com.antgskds.calendarassistant.shared.event.events.IngestSucceededEvent
+import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.NormalNotificationContent
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.RecognitionNormalDisplay
@@ -147,8 +147,8 @@ class TextAccessibilityService : AccessibilityService() {
         if (!settings.volumeUpLongPressEnabled) return false
         return when (settings.volumeUpLongPressAction.coerceIn(1, 3)) {
             ACTION_VOLUME_LONG_PRESS_SCREENSHOT -> true
-            ACTION_VOLUME_LONG_PRESS_FLOATING -> settings.isFloatingWindowEnabled
-            ACTION_VOLUME_LONG_PRESS_VOICE -> settings.voiceInputEnabled && settings.isFloatingWindowEnabled
+            ACTION_VOLUME_LONG_PRESS_FLOATING -> settings.isFloatingWindowEnabled || settings.voiceInputEnabled
+            ACTION_VOLUME_LONG_PRESS_VOICE -> settings.voiceInputEnabled
             else -> false
         }
     }
@@ -286,6 +286,10 @@ class TextAccessibilityService : AccessibilityService() {
                                 }
                             }
                             ACTION_VOLUME_LONG_PRESS_VOICE -> {
+                                if (FloatingScheduleService.isShowing && !currentSettings.floatingVoiceLongPressEnabled) {
+                                    Log.d(TAG, "悬浮窗长按随口记已关闭，忽略音量+语音触发")
+                                    return@launch
+                                }
                                 isVoiceCaptureTriggered = true
                                 startVoiceCaptureService()
                             }

@@ -1,10 +1,10 @@
 package com.antgskds.calendarassistant.feature.schedule.domain.rule
 
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
+import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
 
 object RuleMatchingEngine {
     const val RULE_GENERAL = "general"

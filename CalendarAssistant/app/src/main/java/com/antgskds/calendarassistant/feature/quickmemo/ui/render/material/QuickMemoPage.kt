@@ -117,17 +117,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
-import com.antgskds.calendarassistant.core.util.ImageImportUtils
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.shared.util.ImageImportUtils
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarExtraHeight
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarShadowPadding
@@ -265,7 +265,7 @@ fun MaterialQuickMemoScreen(
                             onAction(QuickMemoUiAction.TogglePinned(id, memo.id == pinnedQuickMemoId))
                         }
                     },
-                    onDelete = { onAction(QuickMemoUiAction.RequestDelete(memo)) },
+                    onDelete = { memo.id?.let { onAction(QuickMemoUiAction.Delete(it)) } },
                     onToggleAudio = { path -> onAction(QuickMemoUiAction.ToggleAudio(path)) },
                     onOpenDetail = { memo.id?.let { onAction(QuickMemoUiAction.OpenDetail(it)) } },
                     onLongPress = { onAction(QuickMemoUiAction.RequestDelete(memo)) },

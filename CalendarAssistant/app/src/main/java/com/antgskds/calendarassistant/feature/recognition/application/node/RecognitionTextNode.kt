@@ -6,7 +6,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.Recogni
 import com.antgskds.calendarassistant.feature.recognition.application.ai.provider.RecognitionProviderFactory
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionModePolicy
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 internal object RecognitionTextNode {
     suspend fun parseUserText(

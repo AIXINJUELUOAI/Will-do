@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.notification.model.NotificationFailureReason
@@ -74,6 +75,7 @@ class AndroidNormalNotificationPublisher(
             .setAutoCancel(payload.behavior.autoCancel)
             .setOnlyAlertOnce(payload.behavior.onlyAlertOnce)
             .setOngoing(payload.behavior.ongoing)
+            .setLocalOnly(isBraceletModeEnabled())
         payload.behavior.timeoutAfterMillis?.let(builder::setTimeoutAfter)
         if (expanded != null && expanded != contentText) {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
@@ -156,6 +158,9 @@ class AndroidNormalNotificationPublisher(
             )
         }
     }
+
+    private fun isBraceletModeEnabled(): Boolean =
+        (appContext as? App)?.settingsQueryApi?.settings?.value?.braceletModeEnabled == true
 
     companion object {
         private const val TAG = "NormalNotifPublisher"

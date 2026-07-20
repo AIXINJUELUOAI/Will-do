@@ -4,9 +4,9 @@ import android.net.Uri
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
-import com.antgskds.calendarassistant.data.model.AppBackupImportResult
-import com.antgskds.calendarassistant.data.model.AppBackupOptions
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupImportResult
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupOptions
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 

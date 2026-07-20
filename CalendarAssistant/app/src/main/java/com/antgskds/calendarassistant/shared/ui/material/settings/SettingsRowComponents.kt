@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.sliderHapticBucket
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.antgskds.calendarassistant.data.model.RecognitionMode
+import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
 import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker

@@ -82,7 +82,7 @@ fun MaterialScheduleView(
     val displayItems = remember(items, viewingWeekMonday) {
         val weekEnd = viewingWeekMonday.plusDays(6)
         items.filter { item ->
-            item.tag == com.antgskds.calendarassistant.calendar.models.EventTags.COURSE &&
+            item.tag == com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags.COURSE &&
                 !item.startDate.isBefore(viewingWeekMonday) &&
                 !item.startDate.isAfter(weekEnd) &&
                 CourseEventMapper.parseMeta(item.description) != null

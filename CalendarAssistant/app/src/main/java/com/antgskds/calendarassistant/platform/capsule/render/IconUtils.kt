@@ -4,11 +4,11 @@ import android.content.Context
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherAlertIconMapper
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
-import com.antgskds.calendarassistant.data.state.CapsuleType
-import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleStateManager
 
 object IconUtils {
 

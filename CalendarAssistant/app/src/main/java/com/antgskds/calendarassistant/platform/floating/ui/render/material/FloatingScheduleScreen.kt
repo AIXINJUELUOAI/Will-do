@@ -31,6 +31,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -143,28 +144,28 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import android.content.Context
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.data.model.WeatherData
-import com.antgskds.calendarassistant.data.model.WeatherDailyForecast
-import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
-import com.antgskds.calendarassistant.data.model.displayLocationName
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherDailyForecast
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherHourlyForecast
+import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherForecastIconMapper
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.feature.schedule.presentation.rule.ActionIconType
-import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
+import com.antgskds.calendarassistant.shared.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.schedule.presentation.rule.StatusColor
-import com.antgskds.calendarassistant.core.util.extractSourceImagePath
-import com.antgskds.calendarassistant.core.util.mergeSourceImageMarker
-import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.shared.util.extractSourceImagePath
+import com.antgskds.calendarassistant.shared.util.mergeSourceImageMarker
+import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingScheduleUiActions
@@ -226,6 +227,9 @@ fun MaterialFloatingScheduleScreen(
     val dragHotZonePercent = state.dragHotZonePercent
     val dragTextOptions = state.dragTextOptions
     val hapticEnabled = state.hapticEnabled
+    val scheduleFloatingEnabled = state.scheduleFloatingEnabled
+    val quickMemoFloatingEnabled = state.quickMemoFloatingEnabled
+    val floatingVoiceLongPressEnabled = state.floatingVoiceLongPressEnabled
     val reverseScheduleOrder = state.reverseScheduleOrder
     val onClose = actions.onClose
     val onManualInput = actions.onManualInput
@@ -287,7 +291,17 @@ fun MaterialFloatingScheduleScreen(
     val haptics = rememberAppHaptics(hapticEnabled)
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val isPickerVisible = pickerRequest != null
-    var currentMode by remember { mutableStateOf(initialMode) }
+    fun normalizeInputMode(mode: FloatingInputMode): FloatingInputMode {
+        return when {
+            mode == FloatingInputMode.SCHEDULE && scheduleFloatingEnabled -> FloatingInputMode.SCHEDULE
+            mode == FloatingInputMode.NOTE && quickMemoFloatingEnabled -> FloatingInputMode.NOTE
+            scheduleFloatingEnabled -> FloatingInputMode.SCHEDULE
+            quickMemoFloatingEnabled -> FloatingInputMode.NOTE
+            else -> FloatingInputMode.SCHEDULE
+        }
+    }
+    var currentMode by remember { mutableStateOf(normalizeInputMode(initialMode)) }
+    val canSwitchInputMode = scheduleFloatingEnabled && quickMemoFloatingEnabled
     val recentVoiceMemo = remember(quickMemos, recentVoiceMemoId) {
         recentVoiceMemoId?.let { id -> quickMemos.firstOrNull { it.id == id } }
     }
@@ -302,13 +316,18 @@ fun MaterialFloatingScheduleScreen(
     }
 
     LaunchedEffect(voiceCaptureState.status) {
-        if (voiceCaptureState.isActive) {
+        if (voiceCaptureState.isActive && quickMemoFloatingEnabled) {
             currentMode = FloatingInputMode.NOTE
         }
     }
 
-    LaunchedEffect(initialMode, initialModeRequestKey) {
-        currentMode = initialMode
+    LaunchedEffect(initialMode, initialModeRequestKey, scheduleFloatingEnabled, quickMemoFloatingEnabled) {
+        currentMode = normalizeInputMode(initialMode)
+    }
+
+    LaunchedEffect(currentMode, scheduleFloatingEnabled, quickMemoFloatingEnabled) {
+        val normalized = normalizeInputMode(currentMode)
+        if (normalized != currentMode) currentMode = normalized
     }
 
     // 背景透明度动画
@@ -355,10 +374,10 @@ fun MaterialFloatingScheduleScreen(
             modifier = Modifier.align(if (expandFromLeft) Alignment.TopStart else Alignment.TopEnd)
         ) {
             TimeWheelList(
-                scheduleItems = scheduleItems,
-                quickMemos = quickMemos,
+                scheduleItems = if (scheduleFloatingEnabled) scheduleItems else emptyList(),
+                quickMemos = if (quickMemoFloatingEnabled) quickMemos else emptyList(),
                 audioPlaybackState = audioPlaybackState,
-                weatherData = weatherData,
+                weatherData = if (scheduleFloatingEnabled) weatherData else null,
                 weatherForecastRange = weatherForecastRange,
                 currentMode = currentMode,
                 expandFromLeft = expandFromLeft,
@@ -443,7 +462,9 @@ fun MaterialFloatingScheduleScreen(
                 onSwipeUpClose = { animateClose() },
                 isLoading = isLoading,
                 currentMode = currentMode,
-                onModeChange = { currentMode = it },
+                canSwitchMode = canSwitchInputMode,
+                onModeChange = { currentMode = normalizeInputMode(it) },
+                voiceLongPressEnabled = floatingVoiceLongPressEnabled,
                 hapticEnabled = hapticEnabled
             )
         }
@@ -457,6 +478,7 @@ fun MaterialFloatingScheduleScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BottomInteractionArea(
     modifier: Modifier = Modifier,
@@ -474,7 +496,9 @@ fun BottomInteractionArea(
     onSwipeUpClose: () -> Unit,
     isLoading: Boolean = false,
     currentMode: FloatingInputMode = FloatingInputMode.SCHEDULE,
+    canSwitchMode: Boolean = true,
     onModeChange: (FloatingInputMode) -> Unit = {},
+    voiceLongPressEnabled: Boolean = true,
     hapticEnabled: Boolean = true
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
@@ -541,10 +565,20 @@ fun BottomInteractionArea(
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(activeColor.copy(alpha = 0.15f))
-                            .clickable(enabled = !isLoading) {
-                                haptics.selection()
-                                onModeChange(if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE)
-                            },
+                            .combinedClickable(
+                                enabled = !isLoading && canSwitchMode,
+                                onClick = {
+                                    haptics.selection()
+                                    onModeChange(if (isNote) FloatingInputMode.SCHEDULE else FloatingInputMode.NOTE)
+                                },
+                                onLongClick = {
+                                    if (voiceLongPressEnabled && canSwitchMode) {
+                                        haptics.longPress()
+                                        if (!isNote) onModeChange(FloatingInputMode.NOTE)
+                                        onStartVoiceCapture()
+                                    }
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isNote) {

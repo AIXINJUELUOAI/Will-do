@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.settings.preference.ui.contract
 
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import kotlinx.coroutines.flow.StateFlow
 
 interface PreferenceUiController {

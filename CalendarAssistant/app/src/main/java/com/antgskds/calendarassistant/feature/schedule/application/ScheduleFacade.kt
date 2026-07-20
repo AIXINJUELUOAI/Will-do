@@ -3,21 +3,21 @@ package com.antgskds.calendarassistant.feature.schedule.application
 import android.util.Log
 import com.antgskds.calendarassistant.feature.schedule.application.undo.UndoManager
 import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
-import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
-import com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED
-import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.isCheckedIn
-import com.antgskds.calendarassistant.calendar.models.isCompleted
-import com.antgskds.calendarassistant.calendar.models.isCourse
-import com.antgskds.calendarassistant.calendar.models.isRetiredNoteTag
-import com.antgskds.calendarassistant.calendar.models.isTransit
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_COMPLETED
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isCheckedIn
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isCompleted
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isCourse
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isRetiredNoteTag
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isTransit
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
-import com.antgskds.calendarassistant.core.operation.OperationResult
-import com.antgskds.calendarassistant.core.query.EventActionQueryApi
-import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.shared.operation.OperationResult
+import com.antgskds.calendarassistant.shared.query.EventActionQueryApi
+import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
@@ -42,7 +42,8 @@ class ScheduleFacade(
     private val appScope: CoroutineScope,
     private val notificationApi: NotificationApi? = null,
     private val eventActionQueryApi: EventActionQueryApi? = null,
-    private val settingsProvider: () -> MySettings = { MySettings() }
+    private val settingsProvider: () -> MySettings = { MySettings() },
+    private val braceletScheduleUpdateNotifier: (Event) -> Unit = {}
 ) {
     var onScheduleChanged: (() -> Unit)? = null
 
@@ -160,33 +161,33 @@ class ScheduleFacade(
 
     fun completeEventWithUndo(event: Event) {
         val eventId = event.id ?: return
-        applyStateToUiList(eventId, com.antgskds.calendarassistant.calendar.helpers.STATE_COMPLETED)
+        applyStateToUiList(eventId, com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_COMPLETED)
         undoManager.submit(UndoManager.PendingAction(
             id = "complete-$eventId",
             label = "已完成「${event.title}」",
-            commitAction = { withContext(Dispatchers.IO) { calendarCenter.completeEvent(eventId); refreshEvents() } },
+            commitAction = { withContext(Dispatchers.IO) { calendarCenter.completeEvent(eventId); notifyBraceletScheduleUpdate(eventId); refreshEvents() } },
             rollbackAction = { refreshEvents() }
         ))
     }
 
     fun checkInEventWithUndo(event: Event) {
         val eventId = event.id ?: return
-        applyStateToUiList(eventId, com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN)
+        applyStateToUiList(eventId, com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN)
         undoManager.submit(UndoManager.PendingAction(
             id = "checkin-$eventId",
             label = "已签到「${event.title}」",
-            commitAction = { withContext(Dispatchers.IO) { calendarCenter.checkInEvent(eventId); refreshEvents() } },
+            commitAction = { withContext(Dispatchers.IO) { calendarCenter.checkInEvent(eventId); notifyBraceletScheduleUpdate(eventId); refreshEvents() } },
             rollbackAction = { refreshEvents() }
         ))
     }
 
     fun markPendingWithUndo(event: Event) {
         val eventId = event.id ?: return
-        applyStateToUiList(eventId, com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING)
+        applyStateToUiList(eventId, com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING)
         undoManager.submit(UndoManager.PendingAction(
             id = "pending-$eventId",
             label = "已恢复「${event.title}」",
-            commitAction = { withContext(Dispatchers.IO) { calendarCenter.markPending(eventId); refreshEvents() } },
+            commitAction = { withContext(Dispatchers.IO) { calendarCenter.markPending(eventId); notifyBraceletScheduleUpdate(eventId); refreshEvents() } },
             rollbackAction = { refreshEvents() }
         ))
     }
@@ -206,7 +207,7 @@ class ScheduleFacade(
     /** 批量完成所有活跃取件码 */
     suspend fun completeAllActivePickups(): Int {
         val pickups = _events.value.filter {
-            it.tag == com.antgskds.calendarassistant.calendar.models.EventTags.PICKUP && !it.isCompleted
+            it.tag == com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags.PICKUP && !it.isCompleted
         }
         pickups.forEach { event ->
             val eid = event.id ?: return@forEach
@@ -327,9 +328,9 @@ class ScheduleFacade(
         val start = java.time.Instant.ofEpochSecond(overrideStartTS).atZone(zone).toLocalDateTime()
         val end = java.time.Instant.ofEpochSecond(overrideEndTS).atZone(zone).toLocalDateTime()
         val reminders = listOfNotNull(
-            event.reminder1Minutes.takeIf { it != com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF },
-            event.reminder2Minutes.takeIf { it != com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF },
-            event.reminder3Minutes.takeIf { it != com.antgskds.calendarassistant.calendar.helpers.REMINDER_OFF }
+            event.reminder1Minutes.takeIf { it != com.antgskds.calendarassistant.feature.schedule.domain.calendar.REMINDER_OFF },
+            event.reminder2Minutes.takeIf { it != com.antgskds.calendarassistant.feature.schedule.domain.calendar.REMINDER_OFF },
+            event.reminder3Minutes.takeIf { it != com.antgskds.calendarassistant.feature.schedule.domain.calendar.REMINDER_OFF }
         )
         return com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft(
             title = event.title,
@@ -462,16 +463,19 @@ class ScheduleFacade(
      */
     fun completeItem(target: ActionTarget) {
         appScope.launch(Dispatchers.IO) {
-            when (target) {
+            val changedId = when (target) {
                 is ActionTarget.Single -> {
                     if (calendarCenter.getEvent(target.eventId)?.isCourse == true) return@launch
-                    calendarCenter.completeEvent(target.eventId)
+                    val result = calendarCenter.completeEvent(target.eventId)
+                    (result as? OperationResult.Success<Long>)?.data
                 }
                 is ActionTarget.RecurringOccurrence -> {
                     if (calendarCenter.getEvent(target.parentId)?.isCourse == true) return@launch
-                    calendarCenter.completeEvent(target.parentId, target.occurrenceTs)
+                    val result = calendarCenter.completeEvent(target.parentId, target.occurrenceTs)
+                    (result as? OperationResult.Success<Long>)?.data
                 }
             }
+            changedId?.let(::notifyBraceletScheduleUpdate)
             refreshEvents()
         }
     }
@@ -481,24 +485,34 @@ class ScheduleFacade(
      */
     fun checkInItem(target: ActionTarget) {
         appScope.launch(Dispatchers.IO) {
-            when (target) {
+            val changedId = when (target) {
                 is ActionTarget.Single -> {
-                    calendarCenter.checkInEvent(target.eventId)
+                    val result = calendarCenter.checkInEvent(target.eventId)
+                    (result as? OperationResult.Success<Long>)?.data
                 }
                 is ActionTarget.RecurringOccurrence -> {
-                    calendarCenter.checkInEvent(target.parentId, target.occurrenceTs)
+                    val result = calendarCenter.checkInEvent(target.parentId, target.occurrenceTs)
+                    (result as? OperationResult.Success<Long>)?.data
                 }
             }
+            changedId?.let(::notifyBraceletScheduleUpdate)
             refreshEvents()
         }
     }
 
     fun markPendingItem(target: ActionTarget) {
         appScope.launch(Dispatchers.IO) {
-            when (target) {
-                is ActionTarget.Single -> calendarCenter.markPending(target.eventId)
-                is ActionTarget.RecurringOccurrence -> calendarCenter.markPending(target.parentId, target.occurrenceTs)
+            val changedId = when (target) {
+                is ActionTarget.Single -> {
+                    val result = calendarCenter.markPending(target.eventId)
+                    (result as? OperationResult.Success<Long>)?.data
+                }
+                is ActionTarget.RecurringOccurrence -> {
+                    val result = calendarCenter.markPending(target.parentId, target.occurrenceTs)
+                    (result as? OperationResult.Success<Long>)?.data
+                }
             }
+            changedId?.let(::notifyBraceletScheduleUpdate)
             refreshEvents()
         }
     }
@@ -548,6 +562,7 @@ class ScheduleFacade(
         if (item.tag == EventTags.COURSE) return
         val snapshotBefore = captureStateUndoSnapshot(item) ?: return
         val changedId = applyItemState(item.action, targetState) ?: return
+        notifyBraceletScheduleUpdate(changedId)
         refreshEvents()
 
         val pendingKeys = buildSet {
@@ -568,6 +583,7 @@ class ScheduleFacade(
             rollbackAction = {
                 try {
                     restoreStateUndoSnapshot(snapshot)
+                    notifyBraceletScheduleUpdate(snapshot.targetBefore ?: snapshot.parentBefore)
                     refreshEvents()
                 } finally {
                     clearPendingItemStates(pendingKeys)
@@ -625,6 +641,16 @@ class ScheduleFacade(
             }
         }
         return (result as? OperationResult.Success<Long>)?.data
+    }
+
+    private fun notifyBraceletScheduleUpdate(eventId: Long) {
+        notifyBraceletScheduleUpdate(calendarCenter.getEvent(eventId))
+    }
+
+    private fun notifyBraceletScheduleUpdate(event: Event?) {
+        if (event == null || !event.isTransit) return
+        runCatching { braceletScheduleUpdateNotifier(event) }
+            .onFailure { Log.w("ScheduleFacade", "bracelet schedule update failed eventId=${event.id}", it) }
     }
 
     private fun restoreStateUndoSnapshot(snapshot: StateUndoSnapshot) {

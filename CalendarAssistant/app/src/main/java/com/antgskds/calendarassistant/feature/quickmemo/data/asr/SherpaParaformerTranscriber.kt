@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.quickmemo.data.asr
 
 import android.content.Context
+import android.os.Debug
 import android.util.Log
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
@@ -24,13 +25,26 @@ class SherpaParaformerTranscriber(
 
     override suspend fun transcribe(audioPath: String): TranscriptionResult = withContext(Dispatchers.IO) {
         runCatching {
+            Log.i(TAG, "transcribe start audio=$audioPath exists=${File(audioPath).isFile} size=${File(audioPath).length()}")
+            logMemory("before_model_resolve")
             val modelFiles = modelManager.ensureModelFiles()
+            Log.i(
+                TAG,
+                "model files resolved model=${modelFiles.model.absolutePath} modelSize=${modelFiles.model.length()} " +
+                    "tokens=${modelFiles.tokens.absolutePath} tokensSize=${modelFiles.tokens.length()}"
+            )
+            logMemory("before_audio_decode")
             val decoded = audioDecoder.decodeToFloatSamples(audioPath)
+            Log.i(TAG, "audio decoded sampleRate=${decoded.sampleRate} samples=${decoded.samples.size}")
+            logMemory("before_recognizer_get")
             val recognizer = getRecognizer(modelFiles)
+            Log.i(TAG, "recognizer ready, creating stream")
             val stream = recognizer.createStream()
             try {
                 stream.acceptWaveform(decoded.samples, decoded.sampleRate)
+                Log.i(TAG, "waveform accepted, start decode")
                 recognizer.decode(stream)
+                Log.i(TAG, "decode finished, fetching result")
                 recognizer.getResult(stream).text.trim()
             } finally {
                 runCatching { stream.release() }
@@ -54,23 +68,50 @@ class SherpaParaformerTranscriber(
         val key = "${modelFiles.model.absolutePath}|${modelFiles.tokens.absolutePath}"
         synchronized(recognizerLock) {
             val cached = recognizer
-            if (cached != null && recognizerKey == key) return cached
+            if (cached != null && recognizerKey == key) {
+                Log.i(TAG, "reuse cached recognizer key=$key")
+                return cached
+            }
             runCatching { recognizer?.release() }
+            Log.i(TAG, "build recognizer start key=$key")
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80, dither = 0f),
                 modelConfig = OfflineModelConfig(
                     paraformer = OfflineParaformerModelConfig(model = modelFiles.model.absolutePath),
                     tokens = modelFiles.tokens.absolutePath,
-                    numThreads = 2,
+                    numThreads = 1,
                     debug = false,
                     provider = "cpu"
-                )
+                ),
+                hotwordsFile = "",
+                hotwordsScore = 0f
             )
-            return OfflineRecognizer(null, config).also {
-                recognizer = it
+            Log.i(
+                TAG,
+                "creating OfflineRecognizer model=${modelFiles.model.name} modelSize=${modelFiles.model.length()} " +
+                    "tokensSize=${modelFiles.tokens.length()} numThreads=1 hotwordsDisabled=true"
+            )
+            return runCatching {
+                OfflineRecognizer(null, config)
+            }.onSuccess { created ->
+                recognizer = created
                 recognizerKey = key
-            }
+                Log.i(TAG, "OfflineRecognizer created key=$key")
+            }.onFailure { throwable ->
+                Log.e(TAG, "OfflineRecognizer creation failed key=$key type=${throwable::class.java.name} msg=${throwable.message}", throwable)
+            }.getOrThrow()
         }
+    }
+
+    private fun logMemory(stage: String) {
+        val runtime = Runtime.getRuntime()
+        Log.i(
+            TAG,
+            "memory[$stage] " +
+                "javaUsed=${runtime.totalMemory() - runtime.freeMemory()} " +
+                "javaFree=${runtime.freeMemory()} javaTotal=${runtime.totalMemory()} javaMax=${runtime.maxMemory()} " +
+                "nativeHeap=${Debug.getNativeHeapAllocatedSize()} nativeFree=${Debug.getNativeHeapFreeSize()}"
+        )
     }
 
     companion object {

@@ -2,12 +2,12 @@ package com.antgskds.calendarassistant.feature.recognition.application.rule
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.calendar.models.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.recognition.application.node.RecognitionTextNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.MainActivity
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.data.model.QuickMemoRecordingDisplayMode
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
+import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 
 class FloatingServiceController(
@@ -23,11 +23,15 @@ class FloatingServiceController(
 
     fun startFloatingService(initialInputMode: String? = null): Boolean {
         if (!canDrawOverlays()) return false
+        val settings = settingsQueryApi.settings.value
+        val resolvedInputMode = resolveInitialInputMode(
+            requested = initialInputMode,
+            scheduleEnabled = settings.isFloatingWindowEnabled,
+            quickMemoEnabled = settings.voiceInputEnabled
+        ) ?: return false
         return try {
             appContext.startService(Intent(appContext, FloatingScheduleService::class.java).apply {
-                if (initialInputMode != null) {
-                    putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, initialInputMode)
-                }
+                putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, resolvedInputMode)
             })
             true
         } catch (e: Exception) {
@@ -38,6 +42,7 @@ class FloatingServiceController(
 
     fun startVoiceCaptureService(): Boolean {
         if (!canDrawOverlays()) return false
+        if (!settingsQueryApi.settings.value.voiceInputEnabled) return false
         return try {
             if (!permissionCenter.hasRecordAudioPermission(appContext)) {
                 appContext.startActivity(Intent(appContext, MainActivity::class.java).apply {
@@ -123,10 +128,35 @@ class FloatingServiceController(
         return if (QuickMemoRecordingDisplayMode.normalize(settings.quickMemoRecordingDisplayMode) == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
             Intent(appContext, FloatingScheduleService::class.java).apply {
                 action = floatingAction
+                putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, FloatingScheduleService.INPUT_MODE_NOTE)
             }
         } else {
             Intent(appContext, QuickMemoVoiceCaptureService::class.java).apply {
                 action = liveAction
+            }
+        }
+    }
+
+    private fun resolveInitialInputMode(
+        requested: String?,
+        scheduleEnabled: Boolean,
+        quickMemoEnabled: Boolean
+    ): String? {
+        return when (requested) {
+            FloatingScheduleService.INPUT_MODE_SCHEDULE -> when {
+                scheduleEnabled -> FloatingScheduleService.INPUT_MODE_SCHEDULE
+                quickMemoEnabled -> FloatingScheduleService.INPUT_MODE_NOTE
+                else -> null
+            }
+            FloatingScheduleService.INPUT_MODE_NOTE -> when {
+                quickMemoEnabled -> FloatingScheduleService.INPUT_MODE_NOTE
+                scheduleEnabled -> FloatingScheduleService.INPUT_MODE_SCHEDULE
+                else -> null
+            }
+            else -> when {
+                scheduleEnabled -> FloatingScheduleService.INPUT_MODE_SCHEDULE
+                quickMemoEnabled -> FloatingScheduleService.INPUT_MODE_NOTE
+                else -> null
             }
         }
     }

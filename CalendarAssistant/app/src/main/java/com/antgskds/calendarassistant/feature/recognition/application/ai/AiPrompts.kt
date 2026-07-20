@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.data.model.RemotePrompts
+import com.antgskds.calendarassistant.feature.recognition.application.ai.model.RemotePrompts
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

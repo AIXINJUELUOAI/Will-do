@@ -60,10 +60,10 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.feature.recognition.ui.feedback.RecognitionFeedbackSource
-import com.antgskds.calendarassistant.core.util.ImageImportUtils
-import com.antgskds.calendarassistant.core.util.LunarCalendarUtils
+import com.antgskds.calendarassistant.shared.util.ImageImportUtils
+import com.antgskds.calendarassistant.shared.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
-import com.antgskds.calendarassistant.data.model.HomeEntryKey
+import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.app.ui.theme.material.SectionTitleTextStyle
@@ -598,7 +598,7 @@ fun MaterialHomePage(
                                                 Modifier
                                             }
                                         )
-                                        .pointerInput(Unit) {
+                                        .pointerInput(state.selectedDate) {
                                             var totalDrag = 0f
                                             detectHorizontalDragGestures(
                                                 onDragEnd = {
@@ -607,6 +607,9 @@ fun MaterialHomePage(
                                                     } else if (totalDrag > 50) {
                                                         onAction(HomePageUiAction.SelectDate(state.selectedDate.minusDays(1)))
                                                     }
+                                                    totalDrag = 0f
+                                                },
+                                                onDragCancel = {
                                                     totalDrag = 0f
                                                 },
                                                 onHorizontalDrag = { change, dragAmount ->

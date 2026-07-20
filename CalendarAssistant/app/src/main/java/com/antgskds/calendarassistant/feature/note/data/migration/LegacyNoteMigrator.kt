@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.note.data.migration
 
 import android.content.Context
-import com.antgskds.calendarassistant.calendar.data.EventsDatabase
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.core.note.NoteEntity
+import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import kotlinx.coroutines.Dispatchers

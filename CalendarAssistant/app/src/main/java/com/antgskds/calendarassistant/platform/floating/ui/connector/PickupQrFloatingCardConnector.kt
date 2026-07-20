@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.platform.floating.ui.connector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.platform.floating.ui.contract.PickupQrFloatingCardUiAction
 import com.antgskds.calendarassistant.platform.floating.ui.contract.PickupQrFloatingCardUiState

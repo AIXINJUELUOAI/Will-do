@@ -1,10 +1,10 @@
 package com.antgskds.calendarassistant.feature.schedule.presentation.rule
 
 import android.content.Context
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
-import com.antgskds.calendarassistant.data.model.LiveNotificationTemplateMode
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
+import com.antgskds.calendarassistant.feature.settings.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import java.time.LocalDateTime

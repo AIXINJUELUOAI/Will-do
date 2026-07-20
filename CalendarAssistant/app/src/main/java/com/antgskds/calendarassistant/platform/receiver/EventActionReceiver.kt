@@ -7,13 +7,13 @@ import android.content.Intent
 import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
-import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleStateManager
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
-import com.antgskds.calendarassistant.calendar.models.EventTags
-import com.antgskds.calendarassistant.calendar.models.isCompleted
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
+import com.antgskds.calendarassistant.feature.schedule.domain.model.isCompleted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.BuildConfig
-import com.antgskds.calendarassistant.data.model.RemotePrompts
+import com.antgskds.calendarassistant.feature.recognition.application.ai.model.RemotePrompts
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.HttpTimeout

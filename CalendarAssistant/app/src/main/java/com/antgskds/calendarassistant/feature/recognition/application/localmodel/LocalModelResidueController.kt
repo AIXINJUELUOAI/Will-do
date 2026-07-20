@@ -3,8 +3,8 @@ package com.antgskds.calendarassistant.feature.recognition.application.localmode
 import android.content.Context
 import android.util.Log
 import com.antgskds.calendarassistant.BuildConfig
-import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

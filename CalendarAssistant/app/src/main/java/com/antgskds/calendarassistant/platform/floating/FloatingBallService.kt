@@ -23,8 +23,8 @@ import androidx.compose.ui.graphics.toArgb
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity
-import com.antgskds.calendarassistant.data.model.FloatingBallGestureAction
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.app.ui.theme.material.ThemeColorGenerator
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import kotlinx.coroutines.CoroutineScope
@@ -88,7 +88,7 @@ class FloatingBallService : Service() {
         }
         serviceScope.launch {
             settingsQueryApi.settings.collect { settings ->
-                if (!settings.isFloatingWindowEnabled || !settings.floatingBallEnabled) {
+                if ((!settings.isFloatingWindowEnabled && !settings.voiceInputEnabled) || !settings.floatingBallEnabled) {
                     removeBallView()
                     stopSelf()
                     return@collect
@@ -246,9 +246,20 @@ class FloatingBallService : Service() {
     }
 
     private fun performGestureAction(action: Int, fromLongPress: Boolean) {
+        val settings = settingsQueryApi.settings.value
         when (FloatingBallGestureAction.normalize(action)) {
-            FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE -> app.floatingCenter.startFloatingService(FloatingScheduleService.INPUT_MODE_SCHEDULE)
-            FloatingBallGestureAction.OPEN_QUICK_MEMO -> app.floatingCenter.startFloatingService(FloatingScheduleService.INPUT_MODE_NOTE)
+            FloatingBallGestureAction.OPEN_FLOATING_SCHEDULE -> {
+                if (settings.isFloatingWindowEnabled) {
+                    app.floatingCenter.startFloatingService(FloatingScheduleService.INPUT_MODE_SCHEDULE)
+                } else if (settings.voiceInputEnabled) {
+                    app.floatingCenter.startFloatingService(FloatingScheduleService.INPUT_MODE_NOTE)
+                }
+            }
+            FloatingBallGestureAction.OPEN_QUICK_MEMO -> {
+                if (settings.voiceInputEnabled) {
+                    app.floatingCenter.startFloatingService(FloatingScheduleService.INPUT_MODE_NOTE)
+                }
+            }
             FloatingBallGestureAction.QUICK_RECOGNITION -> startQuickRecognition()
             FloatingBallGestureAction.QUICK_MEMO_RECORDING -> startOrToggleVoiceCapture(fromLongPress)
             FloatingBallGestureAction.OPEN_APP_HOME -> openAppHome()

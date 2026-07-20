@@ -16,7 +16,7 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter

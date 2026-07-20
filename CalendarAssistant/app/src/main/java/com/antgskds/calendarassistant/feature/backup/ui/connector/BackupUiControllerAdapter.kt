@@ -3,11 +3,11 @@ package com.antgskds.calendarassistant.feature.backup.ui.connector
 import android.net.Uri
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
-import com.antgskds.calendarassistant.data.model.AppBackupImportResult
-import com.antgskds.calendarassistant.data.model.AppBackupOptions
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupImportResult
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.feature.backup.ui.contract.BackupUiController
-import com.antgskds.calendarassistant.ui.viewmodel.MainViewModel
-import com.antgskds.calendarassistant.ui.viewmodel.SettingsViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
+import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 
 class BackupUiControllerAdapter(
     private val settingsViewModel: SettingsViewModel,

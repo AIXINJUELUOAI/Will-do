@@ -2,12 +2,12 @@ package com.antgskds.calendarassistant.feature.schedule.data.maintenance
 
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.calendar.data.EventsDatabase
-import com.antgskds.calendarassistant.calendar.helpers.CALDAV
-import com.antgskds.calendarassistant.calendar.helpers.SOURCE_SIMPLE_CALENDAR
-import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.core.util.EventDuplicateSignature
+import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.CALDAV
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.SOURCE_SIMPLE_CALENDAR
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.shared.util.EventDuplicateSignature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

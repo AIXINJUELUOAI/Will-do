@@ -1,27 +1,27 @@
 package com.antgskds.calendarassistant.feature.schedule.notification
 
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import android.content.Context
 import android.util.Log
-import com.antgskds.calendarassistant.calendar.helpers.STATE_CHECKED_IN
-import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
-import com.antgskds.calendarassistant.core.query.CapsuleRouteMode
-import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
-import com.antgskds.calendarassistant.core.event.DomainEventBus
-import com.antgskds.calendarassistant.core.event.DomainEventType
-import com.antgskds.calendarassistant.core.event.events.CapsuleRefreshPriority
-import com.antgskds.calendarassistant.core.event.events.CapsuleRefreshRequestedEvent
-import com.antgskds.calendarassistant.core.event.events.ScheduleChangeOrigin
-import com.antgskds.calendarassistant.core.event.events.ScheduleChangeType
-import com.antgskds.calendarassistant.core.event.events.ScheduleChangedEvent
+import com.antgskds.calendarassistant.shared.query.CapsuleRouteMode
+import com.antgskds.calendarassistant.shared.query.CapsuleRoutingQueryApi
+import com.antgskds.calendarassistant.shared.event.DomainEventBus
+import com.antgskds.calendarassistant.shared.event.DomainEventType
+import com.antgskds.calendarassistant.shared.event.events.CapsuleRefreshPriority
+import com.antgskds.calendarassistant.shared.event.events.CapsuleRefreshRequestedEvent
+import com.antgskds.calendarassistant.shared.event.events.ScheduleChangeOrigin
+import com.antgskds.calendarassistant.shared.event.events.ScheduleChangeType
+import com.antgskds.calendarassistant.shared.event.events.ScheduleChangedEvent
 
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHelper
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
-import com.antgskds.calendarassistant.store.reminder.ReminderStoreNode
+import com.antgskds.calendarassistant.feature.schedule.data.store.reminder.ReminderStoreNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -118,7 +118,8 @@ class ScheduleReminderCoordinator(
                     ReminderSettingsKey(
                         advanceReminderEnabled = settings.isAdvanceReminderEnabled,
                         advanceReminderMinutes = settings.advanceReminderMinutes,
-                        liveCapsuleEnabled = settings.isLiveCapsuleEnabled
+                        liveCapsuleEnabled = settings.isLiveCapsuleEnabled,
+                        braceletModeEnabled = settings.braceletModeEnabled
                     )
                 }
                 .distinctUntilChanged()
@@ -317,6 +318,7 @@ class ScheduleReminderCoordinator(
     private data class ReminderSettingsKey(
         val advanceReminderEnabled: Boolean,
         val advanceReminderMinutes: Int,
-        val liveCapsuleEnabled: Boolean
+        val liveCapsuleEnabled: Boolean,
+        val braceletModeEnabled: Boolean
     )
 }

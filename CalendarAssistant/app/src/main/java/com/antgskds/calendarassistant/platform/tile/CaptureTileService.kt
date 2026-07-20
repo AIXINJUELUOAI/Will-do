@@ -9,8 +9,8 @@ import android.service.quicksettings.TileService
 import android.util.Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.shared.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

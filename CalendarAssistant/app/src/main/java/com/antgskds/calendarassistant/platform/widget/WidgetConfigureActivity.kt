@@ -11,7 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.data.model.WidgetThemeMode
+import com.antgskds.calendarassistant.platform.widget.model.WidgetThemeMode
 import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureThemeOption
 import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiAction
 import com.antgskds.calendarassistant.platform.widget.ui.contract.WidgetConfigureUiState

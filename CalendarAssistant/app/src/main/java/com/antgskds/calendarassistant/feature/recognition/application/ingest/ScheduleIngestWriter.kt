@@ -1,14 +1,14 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ingest
 
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
-import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
-import com.antgskds.calendarassistant.core.operation.IngestCommandApi
+import com.antgskds.calendarassistant.feature.schedule.data.attachment.EventAttachmentManager
+import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate

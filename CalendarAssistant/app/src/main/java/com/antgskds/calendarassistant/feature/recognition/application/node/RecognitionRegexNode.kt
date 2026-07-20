@@ -5,7 +5,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.Analysi
 import com.antgskds.calendarassistant.feature.recognition.data.preferences.RegexScheduleRulePrefs
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRecognizer
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 internal object RecognitionRegexNode {
     fun analyzeTextEvents(

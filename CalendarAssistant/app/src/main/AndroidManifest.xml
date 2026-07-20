@@ -252,6 +252,21 @@
             android:foregroundServiceType="microphone" />
 
         <service
+            android:name=".feature.quickmemo.application.QuickMemoTranscriptionService"
+            android:exported="false"
+            android:process=":quickmemo_asr"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".feature.quickmemo.application.QuickMemoTranscriptionResultReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.antgskds.calendarassistant.quickmemo.action.TRANSCRIPTION_SUCCEEDED" />
+                <action android:name="com.antgskds.calendarassistant.quickmemo.action.TRANSCRIPTION_FAILED" />
+            </intent-filter>
+        </receiver>
+
+        <service
             android:name=".platform.clipboard.ClipboardCodeMonitorService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

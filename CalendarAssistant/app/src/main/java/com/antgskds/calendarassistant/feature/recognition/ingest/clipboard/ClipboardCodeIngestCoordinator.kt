@@ -7,10 +7,10 @@ import android.util.Log
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeCandidate
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParseMode
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
-import com.antgskds.calendarassistant.core.operation.IngestCommandApi
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
-import com.antgskds.calendarassistant.core.util.PrivilegeManager
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

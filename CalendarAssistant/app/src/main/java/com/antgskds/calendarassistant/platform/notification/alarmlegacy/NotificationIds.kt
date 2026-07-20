@@ -16,6 +16,7 @@ object NotificationIds {
     const val DAILY_SUMMARY_EVENING = 0x51A16
     const val IMAGE_SHARE_RECOGNITION_STATUS = 0x51A17
     const val QUICK_MEMO_RECORDING_CAPSULE = 0x51A18
+    const val QUICK_MEMO_TRANSCRIPTION_SERVICE = 0x51A19
 
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"
@@ -25,8 +26,11 @@ object NotificationIds {
     private const val CREATED_EVENT_RESULT_NAMESPACE = "created-event-result"
     private const val VOICE_TRANSCRIPTION_NAMESPACE = "voice-transcription"
     private const val TEXT_QUICK_MEMO_NAMESPACE = "text-quick-memo"
+    private const val BRACELET_NOTIFICATION_NAMESPACE = "bracelet-notification"
 
     private const val LEGACY_PICKUP_INITIAL_OFFSET = 1_000_000
+    private const val BRACELET_NOTIFICATION_BASE = 0x62000000
+    private const val BRACELET_NOTIFICATION_MASK = 0x01FFFFFF
 
     fun standardReminder(eventId: Long): Int = stableId(STANDARD_REMINDER_NAMESPACE, eventId.toString())
 
@@ -47,6 +51,9 @@ object NotificationIds {
     fun quickMemoSuggestion(suggestionId: Long): Int = stableId(QUICK_MEMO_SUGGESTION_NAMESPACE, suggestionId.toString())
 
     fun createdEventResult(source: String, eventId: String): Int = stableId(CREATED_EVENT_RESULT_NAMESPACE, "$source:$eventId")
+
+    fun braceletNotification(key: String): Int =
+        BRACELET_NOTIFICATION_BASE or (stableId(BRACELET_NOTIFICATION_NAMESPACE, key) and BRACELET_NOTIFICATION_MASK)
 
     fun legacyEventIds(eventId: Long): Set<Int> {
         val base = eventId.hashCode()

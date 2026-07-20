@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.contract
 
-import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 
 data class CourseManagerUiState(
     val courses: List<Course>,

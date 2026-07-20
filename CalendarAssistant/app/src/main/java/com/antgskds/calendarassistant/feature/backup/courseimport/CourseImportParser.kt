@@ -3,11 +3,11 @@ package com.antgskds.calendarassistant.feature.backup.courseimport
 import android.graphics.Color
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.TimeNode
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpCourseBaseDTO
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpScheduleDTO
-import com.antgskds.calendarassistant.data.model.external.wakeup.WakeUpSettingsDTO
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
+import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeNode
+import com.antgskds.calendarassistant.feature.backup.courseimport.external.wakeup.WakeUpCourseBaseDTO
+import com.antgskds.calendarassistant.feature.backup.courseimport.external.wakeup.WakeUpScheduleDTO
+import com.antgskds.calendarassistant.feature.backup.courseimport.external.wakeup.WakeUpSettingsDTO
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.backup.courseimport
 
-import com.antgskds.calendarassistant.data.model.Course
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 
 enum class CourseImportSourceType {
     WAKEUP_FILE,

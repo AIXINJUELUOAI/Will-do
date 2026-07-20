@@ -1,14 +1,14 @@
 package com.antgskds.calendarassistant.feature.schedule.notification
 
 import android.util.Log
-import com.antgskds.calendarassistant.calendar.helpers.STATE_PENDING
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.idString
-import com.antgskds.calendarassistant.core.query.EventActionQueryApi
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.idString
+import com.antgskds.calendarassistant.shared.query.EventActionQueryApi
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.store.reminder.ReminderPolicy
-import com.antgskds.calendarassistant.calendar.models.startTime
+import com.antgskds.calendarassistant.feature.schedule.data.store.reminder.ReminderPolicy
+import com.antgskds.calendarassistant.feature.schedule.domain.model.startTime
 import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
 import com.antgskds.calendarassistant.feature.notification.model.NotificationAction
 import com.antgskds.calendarassistant.feature.notification.model.NotificationBehavior
@@ -21,6 +21,8 @@ import com.antgskds.calendarassistant.feature.notification.model.NotificationQue
 import com.antgskds.calendarassistant.feature.notification.model.NotificationState
 import com.antgskds.calendarassistant.feature.notification.model.NotificationTapTarget
 import com.antgskds.calendarassistant.feature.notification.model.NotificationTapTargetType
+import com.antgskds.calendarassistant.feature.notification.model.NotificationTrigger
+import com.antgskds.calendarassistant.feature.notification.model.NotificationTriggerReason
 import com.antgskds.calendarassistant.feature.schedule.api.model.ScheduleInstanceKey
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
@@ -143,6 +145,7 @@ class ScheduleNotificationBridge(
                         triggerAtMillis = now + 1000L
                     )
                     notificationApi.create(immediate)
+                    triggerMissedImmediate(immediate.key, eventId, offsetMinutes)
                     "MISSED_IMMEDIATE"
                 }
                 else -> {
@@ -267,6 +270,7 @@ class ScheduleNotificationBridge(
                         existing?.state != NotificationState.POSTED -> {
                         val immediate = buildOccurrenceReminderRequest(item, parent, instanceKey, offsetMinutes, now + 1000L)
                         notificationApi.create(immediate)
+                        triggerMissedImmediate(key, target.parentId, offsetMinutes)
                         "MISSED_IMMEDIATE"
                     }
                     else -> {
@@ -356,6 +360,23 @@ class ScheduleNotificationBridge(
         val endMillis = endTS * 1000L
         if (now >= endMillis) return false
         return if (offsetMinutes > 0) now < startMillis else now >= startMillis
+    }
+
+    private suspend fun triggerMissedImmediate(
+        key: NotificationKey,
+        eventId: Long,
+        offsetMinutes: Int
+    ) {
+        val result = notificationApi.trigger(
+            NotificationTrigger.ByKey(
+                key = key,
+                reason = NotificationTriggerReason.SYSTEM_EVENT
+            )
+        )
+        Log.d(
+            "WillDoNotify",
+            "missed-immediate trigger eventId=$eventId offset=${offsetMinutes}m key=${key.value} result=$result"
+        )
     }
 
     private fun nowEpochSeconds(): Long = System.currentTimeMillis() / 1000L

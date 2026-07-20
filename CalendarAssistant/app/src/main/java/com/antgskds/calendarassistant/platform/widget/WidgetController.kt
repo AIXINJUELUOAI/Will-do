@@ -3,9 +3,9 @@ package com.antgskds.calendarassistant.platform.widget
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
-import com.antgskds.calendarassistant.core.query.CalendarQueryApi
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.query.WidgetScheduleQueryApi
+import com.antgskds.calendarassistant.shared.query.CalendarQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.query.WidgetScheduleQueryApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.platform.widget.ScheduleWidgetProvider

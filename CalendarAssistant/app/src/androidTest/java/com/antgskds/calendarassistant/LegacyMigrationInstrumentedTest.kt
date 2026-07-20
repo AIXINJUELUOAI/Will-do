@@ -2,14 +2,14 @@ package com.antgskds.calendarassistant
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.antgskds.calendarassistant.calendar.data.EventsDatabase
-import com.antgskds.calendarassistant.calendar.models.EventTags
+import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
+import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
-import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
-import com.antgskds.calendarassistant.data.model.Course
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.repository.SettingsRepository
+import com.antgskds.calendarassistant.app.runtime.migration.LegacyDataMigrationCoordinator
+import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.SettingsRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

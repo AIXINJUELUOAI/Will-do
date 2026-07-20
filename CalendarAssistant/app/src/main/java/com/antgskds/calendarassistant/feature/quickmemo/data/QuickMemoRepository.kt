@@ -1,12 +1,13 @@
 package com.antgskds.calendarassistant.feature.quickmemo.data
 
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoAnalysisStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoDao
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoSuggestionEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTodoState
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoType
+import android.util.Log
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoAnalysisStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoDao
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +24,10 @@ class QuickMemoRepository(
     suspend fun getQuickMemo(id: Long): QuickMemoEntity? = quickMemoDao.getQuickMemo(id)
 
     suspend fun getUnfinishedVoiceMemos(): List<QuickMemoEntity> = quickMemoDao.getUnfinishedVoiceMemos()
+
+    suspend fun markProcessingVoiceMemosFailed(): Int {
+        return quickMemoDao.markProcessingVoiceMemosFailed(System.currentTimeMillis())
+    }
 
     suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false): Long {
         val now = System.currentTimeMillis()
@@ -139,19 +144,27 @@ class QuickMemoRepository(
     }
 
     suspend fun updateTranscriptionStatus(id: Long, status: String, bodyText: String? = null) {
-        val memo = quickMemoDao.getQuickMemo(id) ?: return
+        val memo = quickMemoDao.getQuickMemo(id) ?: run {
+            Log.w("QuickMemoRepository", "updateTranscriptionStatus ignored: memo not found id=$id target=$status")
+            return
+        }
         val now = System.currentTimeMillis()
         val nextBody = if (status == QuickMemoTranscriptionStatus.SUCCESS && bodyText != null) {
             mergeVoiceTranscription(memo.bodyText, bodyText)
         } else {
             bodyText?.let { normalizeBody(it) } ?: memo.bodyText
         }
-        quickMemoDao.updateQuickMemo(
-            memo.copy(
-                bodyText = nextBody,
-                transcriptionStatus = status,
-                updatedAt = now
-            )
+        val rows = if (bodyText != null || status == QuickMemoTranscriptionStatus.SUCCESS) {
+            quickMemoDao.updateTranscriptionStatusAndBody(id, status, nextBody, now)
+        } else {
+            quickMemoDao.updateTranscriptionStatus(id, status, now)
+        }
+        val after = quickMemoDao.getQuickMemo(id)
+        Log.i(
+            "QuickMemoRepository",
+            "updateTranscriptionStatus id=$id rows=$rows " +
+                "before=${memo.transcriptionStatus} target=$status after=${after?.transcriptionStatus} " +
+                "type=${after?.type} audio=${after?.audioPath?.isNotBlank() == true} bodyLen=${after?.bodyText?.length ?: -1}"
         )
     }
 

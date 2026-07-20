@@ -5,10 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
-import com.antgskds.calendarassistant.core.util.CrashHandler
-import com.antgskds.calendarassistant.core.util.AnrMonitor
-import com.antgskds.calendarassistant.core.util.AppLogger
-import com.antgskds.calendarassistant.core.capsule.CapsuleStateManager
+import com.antgskds.calendarassistant.shared.util.CrashHandler
+import com.antgskds.calendarassistant.shared.util.AnrMonitor
+import com.antgskds.calendarassistant.shared.util.AppLogger
+import com.antgskds.calendarassistant.feature.capsule.application.CapsuleStateManager
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
 import com.antgskds.calendarassistant.feature.recognition.application.ingest.IngestPipeline
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
@@ -18,6 +18,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ingest.Sch
 import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
 import com.antgskds.calendarassistant.feature.note.application.NoteService
 import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
+import com.antgskds.calendarassistant.feature.notification.bracelet.BraceletNotificationCenter
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
@@ -26,49 +27,49 @@ import com.antgskds.calendarassistant.app.runtime.AppRuntimeCoordinator
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
 import com.antgskds.calendarassistant.feature.schedule.application.sync.CalendarSyncService
 import com.antgskds.calendarassistant.platform.widget.WidgetController
-import com.antgskds.calendarassistant.core.event.DomainEventBus
-import com.antgskds.calendarassistant.core.attachment.EventAttachmentManager
-import com.antgskds.calendarassistant.core.content.ContentDefinition
-import com.antgskds.calendarassistant.core.content.ContentRegistry
-import com.antgskds.calendarassistant.core.content.ContentSourceType
+import com.antgskds.calendarassistant.shared.event.DomainEventBus
+import com.antgskds.calendarassistant.feature.schedule.data.attachment.EventAttachmentManager
+import com.antgskds.calendarassistant.shared.content.ContentDefinition
+import com.antgskds.calendarassistant.shared.content.ContentRegistry
+import com.antgskds.calendarassistant.shared.content.ContentSourceType
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import com.antgskds.calendarassistant.feature.note.data.migration.LegacyNoteMigrator
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
 import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaParaformerTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.QuickMemoAudioPlayer
-import com.antgskds.calendarassistant.core.query.CapsuleRoutingQueryApi
-import com.antgskds.calendarassistant.core.query.AlarmRoutingQueryApi
-import com.antgskds.calendarassistant.core.operation.CapsuleCommandApi
-import com.antgskds.calendarassistant.core.operation.IngestCommandApi
+import com.antgskds.calendarassistant.shared.query.CapsuleRoutingQueryApi
+import com.antgskds.calendarassistant.shared.query.AlarmRoutingQueryApi
+import com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi
+import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
-import com.antgskds.calendarassistant.core.operation.SettingsOperationApi
+import com.antgskds.calendarassistant.shared.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.shared.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
-import com.antgskds.calendarassistant.core.query.CapsuleQueryApi
-import com.antgskds.calendarassistant.core.query.EventActionQueryApi
-import com.antgskds.calendarassistant.core.query.DailySummaryQueryApi
-import com.antgskds.calendarassistant.core.query.HomeQueryApi
-import com.antgskds.calendarassistant.core.query.NotificationPresentationQueryApi
-import com.antgskds.calendarassistant.core.query.NetworkSpeedProbeQueryApi
-import com.antgskds.calendarassistant.core.query.ScheduleInsightsQueryApi
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
-import com.antgskds.calendarassistant.core.query.SettingsTransformApi
+import com.antgskds.calendarassistant.shared.query.CapsuleQueryApi
+import com.antgskds.calendarassistant.shared.query.EventActionQueryApi
+import com.antgskds.calendarassistant.shared.query.DailySummaryQueryApi
+import com.antgskds.calendarassistant.shared.query.HomeQueryApi
+import com.antgskds.calendarassistant.shared.query.NotificationPresentationQueryApi
+import com.antgskds.calendarassistant.shared.query.NetworkSpeedProbeQueryApi
+import com.antgskds.calendarassistant.shared.query.ScheduleInsightsQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.query.SettingsTransformApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
-import com.antgskds.calendarassistant.data.operation.CapsuleStateManagerCommandApi
-import com.antgskds.calendarassistant.data.operation.WeatherRepositoryOperationApi
-import com.antgskds.calendarassistant.data.query.CapsuleStateManagerQueryApi
-import com.antgskds.calendarassistant.data.query.LocalCapsuleRoutingQueryApi
-import com.antgskds.calendarassistant.data.query.LocalAlarmRoutingQueryApi
-import com.antgskds.calendarassistant.data.query.LocalDailySummaryQueryApi
-import com.antgskds.calendarassistant.data.query.LocalEventActionQueryApi
-import com.antgskds.calendarassistant.data.query.LocalHomeQueryApi
-import com.antgskds.calendarassistant.data.query.LocalNotificationPresentationQueryApi
-import com.antgskds.calendarassistant.data.query.LocalNetworkSpeedProbeQueryApi
-import com.antgskds.calendarassistant.data.query.LocalScheduleInsightsQueryApi
-import com.antgskds.calendarassistant.data.query.LocalSettingsTransformApi
-import com.antgskds.calendarassistant.data.query.LocalWidgetScheduleQueryApi
-import com.antgskds.calendarassistant.data.query.WeatherRepositoryQueryApi
-import com.antgskds.calendarassistant.data.repository.SettingsRepository
+import com.antgskds.calendarassistant.feature.capsule.data.CapsuleStateManagerCommandApi
+import com.antgskds.calendarassistant.feature.weather.data.WeatherRepositoryOperationApi
+import com.antgskds.calendarassistant.feature.capsule.data.CapsuleStateManagerQueryApi
+import com.antgskds.calendarassistant.feature.capsule.data.LocalCapsuleRoutingQueryApi
+import com.antgskds.calendarassistant.feature.schedule.data.query.LocalAlarmRoutingQueryApi
+import com.antgskds.calendarassistant.feature.schedule.data.query.LocalDailySummaryQueryApi
+import com.antgskds.calendarassistant.feature.schedule.data.query.LocalEventActionQueryApi
+import com.antgskds.calendarassistant.feature.home.data.LocalHomeQueryApi
+import com.antgskds.calendarassistant.feature.notification.data.LocalNotificationPresentationQueryApi
+import com.antgskds.calendarassistant.feature.capsule.data.LocalNetworkSpeedProbeQueryApi
+import com.antgskds.calendarassistant.feature.schedule.data.query.LocalScheduleInsightsQueryApi
+import com.antgskds.calendarassistant.feature.settings.data.LocalSettingsTransformApi
+import com.antgskds.calendarassistant.platform.widget.data.LocalWidgetScheduleQueryApi
+import com.antgskds.calendarassistant.feature.weather.data.WeatherRepositoryQueryApi
+import com.antgskds.calendarassistant.feature.settings.data.SettingsRepository
 import com.antgskds.calendarassistant.feature.notification.data.local.SharedPreferencesNotificationRegistryStore
 import com.antgskds.calendarassistant.platform.notification.alarm.AndroidSystemAlarmGateway
 import com.antgskds.calendarassistant.platform.notification.normal.AndroidNormalNotificationPublisher
@@ -76,7 +77,7 @@ import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardCodeIngestCoordinator
 import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupIngestCoordinator
 import com.antgskds.calendarassistant.platform.receiver.sms.SmsContentObserver
-import com.antgskds.calendarassistant.core.migration.LegacyDataMigrationCoordinator
+import com.antgskds.calendarassistant.app.runtime.migration.LegacyDataMigrationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,6 +91,7 @@ class App : Application() {
         const val CHANNEL_ID_POPUP = "calendar_assistant_popup_channel_v2"
         const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
         const val CHANNEL_ID_WEATHER = "calendar_assistant_weather_channel_v1"
+        const val CHANNEL_ID_BRACELET = "calendar_assistant_bracelet_channel_v1"
         private const val TAG = "App"
         lateinit var instance: App
             private set
@@ -111,7 +113,10 @@ class App : Application() {
             appScope = appScope,
             notificationApi = notificationCenter,
             eventActionQueryApi = eventActionQueryApi,
-            settingsProvider = { settingsQueryApi.settings.value }
+            settingsProvider = { settingsQueryApi.settings.value },
+            braceletScheduleUpdateNotifier = { event ->
+                braceletNotificationCenter.notifyScheduleEventUpdate(event)
+            }
         )
     }
 
@@ -124,7 +129,7 @@ class App : Application() {
     }
 
     private val noteRepository: NoteRepository by lazy {
-        NoteRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).notesDao())
+        NoteRepository(com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext).notesDao())
     }
 
     val noteCenter: NoteService by lazy {
@@ -132,7 +137,7 @@ class App : Application() {
     }
 
     private val quickMemoRepository: QuickMemoRepository by lazy {
-        QuickMemoRepository(com.antgskds.calendarassistant.calendar.data.EventsDatabase.getInstance(applicationContext).quickMemoDao())
+        QuickMemoRepository(com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext).quickMemoDao())
     }
 
     val audioPlaybackCenter: QuickMemoAudioPlayer by lazy { QuickMemoAudioPlayer() }
@@ -169,7 +174,7 @@ class App : Application() {
 
     val settingsOperationApi: SettingsOperationApi by lazy {
         object : SettingsOperationApi {
-            override fun updateSettings(newSettings: com.antgskds.calendarassistant.data.model.MySettings) {
+            override fun updateSettings(newSettings: com.antgskds.calendarassistant.feature.settings.data.model.MySettings) {
                 settingsRepository.saveSettings(newSettings)
             }
         }
@@ -320,6 +325,10 @@ class App : Application() {
         AndroidNormalNotificationPublisher(applicationContext)
     }
 
+    val braceletNotificationCenter: BraceletNotificationCenter by lazy {
+        BraceletNotificationCenter(applicationContext)
+    }
+
     val notificationCenter: NotificationOrchestrator by lazy {
         NotificationOrchestrator(
             appContext = applicationContext,
@@ -388,7 +397,7 @@ class App : Application() {
 
     val scheduleQueryApi: ScheduleQueryApi by lazy {
         object : ScheduleQueryApi {
-            override val events: kotlinx.coroutines.flow.StateFlow<List<com.antgskds.calendarassistant.calendar.models.Event>>
+            override val events: kotlinx.coroutines.flow.StateFlow<List<com.antgskds.calendarassistant.feature.schedule.domain.model.Event>>
                 get() = scheduleCenter.events
         }
     }
@@ -402,6 +411,12 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        val processName = currentProcessName().orEmpty()
+        if (processName != packageName) {
+            Log.i(TAG, "secondary app process started early: $processName, skipping main init")
+            return
+        }
 
         AppLogger.init(this)
         AppLogger.i(TAG, "main app process started")
@@ -464,6 +479,15 @@ class App : Application() {
         AppLogger.i(TAG, "main app routines started")
     }
 
+    private fun currentProcessName(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName()
+        }
+        val pid = android.os.Process.myPid()
+        val manager = getSystemService(android.app.ActivityManager::class.java) ?: return null
+        return manager.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+    }
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(NotificationManager::class.java)
@@ -476,7 +500,10 @@ class App : Application() {
             val weatherChannel = NotificationChannel(CHANNEL_ID_WEATHER, "天气预警", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "天气预警和风险提醒"; enableLights(true); enableVibration(true)
             }
-            notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel, weatherChannel))
+            val braceletChannel = NotificationChannel(CHANNEL_ID_BRACELET, "手环通知", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "同步到手环的短通知"; enableLights(true); enableVibration(true); setShowBadge(false)
+            }
+            notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel, weatherChannel, braceletChannel))
         }
     }
 

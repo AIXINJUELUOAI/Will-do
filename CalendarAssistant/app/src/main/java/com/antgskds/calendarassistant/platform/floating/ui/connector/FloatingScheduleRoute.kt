@@ -1,14 +1,14 @@
 package com.antgskds.calendarassistant.platform.floating.ui.connector
 
 import androidx.compose.runtime.Composable
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
-import com.antgskds.calendarassistant.data.model.WeatherData
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingScheduleUiActions
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingDragTextOptions
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingInputMode
@@ -55,6 +55,9 @@ fun FloatingScheduleRoute(
     onToggleAudioPlayback: (String?) -> Unit = {},
     onLoadingChange: (Boolean) -> Unit = {},
     hapticEnabled: Boolean = true,
+    scheduleFloatingEnabled: Boolean = true,
+    quickMemoFloatingEnabled: Boolean = true,
+    floatingVoiceLongPressEnabled: Boolean = true,
     reverseScheduleOrder: Boolean = true
 ) {
     FloatingScheduleScreen(
@@ -75,6 +78,9 @@ fun FloatingScheduleRoute(
             dragHotZonePercent = dragHotZonePercent,
             dragTextOptions = dragTextOptions,
             hapticEnabled = hapticEnabled,
+            scheduleFloatingEnabled = scheduleFloatingEnabled,
+            quickMemoFloatingEnabled = quickMemoFloatingEnabled,
+            floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled,
             reverseScheduleOrder = reverseScheduleOrder
         ),
         actions = FloatingScheduleUiActions(

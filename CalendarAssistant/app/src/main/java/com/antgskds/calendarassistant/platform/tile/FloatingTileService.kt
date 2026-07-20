@@ -5,8 +5,9 @@ import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
+import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.util.AccessibilityGuardian
+import com.antgskds.calendarassistant.shared.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 import kotlinx.coroutines.CoroutineScope
@@ -71,14 +72,12 @@ class FloatingTileService : TileService() {
                 delay(350.milliseconds)
 
                 // 启动悬浮窗服务
-                val intent = Intent(this@FloatingTileService, FloatingScheduleService::class.java)
-                startService(intent)
+                startFloatingWindow()
             } else {
                 Log.w(TAG, "无障碍服务实例为 NULL，仅启动悬浮窗（控制中心可能不会自动收起）")
 
                 // 即使无障碍服务不可用，也尝试启动悬浮窗
-                val intent = Intent(this@FloatingTileService, FloatingScheduleService::class.java)
-                startService(intent)
+                startFloatingWindow()
             }
 
             // 恢复磁贴状态
@@ -87,5 +86,20 @@ class FloatingTileService : TileService() {
                 tile.updateTile()
             }
         }
+    }
+
+    private fun startFloatingWindow() {
+        val app = applicationContext as? App
+        if (app?.floatingCenter?.startFloatingService() == true) return
+
+        val settings = app?.settingsQueryApi?.settings?.value ?: return
+        val fallbackMode = when {
+            settings.isFloatingWindowEnabled -> FloatingScheduleService.INPUT_MODE_SCHEDULE
+            settings.voiceInputEnabled -> FloatingScheduleService.INPUT_MODE_NOTE
+            else -> return
+        }
+        startService(Intent(this, FloatingScheduleService::class.java).apply {
+            putExtra(FloatingScheduleService.EXTRA_INITIAL_INPUT_MODE, fallbackMode)
+        })
     }
 }

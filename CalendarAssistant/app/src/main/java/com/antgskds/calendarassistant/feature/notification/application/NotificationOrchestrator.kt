@@ -15,24 +15,24 @@ import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
-import com.antgskds.calendarassistant.core.content.EventTimelinePresenter
+import com.antgskds.calendarassistant.shared.content.EventTimelinePresenter
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureDisplay
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.core.query.DailySummaryPayload
+import com.antgskds.calendarassistant.shared.query.DailySummaryPayload
 import com.antgskds.calendarassistant.feature.schedule.presentation.rule.EventPresenter
-import com.antgskds.calendarassistant.core.util.stripSourceImageMarkers
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.feature.capsule.presentation.NotificationTemplateComposer
-import com.antgskds.calendarassistant.data.state.CapsuleUiState
+import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
 import com.antgskds.calendarassistant.platform.capsule.render.IconUtils
 import com.antgskds.calendarassistant.platform.capsule.provider.FlymeCapsuleProvider
 import com.antgskds.calendarassistant.platform.capsule.provider.ICapsuleProvider
 import com.antgskds.calendarassistant.platform.capsule.provider.NativeCapsuleProvider
 import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
-import com.antgskds.calendarassistant.core.util.FlymeUtils
+import com.antgskds.calendarassistant.shared.util.FlymeUtils
 import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
 import com.antgskds.calendarassistant.feature.notification.model.NotificationFailureReason
 import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
@@ -78,6 +78,7 @@ class NotificationOrchestrator(
         private const val DEFAULT_QUICK_MEMO_SUGGESTION_TIMEOUT_MS = 60_000L
         private const val DEFAULT_DAILY_SUMMARY_TIMEOUT_MS = 60_000L
         private const val RESULT_TEXT_MAX_CHARS = 56
+        private const val BRACELET_MIRROR_ID_OFFSET = 700_000
         private val RECOGNITION_RESULT_COLOR = Color.rgb(76, 175, 80)
         private val RECOGNITION_FAILED_COLOR = Color.rgb(244, 67, 54)
         private val DAILY_SUMMARY_COLOR = Color.rgb(103, 80, 164)
@@ -102,6 +103,12 @@ class NotificationOrchestrator(
         if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
     }
 
+    private fun isBraceletModeEnabled(): Boolean =
+        (appContext as? App)?.settingsQueryApi?.settings?.value?.braceletModeEnabled == true
+
+    private fun braceletMirrorNotificationId(notificationId: Int): Int =
+        notificationId + BRACELET_MIRROR_ID_OFFSET
+
     override suspend fun create(request: NotificationRequest): NotificationResult {
         return upsertApiRequest(request)
     }
@@ -116,7 +123,10 @@ class NotificationOrchestrator(
             registryStore.delete(key)
         }
         systemAlarmGateway?.cancel(key)
-        previous?.notificationId?.let(::cancelNotification)
+        previous?.notificationId?.let { notificationId ->
+            cancelNotification(notificationId)
+            cancelNotification(braceletMirrorNotificationId(notificationId))
+        }
         return NotificationResult.Success(key, NotificationState.CANCELLED)
     }
 
@@ -126,7 +136,10 @@ class NotificationOrchestrator(
 
         val removed = registryStore.deleteAll(distinctKeys)
         distinctKeys.forEach { key -> systemAlarmGateway?.cancel(key) }
-        removed.mapNotNull { it.notificationId }.distinct().forEach(::cancelNotification)
+        removed.mapNotNull { it.notificationId }
+            .flatMap { notificationId -> listOf(notificationId, braceletMirrorNotificationId(notificationId)) }
+            .distinct()
+            .forEach(::cancelNotification)
     }
 
     override suspend fun get(key: NotificationKey): NotificationSnapshot? {
@@ -152,7 +165,10 @@ class NotificationOrchestrator(
         return when (trigger) {
             // Phase 2：ByKey / Due 现在真正发布——普通单次提醒已从旧链路切到新链路。
             // 发布前做胶囊门控与时效校验（见 publishOrSuppress）。
-            is NotificationTrigger.ByKey -> publishOrSuppress(trigger.key)
+            is NotificationTrigger.ByKey -> {
+                Log.d("WillDoNotify", "trigger key=${trigger.key.value} reason=${trigger.reason}")
+                publishOrSuppress(trigger.key)
+            }
             is NotificationTrigger.Due -> {
                 val now = trigger.nowEpochMillis ?: System.currentTimeMillis()
                 val due = list(NotificationQuery(dueAtOrBeforeEpochMillis = now, limit = 1)).firstOrNull()
@@ -172,7 +188,9 @@ class NotificationOrchestrator(
      * - 否则走真实发布器（publishSnapshot 置 POSTED）。
      */
     private suspend fun publishOrSuppress(key: NotificationKey): NotificationResult {
-        if (liveCapsuleEnabledProvider()) {
+        val liveCapsuleEnabled = liveCapsuleEnabledProvider()
+        val braceletModeEnabled = isBraceletModeEnabled()
+        if (liveCapsuleEnabled && !braceletModeEnabled) {
             Log.d("WillDoNotify", "fire key=${key.value} -> SUPPRESSED_CAPSULE")
             return markSnapshotReady(key, cancelAlarm = true)
         }
@@ -186,7 +204,10 @@ class NotificationOrchestrator(
             Log.d("WillDoNotify", "fire key=${key.value} -> EXPIRED endTS=$endMillis")
             registryStore.delete(key)
             systemAlarmGateway?.cancel(key)
-            snapshot.notificationId?.let(::cancelNotification)
+            snapshot.notificationId?.let { notificationId ->
+                cancelNotification(notificationId)
+                cancelNotification(braceletMirrorNotificationId(notificationId))
+            }
             return NotificationResult.Success(key, NotificationState.EXPIRED)
         }
         Log.d("WillDoNotify", "fire key=${key.value} -> PUBLISH offset=${snapshot.offsetMinutes}")
@@ -196,7 +217,22 @@ class NotificationOrchestrator(
             version = snapshot.version + 1L
         )
         registryStore.upsert(readied)
-        return publishSnapshot(readied)
+        systemAlarmGateway?.cancel(key)
+        val braceletAttempted = if (braceletModeEnabled && snapshot.kind == com.antgskds.calendarassistant.feature.notification.model.NotificationKind.SCHEDULE_REMINDER) {
+            (appContext as? App)?.braceletNotificationCenter?.notifySchedule(readied)
+            true
+        } else {
+            false
+        }
+        return if (liveCapsuleEnabled) {
+            if (braceletAttempted) {
+                markSnapshotPosted(readied)
+            } else {
+                markSnapshotReady(readied.key, cancelAlarm = false)
+            }
+        } else {
+            publishSnapshot(readied)
+        }
     }
 
     /**
@@ -220,13 +256,17 @@ class NotificationOrchestrator(
         return publishSnapshot(readied)
     }
 
-    private suspend fun publishSnapshot(snapshot: NotificationSnapshot): NotificationResult {
+    private suspend fun publishSnapshot(
+        snapshot: NotificationSnapshot,
+        markPosted: Boolean = true,
+        notificationIdOverride: Int? = null
+    ): NotificationResult {
         val publisher = platformPublisher ?: return NotificationResult.Failure(
             snapshot.key, NotificationFailureReason.PUBLISH_FAILED, "PlatformPublisher 未装配"
         )
         val payload = PlatformNotificationPayload(
             key = snapshot.key,
-            notificationId = snapshot.notificationId ?: snapshot.key.value.hashCode(),
+            notificationId = notificationIdOverride ?: snapshot.notificationId ?: snapshot.key.value.hashCode(),
             smallIconResId = snapshot.smallIconResId,
             route = NotificationRoute.NORMAL,
             display = snapshot.display,
@@ -237,7 +277,7 @@ class NotificationOrchestrator(
             category = snapshot.category
         )
         val result = publisher.publish(payload)
-        if (result is NotificationResult.Success) {
+        if (result is NotificationResult.Success && markPosted) {
             registryStore.upsert(
                 snapshot.copy(
                     state = NotificationState.POSTED,
@@ -251,10 +291,17 @@ class NotificationOrchestrator(
 
     private suspend fun upsertApiRequest(request: NotificationRequest): NotificationResult {
         val state = resolveApiState(request)
+        Log.d(
+            "WillDoNotify",
+            "upsert key=${request.key.value} state=$state triggerAt=${request.behavior.triggerAtEpochMillis} route=${request.route}"
+        )
         if (state == NotificationState.CANCELLED || state == NotificationState.EXPIRED) {
             registryStore.delete(request.key)
             systemAlarmGateway?.cancel(request.key)
-            request.notificationId?.let(::cancelNotification)
+            request.notificationId?.let { notificationId ->
+                cancelNotification(notificationId)
+                cancelNotification(braceletMirrorNotificationId(notificationId))
+            }
             return NotificationResult.Success(request.key, state)
         }
 
@@ -285,11 +332,23 @@ class NotificationOrchestrator(
         return NotificationResult.Success(snapshot.key, snapshot.state)
     }
 
+    private suspend fun markSnapshotPosted(snapshot: NotificationSnapshot): NotificationResult {
+        val posted = snapshot.copy(
+            state = NotificationState.POSTED,
+            updatedAtEpochMillis = System.currentTimeMillis(),
+            version = snapshot.version + 1L
+        )
+        registryStore.upsert(posted)
+        return NotificationResult.Success(posted.key, posted.state)
+    }
+
     private suspend fun syncSystemAlarm(snapshot: NotificationSnapshot) {
         val triggerAt = snapshot.behavior.triggerAtEpochMillis
         if (snapshot.state == NotificationState.SCHEDULED && triggerAt != null) {
+            Log.d("WillDoNotify", "alarm schedule key=${snapshot.key.value} triggerAt=$triggerAt")
             systemAlarmGateway?.schedule(snapshot.key, triggerAt, snapshot.behavior.allowWhileIdle)
         } else {
+            Log.d("WillDoNotify", "alarm cancel key=${snapshot.key.value} state=${snapshot.state} triggerAt=$triggerAt")
             systemAlarmGateway?.cancel(snapshot.key)
         }
     }
@@ -502,10 +561,12 @@ class NotificationOrchestrator(
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+                .setLocalOnly(isBraceletModeEnabled())
                 .build()
         }
 
         manager.notify(notificationId, notification)
+        (appContext as? App)?.braceletNotificationCenter?.notifyDailySummary(payload, isMorning)
         if (settings?.isLiveCapsuleEnabled == true) {
             scheduleResultNotificationTimeout(manager, notificationId, dailySummaryTimeoutMs())
         }
@@ -550,6 +611,7 @@ class NotificationOrchestrator(
             .setGroup(GROUP_CREATED_EVENTS)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setLocalOnly(isBraceletModeEnabled())
             .build()
     }
 
@@ -725,6 +787,7 @@ class NotificationOrchestrator(
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setLocalOnly(isBraceletModeEnabled())
 
         if (event.color.hashCode() != 0) {
             builder.setColor(event.color.hashCode())
@@ -946,6 +1009,7 @@ class NotificationOrchestrator(
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setLocalOnly(isBraceletModeEnabled())
 
         if (eventColor != 0) {
             builder.setColor(eventColor)
@@ -1003,6 +1067,7 @@ class NotificationOrchestrator(
             .setContentIntent(pendingIntent)
             .setOngoing(ongoing)
             .setAutoCancel(autoCancel)
+            .setLocalOnly(isBraceletModeEnabled())
         if (timeoutMs != null) builder.setTimeoutAfter(timeoutMs)
 
         manager.notify(notificationId, builder.build())

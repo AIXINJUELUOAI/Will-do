@@ -3,9 +3,9 @@ package com.antgskds.calendarassistant.feature.settings.diagnostics.application
 import android.content.Context
 import android.os.Environment
 import android.os.Process as AndroidProcess
-import com.antgskds.calendarassistant.core.util.AppLogger
-import com.antgskds.calendarassistant.core.util.PrivilegeManager
-import com.antgskds.calendarassistant.data.node.diagnostic.WillDoDownloadLogNode
+import com.antgskds.calendarassistant.shared.util.AppLogger
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
+import com.antgskds.calendarassistant.feature.settings.diagnostics.data.WillDoDownloadLogNode
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale

@@ -4,10 +4,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
-import com.antgskds.calendarassistant.calendar.helpers.CalendarConfig
+import com.antgskds.calendarassistant.feature.schedule.domain.calendar.CalendarConfig
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarManager
 import com.antgskds.calendarassistant.feature.schedule.api.model.CalendarSyncManager
-import com.antgskds.calendarassistant.calendar.sync.SystemCalendarSyncManager
+import com.antgskds.calendarassistant.feature.schedule.data.sync.SystemCalendarSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 class CalendarSyncService(
     private val calendarCenter: ScheduleStoreGateway,
     private val context: Context
-) : com.antgskds.calendarassistant.core.operation.SyncApi {
+) : com.antgskds.calendarassistant.shared.operation.SyncApi {
     private val appContext = context.applicationContext
     private val config = CalendarConfig.newInstance(appContext)
     private val syncManager = SystemCalendarSyncManager(appContext)

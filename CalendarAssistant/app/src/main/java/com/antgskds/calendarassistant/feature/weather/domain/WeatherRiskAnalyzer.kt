@@ -1,8 +1,8 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
-import com.antgskds.calendarassistant.data.model.MySettings
-import com.antgskds.calendarassistant.data.model.WeatherHourlyForecast
-import com.antgskds.calendarassistant.data.model.WeatherRiskAlert
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherHourlyForecast
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlin.math.roundToInt

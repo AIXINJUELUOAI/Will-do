@@ -4,7 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
-import com.antgskds.calendarassistant.core.query.ScheduleQueryApi
+import com.antgskds.calendarassistant.shared.query.ScheduleQueryApi
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.Context
@@ -57,27 +57,27 @@ import com.antgskds.calendarassistant.feature.recognition.application.ai.Recogni
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.recognitionConfigMissingMessage
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
-import com.antgskds.calendarassistant.core.event.DomainEventType
-import com.antgskds.calendarassistant.core.event.EventIdentity
-import com.antgskds.calendarassistant.core.event.events.IngestFailedEvent
-import com.antgskds.calendarassistant.core.event.events.IngestSucceededEvent
-import com.antgskds.calendarassistant.core.event.events.RecognitionFailedEvent
-import com.antgskds.calendarassistant.core.query.SettingsQueryApi
+import com.antgskds.calendarassistant.shared.event.DomainEventType
+import com.antgskds.calendarassistant.shared.event.EventIdentity
+import com.antgskds.calendarassistant.shared.event.events.IngestFailedEvent
+import com.antgskds.calendarassistant.shared.event.events.IngestSucceededEvent
+import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoEntity
-import com.antgskds.calendarassistant.core.quickmemo.QuickMemoTranscriptionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
 import com.antgskds.calendarassistant.core.service.image.ImagePickHandleActivity
-import com.antgskds.calendarassistant.core.util.ImageImportUtils
+import com.antgskds.calendarassistant.shared.util.ImageImportUtils
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
 import com.antgskds.calendarassistant.feature.recognition.domain.model.RecognitionDraft
-import com.antgskds.calendarassistant.calendar.models.Event
-import com.antgskds.calendarassistant.calendar.models.*
+import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingInputMode
@@ -430,6 +430,9 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         initialMode = currentRequestedInputMode.first,
                         initialModeRequestKey = currentRequestedInputMode.second,
                         hapticEnabled = settings.hapticFeedbackEnabled,
+                        scheduleFloatingEnabled = settings.isFloatingWindowEnabled,
+                        quickMemoFloatingEnabled = settings.voiceInputEnabled,
+                        floatingVoiceLongPressEnabled = settings.floatingVoiceLongPressEnabled,
                         onClose = { requestClose() },
                         onManualInput = { text, isQuickMemo, onComplete ->
                             handleManualInput(text = text, isQuickMemo = isQuickMemo, onComplete = onComplete)
@@ -884,6 +887,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         voiceConfirmJob?.cancel()
         voiceStartJob?.cancel()
         voiceStopRequested = false
+        if (!settingsQueryApi.settings.value.voiceInputEnabled) {
+            voiceCaptureState.value = QuickMemoVoiceCaptureState(
+                status = QuickMemoVoiceCaptureStatus.ERROR,
+                message = "请先开启随口记"
+            )
+            Toast.makeText(applicationContext, "请先开启随口记", Toast.LENGTH_SHORT).show()
+            serviceScope.launch {
+                delay(1400)
+                voiceCaptureState.value = QuickMemoVoiceCaptureState()
+            }
+            return
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             voiceCaptureState.value = QuickMemoVoiceCaptureState(
                 status = QuickMemoVoiceCaptureStatus.ERROR,
@@ -1218,7 +1233,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             }
             var accessibilityService = TextAccessibilityService.instance
             if (accessibilityService == null) {
-                com.antgskds.calendarassistant.core.util.AccessibilityGuardian.restoreIfNeeded(this@FloatingScheduleService)
+                com.antgskds.calendarassistant.shared.util.AccessibilityGuardian.restoreIfNeeded(this@FloatingScheduleService)
                 accessibilityService = TextAccessibilityService.instance
             }
 
@@ -1468,7 +1483,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
         applyRequestedInputMode(intent)
-        when (intent?.action) {
+        val settings = settingsQueryApi.settings.value
+        val action = intent?.action
+        val requiresEnabledFloatingFeature = action == null || action == ACTION_START_VOICE_CAPTURE
+        if (!settings.isFloatingWindowEnabled && !settings.voiceInputEnabled && requiresEnabledFloatingFeature) {
+            requestClose()
+            return START_NOT_STICKY
+        }
+        when (action) {
             ACTION_SHOW_PICKUP_QR_CARD -> {
                 val eventId = intent.getLongExtra(EXTRA_PICKUP_EVENT_ID, -1L).takeIf { it > 0L }
                 if (eventId == null) return START_NOT_STICKY
@@ -1547,10 +1569,23 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     private fun applyRequestedInputMode(intent: Intent?) {
+        val settings = settingsQueryApi.settings.value
         val mode = when (intent?.getStringExtra(EXTRA_INITIAL_INPUT_MODE)) {
-            INPUT_MODE_NOTE -> FloatingInputMode.NOTE
-            INPUT_MODE_SCHEDULE -> FloatingInputMode.SCHEDULE
-            else -> return
+            INPUT_MODE_NOTE -> when {
+                settings.voiceInputEnabled -> FloatingInputMode.NOTE
+                settings.isFloatingWindowEnabled -> FloatingInputMode.SCHEDULE
+                else -> return
+            }
+            INPUT_MODE_SCHEDULE -> when {
+                settings.isFloatingWindowEnabled -> FloatingInputMode.SCHEDULE
+                settings.voiceInputEnabled -> FloatingInputMode.NOTE
+                else -> return
+            }
+            else -> when {
+                settings.isFloatingWindowEnabled -> FloatingInputMode.SCHEDULE
+                settings.voiceInputEnabled -> FloatingInputMode.NOTE
+                else -> return
+            }
         }
         requestedInputMode.value = mode to (requestedInputMode.value.second + 1L)
     }

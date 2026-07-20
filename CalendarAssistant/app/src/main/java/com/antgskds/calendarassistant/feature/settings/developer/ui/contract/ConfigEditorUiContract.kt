@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.contract
 
-import com.antgskds.calendarassistant.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 data class ConfigEditorUiState(val settings: MySettings?)
 
