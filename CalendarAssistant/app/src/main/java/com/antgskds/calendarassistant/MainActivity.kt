@@ -96,6 +96,8 @@ import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import kotlin.math.roundToInt
 
 private data class PendingWidgetLaunchAction(
@@ -479,14 +481,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 var appBackgroundRootSize by remember { mutableStateOf(IntSize.Zero) }
+                val appGlassBackdrop = rememberLayerBackdrop()
+                val appSceneBackdrop = rememberLayerBackdrop()
+                val useMiuiBlurMaterial = settings.appBackgroundMiuiBlurTestEnabled &&
+                    appBackgroundBitmap != null
 
                 AppGlassSettingsProvider(
                     settings = AppGlassSettings(
-                        enabled = settings.appBackgroundMiuiBlurTestEnabled && settings.appBackgroundImagePath.isNotBlank(),
-                        miuixEnabled = settings.appBackgroundMiuiBlurTestEnabled,
-                        overlayAlphaPercent = settings.appBackgroundCardAlphaPercent,
-                        wallpaperBitmap = appBackgroundBitmap,
-                        rootSize = appBackgroundRootSize,
+                        enabled = useMiuiBlurMaterial,
+                        backdrop = appGlassBackdrop,
+                        overlayBackdrop = appSceneBackdrop,
                         darkTheme = isDarkTheme
                     )
                 ) {
@@ -501,12 +505,28 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background)
                             .onSizeChanged { appBackgroundRootSize = it }
+                            .then(
+                                if (useMiuiBlurMaterial) {
+                                    Modifier.layerBackdrop(appSceneBackdrop)
+                                } else {
+                                    Modifier
+                                }
+                            )
                     ) {
                         AppBackgroundLayer(
                             enabled = settings.appBackgroundImagePath.isNotBlank(),
                             imageBitmap = appBackgroundBitmap,
-                            blurEnabled = settings.appBackgroundWallpaperBlurEnabled,
-                            modifier = Modifier.fillMaxSize()
+                            blurEnabled = settings.appBackgroundWallpaperBlurEnabled &&
+                                !useMiuiBlurMaterial,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (useMiuiBlurMaterial) {
+                                        Modifier.layerBackdrop(appGlassBackdrop)
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                         )
                         NavHost(
                             modifier = Modifier.fillMaxSize(),

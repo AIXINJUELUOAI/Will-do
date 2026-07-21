@@ -67,10 +67,14 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLa
 import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePickerDialog
+import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
+import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayCard
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DialogEdgeToEdgeEffect
+import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
 import com.antgskds.calendarassistant.shared.ui.motion.PredictiveBottomDialogHost
 import com.antgskds.calendarassistant.app.ui.theme.material.getRandomEventColor
 import kotlinx.coroutines.launch
@@ -78,6 +82,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 
 @Composable
 fun MaterialCourseEditDialog(
@@ -132,6 +138,11 @@ fun MaterialCourseEditDialog(
         endNode = endNode.coerceIn(startNode, safeMaxNodes)
     }
 
+    val glassSettings = LocalAppGlassSettings.current
+    val childDialogBackdrop = rememberLayerBackdrop()
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
+    ) {
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides hapticEnabled) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -142,15 +153,23 @@ fun MaterialCourseEditDialog(
         )
     ) {
         DialogEdgeToEdgeEffect(isDarkTheme = false)
-        PredictiveBottomDialogHost(
-            visible = true,
-            onDismiss = onDismiss,
-            predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
-            backHandlerEnabled = !isChildDialogVisible,
-            contentAlignment = Alignment.Center,
-            contentPadding = WindowInsets.navigationBars.asPaddingValues()
+        if (glassSettings.active) DisableDialogWindowDimEffect()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
         ) {
-            Card(
+            androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
+            PredictiveBottomDialogHost(
+                visible = true,
+                onDismiss = onDismiss,
+                predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
+                backHandlerEnabled = !isChildDialogVisible,
+                scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
+                contentAlignment = Alignment.Center,
+                contentPadding = WindowInsets.navigationBars.asPaddingValues()
+            ) {
+            AppOverlayCard(
                 modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -245,13 +264,15 @@ fun MaterialCourseEditDialog(
                     }) { Text("确定") }
                 }
             }
-        }
+            }
+            }
+            }
         }
     }
 
     if (showDayPicker) {
         val days = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDayPicker = false },
             title = { CenteredDialogTitle("选择星期") },
             text = { WheelPicker(items = days, initialIndex = dayOfWeek - 1, onSelectionChanged = { dayOfWeek = it + 1 }) },
@@ -276,12 +297,13 @@ fun MaterialCourseEditDialog(
     }
 
     if (showWeekTypePicker) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showWeekTypePicker = false },
             title = { CenteredDialogTitle("课程频率") },
             text = { WheelPicker(items = weekTypeOptions, initialIndex = weekType, onSelectionChanged = { weekType = it }) },
             confirmButton = { TextButton(onClick = { haptics.confirm(); showWeekTypePicker = false }) { Text("确定") } }
         )
+    }
     }
     }
 }
@@ -375,7 +397,12 @@ fun MaterialCourseSingleEditDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var showNodeRangePicker by remember { mutableStateOf(false) }
     val isChildDialogVisible = showDatePicker || showNodeRangePicker
+    val glassSettings = LocalAppGlassSettings.current
+    val childDialogBackdrop = rememberLayerBackdrop()
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
+    ) {
     if (showDatePicker) {
         WheelDatePickerDialog(date, { showDatePicker = false }, title = "调整日期") {
             date = it
@@ -403,15 +430,23 @@ fun MaterialCourseSingleEditDialog(
         )
     ) {
         DialogEdgeToEdgeEffect(isDarkTheme = false)
+        if (glassSettings.active) DisableDialogWindowDimEffect()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
+        ) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
         PredictiveBottomDialogHost(
             visible = true,
             onDismiss = onDismiss,
             predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
             backHandlerEnabled = !isChildDialogVisible,
+            scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
             contentAlignment = Alignment.Center,
             contentPadding = WindowInsets.navigationBars.asPaddingValues()
         ) {
-            Card(
+            AppOverlayCard(
                 modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -458,6 +493,9 @@ fun MaterialCourseSingleEditDialog(
             }
         }
         }
+        }
+        }
+    }
     }
 }
 
@@ -475,7 +513,7 @@ fun WheelRangePickerDialog(
     var start by remember { mutableIntStateOf(initialStart) }
     var end by remember { mutableIntStateOf(initialEnd) }
     val list = range.toList().map { labelMapper(it) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = {

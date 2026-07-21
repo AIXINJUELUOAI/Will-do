@@ -119,7 +119,7 @@ fun WheelDatePickerDialog(
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
     val haptics = rememberAppHaptics()
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = { WheelDatePicker(initialDate, { selectedDate = it }) },
@@ -160,7 +160,7 @@ fun WheelTimePickerDialog(
     var sH by remember { mutableIntStateOf(h) }
     var sM by remember { mutableIntStateOf(m) }
     val haptics = rememberAppHaptics()
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(title) },
         text = { WheelTimePicker(h, m, { hh, mm -> sH = hh; sM = mm }) },
@@ -199,7 +199,7 @@ fun WheelReminderPickerDialog(
     var selectedIndex by remember { mutableIntStateOf(defaultIndex) }
     val haptics = rememberAppHaptics()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle("添加提醒") },
         text = {

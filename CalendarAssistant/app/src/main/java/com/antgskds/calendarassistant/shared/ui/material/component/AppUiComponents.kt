@@ -1,13 +1,17 @@
 package com.antgskds.calendarassistant.shared.ui.material.component
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
@@ -19,11 +23,16 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
 
 @Composable
 fun AppCard(
@@ -34,7 +43,6 @@ fun AppCard(
     tonalElevation: Dp = 0.dp,
     shadowElevation: Dp = 0.dp,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    forceStrongerOverlay: Boolean = false,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -44,8 +52,7 @@ fun AppCard(
         AppGlassSurface(
             modifier = resolvedModifier,
             shape = shape,
-            fallbackColor = containerColor,
-            forceStrongerOverlay = forceStrongerOverlay
+            fallbackColor = containerColor
         ) {
             androidx.compose.material3.Surface(color = Color.Transparent, contentColor = contentColor) {
                 androidx.compose.foundation.layout.Column(
@@ -71,6 +78,91 @@ fun AppCard(
             content = content
         )
     }
+}
+
+@Composable
+fun AppOverlayCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(16.dp),
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    tonalElevation: Dp = 0.dp,
+    shadowElevation: Dp = 0.dp,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val glassSettings = LocalAppGlassSettings.current
+    val resolvedModifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
+    if (glassSettings.active && glassSettings.overlayBackdrop != null) {
+        AppOverlayGlassSurface(
+            modifier = resolvedModifier,
+            shape = shape,
+            fallbackColor = containerColor
+        ) {
+            androidx.compose.material3.Surface(color = Color.Transparent, contentColor = contentColor) {
+                androidx.compose.foundation.layout.Column(
+                    modifier = Modifier.padding(contentPadding),
+                    content = content
+                )
+            }
+        }
+        return
+    }
+
+    Card(
+        modifier = resolvedModifier,
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = shadowElevation)
+    ) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.padding(contentPadding),
+            content = content
+        )
+    }
+}
+
+@Composable
+fun AppOverlayCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(16.dp),
+    colors: CardColors = CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ),
+    elevation: CardElevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val glassSettings = LocalAppGlassSettings.current
+    val resolvedModifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
+    if (glassSettings.active && glassSettings.overlayBackdrop != null) {
+        AppOverlayGlassSurface(
+            modifier = resolvedModifier,
+            shape = shape,
+            fallbackColor = colors.containerColor
+        ) {
+            androidx.compose.material3.Surface(
+                color = Color.Transparent,
+                contentColor = colors.contentColor
+            ) {
+                androidx.compose.foundation.layout.Column(content = content)
+            }
+        }
+        return
+    }
+
+    Card(
+        modifier = resolvedModifier,
+        shape = shape,
+        colors = colors,
+        elevation = elevation,
+        content = content
+    )
 }
 
 @Composable
@@ -137,7 +229,7 @@ fun AppDialog(
     dismissText: String? = null,
     onDismiss: (() -> Unit)? = null
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text(title) },
         text = { Text(text) },
@@ -171,20 +263,42 @@ fun AppAlertDialog(
     titleContentColor: Color = MaterialTheme.colorScheme.onSurface,
     textContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = confirmButton,
-        modifier = modifier,
-        dismissButton = dismissButton,
-        icon = icon,
-        title = title,
-        text = text,
-        shape = shape,
-        containerColor = containerColor,
-        tonalElevation = tonalElevation,
-        titleContentColor = titleContentColor,
-        textContentColor = textContentColor
-    )
+    val glassSettings = LocalAppGlassSettings.current
+    val glassActive = glassSettings.active && glassSettings.overlayBackdrop != null
+    val childBackdrop = rememberLayerBackdrop()
+    val dialogModifier = if (glassActive) {
+        modifier
+            .layerBackdrop(childBackdrop)
+            .appMiuiOverlayBlurMaterial(shape)
+    } else {
+        modifier
+    }
+
+    CompositionLocalProvider(
+        LocalAppGlassSettings provides if (glassActive) {
+            glassSettings.copy(overlayBackdrop = childBackdrop)
+        } else {
+            glassSettings
+        }
+    ) {
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            confirmButton = {
+                if (glassActive) DisableDialogWindowDimEffect()
+                confirmButton()
+            },
+            modifier = dialogModifier,
+            dismissButton = dismissButton,
+            icon = icon,
+            title = title,
+            text = text,
+            shape = shape,
+            containerColor = if (glassActive) Color.Transparent else containerColor,
+            tonalElevation = if (glassActive) 0.dp else tonalElevation,
+            titleContentColor = titleContentColor,
+            textContentColor = textContentColor
+        )
+    }
 }
 
 @Composable
@@ -195,7 +309,7 @@ fun AppPickerDialog(
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text(title) },
         text = { Box(modifier = Modifier.fillMaxWidth()) { content() } },
@@ -215,22 +329,84 @@ fun AppModalBottomSheet(
     sheetState: SheetState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val glassSettings = LocalAppGlassSettings.current
+    val glassActive = glassSettings.active && glassSettings.overlayBackdrop != null
+    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetContent: @Composable ColumnScope.() -> Unit = if (glassActive) {
+        {
+            DisableDialogWindowDimEffect()
+            AppOverlayGlassSurface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = shape,
+                fallbackColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                androidx.compose.material3.Surface(
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BottomSheetDefaults.DragHandle()
+                        }
+                        Column(modifier = modifier) {
+                            content()
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        content
+    }
+
+    val sheetModifier = if (glassActive) Modifier else modifier
+    val containerColor = if (glassActive) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow
+    val scrimColor = if (glassActive) Color.Transparent else BottomSheetDefaults.ScrimColor
+    val dragHandle: (@Composable () -> Unit)? = if (glassActive) {
+        null
+    } else {
+        { BottomSheetDefaults.DragHandle() }
+    }
+
     if (sheetState != null) {
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,
-            modifier = modifier,
+            modifier = sheetModifier,
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = shape,
+            containerColor = containerColor,
+            tonalElevation = if (glassActive) 0.dp else 1.dp,
+            scrimColor = scrimColor,
+            dragHandle = dragHandle,
+            contentWindowInsets = if (glassActive) {
+                { WindowInsets(0, 0, 0, 0) }
+            } else {
+                { BottomSheetDefaults.windowInsets }
+            },
             contentColor = MaterialTheme.colorScheme.onSurface,
-            content = content
+            content = sheetContent
         )
     } else {
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = sheetModifier,
+            shape = shape,
+            containerColor = containerColor,
+            tonalElevation = if (glassActive) 0.dp else 1.dp,
+            scrimColor = scrimColor,
+            dragHandle = dragHandle,
+            contentWindowInsets = if (glassActive) {
+                { WindowInsets(0, 0, 0, 0) }
+            } else {
+                { BottomSheetDefaults.windowInsets }
+            },
             contentColor = MaterialTheme.colorScheme.onSurface,
-            content = content
+            content = sheetContent
         )
     }
 }

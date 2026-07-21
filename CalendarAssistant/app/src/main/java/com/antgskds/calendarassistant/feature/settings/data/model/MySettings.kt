@@ -178,7 +178,7 @@ data class MySettings(
     val appBackgroundImagePath: String = "",
     val appBackgroundSeedColorHex: String = "",
     val appBackgroundImageColorEnabled: Boolean = false,
-    val appBackgroundMiuiBlurTestEnabled: Boolean = false,
+    val appBackgroundMiuiBlurTestEnabled: Boolean = true,
     val appBackgroundWallpaperBlurEnabled: Boolean = false,
     val appBackgroundCardAlphaPercent: Int = APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     val appBackgroundScrimAlphaPercent: Int = 0, // 旧设置兼容字段；主界面背景不再叠加蒙层

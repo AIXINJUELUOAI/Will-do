@@ -81,7 +81,7 @@ fun FloatingActionCardSurface(
     val haptics = rememberAppHaptics()
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1f)
 
-    AppCard(
+    AppOverlayCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 24.dp),
