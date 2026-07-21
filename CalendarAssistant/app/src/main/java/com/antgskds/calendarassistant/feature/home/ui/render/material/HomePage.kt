@@ -592,7 +592,7 @@ fun MaterialHomePage(
                                         .fillMaxWidth()
                                         .aspectRatio(0.95f)
                                         .then(
-                                            if (hasAppBackground) {
+                                            if (hasAppBackground && !state.settings.appBackgroundMiuiBlurTestEnabled) {
                                                 Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
                                             } else {
                                                 Modifier

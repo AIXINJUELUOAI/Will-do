@@ -41,6 +41,7 @@ import com.antgskds.calendarassistant.platform.floating.FloatingBallService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
@@ -1476,7 +1477,7 @@ private fun FloatingGestureActionPickerDialog(
     val selectedActionIndex = options.indexOf(FloatingBallGestureAction.normalize(selectedAction)).coerceAtLeast(0)
     var selectedIndex by remember(request, selectedAction) { mutableIntStateOf(selectedActionIndex) }
     val haptics = rememberAppHaptics()
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(request.title) },
         text = {

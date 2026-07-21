@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 90
+        versionCode = 91
         versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -146,6 +146,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.0")
 
     // ✅✅✅ 新增关键依赖：修复 MainActivity 中的 viewModel() 报错
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

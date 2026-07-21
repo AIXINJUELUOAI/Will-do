@@ -1,11 +1,8 @@
 package com.antgskds.calendarassistant.app.ui.theme.material.background
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -13,31 +10,19 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
-import kotlin.math.roundToInt
+import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSurface
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 
 data class AppBackgroundStylePalette(
     val surface: Color,
@@ -67,7 +52,11 @@ fun AppBackgroundStyleTheme(
     cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
     content: @Composable () -> Unit
 ) {
-    val normalizedCardAlphaPercent = MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent)
+    val normalizedCardAlphaPercent = if (miuiBlurEnabled) {
+        MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
+    } else {
+        MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent)
+    }
     val darkGlass = resolveAppBackgroundDarkGlass(
         fallbackDark = MaterialTheme.colorScheme.isCurrentThemeDarkGlass()
     )
@@ -137,9 +126,13 @@ fun rememberAppBackgroundStylePalette(
     val dark = resolveAppBackgroundDarkGlass(
         fallbackDark = MaterialTheme.colorScheme.isCurrentThemeDarkGlass()
     )
-    val effectiveCardAlphaPercent = cardAlphaPercent
-        ?.let(MySettings::normalizeAppBackgroundCardAlphaPercent)
-        ?: LocalAppBackgroundCardAlphaPercent.current
+    val effectiveCardAlphaPercent = if (miuiBlurEnabled) {
+        MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
+    } else {
+        cardAlphaPercent
+            ?.let(MySettings::normalizeAppBackgroundCardAlphaPercent)
+            ?: LocalAppBackgroundCardAlphaPercent.current
+    }
     return if (dark) {
         val primaryText = Color.White
         AppBackgroundStylePalette(
@@ -249,71 +242,27 @@ fun AppBackgroundGlassSurface(
         return
     }
 
+    if (effectiveMiuiBlurEnabled && LocalAppGlassSettings.current.active) {
+        AppGlassSurface(
+            modifier = modifier,
+            shape = shape,
+            fallbackColor = resolvedSurfaceColor,
+            content = content
+        )
+        return
+    }
+
     Box(
         modifier = modifier
             .clip(shape)
             .border(borderWidth, palette.outline, shape)
     ) {
-        if (effectiveEnabled && palette.blurEnabled) {
-            AppBackgroundBlurredBackdrop(
-                modifier = Modifier.matchParentSize(),
-                shape = shape,
-                blurRadius = palette.blurRadius
-            )
-        }
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(resolvedSurfaceColor, shape)
         )
         content()
-    }
-}
-
-@Composable
-private fun AppBackgroundBlurredBackdrop(
-    modifier: Modifier,
-    shape: Shape,
-    blurRadius: Dp
-) {
-    val wallpaper = LocalAppBackgroundWallpaperBitmap.current ?: return
-    val rootSize = LocalAppBackgroundRootSize.current
-    if (rootSize.width <= 0 || rootSize.height <= 0) return
-
-    val density = LocalDensity.current
-    val blurRadiusPx = with(density) { blurRadius.toPx() }
-    val rootWidth = with(density) { rootSize.width.toDp() }
-    val rootHeight = with(density) { rootSize.height.toDp() }
-    var positionInRoot by remember { mutableStateOf(Offset.Zero) }
-
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .onGloballyPositioned { coordinates ->
-                positionInRoot = coordinates.positionInRoot()
-            }
-    ) {
-        Image(
-            bitmap = wallpaper,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                // 背景副本必须覆盖整个根容器，不能被卡片尺寸约束截断。
-                .requiredSize(width = rootWidth, height = rootHeight)
-                .offset {
-                    IntOffset(
-                        x = -positionInRoot.x.roundToInt(),
-                        y = -positionInRoot.y.roundToInt()
-                    )
-                }
-                .graphicsLayer {
-                    renderEffect = BlurEffect(
-                        radiusX = blurRadiusPx,
-                        radiusY = blurRadiusPx,
-                        edgeTreatment = TileMode.Clamp
-                    )
-                }
-        )
     }
 }
 

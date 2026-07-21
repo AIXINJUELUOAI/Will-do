@@ -50,13 +50,18 @@ import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelTimePickerDialog
+import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayCard
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.feature.schedule.ui.render.RepeatRulePickerDialog
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DialogEdgeToEdgeEffect
+import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
 import com.antgskds.calendarassistant.shared.ui.motion.PredictiveBottomDialogHost
 import com.antgskds.calendarassistant.app.ui.theme.material.resolveEventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import java.io.File
 import java.time.Duration
 import java.time.LocalDate
@@ -346,28 +351,41 @@ fun MaterialAddEventDialog(
 
     if (!visible) return
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = false,
-            decorFitsSystemWindows = false
-        )
+    val glassSettings = LocalAppGlassSettings.current
+    val childDialogBackdrop = rememberLayerBackdrop()
+    CompositionLocalProvider(
+        LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
     ) {
-        DialogEdgeToEdgeEffect(isDarkTheme = settings.isDarkMode)
-        PredictiveBottomDialogHost(
-            visible = visible,
-            onDismiss = onDismiss,
-            predictiveBackEnabled = settings.predictiveBackEnabled && !isChildDialogVisible,
-            backHandlerEnabled = !isChildDialogVisible,
-            contentAlignment = Alignment.Center,
-            contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                decorFitsSystemWindows = false
+            )
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            DialogEdgeToEdgeEffect(isDarkTheme = settings.isDarkMode)
+            if (glassSettings.active) DisableDialogWindowDimEffect()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
             ) {
+                CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
+                    PredictiveBottomDialogHost(
+                        visible = visible,
+                        onDismiss = onDismiss,
+                        predictiveBackEnabled = settings.predictiveBackEnabled && !isChildDialogVisible,
+                        backHandlerEnabled = !isChildDialogVisible,
+                        scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
+                        contentAlignment = Alignment.Center,
+                        contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
+                    ) {
+                        AppOverlayCard(
+                            modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(if (!isEditing) "新增日程" else "编辑日程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -554,9 +572,12 @@ fun MaterialAddEventDialog(
                     }) { Text(if (activeStructuredSpec != null) "完成" else "确定") }
                 }
             }
-        }
-        }
-    }
+                        }
+                        }
+                    }
+                }
+            }
+
 
     if (showStartDatePicker) WheelDatePickerDialog(startDate, { showStartDatePicker = false }, title = "开始日期") {
         val newStart = parseDateTimeValue(it, startTime, timeFormatter)
@@ -640,6 +661,7 @@ fun MaterialAddEventDialog(
                 showRepeatPicker = false
             }
         )
+    }
     }
 }
 

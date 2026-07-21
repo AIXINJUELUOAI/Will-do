@@ -1,48 +1,32 @@
 package com.antgskds.calendarassistant.shared.ui.material.component
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
-import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurBlendMode
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 
 data class AppGlassSettings(
     val enabled: Boolean = false,
-    val miuixEnabled: Boolean = false,
-    val blurRadiusDp: Int = 28,
-    val overlayAlphaPercent: Int = 78,
-    val wallpaperBitmap: ImageBitmap? = null,
-    val rootSize: IntSize = IntSize.Zero,
+    val blurRadiusDp: Int = 25,
+    val backdrop: LayerBackdrop? = null,
+    val overlayBackdrop: LayerBackdrop? = null,
     val darkTheme: Boolean = false
 ) {
     val active: Boolean
-        get() = enabled && wallpaperBitmap != null && rootSize.width > 0 && rootSize.height > 0
+        get() = enabled && backdrop != null
 }
 
 val LocalAppGlassSettings = staticCompositionLocalOf { AppGlassSettings() }
@@ -60,108 +44,97 @@ fun AppGlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape,
     fallbackColor: Color,
-    overlayColor: Color = glassOverlayColor(LocalAppGlassSettings.current, fallbackColor),
-    borderColor: Color = glassBorderColor(LocalAppGlassSettings.current),
-    borderWidth: Dp = 1.dp,
-    forceStrongerOverlay: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val glassSettings = LocalAppGlassSettings.current
-    if (!glassSettings.active) {
+    val settings = LocalAppGlassSettings.current
+    if (!settings.active) {
         Box(modifier = modifier.background(fallbackColor, shape)) {
             content()
         }
         return
     }
 
-    val resolvedOverlay = if (forceStrongerOverlay) {
-        overlayColor.copy(alpha = (overlayColor.alpha + 0.08f).coerceAtMost(0.96f))
-    } else {
-        overlayColor
-    }
-
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .border(borderWidth, borderColor, shape)
-    ) {
-        AppGlassBlurredBackdrop(
-            modifier = Modifier.matchParentSize(),
-            shape = shape,
-            blurRadius = if (glassSettings.miuixEnabled) {
-                (glassSettings.blurRadiusDp * 1.25f).dp
-            } else {
-                glassSettings.blurRadiusDp.dp
-            }
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(resolvedOverlay, shape)
-        )
+    Box(modifier = modifier.appMiuiBlurMaterial(shape)) {
         content()
     }
 }
 
+/**
+ * Glass surface for content drawn above the current page. It samples the scene backdrop and
+ * publishes its rendered result as the backdrop for any child dialog opened from this surface.
+ */
 @Composable
-private fun AppGlassBlurredBackdrop(
-    modifier: Modifier,
+fun AppOverlayGlassSurface(
+    modifier: Modifier = Modifier,
     shape: Shape,
-    blurRadius: Dp
+    fallbackColor: Color,
+    content: @Composable () -> Unit
 ) {
-    val glassSettings = LocalAppGlassSettings.current
-    val wallpaper = glassSettings.wallpaperBitmap ?: return
-    val rootSize = glassSettings.rootSize
-    if (rootSize.width <= 0 || rootSize.height <= 0) return
+    val settings = LocalAppGlassSettings.current
+    val parentBackdrop = settings.overlayBackdrop
+    if (!settings.active || parentBackdrop == null) {
+        Box(modifier = modifier.background(fallbackColor, shape)) {
+            content()
+        }
+        return
+    }
+
+    val childBackdrop = rememberLayerBackdrop()
+    val glassModifier = modifier
+        .layerBackdrop(childBackdrop)
+        .appMiuiBlurMaterial(shape = shape, backdrop = parentBackdrop)
+
+    AppGlassSettingsProvider(settings.copy(overlayBackdrop = childBackdrop)) {
+        Box(modifier = glassModifier) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun Modifier.appMiuiBlurMaterial(shape: Shape): Modifier {
+    val settings = LocalAppGlassSettings.current
+    return appMiuiBlurMaterial(shape = shape, backdrop = settings.backdrop)
+}
+
+@Composable
+fun Modifier.appMiuiOverlayBlurMaterial(shape: Shape): Modifier {
+    val settings = LocalAppGlassSettings.current
+    return appMiuiBlurMaterial(shape = shape, backdrop = settings.overlayBackdrop)
+}
+
+@Composable
+private fun Modifier.appMiuiBlurMaterial(
+    shape: Shape,
+    backdrop: LayerBackdrop?
+): Modifier {
+    val settings = LocalAppGlassSettings.current
+    if (!settings.active || backdrop == null) return this
 
     val density = LocalDensity.current
-    val rootWidth = with(density) { rootSize.width.toDp() }
-    val rootHeight = with(density) { rootSize.height.toDp() }
-    val blurRadiusPx = with(density) { blurRadius.toPx() }
-    var positionInRoot by remember { mutableStateOf(Offset.Zero) }
-
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .onGloballyPositioned { coordinates ->
-                positionInRoot = coordinates.positionInRoot()
-            }
-    ) {
-        Image(
-            bitmap = wallpaper,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                // requiredSize 允许背景副本突破卡片自身的测量约束，避免滚动列表中只覆盖局部区域。
-                .requiredSize(rootWidth, rootHeight)
-                .offset {
-                    IntOffset(
-                        x = -positionInRoot.x.roundToInt(),
-                        y = -positionInRoot.y.roundToInt()
-                    )
-                }
-                .graphicsLayer {
-                    renderEffect = BlurEffect(
-                        radiusX = blurRadiusPx,
-                        radiusY = blurRadiusPx,
-                        edgeTreatment = TileMode.Clamp
-                    )
-                }
-        )
-    }
-}
-
-private fun glassOverlayColor(settings: AppGlassSettings, fallbackColor: Color): Color {
-    // 透明度设置直接对应表面不透明度，100% 必须得到纯色表面。
-    val alpha = settings.overlayAlphaPercent.coerceIn(0, 100) / 100f
-    val base = if (settings.darkTheme) Color.Black else fallbackColor
-    return base.copy(alpha = alpha)
-}
-
-private fun glassBorderColor(settings: AppGlassSettings): Color {
-    return if (settings.darkTheme) {
-        Color.White.copy(alpha = if (settings.miuixEnabled) 0.24f else 0.16f)
+    val blurRadiusPx = with(density) { settings.blurRadiusDp.dp.toPx() }
+    val materialTint = if (settings.darkTheme) {
+        Color.Black.copy(alpha = 0.58f)
     } else {
-        Color.White.copy(alpha = if (settings.miuixEnabled) 0.50f else 0.34f)
+        Color.White.copy(alpha = 0.62f)
     }
+    val blurColors = BlurDefaults.blurColors(
+        blendColors = listOf(
+            BlendColorEntry(
+                color = materialTint,
+                mode = BlurBlendMode.SrcOver
+            )
+        ),
+        brightness = if (settings.darkTheme) -0.03f else 0.03f,
+        contrast = 1.04f,
+        saturation = 1.12f
+    )
+
+    return textureBlur(
+        backdrop = backdrop,
+        shape = shape,
+        blurRadius = blurRadiusPx,
+        noiseCoefficient = BlurDefaults.NoiseCoefficient,
+        colors = blurColors
+    )
 }

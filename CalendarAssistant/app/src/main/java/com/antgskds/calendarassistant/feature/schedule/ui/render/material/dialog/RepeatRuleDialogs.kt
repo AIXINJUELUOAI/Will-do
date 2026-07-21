@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
@@ -85,7 +86,7 @@ fun MaterialRepeatRulePickerDialog(
         )
     }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = {
             if (page == RepeatDialogPage.UNTIL_DATE) page = RepeatDialogPage.CUSTOM_WEEKLY else onDismiss()
         },

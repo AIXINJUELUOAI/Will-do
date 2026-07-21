@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Restore
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import com.antgskds.calendarassistant.feature.capsule.domain.icon.RuleIconSource
 import com.antgskds.calendarassistant.feature.capsule.presentation.icon.PresetIcons
 import com.antgskds.calendarassistant.feature.schedule.application.rule.RuleRegistry
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 
 /**
  * 通知图标选择器弹窗。
@@ -55,7 +55,7 @@ fun RuleIconPickerDialog(
     val context = LocalContext.current
     val haptics = rememberAppHaptics()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = null,
         text = {
