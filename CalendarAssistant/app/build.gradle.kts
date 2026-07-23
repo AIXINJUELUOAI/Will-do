@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 91
+        versionCode = 92
         versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -146,13 +146,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.0")
+    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.3")
 
     // ✅✅✅ 新增关键依赖：修复 MainActivity 中的 viewModel() 报错
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // 补充图标库
-    implementation("androidx.compose.material:material-icons-extended:1.5.4")
+    implementation("androidx.compose.material:material-icons-extended")
 
     // === 脱糖库 (Time API 必需) ===
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
