@@ -1,13 +1,23 @@
 import java.io.File
 
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools:r8:9.1.31")
+    }
+}
+
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
-    kotlin("plugin.serialization") version "2.3.21" apply false
+    kotlin("plugin.serialization") version "2.4.0" apply false
 }
 
 data class ArchitectureGuardrailRule(
