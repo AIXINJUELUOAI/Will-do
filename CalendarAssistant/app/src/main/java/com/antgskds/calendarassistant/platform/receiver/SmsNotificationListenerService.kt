@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -39,6 +40,8 @@ class SmsNotificationListenerService : NotificationListenerService() {
             "com.huawei.message",
             "com.samsung.android.messaging",
             "com.coloros.mms",
+            "com.coloros.message",
+            "com.oplus.mms",
             "com.oneplus.mms"
         )
 
@@ -50,10 +53,10 @@ class SmsNotificationListenerService : NotificationListenerService() {
                 context.contentResolver,
                 "enabled_notification_listeners"
             ) ?: return false
-            val full = ComponentName(context, SmsNotificationListenerService::class.java)
-                .flattenToString()
-            val short = "${context.packageName}/.service.receiver.SmsNotificationListenerService"
-            return flat.split(":").any { it == full || it == short }
+            val expected = ComponentName(context, SmsNotificationListenerService::class.java)
+            return flat.split(":")
+                .mapNotNull(ComponentName::unflattenFromString)
+                .any { it == expected }
         }
 
         /**
@@ -76,6 +79,8 @@ class SmsNotificationListenerService : NotificationListenerService() {
                         ComponentName(context, SmsNotificationListenerService::class.java)
                     )
                     Log.d(TAG, "请求重新绑定通知监听服务")
+                } else {
+                    Log.d(TAG, "当前通知监听组件未授权，跳过重新绑定")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "重新绑定失败: ${e.message}")
@@ -107,12 +112,13 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName ?: return
+        val context = applicationContext
+        val defaultSmsPackage = runCatching { Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()
 
         // 只处理系统短信应用的通知
-        if (pkg !in SYSTEM_SMS_PACKAGES) return
+        if (pkg !in SYSTEM_SMS_PACKAGES && pkg != defaultSmsPackage) return
 
         try {
-            val context = applicationContext
             val settings = SettingsDataSource(context).loadSettings()
             if (!settings.isSmsMonitoringEnabled) return
 

@@ -18,6 +18,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,7 @@ class QuickMemoVoiceCaptureService : Service() {
     private var stopRequested = false
     private var startedAt = 0L
     private var tickerJob: Job? = null
+    private var autoStopJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -65,6 +67,7 @@ class QuickMemoVoiceCaptureService : Service() {
     override fun onDestroy() {
         instance = null
         tickerJob?.cancel()
+        autoStopJob?.cancel()
         runCatching { recorder.stopAndDiscard() }
         app.capsuleCommandApi.clearQuickMemoRecording()
         stopVoiceForeground()
@@ -84,15 +87,17 @@ class QuickMemoVoiceCaptureService : Service() {
         starting = true
         stopRequested = false
         startedAt = System.currentTimeMillis()
-        updateRecordingStatus(0L)
+        updateRecordingNotification("随口记录音", "正在录音，可点击结束")
+        updateCapsuleStatus(0L)
         serviceScope.launch {
             try {
                 withContext(Dispatchers.IO) { recorder.start() }
                 startedAt = System.currentTimeMillis()
                 starting = false
                 recording = true
-                updateRecordingStatus()
+                updateCapsuleStatus()
                 startTicker()
+                scheduleAutoStop()
                 if (stopRequested) stopCapture()
             } catch (e: Exception) {
                 Log.e(TAG, "start failed", e)
@@ -114,6 +119,8 @@ class QuickMemoVoiceCaptureService : Service() {
         starting = false
         tickerJob?.cancel()
         tickerJob = null
+        autoStopJob?.cancel()
+        autoStopJob = null
         serviceScope.launch {
             updateRecordingNotification("正在保存...", "随口记录音")
             app.capsuleCommandApi.showQuickMemoRecording("正在保存...", "随口记录音")
@@ -152,16 +159,25 @@ class QuickMemoVoiceCaptureService : Service() {
         tickerJob?.cancel()
         tickerJob = serviceScope.launch {
             while (recording) {
-                updateRecordingStatus()
+                updateCapsuleStatus()
                 delay(1000)
             }
         }
     }
 
-    private fun updateRecordingStatus(elapsedMs: Long = System.currentTimeMillis() - startedAt) {
+    private fun updateCapsuleStatus(elapsedMs: Long = System.currentTimeMillis() - startedAt) {
         val title = "录音中：${formatRecordingTime(elapsedMs)}"
-        updateRecordingNotification(title, "松开保存")
         app.capsuleCommandApi.showQuickMemoRecording(title, "松开保存")
+    }
+
+    private fun scheduleAutoStop() {
+        autoStopJob?.cancel()
+        val durationMs = QuickMemoAutoStopPolicy.durationMillis(app.settingsQueryApi.settings.value) ?: return
+        autoStopJob = serviceScope.launch {
+            delay(durationMs)
+            autoStopJob = null
+            stopCapture()
+        }
     }
 
     private fun updateRecordingNotification(title: String, content: String) {
@@ -192,7 +208,7 @@ class QuickMemoVoiceCaptureService : Service() {
             stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
+        return NotificationCompat.Builder(this, App.CHANNEL_ID_VOICE_CAPTURE)
             .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(title)
             .setContentText(content)
@@ -212,6 +228,8 @@ class QuickMemoVoiceCaptureService : Service() {
         startedAt = 0L
         tickerJob?.cancel()
         tickerJob = null
+        autoStopJob?.cancel()
+        autoStopJob = null
         app.capsuleCommandApi.clearQuickMemoRecording()
         stopVoiceForeground()
         Toast.makeText(applicationContext, toast, Toast.LENGTH_SHORT).show()

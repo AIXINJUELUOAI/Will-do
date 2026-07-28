@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.feature.recognition.ingest.sms
 
 import android.util.Log
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
+import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -19,6 +20,7 @@ enum class SmsPickupSource(
 
 class SmsPickupIngestCoordinator(
     private val appScope: CoroutineScope,
+    private val settingsQueryApi: SettingsQueryApi,
     private val getIngestCommandApi: () -> IngestCommandApi?
 ) {
     private data class Candidate(
@@ -30,6 +32,8 @@ class SmsPickupIngestCoordinator(
 
     private val candidates = Channel<Candidate>(capacity = 64)
     private val terminalFingerprints = LinkedHashMap<String, Long>()
+    private data class DeliveryRecord(val source: SmsPickupSource, val timestamp: Long)
+    private val recentDeliveryBodies = LinkedHashMap<String, DeliveryRecord>()
 
     init {
         appScope.launch {
@@ -58,7 +62,12 @@ class SmsPickupIngestCoordinator(
 
     private suspend fun processCandidate(candidate: Candidate) {
         val now = System.currentTimeMillis()
-        cleanupTerminalFingerprints(now)
+        val dedupEnabled = settingsQueryApi.settings.value.smsPickupDedupEnabled
+        if (dedupEnabled) {
+            cleanupTerminalFingerprints(now)
+        } else {
+            cleanupRecentDeliveries(now)
+        }
 
         Log.d(TAG, "[探针] 候选短信开始处理 source=${candidate.source.logName}, smsId=${candidate.smsId}, body=${candidate.body.take(80)}...")
 
@@ -69,8 +78,18 @@ class SmsPickupIngestCoordinator(
         }
 
         val fingerprint = SmsPickupFingerprint.fromDraft(eventData)
-        if (fingerprint != null && terminalFingerprints.containsKey(fingerprint)) {
+        if (dedupEnabled && fingerprint != null && terminalFingerprints.containsKey(fingerprint)) {
             Log.d(TAG, "[探针] 同取件码已由其他入口处理，跳过 source=${candidate.source.logName}, fingerprint=$fingerprint")
+            return
+        }
+        val deliveryKey = candidate.body.trim().replace(Regex("\\s+"), " ")
+        val previousDelivery = recentDeliveryBodies[deliveryKey]
+        if (!dedupEnabled &&
+            previousDelivery != null &&
+            previousDelivery.source != candidate.source &&
+            now - previousDelivery.timestamp <= DELIVERY_DEBOUNCE_MS
+        ) {
+            Log.d(TAG, "[探针] 同一短信已由其他入口提交，跳过入口抖动 source=${candidate.source.logName}")
             return
         }
 
@@ -82,8 +101,13 @@ class SmsPickupIngestCoordinator(
 
         try {
             val added = ingestCommandApi.ingestSmsPickup(eventData)
-            if (fingerprint != null) {
+            if (dedupEnabled && fingerprint != null) {
                 terminalFingerprints[fingerprint] = System.currentTimeMillis()
+            } else if (!dedupEnabled && added != null) {
+                recentDeliveryBodies[deliveryKey] = DeliveryRecord(
+                    source = candidate.source,
+                    timestamp = System.currentTimeMillis()
+                )
             }
 
             if (added == null) {
@@ -112,9 +136,19 @@ class SmsPickupIngestCoordinator(
         }
     }
 
+    private fun cleanupRecentDeliveries(now: Long) {
+        val iterator = recentDeliveryBodies.entries.iterator()
+        while (iterator.hasNext()) {
+            if (now - iterator.next().value.timestamp > DELIVERY_DEBOUNCE_MS) {
+                iterator.remove()
+            }
+        }
+    }
+
     private companion object {
         private const val TAG = "SmsPickupCoordinator"
         private const val TERMINAL_TTL_MS = 10 * 60 * 1000L
         private const val MAX_TERMINAL_FINGERPRINTS = 128
+        private const val DELIVERY_DEBOUNCE_MS = 5_000L
     }
 }

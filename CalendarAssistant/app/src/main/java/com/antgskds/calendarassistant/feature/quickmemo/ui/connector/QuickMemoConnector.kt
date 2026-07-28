@@ -19,6 +19,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoLis
 import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoUiAction
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailScreen
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoScreen
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 
 private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
@@ -80,6 +81,7 @@ fun QuickMemoDetailPage(
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
     val playbackState by viewModel.audioPlaybackState.collectAsState()
     val capsuleUiState by viewModel.capsuleUiState.collectAsState()
+    val mainUiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val state = remember(memoId, quickMemos, suggestions, playbackState, capsuleUiState) {
         val memo = quickMemos.firstOrNull { it.id == memoId }
@@ -103,6 +105,7 @@ fun QuickMemoDetailPage(
         backgroundMode = backgroundMode,
         miuiBlurEnabled = miuiBlurEnabled,
         cardAlphaPercent = cardAlphaPercent,
+        autoStopDurationMs = QuickMemoAutoStopPolicy.durationMillis(mainUiState.settings),
         onAction = { action ->
             handleQuickMemoAction(
                 action = action,

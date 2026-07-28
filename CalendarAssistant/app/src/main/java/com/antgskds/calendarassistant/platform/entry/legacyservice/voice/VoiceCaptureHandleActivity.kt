@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.platform.floating.FloatingScheduleService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ class VoiceCaptureHandleActivity : ComponentActivity() {
     private var stopping = false
     private var completed = false
     private val startRunnable = Runnable { startRecording() }
+    private val autoStopRunnable = Runnable { requestStop() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +111,10 @@ class VoiceCaptureHandleActivity : ComponentActivity() {
                 dispatchVoiceRecording()
                 performHaptic()
                 Toast.makeText(applicationContext, "正在录音，松开音量+保存", Toast.LENGTH_SHORT).show()
+                QuickMemoAutoStopPolicy.durationMillis(app.settingsQueryApi.settings.value)?.let { durationMs ->
+                    window.decorView.removeCallbacks(autoStopRunnable)
+                    window.decorView.postDelayed(autoStopRunnable, durationMs)
+                }
                 if (stopRequested) stopRecording()
             } catch (e: Exception) {
                 Log.e(TAG, "Activity voice recording start failed", e)
@@ -119,6 +125,7 @@ class VoiceCaptureHandleActivity : ComponentActivity() {
     }
 
     private fun requestStop() {
+        window.decorView.removeCallbacks(autoStopRunnable)
         if (completed || stopping || isFinishing) return
         if (!recording) {
             stopRequested = true
@@ -203,6 +210,7 @@ class VoiceCaptureHandleActivity : ComponentActivity() {
 
     private fun stopRecording() {
         if (completed || stopping) return
+        window.decorView.removeCallbacks(autoStopRunnable)
         stopping = true
         lifecycleScope.launch {
             try {
@@ -299,6 +307,7 @@ class VoiceCaptureHandleActivity : ComponentActivity() {
 
     override fun onDestroy() {
         window.decorView.removeCallbacks(startRunnable)
+        window.decorView.removeCallbacks(autoStopRunnable)
         if (!completed && !stopping && (startIssued || recording)) {
             runCatching { recorder.stopAndDiscard() }
         }

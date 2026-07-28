@@ -17,7 +17,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -26,13 +25,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -84,6 +79,7 @@ import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.O
 import com.antgskds.calendarassistant.feature.settings.shell.ui.connector.SettingsDetailRoute
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundRootSize
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundWallpaperBitmap
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppWallpaperImage
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundAverageLuminance
 import com.antgskds.calendarassistant.app.ui.theme.material.background.shouldUseLightSystemBarsForAppBackground
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
@@ -155,7 +151,7 @@ class MainActivity : ComponentActivity() {
         val uiSizeIndex = DensityConfigManager.getUiSizeFromPrefs(newBase)
         val systemMetrics = Resources.getSystem().displayMetrics
         val systemConfig = Resources.getSystem().configuration
-        val scale = DensityConfigManager.getScaleFactor(uiSizeIndex)
+        val scale = DensityConfigManager.getAppScaleFactor(newBase, uiSizeIndex)
 
         val targetDensity = systemMetrics.density * scale
         val targetDpi = (systemMetrics.densityDpi * scale).toInt()
@@ -516,8 +512,10 @@ class MainActivity : ComponentActivity() {
                         AppBackgroundLayer(
                             enabled = settings.appBackgroundImagePath.isNotBlank(),
                             imageBitmap = appBackgroundBitmap,
-                            blurEnabled = settings.appBackgroundWallpaperBlurEnabled &&
-                                !useMiuiBlurMaterial,
+                            imageScale = settings.appBackgroundImageScale,
+                            imageOffsetX = settings.appBackgroundImageOffsetX,
+                            imageOffsetY = settings.appBackgroundImageOffsetY,
+                            blurEnabled = settings.appBackgroundWallpaperBlurEnabled,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(
@@ -770,6 +768,7 @@ class MainActivity : ComponentActivity() {
             mainViewModel.refreshData()
         }
         app.runtimeCenter.startEdgeBarIfNeeded()
+        app.runtimeCenter.restoreSmsNotificationListenerIfNeeded()
         app.localModelResidueCenter.checkForResidue()
         AccessibilityGuardian.checkAndRestoreIfNeeded(this, lifecycleScope)
     }
@@ -887,6 +886,9 @@ private fun formatLocalModelResidueSize(bytes: Long): String {
 private fun AppBackgroundLayer(
     enabled: Boolean,
     imageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    imageScale: Float,
+    imageOffsetX: Float,
+    imageOffsetY: Float,
     blurEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -894,25 +896,13 @@ private fun AppBackgroundLayer(
     val blurRadiusPx = with(LocalDensity.current) { 28.dp.toPx() }
     val bitmap = imageBitmap ?: return
     Box(modifier = modifier) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (blurEnabled) {
-                        Modifier.graphicsLayer {
-                            renderEffect = BlurEffect(
-                                radiusX = blurRadiusPx,
-                                radiusY = blurRadiusPx,
-                                edgeTreatment = TileMode.Clamp
-                            )
-                        }
-                    } else {
-                        Modifier
-                    }
-                ),
-            contentScale = ContentScale.Crop
+        AppWallpaperImage(
+            imageBitmap = bitmap,
+            scale = imageScale,
+            offsetX = imageOffsetX,
+            offsetY = imageOffsetY,
+            blurRadiusPx = if (blurEnabled) blurRadiusPx else 0f,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }

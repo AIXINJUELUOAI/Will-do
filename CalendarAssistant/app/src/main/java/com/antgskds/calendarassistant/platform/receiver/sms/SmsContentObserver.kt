@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /**
  * 短信 ContentObserver
  *
- * 监听 content://sms 数据库变化，新短信到来时自动查询并用 SmsAnalysis 解析取件码。
+ * 监听 content://sms/inbox 数据库变化，新短信到来时自动查询并用 SmsAnalysis 解析取件码。
  * 优势：不需要 NotificationListenerService 额外权限，仅需 READ_SMS（已具备）。
  *
  * 对齐 parcel 项目方案：广播 + ContentObserver 双通道。
@@ -32,7 +32,9 @@ class SmsContentObserver(
         private const val TAG = "SmsContentObserver"
         private const val PREFS_NAME = "sms_observer"
         private const val KEY_LAST_PROCESSED_ID = "last_processed_id"
-        private val SMS_URI: Uri = Telephony.Sms.CONTENT_URI
+        private val SMS_URI: Uri = Telephony.Sms.Inbox.CONTENT_URI
+        private const val RECOVERY_LOOKBACK_COUNT = 5
+        private const val RECOVERY_LOOKBACK_WINDOW_MS = 24 * 60 * 60 * 1000L
 
         // 记录上次处理到的短信 ID，避免重复处理（进程存活期间有效）
         @Volatile private var lastProcessedId: Long = -1L
@@ -42,6 +44,7 @@ class SmsContentObserver(
     }
 
     private val pollHandler = Handler(Looper.getMainLooper())
+    private var registered = false
     private var polling = false
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -55,31 +58,51 @@ class SmsContentObserver(
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    @Synchronized
     fun register() {
+        if (registered) return
         val contentResolver = context.contentResolver
         try {
             val persistedId = prefs.getLong(KEY_LAST_PROCESSED_ID, -1L)
 
-            // 初始化 lastProcessedId：优先使用持久化值；首次运行回看最近 5 条，减少漏识别
+            // 每次重新注册都回看最近几条。入库层会去重，这可以恢复此前已推进游标但未成功入库的短信。
             val cursor = contentResolver.query(
                 SMS_URI,
-                arrayOf(Telephony.Sms._ID),
+                arrayOf(Telephony.Sms._ID, Telephony.Sms.DATE),
                 null, null,
                 "${Telephony.Sms._ID} DESC"
             )
             cursor?.use {
                 if (it.moveToFirst()) {
                     val latest = it.getLong(0)
-                    lastProcessedId = when {
-                        persistedId >= 0L -> persistedId
-                        latest > 5L -> latest - 5L
-                        else -> 0L
+                    val recoveryCutoff = System.currentTimeMillis() - RECOVERY_LOOKBACK_WINDOW_MS
+                    var recoveryBaseline = latest
+                    var inspected = 0
+                    if (it.getLong(1) >= recoveryCutoff) {
+                        var oldestRecoveryId = latest
+                        inspected = 1
+                        while (inspected < RECOVERY_LOOKBACK_COUNT && it.moveToNext()) {
+                            if (it.getLong(1) < recoveryCutoff) break
+                            oldestRecoveryId = it.getLong(0)
+                            inspected++
+                        }
+                        recoveryBaseline = (oldestRecoveryId - 1L).coerceAtLeast(0L)
                     }
-                    Log.d(TAG, "[探针] 初始化 lastProcessedId=$lastProcessedId (latest=$latest, persisted=$persistedId)")
+                    lastProcessedId = if (persistedId >= 0L) {
+                        minOf(persistedId, recoveryBaseline)
+                    } else {
+                        recoveryBaseline
+                    }
+                    Log.d(
+                        TAG,
+                        "[探针] 初始化 lastProcessedId=$lastProcessedId " +
+                            "(latest=$latest, persisted=$persistedId, recoveryCount=$inspected)"
+                    )
                 }
             }
 
             contentResolver.registerContentObserver(SMS_URI, true, this)
+            registered = true
             Log.d(TAG, "[探针] 短信 ContentObserver 已注册")
 
             scanNewMessages("register")
@@ -91,12 +114,17 @@ class SmsContentObserver(
         }
     }
 
+    @Synchronized
     fun unregister() {
+        stopPolling()
+        if (!registered) return
         try {
-            stopPolling()
             context.contentResolver.unregisterContentObserver(this)
+            registered = false
             Log.d(TAG, "[探针] 短信 ContentObserver 已注销")
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            registered = false
+        }
     }
 
     override fun onChange(selfChange: Boolean) {

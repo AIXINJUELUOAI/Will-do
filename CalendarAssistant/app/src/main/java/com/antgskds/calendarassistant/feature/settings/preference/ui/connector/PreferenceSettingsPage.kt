@@ -244,9 +244,13 @@ fun MaterialPreferenceSettingsScreen(
         val allGranted = permissions.values.all { it }
         if (!allGranted) {
             controller.updatePreference(smsMonitoring = false)
-        } else if (!SmsNotificationListenerService.isEnabled(context)) {
-            Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
-            SmsNotificationListenerService.requestEnable(context)
+            (context.applicationContext as? App)?.refreshSmsObserver(enabled = false)
+        } else {
+            (context.applicationContext as? App)?.refreshSmsObserver(enabled = true)
+            if (!SmsNotificationListenerService.isEnabled(context)) {
+                Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
+                SmsNotificationListenerService.requestEnable(context)
+            }
         }
     }
 
@@ -337,7 +341,7 @@ fun MaterialPreferenceSettingsScreen(
                     )
                     SwitchSettingItem(
                         title = "悬浮日程",
-                        subtitle = "用于悬浮窗日程显示与编辑",
+                        subtitle = "在悬浮窗中显示日程",
                         checked = settings.isFloatingWindowEnabled,
                         onCheckedChange = { isChecked ->
                             if (isChecked && !hasOverlayPermission) {
@@ -431,7 +435,7 @@ fun MaterialPreferenceSettingsScreen(
 
                         SwitchSettingItem(
                             title = "侧边栏入口",
-                            subtitle = "在屏幕边缘显示窄条，滑动呼出悬浮窗，点击动作可单独设置",
+                            subtitle = "在屏幕边缘显示侧边栏",
                             checked = settings.edgeBarEnabled,
                             onCheckedChange = { isChecked ->
                                 if (isChecked && !hasOverlayPermission) {
@@ -567,7 +571,7 @@ fun MaterialPreferenceSettingsScreen(
                                     subtitle = "侧边条宽度",
                                     value = settings.edgeBarWidthDp.toFloat(),
                                     onValueChange = { controller.updateEdgeBarSettings(widthDp = it.roundToInt()) },
-                                    valueRange = 4f..20f,
+                                    valueRange = 4f..100f,
                                     steps = 0,
                                     cardTitleStyle = cardTitleStyle,
                                     cardSubtitleStyle = cardSubtitleStyle,
@@ -645,7 +649,7 @@ fun MaterialPreferenceSettingsScreen(
 
                         SwitchSettingItem(
                             title = "悬浮球入口",
-                            subtitle = "显示可拖动悬浮球，单击、双击和长按可分别设置动作",
+                            subtitle = "在屏幕中显示悬浮球",
                             checked = settings.floatingBallEnabled,
                             onCheckedChange = { isChecked ->
                                 if (isChecked && !hasOverlayPermission) {
@@ -847,6 +851,8 @@ fun MaterialPreferenceSettingsScreen(
                                         Manifest.permission.READ_SMS
                                     )
                                 )
+                            } else {
+                                (context.applicationContext as? App)?.refreshSmsObserver(enabled = false)
                             }
                             controller.updatePreference(smsMonitoring = isChecked)
                         },
@@ -932,7 +938,7 @@ fun MaterialPreferenceSettingsScreen(
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
                     SwitchSettingItem(
-                        title = "实况胶囊通知",
+                        title = "实况通知",
                         subtitle = "日程开始时显示实况通知",
                         checked = settings.isLiveCapsuleEnabled,
                         onCheckedChange = { isChecked ->
@@ -955,8 +961,8 @@ fun MaterialPreferenceSettingsScreen(
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
                             SwitchSettingItem(
-                                title = "取件码聚合 (Beta)",
-                                subtitle = "当有多个取件码时合并显示为一个胶囊",
+                                title = "取件码聚合（Beta）",
+                                subtitle = "当同时存在多个取件码时合并显示为一个实况通知",
                                 checked = settings.isPickupAggregationEnabled,
                                 onCheckedChange = { isChecked ->
                                     controller.updatePreference(pickupAggregation = isChecked)
@@ -1595,7 +1601,7 @@ private fun SourceCalendarPickerSheet(
             Text("同步来源日历", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "勾选后，这些系统日历中的日程会同步到 APP；在 APP 中修改导入日程时，会回写到原日历。",
+                text = "将日程同步到系统日历",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

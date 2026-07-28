@@ -785,7 +785,7 @@ private fun ScheduleReminderConfigStep(
             OnboardingConfigRow(
                 icon = Icons.Rounded.Timer,
                 title = "提前提醒",
-                subtitle = "日程开始前提前提醒；精准闹钟建议开启",
+                subtitle = "日程开始前提前提醒",
                 checked = settings.isAdvanceReminderEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.ADVANCE_REMINDER, it) },
                 enabled = snapshot.notification,
@@ -815,7 +815,7 @@ private fun ScheduleReminderConfigStep(
             OnboardingConfigRow(
                 icon = Icons.Rounded.Watch,
                 title = "手环模式",
-                subtitle = "关键内容短通知同步到手环",
+                subtitle = "开启后，将同步发送一条普通通知以同步到手环",
                 checked = settings.braceletModeEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.BRACELET_MODE, it) },
                 enabled = snapshot.notification,
@@ -1711,7 +1711,7 @@ private fun onboardingPermissionItems(snapshot: PermissionSnapshot): List<Permis
     ),
     PermissionItem(PermissionKey.BATTERY, "后台稳定性", "电池优化白名单", "后台提醒、每日提醒和实况通知稳定性依赖它", RequirementLevel.RECOMMENDED, snapshot.batteryOptimization, "去授权"),
     PermissionItem(PermissionKey.AUTOSTART, "后台稳定性", "自启动/后台运行", "开机后恢复提醒和后台任务稳定性依赖它", RequirementLevel.RECOMMENDED, snapshot.autostart, "去授权"),
-    PermissionItem(PermissionKey.LOCATION, "可选能力", "定位权限", "天气自动定位依赖它；也可以改用手动城市", RequirementLevel.OPTIONAL, snapshot.location, "去授权"),
+    PermissionItem(PermissionKey.LOCATION, "可选能力", "定位权限", "用于启用自动定位", RequirementLevel.OPTIONAL, snapshot.location, "去授权"),
     PermissionItem(PermissionKey.NOTIFICATION_LISTENER, "可选能力", "通知监听权限", "部分通知识别和系统通知读取依赖它", RequirementLevel.OPTIONAL, snapshot.notificationListener, "去授权"),
     PermissionItem(PermissionKey.SMS, "可选能力", "短信权限", "短信识别、取件码/验证码类识别依赖它；敏感权限默认不强推", RequirementLevel.OPTIONAL, snapshot.sms, "去授权"),
     PermissionItem(PermissionKey.SHIZUKU_ROOT, "高级能力", "Shizuku/Root 状态", "高级后台识别能力；未配置时功能会降级", RequirementLevel.OPTIONAL, snapshot.shizukuRoot, "去授权"),
@@ -1723,10 +1723,10 @@ private fun onboardingFeatureItems(settings: MySettings, syncEnabled: Boolean, s
     FeatureItem(FeatureKey.LIVE_NOTIFICATION, "实况通知", "日程、识别、天气等以胶囊/灵动形态显示", settings.isLiveCapsuleEnabled, liveNotificationRequirementMet(snapshot), "需要先开启通知权限，并确认实况通知权限已开启"),
     FeatureItem(FeatureKey.DAILY_SUMMARY, "每日提醒", "今日提醒和明日预告", settings.isDailySummaryEnabled, snapshot.notification, "需要先开启通知权限"),
     FeatureItem(FeatureKey.CALENDAR_SYNC, "日历同步", "与系统日历同步日程", syncEnabled, snapshot.calendar, "需要先开启日历读写权限"),
-    FeatureItem(FeatureKey.ADVANCE_REMINDER, "提前提醒", "日程开始前提前提醒", settings.isAdvanceReminderEnabled, snapshot.notification, "需要先开启通知权限；精准闹钟建议开启"),
+    FeatureItem(FeatureKey.ADVANCE_REMINDER, "提前提醒", "日程开始前提前提醒", settings.isAdvanceReminderEnabled, snapshot.notification, "需要先开启通知权限"),
     FeatureItem(FeatureKey.WEATHER, "天气服务", "天气卡片和天气提醒基础能力", settings.weatherEnabled, snapshot.location || settings.weatherManualLocationId.isNotBlank(), "需要开启定位权限，或先在天气设置中选择手动城市"),
     FeatureItem(FeatureKey.WEATHER_ALERT, "天气预警", "天气预警和风险提醒通知", settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled, snapshot.notification && settings.weatherEnabled, "需要先开启通知权限和天气服务"),
-    FeatureItem(FeatureKey.BRACELET_MODE, "手环模式", "日程、天气、随口记结果以短通知同步到手环", settings.braceletModeEnabled, snapshot.notification, "需要先开启通知权限"),
+    FeatureItem(FeatureKey.BRACELET_MODE, "手环模式", "开启后，将同步发送一条普通通知以同步到手环", settings.braceletModeEnabled, snapshot.notification, "需要先开启通知权限"),
     FeatureItem(FeatureKey.COURSE, "课程", "课程表、学期设置和课程提醒", settings.courseFeatureEnabled, true, "课程功能可稍后在设置中完善"),
     FeatureItem(FeatureKey.SMS_RECOGNITION, "短信识别", "短信取件码/验证码类识别，敏感功能默认关闭", settings.isSmsMonitoringEnabled, snapshot.sms, "需要先开启短信权限"),
     FeatureItem(FeatureKey.VOLUME_SHORTCUT, "音量键快捷随口记", "通过无障碍监听音量键长按触发快捷功能", settings.volumeUpLongPressEnabled, snapshot.accessibility, "需要先开启无障碍服务"),
@@ -1774,7 +1774,7 @@ private fun readOnboardingPermissions(context: Context): PermissionSnapshot {
         liveNotificationDescription = if (OsUtils.isColorOsLike()) {
             "系统未开放状态读取。请进入通知设置，确认“流体云显示实时活动”已开启，否则实况胶囊可能不显示。"
         } else {
-            "当前系统通常无需单独授权；如不显示可进入应用通知设置确认"
+            "部分系统需要进入应用通知设置确认"
         },
         overlay = overlayEnabled,
         microphone = hasPermission(context, Manifest.permission.RECORD_AUDIO),

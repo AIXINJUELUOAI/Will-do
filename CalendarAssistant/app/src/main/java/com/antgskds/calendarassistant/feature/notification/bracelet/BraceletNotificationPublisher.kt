@@ -20,7 +20,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.isCompleted
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.query.DailySummaryPayload
 
-class BraceletNotificationCenter(context: Context) {
+class BraceletNotificationPublisher(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

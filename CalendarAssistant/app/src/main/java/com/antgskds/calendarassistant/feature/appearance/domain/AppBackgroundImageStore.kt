@@ -40,6 +40,9 @@ class AppBackgroundImageStore(context: Context) {
         )
     }
 
+    /** Caller owns the returned bitmap and must recycle it after the editor closes. */
+    fun decodePreviewBitmap(uri: Uri): Bitmap = decodeScaledBitmap(uri)
+
     fun extractSeedColorHex(path: String): String {
         val file = ownedBackgroundFile(path)?.takeIf { it.exists() } ?: error("背景图片不存在")
         val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("无法读取背景图片")
@@ -145,7 +148,7 @@ class AppBackgroundImageStore(context: Context) {
         return "#%02X%02X%02X".format(red, green, blue)
     }
 
-    private fun extractAverageLuminance(bitmap: Bitmap): Float {
+    fun extractAverageLuminance(bitmap: Bitmap): Float {
         val stepX = (bitmap.width / LUMINANCE_SAMPLE_GRID).coerceAtLeast(1)
         val stepY = (bitmap.height / LUMINANCE_SAMPLE_GRID).coerceAtLeast(1)
         val samples = ArrayList<Double>(LUMINANCE_SAMPLE_GRID * LUMINANCE_SAMPLE_GRID)

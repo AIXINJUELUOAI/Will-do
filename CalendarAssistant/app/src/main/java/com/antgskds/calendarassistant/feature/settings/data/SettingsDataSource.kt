@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.feature.settings.data
 
 import android.content.Context
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.shared.util.DensityConfigManager
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -21,7 +22,6 @@ class SettingsDataSource(context: Context) {
 
     companion object {
         const val KEY_JSON = "settings_json"
-        private const val KEY_UI_SIZE_INDEPENDENT = "key_ui_size_independent"
     }
 
     /**
@@ -60,7 +60,19 @@ class SettingsDataSource(context: Context) {
             val jsonString = json.encodeToString(settings)
             prefs.edit()
                 .putString(KEY_JSON, jsonString)
-                .putInt(KEY_UI_SIZE_INDEPENDENT, settings.uiSize)
+                .putInt(DensityConfigManager.KEY_UI_SIZE, settings.uiSize)
+                .putFloat(
+                    DensityConfigManager.KEY_UI_SCALE_SMALL,
+                    MySettings.normalizeUiScale(settings.uiScaleSmall)
+                )
+                .putFloat(
+                    DensityConfigManager.KEY_UI_SCALE_MEDIUM,
+                    MySettings.normalizeUiScale(settings.uiScaleMedium)
+                )
+                .putFloat(
+                    DensityConfigManager.KEY_UI_SCALE_LARGE,
+                    MySettings.normalizeUiScale(settings.uiScaleLarge)
+                )
                 .commit()
         } catch (e: Exception) {
             e.printStackTrace()

@@ -32,14 +32,17 @@ class ScheduleIngestWriter(
             eventColorPaletteHex = settings.eventColorPaletteHex
         )
 
-        val incomingFingerprint = SmsPickupFingerprint.fromDraft(eventData)
-            ?: SmsPickupFingerprint.fromEvent(event)
-        val existingEvents = scheduleCenter.getLatestActiveEvents()
-        val isDuplicate = existingEvents.any { existing ->
-            !existing.endDate.isBefore(LocalDate.now()) &&
-                isSameSmsPickupEvent(existing, event, incomingFingerprint)
+        val shouldDeduplicate = sourceType != "sms" || settings.smsPickupDedupEnabled
+        if (shouldDeduplicate) {
+            val incomingFingerprint = SmsPickupFingerprint.fromDraft(eventData)
+                ?: SmsPickupFingerprint.fromEvent(event)
+            val existingEvents = scheduleCenter.getLatestActiveEvents()
+            val isDuplicate = existingEvents.any { existing ->
+                !existing.endDate.isBefore(LocalDate.now()) &&
+                    isSameSmsPickupEvent(existing, event, incomingFingerprint)
+            }
+            if (isDuplicate) return@withLock null
         }
-        if (isDuplicate) return@withLock null
 
         scheduleCenter.addEvent(event)
         event

@@ -9,6 +9,8 @@ sealed interface LaboratoryUiAction {
     data class SetVoiceInput(val enabled: Boolean) : LaboratoryUiAction
     data class SetFloatingLongPress(val enabled: Boolean) : LaboratoryUiAction
     data class SetRecordingDisplayMode(val mode: Int) : LaboratoryUiAction
+    data class SetQuickMemoAutoStopEnabled(val enabled: Boolean) : LaboratoryUiAction
+    data class SetQuickMemoAutoStopSeconds(val seconds: Int) : LaboratoryUiAction
     data class SetTextAutoPin(val enabled: Boolean) : LaboratoryUiAction
     data class SetVoiceAutoPin(val enabled: Boolean) : LaboratoryUiAction
     data class SetBraceletMode(val enabled: Boolean) : LaboratoryUiAction

@@ -152,6 +152,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -293,6 +294,7 @@ fun MaterialQuickMemoDetailScreen(
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
     cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
+    autoStopDurationMs: Long? = null,
     onAction: (QuickMemoUiAction) -> Unit
 ) {
     val memo = state.memo
@@ -404,7 +406,8 @@ fun MaterialQuickMemoDetailScreen(
                     uiSize = uiSize,
                     hapticEnabled = hapticEnabled,
                     backgroundMode = backgroundMode,
-                    miuiBlurEnabled = miuiBlurEnabled
+                    miuiBlurEnabled = miuiBlurEnabled,
+                    autoStopDurationMs = autoStopDurationMs
                 )
             }
         }
@@ -747,7 +750,8 @@ private fun QuickMemoDetailContent(
     uiSize: Int = 2,
     hapticEnabled: Boolean,
     backgroundMode: Boolean,
-    miuiBlurEnabled: Boolean
+    miuiBlurEnabled: Boolean,
+    autoStopDurationMs: Long?
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
     val context = LocalContext.current
@@ -853,6 +857,15 @@ private fun QuickMemoDetailContent(
                 withContext(Dispatchers.IO) { audioRecorder.stopAndDiscard() }
                 Toast.makeText(context, e.message ?: "录音失败", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    LaunchedEffect(isRecordingVoice, autoStopDurationMs) {
+        val durationMs = autoStopDurationMs ?: return@LaunchedEffect
+        if (!isRecordingVoice) return@LaunchedEffect
+        delay(durationMs)
+        if (isRecordingVoice && !isSavingVoice) {
+            stopVoiceRecording()
         }
     }
 
@@ -1185,6 +1198,7 @@ private fun QuickMemoDetailBottomBar(
     } else {
         MaterialTheme.colorScheme.surface
     }
+
     val indicatorColor = if (backgroundMode) {
         backgroundPalette.accent
     } else {

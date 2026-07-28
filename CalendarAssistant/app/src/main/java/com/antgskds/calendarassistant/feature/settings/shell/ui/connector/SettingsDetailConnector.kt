@@ -201,7 +201,11 @@ private fun SettingsPageRouteContent(
             uiSize = uiSize,
         )
 
-        SettingsDestination.Theme -> ThemeSettingsPage(settingsViewModel, uiSize)
+        SettingsDestination.Theme -> ThemeSettingsPage(
+            viewModel = settingsViewModel,
+            mainViewModel = mainViewModel,
+            uiSize = uiSize
+        )
         SettingsDestination.Archives -> ArchivesPage(viewModel = mainViewModel)
         SettingsDestination.Logout -> Unit
     }

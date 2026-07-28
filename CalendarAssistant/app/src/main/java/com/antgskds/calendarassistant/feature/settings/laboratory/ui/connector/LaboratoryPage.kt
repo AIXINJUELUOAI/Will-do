@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
@@ -61,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 fun LaboratoryPage(
@@ -136,6 +139,8 @@ fun LaboratoryPage(
                 }
                 is LaboratoryUiAction.SetFloatingLongPress -> settingsViewModel?.updatePreference(floatingVoiceLongPressEnabled = action.enabled)
                 is LaboratoryUiAction.SetRecordingDisplayMode -> settingsViewModel?.updatePreference(quickMemoRecordingDisplayMode = action.mode)
+                is LaboratoryUiAction.SetQuickMemoAutoStopEnabled -> settingsViewModel?.updateQuickMemoAutoStop(enabled = action.enabled)
+                is LaboratoryUiAction.SetQuickMemoAutoStopSeconds -> settingsViewModel?.updateQuickMemoAutoStop(seconds = action.seconds)
                 is LaboratoryUiAction.SetTextAutoPin -> settingsViewModel?.updatePreference(floatingTextQuickMemoAutoPinEnabled = action.enabled)
                 is LaboratoryUiAction.SetVoiceAutoPin -> settingsViewModel?.updatePreference(voiceQuickMemoAutoPinEnabled = action.enabled)
                 is LaboratoryUiAction.SetBraceletMode -> settingsViewModel?.updatePreference(braceletModeEnabled = action.enabled)
@@ -200,6 +205,12 @@ fun MaterialLaboratoryScreen(
                 onRecordingDisplayModeChange = { mode ->
                     onAction(LaboratoryUiAction.SetRecordingDisplayMode(mode))
                 },
+                onAutoStopEnabledChange = { enabled ->
+                    onAction(LaboratoryUiAction.SetQuickMemoAutoStopEnabled(enabled))
+                },
+                onAutoStopSecondsChange = { seconds ->
+                    onAction(LaboratoryUiAction.SetQuickMemoAutoStopSeconds(seconds))
+                },
                 onTextAutoPinChange = { enabled ->
                     onAction(LaboratoryUiAction.SetTextAutoPin(enabled))
                 },
@@ -225,8 +236,8 @@ fun MaterialLaboratoryScreen(
             )
 
             LaboratorySwitchCard(
-                title = "剪贴板取件类识别（实验）",
-                subtitle = "识别剪贴板中的取件码、取餐码、取票码、寄件码；有 Shizuku/Root 时后台自动入库，否则打开软件时确认入库",
+                title = "剪贴板取件类识别（Beta）",
+                subtitle = "识别剪贴板中的取件码、取餐码、取票码和寄件码",
                 checked = settings.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
                     onAction(LaboratoryUiAction.SetClipboardRecognition(enabled))
@@ -244,7 +255,7 @@ fun MaterialLaboratoryScreen(
 
             LaboratorySwitchCard(
                 title = "手环模式",
-                subtitle = "开启后，日程、天气、每日提醒和随口记结果以短通知同步到手环",
+                subtitle = "开启后，将同步发送一条普通通知以同步到手环",
                 checked = settings.braceletModeEnabled,
                 onCheckedChange = { enabled ->
                     onAction(LaboratoryUiAction.SetBraceletMode(enabled))
@@ -292,6 +303,8 @@ private fun LaboratoryQuickMemoCard(
     onVoiceInputEnabledChange: (Boolean) -> Unit,
     onFloatingLongPressChange: (Boolean) -> Unit,
     onRecordingDisplayModeChange: (Int) -> Unit,
+    onAutoStopEnabledChange: (Boolean) -> Unit,
+    onAutoStopSecondsChange: (Int) -> Unit,
     onTextAutoPinChange: (Boolean) -> Unit,
     onVoiceAutoPinChange: (Boolean) -> Unit,
     onImportAsrModel: () -> Unit
@@ -304,7 +317,7 @@ private fun LaboratoryQuickMemoCard(
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             LaboratorySwitchRow(
                 title = "随口记",
-                subtitle = "总开关。关闭后长按音量+和悬浮窗入口都不能启动随口记录音",
+                subtitle = "随口记功能总开关",
                 checked = settings.voiceInputEnabled,
                 onCheckedChange = onVoiceInputEnabledChange
             )
@@ -318,7 +331,7 @@ private fun LaboratoryQuickMemoCard(
                     LaboratoryDivider()
                     LaboratorySwitchRow(
                         title = "悬浮窗长按随口记",
-                        subtitle = "控制悬浮窗已呼出后，再次长按音量+是否进入随口记录音",
+                        subtitle = "呼出悬浮窗后，再次长按音量+开始随口记录音",
                         checked = settings.floatingVoiceLongPressEnabled,
                         onCheckedChange = onFloatingLongPressChange
                     )
@@ -338,16 +351,23 @@ private fun LaboratoryQuickMemoCard(
                         onValueSelected = onRecordingDisplayModeChange
                     )
                     LaboratoryDivider()
+                    LaboratoryAutoStopRow(
+                        checked = settings.quickMemoAutoStopEnabled,
+                        seconds = settings.quickMemoAutoStopSeconds,
+                        onCheckedChange = onAutoStopEnabledChange,
+                        onSecondsChange = onAutoStopSecondsChange
+                    )
+                    LaboratoryDivider()
                     LaboratorySwitchRow(
                         title = "文本随口记同步挂起",
-                        subtitle = "悬浮窗随口记模式保存文本后，同步挂到实况通知；需开启实况通知",
+                        subtitle = "随口记文本保存后，同步挂起到实况通知",
                         checked = settings.floatingTextQuickMemoAutoPinEnabled,
                         onCheckedChange = onTextAutoPinChange
                     )
                     LaboratoryDivider()
                     LaboratorySwitchRow(
                         title = "语音随口记同步挂起",
-                        subtitle = "语音随口记转写完成后，自动挂到实况通知；需开启实况通知",
+                        subtitle = "随口记语音转写后，同步挂起到实况通知",
                         checked = settings.voiceQuickMemoAutoPinEnabled,
                         onCheckedChange = onVoiceAutoPinChange
                     )
@@ -423,6 +443,74 @@ private fun LaboratorySwitchRow(
             checked = checked,
             onCheckedChange = { haptics.selection(); onCheckedChange(it) }
         )
+    }
+}
+
+@Composable
+private fun LaboratoryAutoStopRow(
+    checked: Boolean,
+    seconds: Int,
+    onCheckedChange: (Boolean) -> Unit,
+    onSecondsChange: (Int) -> Unit
+) {
+    val normalizedSeconds = MySettings.normalizeQuickMemoAutoStopSeconds(seconds)
+    HapticValueChangeEffect(valueKey = normalizedSeconds)
+    val haptics = rememberAppHaptics()
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "自动结束录音",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (checked) {
+                        "录音 ${normalizedSeconds} 秒后自动保存"
+                    } else {
+                        "关闭时由用户手动结束并保存录音"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = {
+                    haptics.selection()
+                    onCheckedChange(it)
+                }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = checked,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("1 秒", style = MaterialTheme.typography.bodyMedium)
+                    Text("15 秒", style = MaterialTheme.typography.bodyMedium)
+                }
+                Slider(
+                    value = normalizedSeconds.toFloat(),
+                    onValueChange = { value ->
+                        onSecondsChange(value.roundToInt())
+                    },
+                    valueRange = MySettings.QUICK_MEMO_AUTO_STOP_MIN_SECONDS.toFloat()..
+                        MySettings.QUICK_MEMO_AUTO_STOP_MAX_SECONDS.toFloat(),
+                    steps = 0
+                )
+            }
+        }
     }
 }
 
