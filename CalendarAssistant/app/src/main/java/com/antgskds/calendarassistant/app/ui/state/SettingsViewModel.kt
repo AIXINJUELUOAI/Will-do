@@ -390,6 +390,12 @@ class SettingsViewModel(
         onUpdated()
     }
 
+    fun setSmsPickupDedupEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(
+            settings.value.copy(smsPickupDedupEnabled = enabled)
+        )
+    }
+
     fun expireDeveloperOptionsUnlock() {
         updatePreference(
             developerOptionsUnlocked = false,
@@ -486,7 +492,14 @@ class SettingsViewModel(
         }
     }
 
-    fun importAppBackground(uri: Uri, onResult: (Boolean, String) -> Unit) {
+    fun importAppBackground(
+        uri: Uri,
+        imageScale: Float = MySettings.APP_BACKGROUND_IMAGE_SCALE_DEFAULT,
+        imageOffsetX: Float = 0f,
+        imageOffsetY: Float = 0f,
+        averageLuminance: Float? = null,
+        onResult: (Boolean, String) -> Unit
+    ) {
         viewModelScope.launch {
             val current = settings.value
             runCatching {
@@ -499,10 +512,15 @@ class SettingsViewModel(
                     current.copy(
                         appBackgroundEnabled = true,
                         appBackgroundImagePath = result.path,
+                        appBackgroundImageScale = MySettings.normalizeAppBackgroundImageScale(imageScale),
+                        appBackgroundImageOffsetX = MySettings.normalizeAppBackgroundImageOffset(imageOffsetX),
+                        appBackgroundImageOffsetY = MySettings.normalizeAppBackgroundImageOffset(imageOffsetY),
                         appBackgroundSeedColorHex = "",
                         appBackgroundImageColorEnabled = false,
                         appBackgroundScrimAlphaPercent = 0,
-                        appBackgroundAverageLuminance = result.averageLuminance,
+                        appBackgroundAverageLuminance = averageLuminance
+                            ?.coerceIn(0f, 1f)
+                            ?: result.averageLuminance,
                         themeColorScheme = if (resetImageColor) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
                     )
                 )
@@ -523,6 +541,9 @@ class SettingsViewModel(
                 current.copy(
                     appBackgroundEnabled = false,
                         appBackgroundImagePath = "",
+                        appBackgroundImageScale = MySettings.APP_BACKGROUND_IMAGE_SCALE_DEFAULT,
+                        appBackgroundImageOffsetX = 0f,
+                        appBackgroundImageOffsetY = 0f,
                         appBackgroundSeedColorHex = "",
                         appBackgroundImageColorEnabled = false,
                         appBackgroundWallpaperBlurEnabled = false,
@@ -605,6 +626,45 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsOperationApi.updateSettings(settings.value.copy(uiSize = size))
         }
+    }
+
+    fun updateQuickMemoAutoStop(enabled: Boolean? = null, seconds: Int? = null) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsOperationApi.updateSettings(
+                current.copy(
+                    quickMemoAutoStopEnabled = enabled ?: current.quickMemoAutoStopEnabled,
+                    quickMemoAutoStopSeconds = seconds
+                        ?.let(MySettings::normalizeQuickMemoAutoStopSeconds)
+                        ?: current.quickMemoAutoStopSeconds
+                )
+            )
+        }
+    }
+
+    fun updateUiScaleFactors(small: Float, medium: Float, large: Float, onUpdated: () -> Unit = {}) {
+        viewModelScope.launch {
+            val normalizedSmall = MySettings.normalizeUiScale(small)
+            val normalizedMedium = MySettings.normalizeUiScale(medium).coerceAtLeast(normalizedSmall)
+            val normalizedLarge = MySettings.normalizeUiScale(large).coerceAtLeast(normalizedMedium)
+            settingsOperationApi.updateSettings(
+                settings.value.copy(
+                    uiScaleSmall = normalizedSmall,
+                    uiScaleMedium = normalizedMedium,
+                    uiScaleLarge = normalizedLarge
+                )
+            )
+            onUpdated()
+        }
+    }
+
+    fun resetUiScaleFactors(onUpdated: () -> Unit = {}) {
+        updateUiScaleFactors(
+            small = MySettings.UI_SCALE_SMALL_DEFAULT,
+            medium = MySettings.UI_SCALE_MEDIUM_DEFAULT,
+            large = MySettings.UI_SCALE_LARGE_DEFAULT,
+            onUpdated = onUpdated
+        )
     }
 
     fun updateEdgeBarSettings(

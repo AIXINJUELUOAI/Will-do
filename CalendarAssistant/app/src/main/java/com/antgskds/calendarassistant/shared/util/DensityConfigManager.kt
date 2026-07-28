@@ -5,6 +5,17 @@ import android.content.res.Resources
 import kotlin.math.roundToInt
 
 object DensityConfigManager {
+    const val PREFS_NAME = "app_settings"
+    const val KEY_UI_SIZE = "key_ui_size_independent"
+    const val KEY_UI_SCALE_SMALL = "key_ui_scale_small"
+    const val KEY_UI_SCALE_MEDIUM = "key_ui_scale_medium"
+    const val KEY_UI_SCALE_LARGE = "key_ui_scale_large"
+
+    const val DEFAULT_SCALE_SMALL = 0.75f
+    const val DEFAULT_SCALE_MEDIUM = 0.80f
+    const val DEFAULT_SCALE_LARGE = 0.85f
+    const val MIN_SCALE = 0.65f
+    const val MAX_SCALE = 1.00f
     
     /**
      * UI 大小索引 -> 缩放系数
@@ -15,10 +26,21 @@ object DensityConfigManager {
      * 3 (大): 0.85f  - 比设备原生小 15%
      */
     fun getScaleFactor(uiSize: Int): Float = when (uiSize) {
-        1 -> 0.75f
-        2 -> 0.80f
-        3 -> 0.85f
-        else -> 0.85f
+        1 -> DEFAULT_SCALE_SMALL
+        2 -> DEFAULT_SCALE_MEDIUM
+        3 -> DEFAULT_SCALE_LARGE
+        else -> DEFAULT_SCALE_LARGE
+    }
+
+    /** Reads the app-only custom scale before the regular settings state is available. */
+    fun getAppScaleFactor(context: Context, uiSize: Int): Float {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = when (uiSize) {
+            1 -> KEY_UI_SCALE_SMALL
+            2 -> KEY_UI_SCALE_MEDIUM
+            else -> KEY_UI_SCALE_LARGE
+        }
+        return prefs.getFloat(key, getScaleFactor(uiSize)).coerceIn(MIN_SCALE, MAX_SCALE)
     }
 
     /**
@@ -52,11 +74,10 @@ object DensityConfigManager {
      * 支持独立 key 和 JSON 两种方式的兼容读取
      */
     fun getUiSizeFromPrefs(context: Context): Int {
-        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         // 1. 优先尝试读取独立 Key (极快)
-        val independentKey = "key_ui_size_independent"
-        var uiSize = prefs.getInt(independentKey, -1)
+        var uiSize = prefs.getInt(KEY_UI_SIZE, -1)
 
         // 2. 如果独立 Key 不存在 (老用户升级)，则降级读取 JSON
         if (uiSize == -1) {

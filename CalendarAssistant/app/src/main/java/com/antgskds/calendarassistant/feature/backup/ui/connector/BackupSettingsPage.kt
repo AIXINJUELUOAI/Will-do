@@ -297,7 +297,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
             )
             BackupCard(
                 title = "数据备份",
-                desc = "备份/恢复日程、随口记、设置和提示词；日程附件随日程处理",
+                desc = "备份/恢复日程、随口记、设置和提示词",
                 onExport = {
                     haptics.click()
                     exportOptions = AppBackupOptions(includeEvents = true)
@@ -362,7 +362,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
             visible = showImportMethodDialog,
             title = "选择导入方式",
             content = importMethodError?.let { "从口令导入失败：$it" }
-                ?: "文件导入支持本应用备份、WakeUp 文件和 ICS；口令导入会读取剪贴板中的 WakeUp 分享文本。",
+                ?: "支持本应用备份、ICS、Wakeup 文件和分享口令",
             confirmText = "从口令",
             dismissText = "从文件",
             isLoading = shareImportLoading,
@@ -424,7 +424,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
         if (showBackupExportSheet) {
             BackupOptionsSheet(
                 title = "导出数据备份",
-                description = "选择要写入备份文件的数据。日程会包含日程附件；随口记会包含录音和图片。包含文件数据时会导出 ZIP，否则导出 JSON。",
+                description = "选择要写入备份文件的数据",
                 options = exportOptions,
                 attachmentCount = attachmentCount,
                 confirmText = "导出",
@@ -729,7 +729,7 @@ private fun BackupOptionsSheet(
     val eventSubtitle = if (attachmentCount > 0) {
         "日程、提醒、归档状态、重复规则，以及 $attachmentCount 个日程附件"
     } else {
-        "日程、提醒、归档状态、重复规则；日程附件会随日程一起处理"
+        "日程、提醒、归档状态、重复规则"
     }
 
     AppModalBottomSheet(

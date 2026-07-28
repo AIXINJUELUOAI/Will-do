@@ -41,7 +41,7 @@ class WeatherNotifier(context: Context) {
             notifyOfficialOnce(locationName, alert, title) {
                 if (showLiveNotification) {
                     app?.capsuleCenter?.showWeatherAlert(locationName, alert)
-                    app?.braceletNotificationCenter?.notifyWeatherWarning(
+                    app?.braceletNotificationPublisher?.notifyWeatherWarning(
                         sourceKey = "official:$locationName:${stableId(title)}",
                         title = title,
                         contentText = content,
@@ -60,7 +60,7 @@ class WeatherNotifier(context: Context) {
                             source = "weather_official"
                         )
                     )
-                    app?.braceletNotificationCenter?.notifyWeatherWarning(
+                    app?.braceletNotificationPublisher?.notifyWeatherWarning(
                         sourceKey = "official:$locationName:${stableId(title)}",
                         title = title,
                         contentText = content,
@@ -76,7 +76,7 @@ class WeatherNotifier(context: Context) {
             notifyRiskOnce(locationName, risk, title) {
                 if (showLiveNotification) {
                     app?.capsuleCenter?.showWeatherRisk(locationName, risk)
-                    app?.braceletNotificationCenter?.notifyWeatherForecast(
+                    app?.braceletNotificationPublisher?.notifyWeatherForecast(
                         sourceKey = "risk:$locationName:${riskEventBucket(risk)}",
                         title = title,
                         contentText = content,
@@ -95,7 +95,7 @@ class WeatherNotifier(context: Context) {
                             source = "weather_risk"
                         )
                     )
-                    app?.braceletNotificationCenter?.notifyWeatherForecast(
+                    app?.braceletNotificationPublisher?.notifyWeatherForecast(
                         sourceKey = "risk:$locationName:${riskEventBucket(risk)}",
                         title = title,
                         contentText = content,

@@ -14,10 +14,13 @@ enum class DeveloperDragField { TITLE, TIME, LOCATION, DESCRIPTION }
 sealed interface DeveloperUiAction {
     data class SetEnabled(val enabled: Boolean) : DeveloperUiAction
     data class SetQuickMemoPinnedFixedTitle(val enabled: Boolean) : DeveloperUiAction
+    data class SetSmsPickupDedup(val enabled: Boolean) : DeveloperUiAction
     data class SetLiveTemplateMode(val mode: String) : DeveloperUiAction
     data class SetListReverse(val kind: DeveloperListKind, val enabled: Boolean) : DeveloperUiAction
     data class SetDragField(val field: DeveloperDragField, val enabled: Boolean) : DeveloperUiAction
     data class SetDragHotZone(val percent: Int) : DeveloperUiAction
+    data class ApplyUiScale(val small: Float, val medium: Float, val large: Float) : DeveloperUiAction
+    data object ResetUiScale : DeveloperUiAction
     data object ResetListOrder : DeveloperUiAction
     data object OpenConfig : DeveloperUiAction
     data object OpenRegexRules : DeveloperUiAction

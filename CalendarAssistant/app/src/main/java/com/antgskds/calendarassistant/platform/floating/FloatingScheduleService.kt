@@ -67,6 +67,7 @@ import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureState
 import com.antgskds.calendarassistant.feature.quickmemo.domain.model.QuickMemoVoiceCaptureStatus
 import com.antgskds.calendarassistant.feature.weather.domain.hasWeatherConfig
@@ -160,6 +161,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private var voiceConfirmJob: Job? = null
     private var recentVoiceMemoJob: Job? = null
     private var voiceStartJob: Job? = null
+    private var voiceAutoStopJob: Job? = null
     private var plainTextDragRestoreJob: Job? = null
     private var plainTextDragCancelHotZoneActive: Boolean = false
     private var plainTextDragDropHandled: Boolean = false
@@ -886,6 +888,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private fun startVoiceCapture() {
         voiceConfirmJob?.cancel()
         voiceStartJob?.cancel()
+        voiceAutoStopJob?.cancel()
+        voiceAutoStopJob = null
         voiceStopRequested = false
         if (!settingsQueryApi.settings.value.voiceInputEnabled) {
             voiceCaptureState.value = QuickMemoVoiceCaptureState(
@@ -941,6 +945,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 }
                 performServiceHaptic()
                 voiceCaptureState.value = QuickMemoVoiceCaptureState(status = QuickMemoVoiceCaptureStatus.RECORDING)
+                scheduleVoiceAutoStop()
             } catch (e: Exception) {
                 Log.e(TAG, "启动随口记录音失败", e)
                 stopVoiceForeground()
@@ -956,6 +961,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     private fun stopVoiceCapture() {
+        voiceAutoStopJob?.cancel()
+        voiceAutoStopJob = null
         if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.RECORDING && !audioRecorder.isRecording) {
             voiceStopRequested = true
             return
@@ -989,6 +996,16 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 delay(1400)
                 voiceCaptureState.value = QuickMemoVoiceCaptureState()
             }
+        }
+    }
+
+    private fun scheduleVoiceAutoStop() {
+        voiceAutoStopJob?.cancel()
+        val durationMs = QuickMemoAutoStopPolicy.durationMillis(settingsQueryApi.settings.value) ?: return
+        voiceAutoStopJob = serviceScope.launch {
+            delay(durationMs)
+            voiceAutoStopJob = null
+            stopVoiceCapture()
         }
     }
 
@@ -1081,7 +1098,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val content = SystemNormalDisplay.voiceCaptureRunning()
-        return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
+        return NotificationCompat.Builder(this, App.CHANNEL_ID_VOICE_CAPTURE)
             .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(content.title)
             .setContentText(content.contentText)
@@ -1602,6 +1619,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         voiceConfirmJob?.cancel()
         recentVoiceMemoJob?.cancel()
         voiceStartJob?.cancel()
+        voiceAutoStopJob?.cancel()
         recognitionFailedSubscriptionJob?.cancel()
         recognitionFailedSubscriptionJob = null
         ingestSucceededSubscriptionJob?.cancel()
@@ -1633,6 +1651,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             return
         }
         if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.RECORDING) {
+            voiceAutoStopJob?.cancel()
+            voiceAutoStopJob = null
             audioRecorder.stopAndDiscard()
             voiceCaptureState.value = QuickMemoVoiceCaptureState()
         }

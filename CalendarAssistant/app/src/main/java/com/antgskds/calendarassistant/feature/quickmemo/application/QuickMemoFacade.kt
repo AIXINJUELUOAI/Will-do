@@ -424,11 +424,11 @@ class QuickMemoFacade(
     }
 
     private fun notifyBraceletQuickMemoResult(id: Long, text: String) {
-        (appContext as? App)?.braceletNotificationCenter?.notifyQuickMemoResult(id, text, failed = false)
+        (appContext as? App)?.braceletNotificationPublisher?.notifyQuickMemoResult(id, text, failed = false)
     }
 
     private fun notifyBraceletQuickMemoFailed(id: Long) {
-        (appContext as? App)?.braceletNotificationCenter?.notifyQuickMemoResult(id, "转写失败", failed = true)
+        (appContext as? App)?.braceletNotificationPublisher?.notifyQuickMemoResult(id, "转写失败", failed = true)
     }
 
     private fun markAutoPinAfterTranscription(id: Long) = synchronized(autoPinAfterTranscriptionIds) {

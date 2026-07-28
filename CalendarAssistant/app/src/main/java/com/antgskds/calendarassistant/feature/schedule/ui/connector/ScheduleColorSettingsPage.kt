@@ -110,7 +110,7 @@ fun MaterialScheduleColorScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "新建日程会按这个色盘轮换取色，AI/正则识别日程会从这里随机取色；已有日程颜色不会被批量修改。",
+                        text = "新增或删除日程颜色标签轮盘",
                         style = cardSubtitleStyle
                     )
 

@@ -219,7 +219,7 @@ class NotificationOrchestrator(
         registryStore.upsert(readied)
         systemAlarmGateway?.cancel(key)
         val braceletAttempted = if (braceletModeEnabled && snapshot.kind == com.antgskds.calendarassistant.feature.notification.model.NotificationKind.SCHEDULE_REMINDER) {
-            (appContext as? App)?.braceletNotificationCenter?.notifySchedule(readied)
+            (appContext as? App)?.braceletNotificationPublisher?.notifySchedule(readied)
             true
         } else {
             false
@@ -566,7 +566,7 @@ class NotificationOrchestrator(
         }
 
         manager.notify(notificationId, notification)
-        (appContext as? App)?.braceletNotificationCenter?.notifyDailySummary(payload, isMorning)
+        (appContext as? App)?.braceletNotificationPublisher?.notifyDailySummary(payload, isMorning)
         if (settings?.isLiveCapsuleEnabled == true) {
             scheduleResultNotificationTimeout(manager, notificationId, dailySummaryTimeoutMs())
         }

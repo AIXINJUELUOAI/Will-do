@@ -539,7 +539,7 @@ fun MaterialWeatherSettingsScreen(
 
                     SwitchSettingItem(
                         title = "天气风险提醒",
-                        subtitle = "根据未来 ${warningLookaheadHours} 小时预报推断风险，非官方预警",
+                        subtitle = "根据未来${warningLookaheadHours}小时预报推断风险并提醒",
                         checked = riskWarningEnabled,
                         onCheckedChange = { riskWarningEnabled = it },
                         cardTitleStyle = cardTitleStyle,

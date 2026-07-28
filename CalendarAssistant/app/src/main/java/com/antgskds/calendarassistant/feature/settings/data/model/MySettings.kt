@@ -123,11 +123,13 @@ data class MySettings(
     val liveNotificationTemplateMode: String = LiveNotificationTemplateMode.AUTO,
     val braceletModeEnabled: Boolean = false,
 
-    // 【新增】取件码聚合开关 (Beta)
+    // 【新增】取件码聚合开关（Beta）
     val isPickupAggregationEnabled: Boolean = false,
 
     // 短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
+    // 【开发者】短信取件码入库去重；默认保持既有行为
+    val smsPickupDedupEnabled: Boolean = true,
 
     // 【实验室】取件类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
     val forceInstantCodeTimeToNow: Boolean = false,
@@ -147,6 +149,9 @@ data class MySettings(
     val floatingTextQuickMemoAutoPinEnabled: Boolean = false,
     // 【实验室】语音随口记转写完成后同步挂到实况通知；默认关闭，避免意外打扰
     val voiceQuickMemoAutoPinEnabled: Boolean = false,
+    // 【实验室】语音随口记录音达到指定时长后自动保存
+    val quickMemoAutoStopEnabled: Boolean = false,
+    val quickMemoAutoStopSeconds: Int = QUICK_MEMO_AUTO_STOP_DEFAULT_SECONDS,
 
     // 首页入口配置（第 2~4 位，第一位固定侧边栏）
     val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE),
@@ -176,6 +181,9 @@ data class MySettings(
     // 自定义背景：图片保存到 App 私有目录，图片取色结果复用自定义主题色链路
     val appBackgroundEnabled: Boolean = false,
     val appBackgroundImagePath: String = "",
+    val appBackgroundImageScale: Float = APP_BACKGROUND_IMAGE_SCALE_DEFAULT,
+    val appBackgroundImageOffsetX: Float = 0f,
+    val appBackgroundImageOffsetY: Float = 0f,
     val appBackgroundSeedColorHex: String = "",
     val appBackgroundImageColorEnabled: Boolean = false,
     val appBackgroundMiuiBlurTestEnabled: Boolean = true,
@@ -186,6 +194,10 @@ data class MySettings(
 
     // UI 大小设置：1=小, 2=中(默认), 3=大
     val uiSize: Int = 2,
+    // 【开发者】三个 UI 大小档位对应的页面密度缩放系数
+    val uiScaleSmall: Float = UI_SCALE_SMALL_DEFAULT,
+    val uiScaleMedium: Float = UI_SCALE_MEDIUM_DEFAULT,
+    val uiScaleLarge: Float = UI_SCALE_LARGE_DEFAULT,
     @Deprecated("UI edition is selected by product flavor; retained only for backup compatibility")
     val uiStyle: String = "MATERIAL3",
 
@@ -288,6 +300,37 @@ data class MySettings(
     val quickMemoPinnedFixedTitleEnabled: Boolean = false
 ) {
     companion object {
+        const val QUICK_MEMO_AUTO_STOP_DEFAULT_SECONDS = 10
+        const val QUICK_MEMO_AUTO_STOP_MIN_SECONDS = 1
+        const val QUICK_MEMO_AUTO_STOP_MAX_SECONDS = 15
+
+        const val UI_SCALE_MIN = 0.65f
+        const val UI_SCALE_MAX = 1.00f
+        const val UI_SCALE_SMALL_DEFAULT = 0.75f
+        const val UI_SCALE_MEDIUM_DEFAULT = 0.80f
+        const val UI_SCALE_LARGE_DEFAULT = 0.85f
+
+        const val APP_BACKGROUND_IMAGE_SCALE_DEFAULT = 1f
+        const val APP_BACKGROUND_IMAGE_SCALE_MAX = 4f
+        const val APP_BACKGROUND_IMAGE_OFFSET_MIN = -1f
+        const val APP_BACKGROUND_IMAGE_OFFSET_MAX = 1f
+
+        fun normalizeAppBackgroundImageScale(scale: Float): Float {
+            return scale.coerceIn(APP_BACKGROUND_IMAGE_SCALE_DEFAULT, APP_BACKGROUND_IMAGE_SCALE_MAX)
+        }
+
+        fun normalizeAppBackgroundImageOffset(offset: Float): Float {
+            return offset.coerceIn(APP_BACKGROUND_IMAGE_OFFSET_MIN, APP_BACKGROUND_IMAGE_OFFSET_MAX)
+        }
+
+        fun normalizeQuickMemoAutoStopSeconds(seconds: Int): Int {
+            return seconds.coerceIn(QUICK_MEMO_AUTO_STOP_MIN_SECONDS, QUICK_MEMO_AUTO_STOP_MAX_SECONDS)
+        }
+
+        fun normalizeUiScale(value: Float): Float {
+            return value.coerceIn(UI_SCALE_MIN, UI_SCALE_MAX)
+        }
+
         const val SCREENSHOT_DELAY_MIN_MS = 500L
         const val SCREENSHOT_DELAY_MAX_MS = 2500L
         const val DAILY_SUMMARY_MIN_MINUTE_OF_DAY = 0

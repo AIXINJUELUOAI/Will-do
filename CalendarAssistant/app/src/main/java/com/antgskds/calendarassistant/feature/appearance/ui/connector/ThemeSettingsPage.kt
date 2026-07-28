@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.feature.appearance.ui.connector
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -39,9 +40,11 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.appearance.domain.AppBackgroundImageStore
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
+import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCardExitMillis
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
@@ -50,29 +53,51 @@ import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
 import com.antgskds.calendarassistant.app.ui.theme.material.normalizeThemeHexColor
 import com.antgskds.calendarassistant.app.ui.theme.material.parseThemeHexColor
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.feature.appearance.ui.contract.ThemeSettingsUiAction
 import com.antgskds.calendarassistant.feature.appearance.ui.contract.ThemeSettingsUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
 fun ThemeSettingsPage(
     viewModel: SettingsViewModel,
+    mainViewModel: MainViewModel,
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val backgroundImageStore = remember(context) { AppBackgroundImageStore(context) }
     var isBackgroundImporting by remember { mutableStateOf(false) }
-    val backgroundImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    var wallpaperEditorSource by remember { mutableStateOf<WallpaperEditorSource?>(null) }
+    val backgroundImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) {
             isBackgroundImporting = false
             return@rememberLauncherForActivityResult
         }
-        viewModel.importAppBackground(uri) { _, message ->
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val bitmap = backgroundImageStore.decodePreviewBitmap(uri)
+                    WallpaperEditorSource(
+                        bitmap = bitmap,
+                        uri = uri,
+                        averageLuminance = backgroundImageStore.extractAverageLuminance(bitmap)
+                    )
+                }
+            }.onSuccess { source ->
+                wallpaperEditorSource = source
+            }.onFailure { error ->
+                Toast.makeText(context, error.message ?: "无法读取图片", Toast.LENGTH_SHORT).show()
+            }
             isBackgroundImporting = false
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
+
     MaterialThemeSettingsScreen(
         state = ThemeSettingsUiState(settings, isBackgroundImporting),
         uiSize = uiSize,
@@ -84,10 +109,43 @@ fun ThemeSettingsPage(
                 is ThemeSettingsUiAction.UpdateWallpaperBlur -> viewModel.updateAppBackgroundWallpaperBlurEnabled(action.enabled)
                 is ThemeSettingsUiAction.UpdateImageColor -> viewModel.updateAppBackgroundImageColorEnabled(action.enabled) { _, message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
                 ThemeSettingsUiAction.ClearBackground -> { viewModel.clearAppBackground(); Toast.makeText(context, "主界面壁纸已清除", Toast.LENGTH_SHORT).show() }
-                ThemeSettingsUiAction.ImportBackground -> { isBackgroundImporting = true; backgroundImagePicker.launch("image/*") }
+                ThemeSettingsUiAction.ImportBackground -> {
+                    isBackgroundImporting = true
+                    backgroundImagePicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                }
             }
         }
     )
+
+    val editorSource = wallpaperEditorSource
+    if (editorSource != null) {
+        WallpaperEditorDialog(
+            source = editorSource,
+            settings = settings,
+            mainViewModel = mainViewModel,
+            saving = isBackgroundImporting,
+            onDismiss = { if (!isBackgroundImporting) wallpaperEditorSource = null },
+            onApply = { result ->
+                if (isBackgroundImporting) return@WallpaperEditorDialog
+                isBackgroundImporting = true
+                val onResult: (Boolean, String) -> Unit = { success, message ->
+                    isBackgroundImporting = false
+                    if (success) wallpaperEditorSource = null
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+                viewModel.importAppBackground(
+                    uri = editorSource.uri,
+                    imageScale = result.scale,
+                    imageOffsetX = result.offsetX,
+                    imageOffsetY = result.offsetY,
+                    averageLuminance = result.visibleLuminance.takeIf { it in 0f..1f },
+                    onResult = onResult
+                )
+            }
+        )
+    }
 }
 
 @Composable
@@ -104,6 +162,7 @@ fun MaterialThemeSettingsScreen(
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
     var isHexFocused by remember { mutableStateOf(false) }
     var showBackgroundActions by remember { mutableStateOf(false) }
+    val backgroundActionScope = rememberCoroutineScope()
     val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val bottomPadding = when {
@@ -270,14 +329,17 @@ fun MaterialThemeSettingsScreen(
                 TextButton(
                     onClick = {
                         showBackgroundActions = false
-                        onAction(ThemeSettingsUiAction.ClearBackground)
+                        backgroundActionScope.launch {
+                            delay(PredictiveFloatingActionCardExitMillis)
+                            onAction(ThemeSettingsUiAction.ClearBackground)
+                        }
                     },
                     enabled = hasAppBackground && !isBackgroundImporting,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                     modifier = Modifier.height(36.dp)
                 ) {
                     Text(
-                        text = "清除壁纸",
+                        text = "清除",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -285,7 +347,10 @@ fun MaterialThemeSettingsScreen(
                 Button(
                     onClick = {
                         showBackgroundActions = false
-                        onAction(ThemeSettingsUiAction.ImportBackground)
+                        backgroundActionScope.launch {
+                            delay(PredictiveFloatingActionCardExitMillis)
+                            onAction(ThemeSettingsUiAction.ImportBackground)
+                        }
                     },
                     enabled = !isBackgroundImporting,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
@@ -299,7 +364,7 @@ fun MaterialThemeSettingsScreen(
                         )
                     } else {
                         Text(
-                            text = "更换壁纸",
+                            text = "更换",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -385,7 +450,7 @@ private fun AppBackgroundImageColorSwitchCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text("图片取色", style = cardTitleStyle)
                 Text(
-                    text = if (hasImage) "从当前壁纸提取主题色；关闭后恢复系统取色" else "请先选择主界面壁纸",
+                    text = if (hasImage) "从当前壁纸提取主题色" else "请先选择主界面壁纸",
                     style = cardSubtitleStyle
                 )
             }
@@ -422,7 +487,7 @@ private fun AppBackgroundWallpaperBlurSwitchCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text("壁纸模糊", style = cardTitleStyle)
                 Text(
-                    text = if (hasImage) "单独控制背景图片层模糊；不影响玻璃组件的 MIUI 风格测试" else "请先选择主界面壁纸",
+                    text = "控制背景层图片模糊",
                     style = cardSubtitleStyle
                 )
             }

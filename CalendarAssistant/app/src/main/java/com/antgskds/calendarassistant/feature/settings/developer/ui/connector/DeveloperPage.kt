@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.connector
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
+import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -57,6 +59,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * 开发者页 —— 测试中心。
@@ -106,6 +109,7 @@ fun DeveloperPage(
                     }
                 }
             }
+            is DeveloperUiAction.SetSmsPickupDedup -> settingsViewModel.setSmsPickupDedupEnabled(action.enabled)
             is DeveloperUiAction.SetLiveTemplateMode -> { settingsViewModel.updatePreference(liveNotificationTemplateMode = action.mode); app?.capsuleCenter?.forceRefresh() }
             is DeveloperUiAction.SetListReverse -> when (action.kind) {
                 DeveloperListKind.HOME -> settingsViewModel.updateListSortOrder(homeListReverseOrder = action.enabled)
@@ -120,6 +124,16 @@ fun DeveloperPage(
                 DeveloperDragField.DESCRIPTION -> settingsViewModel.updateFloatingDragTextOptions(includeDescription = action.enabled)
             }
             is DeveloperUiAction.SetDragHotZone -> settingsViewModel.updateFloatingDragHotZonePercent(action.percent)
+            is DeveloperUiAction.ApplyUiScale -> settingsViewModel.updateUiScaleFactors(
+                small = action.small,
+                medium = action.medium,
+                large = action.large
+            ) {
+                (context as? Activity)?.recreate()
+            }
+            DeveloperUiAction.ResetUiScale -> settingsViewModel.resetUiScaleFactors {
+                (context as? Activity)?.recreate()
+            }
             DeveloperUiAction.ResetListOrder -> settingsViewModel.resetListSortOrderToDefault()
             DeveloperUiAction.OpenConfig -> onNavigateToConfig()
             DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
@@ -171,6 +185,21 @@ fun MaterialDeveloperScreen(
     var showResetConfirm by remember { mutableStateOf(false) }
     var showLogExportSheet by remember { mutableStateOf(false) }
     var quickActionSheet by remember { mutableStateOf<QuickActionSheetSpec?>(null) }
+    var scaleSmall by remember(settings.uiScaleSmall, settings.uiScaleMedium, settings.uiScaleLarge) {
+        mutableStateOf(MySettings.normalizeUiScale(settings.uiScaleSmall))
+    }
+    var scaleMedium by remember(settings.uiScaleSmall, settings.uiScaleMedium, settings.uiScaleLarge) {
+        mutableStateOf(
+            MySettings.normalizeUiScale(settings.uiScaleMedium)
+                .coerceAtLeast(MySettings.normalizeUiScale(settings.uiScaleSmall))
+        )
+    }
+    var scaleLarge by remember(settings.uiScaleSmall, settings.uiScaleMedium, settings.uiScaleLarge) {
+        mutableStateOf(
+            MySettings.normalizeUiScale(settings.uiScaleLarge)
+                .coerceAtLeast(MySettings.normalizeUiScale(settings.uiScaleMedium))
+        )
+    }
     val actionsById = remember(state.actions) { state.actions.associateBy { it.id } }
 
     fun actions(ids: List<String>): List<DeveloperActionUi> = ids.mapNotNull { actionsById[it] }
@@ -440,10 +469,61 @@ fun MaterialDeveloperScreen(
                 )
             }
 
+            Text(text = "页面缩放", style = sectionTitleStyle)
+            SettingsCard {
+                UiScaleSliderRow(
+                    title = "小档缩放",
+                    value = scaleSmall,
+                    valueRange = MySettings.UI_SCALE_MIN..MySettings.UI_SCALE_MAX,
+                    onValueChange = { scaleSmall = roundUiScale(it).coerceAtMost(scaleMedium) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardValueStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                UiScaleSliderRow(
+                    title = "中档缩放",
+                    value = scaleMedium,
+                    valueRange = MySettings.UI_SCALE_MIN..MySettings.UI_SCALE_MAX,
+                    onValueChange = { scaleMedium = roundUiScale(it).coerceIn(scaleSmall, scaleLarge) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardValueStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                UiScaleSliderRow(
+                    title = "大档缩放",
+                    value = scaleLarge,
+                    valueRange = MySettings.UI_SCALE_MIN..MySettings.UI_SCALE_MAX,
+                    onValueChange = { scaleLarge = roundUiScale(it).coerceAtLeast(scaleMedium) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardValueStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onAction(DeveloperUiAction.ResetUiScale) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("恢复默认")
+                    }
+                    Button(
+                        onClick = {
+                            onAction(DeveloperUiAction.ApplyUiScale(scaleSmall, scaleMedium, scaleLarge))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("应用缩放")
+                    }
+                }
+            }
+
             Text(text = "通知与日志", style = sectionTitleStyle)
             DeveloperOptionsCard(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 quickMemoPinnedFixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
+                smsPickupDedupEnabled = settings.smsPickupDedupEnabled,
                 onOpenLogExportSheet = { showLogExportSheet = true },
                 onQuickMemoPinnedFixedTitleChange = { enabled ->
                     onAction(DeveloperUiAction.SetQuickMemoPinnedFixedTitle(enabled))
@@ -452,6 +532,9 @@ fun MaterialDeveloperScreen(
                 onLiveNotificationTemplateModeChange = { mode ->
                     onAction(DeveloperUiAction.SetLiveTemplateMode(mode))
                     Toast.makeText(context, "原生实况通知模板已设为 ${liveTemplateModeLabel(mode)}", Toast.LENGTH_SHORT).show()
+                },
+                onSmsPickupDedupChange = { enabled ->
+                    onAction(DeveloperUiAction.SetSmsPickupDedup(enabled))
                 }
             )
 
@@ -617,8 +700,7 @@ fun MaterialDeveloperScreen(
                         onAction(DeveloperUiAction.SetDragHotZone(value.roundToInt()))
                     },
                     valueRange = MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT.toFloat()..MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT.toFloat(),
-                    steps = ((MySettings.FLOATING_DRAG_HOT_ZONE_MAX_PERCENT - MySettings.FLOATING_DRAG_HOT_ZONE_MIN_PERCENT) / 5 - 1)
-                        .coerceAtLeast(0),
+                    steps = 0,
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle,
@@ -736,6 +818,36 @@ fun MaterialDeveloperScreen(
 }
 
 @Composable
+private fun UiScaleSliderRow(
+    title: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+    cardTitleStyle: androidx.compose.ui.text.TextStyle,
+    cardValueStyle: androidx.compose.ui.text.TextStyle
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = title, style = cardTitleStyle)
+            Text(text = String.format(Locale.US, "%.2f", value), style = cardValueStyle)
+        }
+        Slider(
+            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
+            onValueChange = onValueChange,
+            valueRange = valueRange
+        )
+    }
+}
+
+private fun roundUiScale(value: Float): Float {
+    return (value * 100f).roundToInt() / 100f
+}
+
+@Composable
 private fun DisabledDeveloperCard(
     message: String,
     cardSubtitleStyle: androidx.compose.ui.text.TextStyle
@@ -757,9 +869,11 @@ private fun DisabledDeveloperCard(
 private fun DeveloperOptionsCard(
     liveNotificationTemplateMode: String,
     quickMemoPinnedFixedTitleEnabled: Boolean,
+    smsPickupDedupEnabled: Boolean,
     onOpenLogExportSheet: () -> Unit,
     onQuickMemoPinnedFixedTitleChange: (Boolean) -> Unit,
-    onLiveNotificationTemplateModeChange: (String) -> Unit
+    onLiveNotificationTemplateModeChange: (String) -> Unit,
+    onSmsPickupDedupChange: (Boolean) -> Unit
 ) {
     val haptics = rememberAppHaptics()
     val titleStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
@@ -826,6 +940,18 @@ private fun DeveloperOptionsCard(
             onCheckedChange = { checked ->
                 haptics.selection()
                 onQuickMemoPinnedFixedTitleChange(checked)
+            },
+            cardTitleStyle = titleStyle,
+            cardSubtitleStyle = subtitleStyle
+        )
+        RowDivider()
+        SwitchSettingItem(
+            title = "短信取件码去重",
+            subtitle = "开启后相同取件码只入库一次；关闭后不检查已有短信取件日程。",
+            checked = smsPickupDedupEnabled,
+            onCheckedChange = { checked ->
+                haptics.selection()
+                onSmsPickupDedupChange(checked)
             },
             cardTitleStyle = titleStyle,
             cardSubtitleStyle = subtitleStyle

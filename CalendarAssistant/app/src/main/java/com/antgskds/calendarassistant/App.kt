@@ -1,10 +1,13 @@
 package com.antgskds.calendarassistant
 
+import android.Manifest
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.shared.util.CrashHandler
 import com.antgskds.calendarassistant.shared.util.AnrMonitor
 import com.antgskds.calendarassistant.shared.util.AppLogger
@@ -18,7 +21,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.ingest.Sch
 import com.antgskds.calendarassistant.feature.recognition.application.localmodel.LocalModelResidueController
 import com.antgskds.calendarassistant.feature.note.application.NoteService
 import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
-import com.antgskds.calendarassistant.feature.notification.bracelet.BraceletNotificationCenter
+import com.antgskds.calendarassistant.feature.notification.bracelet.BraceletNotificationPublisher
 import com.antgskds.calendarassistant.platform.permission.AndroidPermissionChecker
 import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
@@ -92,6 +95,7 @@ class App : Application() {
         const val CHANNEL_ID_LIVE = "calendar_assistant_live_channel_v3"
         const val CHANNEL_ID_WEATHER = "calendar_assistant_weather_channel_v1"
         const val CHANNEL_ID_BRACELET = "calendar_assistant_bracelet_channel_v1"
+        const val CHANNEL_ID_VOICE_CAPTURE = "calendar_assistant_voice_capture_v1"
         private const val TAG = "App"
         lateinit var instance: App
             private set
@@ -115,7 +119,7 @@ class App : Application() {
             eventActionQueryApi = eventActionQueryApi,
             settingsProvider = { settingsQueryApi.settings.value },
             braceletScheduleUpdateNotifier = { event ->
-                braceletNotificationCenter.notifyScheduleEventUpdate(event)
+                braceletNotificationPublisher.notifyScheduleEventUpdate(event)
             }
         )
     }
@@ -271,6 +275,7 @@ class App : Application() {
     val smsPickupIngestCoordinator: SmsPickupIngestCoordinator by lazy {
         SmsPickupIngestCoordinator(
             appScope = appScope,
+            settingsQueryApi = settingsQueryApi,
             getIngestCommandApi = { try { ingestCommandApi } catch (_: Exception) { null } }
         )
     }
@@ -325,8 +330,8 @@ class App : Application() {
         AndroidNormalNotificationPublisher(applicationContext)
     }
 
-    val braceletNotificationCenter: BraceletNotificationCenter by lazy {
-        BraceletNotificationCenter(applicationContext)
+    val braceletNotificationPublisher: BraceletNotificationPublisher by lazy {
+        BraceletNotificationPublisher(applicationContext)
     }
 
     val notificationCenter: NotificationOrchestrator by lazy {
@@ -471,7 +476,7 @@ class App : Application() {
             } catch (_: Exception) { }
         }
 
-        initSmsObserver()
+        refreshSmsObserver()
         runtimeCenter.startAppRoutines()
         reminderCenter.startEventSubscriptions()
         reminderCenter.reconcileAll()
@@ -503,15 +508,38 @@ class App : Application() {
             val braceletChannel = NotificationChannel(CHANNEL_ID_BRACELET, "手环通知", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "同步到手环的短通知"; enableLights(true); enableVibration(true); setShowBadge(false)
             }
-            notificationManager.createNotificationChannels(listOf(popupChannel, liveChannel, weatherChannel, braceletChannel))
+            val voiceCaptureChannel = NotificationChannel(
+                CHANNEL_ID_VOICE_CAPTURE,
+                "随口记录音服务",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "后台录音时 Android 要求保留的运行状态"
+                setSound(null, null)
+                enableLights(false)
+                enableVibration(false)
+                setShowBadge(false)
+            }
+            notificationManager.createNotificationChannels(
+                listOf(popupChannel, liveChannel, weatherChannel, braceletChannel, voiceCaptureChannel)
+            )
         }
     }
 
-    private fun initSmsObserver() {
-        smsObserver = SmsContentObserver(
-            context = this,
-            getSmsPickupIngestCoordinator = { try { smsPickupIngestCoordinator } catch (_: Exception) { null } }
-        )
-        smsObserver?.register()
+    fun refreshSmsObserver(enabled: Boolean = settingsQueryApi.settings.value.isSmsMonitoringEnabled) {
+        if (smsObserver == null) {
+            smsObserver = SmsContentObserver(
+                context = this,
+                getSmsPickupIngestCoordinator = { try { smsPickupIngestCoordinator } catch (_: Exception) { null } }
+            )
+        }
+        val hasReadSmsPermission = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (enabled && hasReadSmsPermission) {
+            smsObserver?.register()
+        } else {
+            smsObserver?.unregister()
+        }
     }
 }

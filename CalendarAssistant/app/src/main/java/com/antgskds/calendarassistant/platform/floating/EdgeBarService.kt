@@ -30,6 +30,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.core.service.shortcut.ShortcutHandleActivity
 import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
@@ -73,6 +74,7 @@ class EdgeBarService : Service() {
     private val edgeAudioRecorder by lazy { QuickMemoAudioRecorder(applicationContext) }
     private var edgeVoiceStartJob: Job? = null
     private var edgeVoiceTickerJob: Job? = null
+    private var edgeVoiceAutoStopJob: Job? = null
     private var edgeVoiceStopJob: Job? = null
     private var edgeVoiceStartedAt: Long = 0L
     private var edgeVoiceStarting = false
@@ -134,6 +136,7 @@ class EdgeBarService : Service() {
         instance = null
         edgeVoiceStartJob?.cancel()
         edgeVoiceTickerJob?.cancel()
+        edgeVoiceAutoStopJob?.cancel()
         edgeVoiceStopJob?.cancel()
         tapJob?.cancel()
         runCatching { edgeAudioRecorder.stopAndDiscard() }
@@ -498,7 +501,8 @@ class EdgeBarService : Service() {
         edgeVoiceStartedAt = System.currentTimeMillis()
 
         return try {
-            updateEdgeRecordingStatus(0L)
+            updateEdgeRecordingNotification("随口记录音", "正在录音，可点击结束")
+            updateEdgeCapsuleStatus(0L)
             edgeVoiceStartJob?.cancel()
             edgeVoiceStartJob = serviceScope.launch {
                 try {
@@ -506,8 +510,9 @@ class EdgeBarService : Service() {
                     edgeVoiceStartedAt = System.currentTimeMillis()
                     edgeVoiceStarting = false
                     edgeVoiceRecording = true
-                    updateEdgeRecordingStatus()
+                    updateEdgeCapsuleStatus()
                     startEdgeRecordingTicker()
+                    scheduleEdgeAutoStop()
                     if (edgeVoiceStopRequested) {
                         stopEdgeVoiceCapture()
                     }
@@ -557,6 +562,8 @@ class EdgeBarService : Service() {
         edgeVoiceStarting = false
         edgeVoiceTickerJob?.cancel()
         edgeVoiceTickerJob = null
+        edgeVoiceAutoStopJob?.cancel()
+        edgeVoiceAutoStopJob = null
         edgeVoiceStopJob?.cancel()
         edgeVoiceStopJob = serviceScope.launch {
             updateEdgeRecordingNotification("正在保存...", "随口记录音")
@@ -623,16 +630,26 @@ class EdgeBarService : Service() {
         edgeVoiceTickerJob?.cancel()
         edgeVoiceTickerJob = serviceScope.launch {
             while (edgeVoiceRecording) {
-                updateEdgeRecordingStatus()
+                updateEdgeCapsuleStatus()
                 delay(1000)
             }
         }
     }
 
-    private fun updateEdgeRecordingStatus(elapsedMs: Long = System.currentTimeMillis() - edgeVoiceStartedAt) {
+    private fun updateEdgeCapsuleStatus(elapsedMs: Long = System.currentTimeMillis() - edgeVoiceStartedAt) {
         val title = "录音中：${formatRecordingTime(elapsedMs)}"
-        updateEdgeRecordingNotification(title, "松开保存")
         app.capsuleCommandApi.showQuickMemoRecording(title, "松开保存")
+    }
+
+    private fun scheduleEdgeAutoStop() {
+        edgeVoiceAutoStopJob?.cancel()
+        val durationMs = QuickMemoAutoStopPolicy.durationMillis(settingsQueryApi.settings.value) ?: return
+        edgeVoiceAutoStopJob = serviceScope.launch {
+            delay(durationMs)
+            edgeVoiceAutoStopJob = null
+            toggleVoiceActive = false
+            stopEdgeVoiceCapture()
+        }
     }
 
     private fun updateEdgeRecordingNotification(title: String, content: String) {
@@ -667,7 +684,7 @@ class EdgeBarService : Service() {
             stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        return NotificationCompat.Builder(this, App.CHANNEL_ID_POPUP)
+        return NotificationCompat.Builder(this, App.CHANNEL_ID_VOICE_CAPTURE)
             .setSmallIcon(R.drawable.ic_stat_recording)
             .setContentTitle(title)
             .setContentText(content)
@@ -688,6 +705,8 @@ class EdgeBarService : Service() {
         toggleVoiceActive = false
         edgeVoiceTickerJob?.cancel()
         edgeVoiceTickerJob = null
+        edgeVoiceAutoStopJob?.cancel()
+        edgeVoiceAutoStopJob = null
         app.capsuleCommandApi.clearQuickMemoRecording()
         stopEdgeRecordingForeground()
         restoreEdgeVisibilityAfterRecording()
