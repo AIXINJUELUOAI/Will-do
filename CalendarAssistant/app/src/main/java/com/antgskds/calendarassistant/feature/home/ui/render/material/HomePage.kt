@@ -4,16 +4,20 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -28,13 +32,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CalendarViewDay
+import androidx.compose.material.icons.outlined.CalendarViewMonth
+import androidx.compose.material.icons.outlined.CalendarViewWeek
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -42,6 +53,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
@@ -54,6 +67,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.App
@@ -65,6 +81,9 @@ import com.antgskds.calendarassistant.shared.util.LunarCalendarUtils
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
+import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayGlassSurface
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.app.ui.theme.material.SectionTitleTextStyle
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
@@ -75,18 +94,29 @@ import com.antgskds.calendarassistant.feature.home.ui.render.material.component.
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.material.component.SwipeableEventItem
+import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.dialog.DialogEdgeToEdgeEffect
+import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
 import com.antgskds.calendarassistant.app.ui.theme.material.background.appBackgroundSurfaceAlpha
+import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.format.TextStyle
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MaterialHomePage(
     state: HomePageUiState,
@@ -120,6 +150,41 @@ fun MaterialHomePage(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val haptics = rememberAppHaptics(state.settings.hapticFeedbackEnabled)
+    val calendarMenuBackgroundMode = state.settings.appBackgroundImagePath.isNotBlank()
+    val calendarMenuBackgroundPalette = rememberAppBackgroundStylePalette(
+        enabled = calendarMenuBackgroundMode,
+        miuiBlurEnabled = state.settings.appBackgroundMiuiBlurTestEnabled,
+        cardAlphaPercent = state.settings.appBackgroundCardAlphaPercent
+    )
+    val calendarMenuIsDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val calendarMenuSurfaceAlpha = MySettings.normalizeAppBackgroundCardAlphaPercent(
+        state.settings.appBackgroundCardAlphaPercent
+    ) / 100f
+    val calendarMenuContainerColor = if (calendarMenuBackgroundMode) {
+        calendarMenuBackgroundPalette.surface.copy(alpha = calendarMenuSurfaceAlpha)
+    } else if (calendarMenuIsDark) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val calendarMenuSelectionColor = if (calendarMenuBackgroundMode) {
+        calendarMenuBackgroundPalette.accent
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer
+    }
+    val calendarMenuContentColor = if (calendarMenuBackgroundMode) {
+        calendarMenuBackgroundPalette.content
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val appGlassSettings = LocalAppGlassSettings.current
+    val homeSceneBackdrop = rememberLayerBackdrop()
+    val homeSceneBlurActive = calendarMenuBackgroundMode &&
+        state.settings.appBackgroundMiuiBlurTestEnabled &&
+        appGlassSettings.active
+    val homeOverlayGlassSettings = appGlassSettings.copy(
+        overlayBackdrop = homeSceneBackdrop.takeIf { homeSceneBlurActive }
+    )
 
 
     var todaySearchQuery by rememberSaveable { mutableStateOf("") }
@@ -127,10 +192,22 @@ fun MaterialHomePage(
     var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
     var isLegacyNoteMode by rememberSaveable { mutableStateOf(false) }
+    var calendarViewName by rememberSaveable { mutableStateOf(HomeCalendarViewMode.TODAY.name) }
+    var isCalendarViewMenuExpanded by remember { mutableStateOf(false) }
+    var calendarViewMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
+    val calendarViewMode = HomeCalendarViewMode.valueOf(calendarViewName)
 
     val isTodayPage = currentPageKey == HomeEntryKey.TODAY
     val isAllPage = currentPageKey == HomeEntryKey.ALL
     val isNotePage = currentPageKey == HomeEntryKey.NOTE
+
+    LaunchedEffect(isTodayPage) {
+        if (!isTodayPage) isCalendarViewMenuExpanded = false
+    }
+
+    BackHandler(enabled = isCalendarViewMenuExpanded) {
+        isCalendarViewMenuExpanded = false
+    }
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -438,9 +515,10 @@ fun MaterialHomePage(
                 .fillMaxSize()
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .graphicsLayer { alpha = 1f - progress }
-                .pointerInput(isActionExpanded, isSearchMode) {
+                .pointerInput(isActionExpanded, isSearchMode, isCalendarViewMenuExpanded) {
                     detectTapGestures(onTap = {
                         when {
+                            isCalendarViewMenuExpanded -> isCalendarViewMenuExpanded = false
                             isActionExpanded -> onActionExpandedChange(false)
                             isSearchMode -> {
                                 isSearchMode = false
@@ -455,7 +533,20 @@ fun MaterialHomePage(
                     })
                 }
         ) {
+            val showSearchBar = isSearchMode &&
+                !isSidebarOpen &&
+                (isTodayPage || isAllPage || isNotePage)
+            val searchBarHeight = 64.dp
+            val searchBarOffset = searchBarHeight + 12.dp
+
             Scaffold(
+                modifier = Modifier.then(
+                    if (homeSceneBlurActive) {
+                        Modifier.layerBackdrop(homeSceneBackdrop)
+                    } else {
+                        Modifier
+                    }
+                ),
                 containerColor = if (state.settings.appBackgroundImagePath.isNotBlank()) {
                     Color.Transparent
                 } else {
@@ -480,6 +571,32 @@ fun MaterialHomePage(
                             Text(title)
                         },
                         actions = {
+                            if (isTodayPage) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .onGloballyPositioned { coordinates ->
+                                            calendarViewMenuAnchorBounds = coordinates.boundsInRoot()
+                                        }
+                                        .combinedClickable(
+                                            onClick = {
+                                                haptics.selection()
+                                                calendarViewName = calendarViewMode.next().name
+                                            },
+                                            onLongClick = {
+                                                haptics.longPress()
+                                                isCalendarViewMenuExpanded = true
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.SwapHoriz,
+                                        contentDescription = calendarViewMode.nextContentDescription,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
                             if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
                                 IconButton(onClick = { haptics.click(); onRequestClearQuickMemos() }) {
                                     Icon(
@@ -498,9 +615,6 @@ fun MaterialHomePage(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    val showSearchBar = isSearchMode && !isSidebarOpen && (isTodayPage || isAllPage || isNotePage)
-                    val searchBarHeight = 64.dp
-                    val searchBarOffset = searchBarHeight + 12.dp
                     val contentBottomPadding = if (showSearchBar) {
                         floatingBarContentPadding + searchBarOffset
                     } else {
@@ -562,157 +676,18 @@ fun MaterialHomePage(
 
                             // 日期卡片
                             item {
-                                val hasAppBackground = state.settings.appBackgroundImagePath.isNotBlank()
-                                val themePrimary = MaterialTheme.colorScheme.primary
-                                val themeOnPrimary = MaterialTheme.colorScheme.onPrimary
-                                val isToday = state.selectedDate == state.today
-                                val weatherData = state.weatherData
-                                val topBaseColor = when {
-                                    isToday -> themePrimary
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
-                                val topContentColor = when {
-                                    isToday -> themeOnPrimary
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                                val topBarColor = if (hasAppBackground) {
-                                    val glassAlpha = appBackgroundSurfaceAlpha(
-                                        cardAlphaPercent = state.settings.appBackgroundCardAlphaPercent,
-                                        dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
-                                        miuiBlurEnabled = state.settings.appBackgroundMiuiBlurTestEnabled
-                                    )
-                                    topBaseColor.copy(alpha = glassAlpha)
-                                } else {
-                                    topBaseColor
-                                }
-                                val dateCardShape = RoundedCornerShape(16.dp)
-                                AppCard(
-                                    modifier = Modifier
-                                        .padding(horizontal = 24.dp)
-                                        .fillMaxWidth()
-                                        .aspectRatio(0.95f)
-                                        .then(
-                                            if (hasAppBackground && !state.settings.appBackgroundMiuiBlurTestEnabled) {
-                                                Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                        .pointerInput(state.selectedDate) {
-                                            var totalDrag = 0f
-                                            detectHorizontalDragGestures(
-                                                onDragEnd = {
-                                                    if (totalDrag < -50) {
-                                                        onAction(HomePageUiAction.SelectDate(state.selectedDate.plusDays(1)))
-                                                    } else if (totalDrag > 50) {
-                                                        onAction(HomePageUiAction.SelectDate(state.selectedDate.minusDays(1)))
-                                                    }
-                                                    totalDrag = 0f
-                                                },
-                                                onDragCancel = {
-                                                    totalDrag = 0f
-                                                },
-                                                onHorizontalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    totalDrag += dragAmount
-                                                }
-                                            )
-                                        },
-                                    shape = dateCardShape,
-                                    elevation = CardDefaults.cardElevation(defaultElevation = if (hasAppBackground) 0.dp else 6.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (hasAppBackground) {
-                                            MaterialTheme.colorScheme.surfaceContainerLow
-                                        } else if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                            MaterialTheme.colorScheme.surfaceContainerLow
-                                        } else {
-                                            MaterialTheme.colorScheme.surface
-                                        },
-                                        contentColor = MaterialTheme.colorScheme.onSurface
-                                    )
-                                ) {
-                                    Column(modifier = Modifier.fillMaxSize()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(0.2f)
-                                                .fillMaxWidth()
-                                                .background(topBarColor)
-                                                .clickable {
-                                                    onAction(HomePageUiAction.SelectDate(state.today))
-                                                }
-                                        ) {
-                                            if (weatherData != null) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .align(Alignment.CenterStart)
-                                                        .clip(RoundedCornerShape(50))
-                                                        .clickable { haptics.click(); onOpenWeatherDetail() }
-                                                        .padding(horizontal = 22.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Icon(
-                                                        painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
-                                                        contentDescription = weatherData.text.ifBlank { "天气" },
-                                                        modifier = Modifier.size(30.dp),
-                                                        tint = topContentColor
-                                                    )
-                                                    Spacer(Modifier.width(10.dp))
-                                                    Text(
-                                                        text = buildString {
-                                                            append(weatherData.temperature.ifBlank { "--" })
-                                                            append("°C")
-                                                            if (weatherData.text.isNotBlank()) {
-                                                                append(" · ")
-                                                                append(weatherData.text)
-                                                            }
-                                                        },
-                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                                        color = topContentColor,
-                                                        maxLines = 1
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Column(
-                                            modifier = Modifier.weight(0.8f).fillMaxWidth(),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                                                Text(
-                                                    state.selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
-                                                    style = MaterialTheme.typography.titleLarge,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(
-                                                    LunarCalendarUtils.getLunarDate(state.selectedDate),
-                                                    style = MaterialTheme.typography.titleLarge,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                            Text(
-                                                text = state.selectedDate.dayOfMonth.toString(),
-                                                fontSize = 140.sp,
-                                                fontWeight = FontWeight.Black,
-                                                lineHeight = 140.sp,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
-                                                    indication = null
-                                                ) {
-                                                    haptics.selection()
-                                                    onAction(HomePageUiAction.SelectDate(state.today))
-                                                }
-                                            )
-                                            Text(
-                                                "${state.selectedDate.year}年${state.selectedDate.monthValue}月",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
-                                            )
-                                        }
+                                HomeCalendarCard(
+                                    state = state,
+                                    viewMode = calendarViewMode,
+                                    onSelectDate = { date ->
+                                        haptics.selection()
+                                        onAction(HomePageUiAction.SelectDate(date))
+                                    },
+                                    onOpenWeatherDetail = {
+                                        haptics.click()
+                                        onOpenWeatherDetail()
                                     }
-                                }
+                                )
                             }
 
                             if (!serviceEnabled) item { PermissionWarningCard(Icons.Default.Warning, "无障碍服务未开启", { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }) }) }
@@ -788,99 +763,79 @@ fun MaterialHomePage(
                     }
                     }
 
-                    if (showSearchBar) {
-                        val searchFocusRequester = remember { FocusRequester() }
-                        val keyboardController = LocalSoftwareKeyboardController.current
+                }
+            }
 
-                        LaunchedEffect(isSearchMode) {
-                            if (isSearchMode) {
-                                searchFocusRequester.requestFocus()
+            if (showSearchBar) {
+                HomeSearchBar(
+                    value = when {
+                        isAllPage -> allSearchQuery
+                        isNotePage -> noteSearchQuery
+                        else -> todaySearchQuery
+                    },
+                    onValueChange = { value ->
+                        when {
+                            isAllPage -> allSearchQuery = value
+                            isNotePage -> noteSearchQuery = value
+                            else -> todaySearchQuery = value
+                        }
+                    },
+                    placeholder = when {
+                        isAllPage -> "搜索标题、备注或地点..."
+                        isNotePage -> if (isLegacyNoteMode) {
+                            "搜索便签标题或正文..."
+                        } else {
+                            "搜索随口记正文..."
+                        }
+                        else -> "搜索标题、备注或地点..."
+                    },
+                    onDismiss = { isSearchMode = false },
+                    floatingBarOffset = floatingBarOffset,
+                    containerColor = calendarMenuContainerColor,
+                    iconSize = topBarIconSize
+                )
+            }
+
+            AppGlassSettingsProvider(homeOverlayGlassSettings) {
+
+                calendarViewMenuAnchorBounds?.let { anchorBounds ->
+                    val density = LocalDensity.current
+                    val menuWidth = 208.dp
+                    val menuWidthPx = with(density) { menuWidth.roundToPx() }
+                    val menuInsetPx = with(density) { 8.dp.roundToPx() }
+                    val menuGapPx = with(density) { 4.dp.roundToPx() }
+                    val menuX = (anchorBounds.right.roundToInt() - menuWidthPx)
+                        .coerceAtLeast(menuInsetPx)
+                    val menuY = anchorBounds.bottom.roundToInt() + menuGapPx
+
+                    AnimatedVisibility(
+                        visible = isCalendarViewMenuExpanded,
+                        modifier = Modifier
+                            .offset { IntOffset(menuX, menuY) }
+                            .zIndex(2f),
+                        enter = fadeIn(tween(180)) + scaleIn(
+                            animationSpec = tween(220),
+                            initialScale = 0.86f,
+                            transformOrigin = TransformOrigin(1f, 0f)
+                        ),
+                        exit = fadeOut(tween(140)) + scaleOut(
+                            animationSpec = tween(180),
+                            targetScale = 0.9f,
+                            transformOrigin = TransformOrigin(1f, 0f)
+                        )
+                    ) {
+                        HomeCalendarViewMenu(
+                            modifier = Modifier.width(menuWidth),
+                            currentMode = calendarViewMode,
+                            containerColor = calendarMenuContainerColor,
+                            selectionColor = calendarMenuSelectionColor,
+                            contentColor = calendarMenuContentColor,
+                            onSelectMode = { mode ->
+                                haptics.selection()
+                                calendarViewName = mode.name
+                                isCalendarViewMenuExpanded = false
                             }
-                        }
-
-                        // 实时获取键盘高度
-                        val imePaddingDp = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-
-                        // 悬浮栏基础高度（键盘完全收起时，搜索框应该待的最低位置）
-                        val baseBottomPadding = floatingBarOffset + 36.dp
-
-                        // 动态计算：coerceAtLeast 保证搜索框永远不会低于基础高度
-                        val searchBarBottomPadding = (imePaddingDp + 12.dp).coerceAtLeast(baseBottomPadding)
-
-                        // 触摸屏障：防止点击穿透到后面的列表
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(bottom = searchBarBottomPadding)
-                                .height(searchBarHeight + 36.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { /* 消费触摸，防止穿透 */ }
-                                ),
-                            contentAlignment = Alignment.BottomCenter
-                        ) {
-                            OutlinedTextField(
-                                value = when {
-                                    isAllPage -> allSearchQuery
-                                    isNotePage -> noteSearchQuery
-                                    else -> todaySearchQuery
-                                },
-                                onValueChange = {
-                                    when {
-                                        isAllPage -> allSearchQuery = it
-                                        isNotePage -> noteSearchQuery = it
-                                        else -> todaySearchQuery = it
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth(0.75f)
-                                    .height(searchBarHeight)
-                                    .focusRequester(searchFocusRequester)
-                                    .pointerInput(Unit) {
-                                        detectTapGestures {
-                                            searchFocusRequester.requestFocus()
-                                            keyboardController?.show()
-                                        }
-                                    },
-                                placeholder = {
-                                    Text(
-                                        when {
-                                            isAllPage -> "搜索标题、备注或地点..."
-                                            isNotePage -> if (isLegacyNoteMode) "搜索便签标题或正文..." else "搜索随口记正文..."
-                                            else -> "搜索标题、备注或地点..."
-                                        }
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Search,
-                                        contentDescription = "搜索",
-                                        modifier = Modifier.size(topBarIconSize)
-                                    )
-                                },
-                                trailingIcon = {
-                                    IconButton(
-                                        onClick = { isSearchMode = false },
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "关闭",
-                                            modifier = Modifier.size(topBarIconSize)
-                                        )
-                                    }
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(24.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                )
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -903,6 +858,820 @@ fun MaterialHomePage(
             modifier = Modifier
                 .padding(bottom = floatingBarOffset + 16.dp)
         )
+    }
+}
+
+private enum class HomeCalendarViewMode {
+    TODAY,
+    WEEK,
+    MONTH;
+
+    fun next(): HomeCalendarViewMode = when (this) {
+        TODAY -> WEEK
+        WEEK -> MONTH
+        MONTH -> TODAY
+    }
+
+    val nextContentDescription: String
+        get() = when (this) {
+            TODAY -> "切换到周视图"
+            WEEK -> "切换到月视图"
+            MONTH -> "返回日期视图"
+        }
+
+    val menuLabel: String
+        get() = when (this) {
+            TODAY -> "今日视图"
+            WEEK -> "周视图"
+            MONTH -> "月视图"
+    }
+}
+
+@Composable
+private fun HomeSearchBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    onDismiss: () -> Unit,
+    floatingBarOffset: Dp,
+    containerColor: Color,
+    iconSize: Dp,
+) {
+    val glassSettings = LocalAppGlassSettings.current
+    val searchFocusRequester = remember { FocusRequester() }
+    val searchBarHeight = 64.dp
+    val searchBarShape = RoundedCornerShape(24.dp)
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val imePadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        val bottomPadding = (imePadding + 12.dp).coerceAtLeast(floatingBarOffset + 36.dp)
+
+        DialogEdgeToEdgeEffect(isDarkTheme = glassSettings.darkTheme)
+        DisableDialogWindowDimEffect()
+
+        LaunchedEffect(Unit) {
+            searchFocusRequester.requestFocus()
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = bottomPadding)
+                    .height(searchBarHeight + 36.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    ),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                AppOverlayGlassSurface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.75f)
+                        .height(searchBarHeight),
+                    shape = searchBarShape,
+                    fallbackColor = containerColor
+                ) {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRequester(searchFocusRequester)
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    searchFocusRequester.requestFocus()
+                                    keyboardController?.show()
+                                }
+                            },
+                        placeholder = { Text(placeholder) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "搜索",
+                                modifier = Modifier.size(iconSize)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "关闭",
+                                    modifier = Modifier.size(iconSize)
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        shape = searchBarShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = if (glassSettings.overlayActive) {
+                                Color.Transparent
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            unfocusedBorderColor = if (glassSettings.overlayActive) {
+                                Color.Transparent
+                            } else {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            },
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            errorContainerColor = Color.Transparent
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeCalendarViewMenu(
+    currentMode: HomeCalendarViewMode,
+    containerColor: Color,
+    selectionColor: Color,
+    contentColor: Color,
+    onSelectMode: (HomeCalendarViewMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(24.dp)
+    AppOverlayGlassSurface(
+        modifier = modifier
+            .shadow(elevation = 8.dp, shape = shape, clip = false)
+            .clip(shape),
+        shape = shape,
+        fallbackColor = containerColor
+    ) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            HomeCalendarViewMode.entries.forEach { mode ->
+                val selected = mode == currentMode
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when (mode) {
+                                    HomeCalendarViewMode.TODAY -> Icons.Outlined.CalendarViewDay
+                                    HomeCalendarViewMode.WEEK -> Icons.Outlined.CalendarViewWeek
+                                    HomeCalendarViewMode.MONTH -> Icons.Outlined.CalendarViewMonth
+                                },
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = mode.menuLabel,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.sp
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                    },
+                    onClick = { onSelectMode(mode) },
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (selected) selectionColor else Color.Transparent),
+                    trailingIcon = {
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "当前视图",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    colors = MenuDefaults.itemColors(
+                        textColor = contentColor,
+                        trailingIconColor = contentColor
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeCalendarCard(
+    state: HomePageUiState,
+    viewMode: HomeCalendarViewMode,
+    onSelectDate: (LocalDate) -> Unit,
+    onOpenWeatherDetail: () -> Unit,
+) {
+    val hasAppBackground = state.settings.appBackgroundImagePath.isNotBlank()
+    val isToday = state.selectedDate == state.today
+    val topBaseColor = if (isToday) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val topContentColor = if (isToday) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val topBarColor = if (hasAppBackground) {
+        val glassAlpha = appBackgroundSurfaceAlpha(
+            cardAlphaPercent = state.settings.appBackgroundCardAlphaPercent,
+            dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f,
+            miuiBlurEnabled = state.settings.appBackgroundMiuiBlurTestEnabled
+        )
+        topBaseColor.copy(alpha = glassAlpha)
+    } else {
+        topBaseColor
+    }
+    val dateCardShape = RoundedCornerShape(16.dp)
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .fillMaxWidth()
+    ) {
+        val cardWidth = maxWidth
+        val todayCardHeight = cardWidth / 0.95f
+        val calendarHeaderHeight = todayCardHeight * 0.2f
+        val monthRowHeight = (todayCardHeight - calendarHeaderHeight - 28.dp) / 6f
+        val targetHeight = when (viewMode) {
+            HomeCalendarViewMode.TODAY -> todayCardHeight
+            HomeCalendarViewMode.WEEK -> calendarHeaderHeight + 114.dp
+            HomeCalendarViewMode.MONTH -> todayCardHeight
+        }
+        val cardHeight by animateDpAsState(
+            targetValue = targetHeight,
+            animationSpec = tween(durationMillis = 420),
+            label = "home_calendar_height"
+        )
+
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(cardHeight)
+                .then(
+                    if (hasAppBackground && !state.settings.appBackgroundMiuiBlurTestEnabled) {
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, dateCardShape)
+                    } else {
+                        Modifier
+                    }
+                )
+                .pointerInput(viewMode, state.selectedDate) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val direction = when {
+                                totalDrag < -50f -> 1L
+                                totalDrag > 50f -> -1L
+                                else -> 0L
+                            }
+                            if (direction != 0L) {
+                                val nextDate = when (viewMode) {
+                                    HomeCalendarViewMode.TODAY -> state.selectedDate.plusDays(direction)
+                                    HomeCalendarViewMode.WEEK -> state.selectedDate.plusWeeks(direction)
+                                    HomeCalendarViewMode.MONTH -> state.selectedDate.plusMonths(direction)
+                                }
+                                onSelectDate(nextDate)
+                            }
+                            totalDrag = 0f
+                        },
+                        onDragCancel = { totalDrag = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            totalDrag += dragAmount
+                        }
+                    )
+                },
+            shape = dateCardShape,
+            elevation = CardDefaults.cardElevation(defaultElevation = if (hasAppBackground) 0.dp else 6.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (hasAppBackground || MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                HomeCalendarSelectionIndicator(
+                    viewMode = viewMode,
+                    selectedDate = state.selectedDate,
+                    headerHeight = calendarHeaderHeight,
+                    monthRowHeight = monthRowHeight,
+                    selectionColor = topBarColor,
+                )
+                AnimatedContent(
+                    targetState = viewMode,
+                    modifier = Modifier.fillMaxSize(),
+                    transitionSpec = {
+                        when {
+                            initialState == HomeCalendarViewMode.MONTH && targetState == HomeCalendarViewMode.TODAY -> {
+                                (fadeIn(tween(280)) + scaleIn(tween(360), initialScale = 0.9f)) togetherWith
+                                    (fadeOut(tween(160)) + shrinkVertically(tween(320), shrinkTowards = Alignment.Top))
+                            }
+                            targetState.ordinal > initialState.ordinal -> {
+                                (fadeIn(tween(260)) + expandVertically(tween(360), expandFrom = Alignment.Top)) togetherWith
+                                    fadeOut(tween(160))
+                            }
+                            else -> fadeIn(tween(260)) togetherWith fadeOut(tween(160))
+                        }
+                    },
+                    label = "home_calendar_mode"
+                ) { mode ->
+                    when (mode) {
+                        HomeCalendarViewMode.TODAY -> HomeTodayDateContent(
+                            selectedDate = state.selectedDate,
+                            today = state.today,
+                            weatherData = state.weatherData,
+                            hasAppBackground = hasAppBackground,
+                            topContentColor = topContentColor,
+                            onSelectDate = onSelectDate,
+                            onOpenWeatherDetail = onOpenWeatherDetail,
+                        )
+                        HomeCalendarViewMode.WEEK -> HomeWeekContent(
+                            selectedDate = state.selectedDate,
+                            today = state.today,
+                            headerHeight = calendarHeaderHeight,
+                            datesWithEvents = state.datesWithEvents,
+                            selectionContentColor = topContentColor,
+                            onSelectDate = onSelectDate,
+                        )
+                        HomeCalendarViewMode.MONTH -> HomeMonthContent(
+                            selectedDate = state.selectedDate,
+                            today = state.today,
+                            headerHeight = calendarHeaderHeight,
+                            monthRowHeight = monthRowHeight,
+                            datesWithEvents = state.datesWithEvents,
+                            selectionContentColor = topContentColor,
+                            onSelectDate = onSelectDate,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.HomeCalendarSelectionIndicator(
+    viewMode: HomeCalendarViewMode,
+    selectedDate: LocalDate,
+    headerHeight: Dp,
+    monthRowHeight: Dp,
+    selectionColor: Color,
+) {
+    BoxWithConstraints(modifier = Modifier.matchParentSize()) {
+        val horizontalPadding = 12.dp
+        val horizontalSpacing = 2.dp
+        val cellWidth = (maxWidth - horizontalPadding * 2 - horizontalSpacing * 6) / 7f
+        val weekdayIndex = selectedDate.dayOfWeek.value - 1
+        val selectedMonth = YearMonth.from(selectedDate)
+        val monthGridStart = selectedMonth
+            .atDay(1)
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val monthCellIndex = ChronoUnit.DAYS.between(monthGridStart, selectedDate).toInt()
+        val monthRow = monthCellIndex / 7
+        val monthCellSize = if (cellWidth < monthRowHeight) cellWidth else monthRowHeight
+        val monthCellInset = (monthRowHeight - monthCellSize) / 2f
+        val columnInset = (cellWidth - monthCellSize) / 2f
+
+        val targetX = when (viewMode) {
+            HomeCalendarViewMode.TODAY -> 0.dp
+            HomeCalendarViewMode.WEEK -> horizontalPadding + (cellWidth + horizontalSpacing) * weekdayIndex
+            HomeCalendarViewMode.MONTH -> {
+                horizontalPadding + (cellWidth + horizontalSpacing) * weekdayIndex + columnInset
+            }
+        }
+        val targetY = when (viewMode) {
+            HomeCalendarViewMode.TODAY -> 0.dp
+            HomeCalendarViewMode.WEEK -> headerHeight
+            HomeCalendarViewMode.MONTH -> {
+                headerHeight + 18.dp + monthRowHeight * monthRow + monthCellInset
+            }
+        }
+        val targetWidth = when (viewMode) {
+            HomeCalendarViewMode.TODAY -> maxWidth
+            HomeCalendarViewMode.WEEK -> cellWidth
+            HomeCalendarViewMode.MONTH -> monthCellSize
+        }
+        val targetHeight = when (viewMode) {
+            HomeCalendarViewMode.TODAY -> headerHeight
+            HomeCalendarViewMode.WEEK -> 104.dp
+            HomeCalendarViewMode.MONTH -> monthCellSize
+        }
+        val targetRadius = if (viewMode == HomeCalendarViewMode.TODAY) 0.dp else 12.dp
+        val animationSpec = tween<Dp>(durationMillis = 420)
+        val x by animateDpAsState(targetX, animationSpec, label = "home_calendar_indicator_x")
+        val y by animateDpAsState(targetY, animationSpec, label = "home_calendar_indicator_y")
+        val width by animateDpAsState(targetWidth, animationSpec, label = "home_calendar_indicator_width")
+        val height by animateDpAsState(targetHeight, animationSpec, label = "home_calendar_indicator_height")
+        val radius by animateDpAsState(targetRadius, animationSpec, label = "home_calendar_indicator_radius")
+        val color by animateColorAsState(
+            targetValue = selectionColor,
+            animationSpec = tween(durationMillis = 240),
+            label = "home_calendar_indicator_color"
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(x = x, y = y)
+                .size(width = width, height = height)
+                .clip(RoundedCornerShape(radius))
+                .background(color)
+        )
+    }
+}
+
+@Composable
+private fun HomeTodayDateContent(
+    selectedDate: LocalDate,
+    today: LocalDate,
+    weatherData: com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData?,
+    hasAppBackground: Boolean,
+    topContentColor: Color,
+    onSelectDate: (LocalDate) -> Unit,
+    onOpenWeatherDetail: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .weight(0.2f)
+                .fillMaxWidth()
+                .clickable { onSelectDate(today) }
+        ) {
+            if (weatherData != null) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onOpenWeatherDetail)
+                        .padding(horizontal = 22.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(WeatherIconMapper.iconRes(weatherData)),
+                        contentDescription = weatherData.text.ifBlank { "天气" },
+                        modifier = Modifier.size(30.dp),
+                        tint = topContentColor
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = buildString {
+                            append(weatherData.temperature.ifBlank { "--" })
+                            append("°C")
+                            if (weatherData.text.isNotBlank()) {
+                                append(" · ")
+                                append(weatherData.text)
+                            }
+                        },
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        color = topContentColor,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(0.8f)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text(
+                    selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    LunarCalendarUtils.getLunarDate(selectedDate),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = selectedDate.dayOfMonth.toString(),
+                fontSize = 140.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = 140.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onSelectDate(today) }
+            )
+            Text(
+                "${selectedDate.year}年${selectedDate.monthValue}月",
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (hasAppBackground) MaterialTheme.colorScheme.onSurfaceVariant else Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeWeekContent(
+    selectedDate: LocalDate,
+    today: LocalDate,
+    headerHeight: Dp,
+    datesWithEvents: Set<LocalDate>,
+    selectionContentColor: Color,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    val weekStart = remember(selectedDate) {
+        selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    }
+    AnimatedContent(
+        targetState = weekStart,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            val movingForward = targetState.isAfter(initialState)
+            val enterDirection = if (movingForward) 1 else -1
+            (slideInHorizontally(tween(320)) { width -> width * enterDirection } +
+                fadeIn(tween(220))) togetherWith
+                (slideOutHorizontally(tween(320)) { width -> -width * enterDirection } +
+                    fadeOut(tween(180)))
+        },
+        label = "home_week_switch"
+    ) { displayedWeekStart ->
+        val weekDates = remember(displayedWeekStart) {
+            List(7) { displayedWeekStart.plusDays(it.toLong()) }
+        }
+        val weekEnd = weekDates.last()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight),
+                contentAlignment = Alignment.Center
+            ) {
+                HomeCalendarPeriodTitle(
+                    startMonth = YearMonth.from(displayedWeekStart),
+                    endMonth = YearMonth.from(weekEnd),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                weekDates.forEach { date ->
+                    HomeCalendarDayCell(
+                        date = date,
+                        selected = date == selectedDate,
+                        today = date == today,
+                        inDisplayedMonth = true,
+                        showWeekday = true,
+                        hasEvents = date in datesWithEvents,
+                        selectionContentColor = selectionContentColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        onClick = { onSelectDate(date) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeMonthContent(
+    selectedDate: LocalDate,
+    today: LocalDate,
+    headerHeight: Dp,
+    monthRowHeight: Dp,
+    datesWithEvents: Set<LocalDate>,
+    selectionContentColor: Color,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    val month = remember(selectedDate) { YearMonth.from(selectedDate) }
+    val weekdays = remember { listOf("一", "二", "三", "四", "五", "六", "日") }
+
+    AnimatedContent(
+        targetState = month,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            val movingForward = targetState.isAfter(initialState)
+            val enterDirection = if (movingForward) 1 else -1
+            (slideInHorizontally(tween(340)) { width -> width * enterDirection } +
+                fadeIn(tween(220))) togetherWith
+                (slideOutHorizontally(tween(340)) { width -> -width * enterDirection } +
+                    fadeOut(tween(180)))
+        },
+        label = "home_month_switch"
+    ) { displayedMonth ->
+        val gridStart = remember(displayedMonth) {
+            displayedMonth.atDay(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        }
+        val dates = remember(gridStart) { List(42) { gridStart.plusDays(it.toLong()) } }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight),
+                contentAlignment = Alignment.Center
+            ) {
+                HomeCalendarPeriodTitle(startMonth = displayedMonth)
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                weekdays.forEach { weekday ->
+                    Text(
+                        text = weekday,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                        modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            dates.chunked(7).forEach { week ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(monthRowHeight),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    week.forEach { date ->
+                        HomeCalendarDayCell(
+                            date = date,
+                            selected = date == selectedDate,
+                            today = date == today,
+                            inDisplayedMonth = YearMonth.from(date) == displayedMonth,
+                            showWeekday = false,
+                            hasEvents = date in datesWithEvents,
+                            selectionContentColor = selectionContentColor,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            onClick = { onSelectDate(date) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeCalendarPeriodTitle(
+    startMonth: YearMonth,
+    endMonth: YearMonth = startMonth,
+) {
+    val text = when {
+        startMonth == endMonth -> "${startMonth.year}年${startMonth.monthValue}月"
+        startMonth.year == endMonth.year -> {
+            "${startMonth.year}年${startMonth.monthValue}月 - ${endMonth.monthValue}月"
+        }
+        else -> {
+            "${startMonth.year}年${startMonth.monthValue}月 - ${endMonth.year}年${endMonth.monthValue}月"
+        }
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.headlineSmall.copy(
+            fontSize = 24.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.sp
+        ),
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1
+    )
+}
+
+@Composable
+private fun HomeCalendarDayCell(
+    date: LocalDate,
+    selected: Boolean,
+    today: Boolean,
+    inDisplayedMonth: Boolean,
+    showWeekday: Boolean,
+    hasEvents: Boolean,
+    selectionContentColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val contentColor = when {
+        selected -> selectionContentColor
+        !inDisplayedMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val outlineModifier = if (today && !selected) {
+        Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), shape)
+    } else {
+        Modifier
+    }
+    val lunarDateText = LunarCalendarUtils.getLunarDate(date).let { lunarDate ->
+        if (lunarDate.length >= 2) lunarDate.takeLast(2) else lunarDate
+    }
+    val eventMarkerColor = when {
+        selected -> selectionContentColor
+        inDisplayedMonth -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    }
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .then(outlineModifier)
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = if (showWeekday) 2.dp else 1.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (showWeekday) {
+                Text(
+                    text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.CHINESE),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                    color = contentColor.copy(alpha = 0.7f),
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+            Text(
+                text = date.dayOfMonth.toString(),
+                style = if (showWeekday) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge,
+                fontWeight = if (selected || today) FontWeight.Black else FontWeight.SemiBold,
+                color = contentColor,
+                maxLines = 1
+            )
+            Text(
+                text = lunarDateText,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Normal
+                ),
+                color = if (selected) {
+                    contentColor.copy(alpha = 0.85f)
+                } else {
+                    contentColor.copy(alpha = 0.5f)
+                },
+                maxLines = 1,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        if (hasEvents) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 6.dp)
+                    .size(4.dp)
+                    .background(eventMarkerColor, CircleShape)
+            )
+        }
     }
 }
 

@@ -38,7 +38,6 @@ import com.antgskds.calendarassistant.feature.home.ui.render.material.component.
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarToastGap
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarVisualHeight
-import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiState
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
@@ -51,6 +50,8 @@ import com.antgskds.calendarassistant.shared.ui.material.dialog.*
 import com.antgskds.calendarassistant.feature.schedule.ui.render.AddEventDialog
 import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseSingleEditDialog
 import com.antgskds.calendarassistant.feature.home.ui.render.HomeScreenContent
+import com.antgskds.calendarassistant.feature.home.ui.render.HomeActionDialog
+import com.antgskds.calendarassistant.feature.home.ui.render.editionHomeEntries
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import java.time.LocalDate
@@ -177,7 +178,12 @@ fun HomeScreen(
         sanitizeHomeBottomItems(settings.homeBottomItems)
     }
     val homeBottomItems = remember(storedHomeBottomItems, settings.voiceInputEnabled) {
-        visibleHomeBottomItems(storedHomeBottomItems, quickMemoEnabled = settings.voiceInputEnabled)
+        editionHomeEntries(
+            visibleHomeBottomItems(
+                storedHomeBottomItems,
+                quickMemoEnabled = settings.voiceInputEnabled,
+            ),
+        )
     }
     val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
         sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -473,6 +479,7 @@ fun HomeScreen(
                 onScheduleProgressChange = { scheduleProgress = it },
                 onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
                 onOpenWeatherDetail = onOpenWeatherDetail,
+                onNavigateToSettings = onNavigateToSettings,
             )
         },
         chrome = {
@@ -525,14 +532,13 @@ fun HomeScreen(
         val deleteItem = scheduleItemToDelete
         val editCommitSession = recurringEditCommitSession
         val clipboardPromptItem = clipboardPrompt
-        PredictiveFloatingActionCard(
+        HomeActionDialog(
             visible = clipboardPromptItem != null,
             title = "识别到剪贴板中的${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}",
             content = "${clipboardPromptItem?.candidate?.type?.displayLabel.orEmpty()}：${clipboardPromptItem?.candidate?.code.orEmpty()}",
             confirmText = "入库",
             dismissText = "忽略",
             isDestructive = false,
-            isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = onConfirmClipboardPrompt,
             onDismiss = onDismissClipboardPrompt,
@@ -540,14 +546,13 @@ fun HomeScreen(
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )
 
-        PredictiveFloatingActionCard(
+        HomeActionDialog(
             visible = showClearQuickMemosConfirm && quickMemoCount > 0,
             title = "确认清空",
             content = "此操作将永久删除 $quickMemoCount 条随口记。\n删除后将无法恢复。",
             confirmText = "删除",
             dismissText = "取消",
             isDestructive = true,
-            isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
                 selectedQuickMemoAction = null
@@ -559,14 +564,13 @@ fun HomeScreen(
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )
 
-        PredictiveFloatingActionCard(
+        HomeActionDialog(
             visible = selectedQuickMemoAction != null,
             title = "删除随口记",
             content = "删除后无法恢复，确认删除这条随口记吗？",
             confirmText = "删除",
             dismissText = "取消",
             isDestructive = true,
-            isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
                 selectedQuickMemoAction?.id?.let { mainViewModel.deleteQuickMemo(it) }
@@ -577,14 +581,13 @@ fun HomeScreen(
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )
 
-        PredictiveFloatingActionCard(
+        HomeActionDialog(
             visible = selectedNoteAction != null,
             title = "删除便签",
             content = "删除后无法恢复，确认删除这条便签吗？",
             confirmText = "删除",
             dismissText = "取消",
             isDestructive = true,
-            isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
                 selectedNoteAction?.id?.let { mainViewModel.deleteNote(it) }
@@ -596,14 +599,13 @@ fun HomeScreen(
         )
 
         val singleDeleteItem = deleteItem?.takeIf { it.action is ScheduleDisplayItem.ActionTarget.Single }
-        PredictiveFloatingActionCard(
+        HomeActionDialog(
             visible = singleDeleteItem != null,
             title = "删除日程",
             content = "删除后无法恢复，确认删除这条日程吗？",
             confirmText = "删除",
             dismissText = "取消",
             isDestructive = true,
-            isLoading = false,
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = {
                 val eventId = (singleDeleteItem?.action as? ScheduleDisplayItem.ActionTarget.Single)?.eventId
@@ -815,7 +817,7 @@ private fun PredictiveRecurringDeleteActionCard(
     onDeleteAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    PredictiveFloatingActionCard(
+    HomeActionDialog(
         visible = visible,
         title = "删除重复日程",
         content = "删除本次还是全部？",
@@ -823,7 +825,6 @@ private fun PredictiveRecurringDeleteActionCard(
         dismissText = "仅本次",
         dismissIsDestructive = true,
         isDestructive = true,
-        isLoading = false,
         predictiveBackEnabled = predictiveBackEnabled,
         onConfirm = onDeleteAll,
         onDismiss = onDeleteThis,
@@ -839,14 +840,13 @@ private fun PredictiveRecurringEditActionCard(
     onEditAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    PredictiveFloatingActionCard(
+    HomeActionDialog(
         visible = visible,
         title = "编辑重复日程",
         content = "保存到本次还是全部？",
         confirmText = "全部",
         dismissText = "仅本次",
         isDestructive = false,
-        isLoading = false,
         predictiveBackEnabled = predictiveBackEnabled,
         onConfirm = onEditAll,
         onDismiss = onEditThis,

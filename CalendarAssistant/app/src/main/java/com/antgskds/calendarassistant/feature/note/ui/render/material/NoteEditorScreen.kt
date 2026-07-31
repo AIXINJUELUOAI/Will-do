@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.note.ui.render.material
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -383,53 +384,23 @@ fun MaterialNoteEditorScreen(
             containerColor = pageContainerColor,
             contentWindowInsets = WindowInsets(0),
             topBar = {
-                CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = pageContainerColor,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                        actionIconContentColor = MaterialTheme.colorScheme.onBackground
-                    ),
-                    title = { Text(if (noteId == null) "新建便签" else "编辑便签") },
-                    navigationIcon = {
-                        IconButton(onClick = ::saveAndDismiss) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
+                com.antgskds.calendarassistant.feature.note.ui.render.NoteEditorTopBar(
+                    title = if (noteId == null) "新建便签" else "编辑便签",
+                    canManage = noteId != null,
+                    pinned = isPinned,
+                    containerColor = pageContainerColor,
+                    onBack = ::saveAndDismiss,
+                    onTogglePinned = {
+                        val id = noteId ?: return@NoteEditorTopBar
+                        haptics.click()
+                        isPinned = !isPinned
+                        onSetPinned(id, isPinned)
+                        onShowMessage(if (isPinned) "已置顶" else "已取消置顶", ToastType.INFO)
                     },
-                    actions = {
-                        if (noteId != null) {
-                            IconButton(onClick = {
-                                val id = noteId ?: return@IconButton
-                                haptics.click()
-                                isPinned = !isPinned
-                                onSetPinned(id, isPinned)
-                                onShowMessage(if (isPinned) "已置顶" else "已取消置顶", ToastType.INFO)
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.PushPin,
-                                    contentDescription = if (isPinned) "取消置顶" else "置顶",
-                                    tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            IconButton(onClick = {
-                                haptics.warning()
-                                pendingDelete = true
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteOutline,
-                                    contentDescription = "删除",
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        } else {
-                            Box(modifier = Modifier.width(48.dp))
-                        }
-                    }
+                    onDelete = {
+                        haptics.warning()
+                        pendingDelete = true
+                    },
                 )
             }
         ) { innerPadding ->
@@ -607,7 +578,7 @@ private fun NoteExportChoiceCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Button(
+                EditionButton(
                     onClick = onMarkdownClick,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -616,7 +587,7 @@ private fun NoteExportChoiceCard(
                 ) {
                     Text("Markdown")
                 }
-                Button(onClick = onDefaultClick) {
+                EditionButton(onClick = onDefaultClick) {
                     Text("默认文件")
                 }
             }

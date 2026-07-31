@@ -17,6 +17,8 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
     override fun hasDuplicateAdvanceReminder(minutes: Int) = viewModel.hasDuplicateAdvanceReminder(minutes)
     override fun updateUiSize(size: Int) = viewModel.updateUiSize(size)
     override fun updateScreenshotDelay(delay: Long) = viewModel.updateScreenshotDelay(delay)
+    override fun updateQuickMemoAutoStop(enabled: Boolean?, seconds: Int?) =
+        viewModel.updateQuickMemoAutoStop(enabled = enabled, seconds = seconds)
     override fun updateDailySummaryTimes(morningMinuteOfDay: Int?, eveningMinuteOfDay: Int?, onUpdated: () -> Unit) =
         viewModel.updateDailySummaryTimes(morningMinuteOfDay = morningMinuteOfDay, eveningMinuteOfDay = eveningMinuteOfDay, onUpdated = onUpdated)
     override fun updateEdgeBarSettings(enabled: Boolean?, side: String?, yPercent: Float?, widthDp: Int?, heightDp: Int?, alpha: Float?, singleTapAction: Int?, doubleTapAction: Int?, longPressAction: Int?) =
@@ -25,20 +27,26 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
         showTomorrow: Boolean?, dailySummary: Boolean?, liveCapsule: Boolean?, pickupAggregation: Boolean?,
         hapticFeedbackEnabled: Boolean?, edgeBarEnabled: Boolean?, networkSpeedCapsule: Boolean?,
         floatingWindow: Boolean?, advanceReminderEnabled: Boolean?, advanceReminderMinutes: Int?,
-        autoArchive: Boolean?, recognitionMode: Int?, defaultEventDurationMinutes: Int?,
+        transitAutoCheckInEnabled: Boolean?, transitAutoCheckInMinutes: Int?, autoArchive: Boolean?,
+        recognitionMode: Int?, defaultEventDurationMinutes: Int?,
         useMultimodalAi: Boolean?, disableThinking: Boolean?, floatingEventRange: Int?,
         floatingExpandSide: String?, floatingBallEnabled: Boolean?, floatingBallXPercent: Float?,
         floatingBallYPercent: Float?, floatingBallSizeDp: Int?, floatingBallAlpha: Float?,
         floatingBallSingleTapAction: Int?, floatingBallDoubleTapAction: Int?, floatingBallLongPressAction: Int?,
         edgeBarSingleTapAction: Int?, edgeBarDoubleTapAction: Int?, edgeBarLongPressAction: Int?,
         volumeUpLongPressEnabled: Boolean?, volumeUpLongPressAction: Int?, smsMonitoring: Boolean?,
-        courseFeatureEnabled: Boolean?
+        courseFeatureEnabled: Boolean?, quickMemoRecordingDisplayMode: Int?, voiceInputEnabled: Boolean?,
+        floatingVoiceLongPressEnabled: Boolean?, floatingTextQuickMemoAutoPinEnabled: Boolean?,
+        voiceQuickMemoAutoPinEnabled: Boolean?
     ) = viewModel.updatePreference(
         showTomorrow = showTomorrow, dailySummary = dailySummary, liveCapsule = liveCapsule,
         pickupAggregation = pickupAggregation, hapticFeedbackEnabled = hapticFeedbackEnabled,
         edgeBarEnabled = edgeBarEnabled, networkSpeedCapsule = networkSpeedCapsule,
         floatingWindow = floatingWindow, advanceReminderEnabled = advanceReminderEnabled,
-        advanceReminderMinutes = advanceReminderMinutes, autoArchive = autoArchive,
+        advanceReminderMinutes = advanceReminderMinutes,
+        transitAutoCheckInEnabled = transitAutoCheckInEnabled,
+        transitAutoCheckInMinutes = transitAutoCheckInMinutes,
+        autoArchive = autoArchive,
         recognitionMode = recognitionMode, defaultEventDurationMinutes = defaultEventDurationMinutes,
         useMultimodalAi = useMultimodalAi, disableThinking = disableThinking,
         floatingEventRange = floatingEventRange, floatingExpandSide = floatingExpandSide,
@@ -49,6 +57,11 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
         edgeBarSingleTapAction = edgeBarSingleTapAction, edgeBarDoubleTapAction = edgeBarDoubleTapAction,
         edgeBarLongPressAction = edgeBarLongPressAction, volumeUpLongPressEnabled = volumeUpLongPressEnabled,
         volumeUpLongPressAction = volumeUpLongPressAction, smsMonitoring = smsMonitoring,
-        courseFeatureEnabled = courseFeatureEnabled
+        courseFeatureEnabled = courseFeatureEnabled,
+        quickMemoRecordingDisplayMode = quickMemoRecordingDisplayMode,
+        voiceInputEnabled = voiceInputEnabled,
+        floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled,
+        floatingTextQuickMemoAutoPinEnabled = floatingTextQuickMemoAutoPinEnabled,
+        voiceQuickMemoAutoPinEnabled = voiceQuickMemoAutoPinEnabled
     )
 }

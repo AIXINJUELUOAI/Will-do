@@ -104,6 +104,8 @@ data class MySettings(
     val dailySummaryEveningMinuteOfDay: Int = DAILY_SUMMARY_DEFAULT_EVENING_MINUTE_OF_DAY, // 明日预告时间，默认 22:00
     val isAdvanceReminderEnabled: Boolean = false, // 日程提前提醒总开关
     val advanceReminderMinutes: Int = 30, // 提前分钟数（30/45/60）
+    val transitAutoCheckInEnabled: Boolean = false,
+    val transitAutoCheckInMinutes: Int = TRANSIT_AUTO_CHECK_IN_DEFAULT_MINUTES,
     val hapticFeedbackEnabled: Boolean = true,
 
     // 列表排序方向（true=倒序，false=正序）。默认值 = 各列表当前行为，保证零行为变化。
@@ -303,6 +305,8 @@ data class MySettings(
         const val QUICK_MEMO_AUTO_STOP_DEFAULT_SECONDS = 10
         const val QUICK_MEMO_AUTO_STOP_MIN_SECONDS = 1
         const val QUICK_MEMO_AUTO_STOP_MAX_SECONDS = 15
+        const val TRANSIT_AUTO_CHECK_IN_DEFAULT_MINUTES = 15
+        val TRANSIT_AUTO_CHECK_IN_MINUTE_OPTIONS = listOf(10, 15, 30)
 
         const val UI_SCALE_MIN = 0.65f
         const val UI_SCALE_MAX = 1.00f
@@ -325,6 +329,12 @@ data class MySettings(
 
         fun normalizeQuickMemoAutoStopSeconds(seconds: Int): Int {
             return seconds.coerceIn(QUICK_MEMO_AUTO_STOP_MIN_SECONDS, QUICK_MEMO_AUTO_STOP_MAX_SECONDS)
+        }
+
+        fun normalizeTransitAutoCheckInMinutes(minutes: Int): Int {
+            return TRANSIT_AUTO_CHECK_IN_MINUTE_OPTIONS.minBy { option ->
+                kotlin.math.abs(option - minutes)
+            }
         }
 
         fun normalizeUiScale(value: Float): Float {

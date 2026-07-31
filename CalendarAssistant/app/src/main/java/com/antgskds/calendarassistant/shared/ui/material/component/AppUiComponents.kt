@@ -30,6 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.shared.ui.edition.EditionAlertDialogSurface
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCardSurface
+import com.antgskds.calendarassistant.shared.ui.edition.EditionModalBottomSheet
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
@@ -64,14 +67,14 @@ fun AppCard(
         return
     }
 
-    Card(
+    EditionCardSurface(
         modifier = resolvedModifier,
         shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = shadowElevation)
+        containerColor = containerColor,
+        contentColor = contentColor,
+        shadowElevation = shadowElevation,
+        materialElevation = null,
+        useEditionDefaultColors = containerColor == MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.padding(contentPadding),
@@ -110,14 +113,14 @@ fun AppOverlayCard(
         return
     }
 
-    Card(
+    EditionCardSurface(
         modifier = resolvedModifier,
         shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = shadowElevation)
+        containerColor = containerColor,
+        contentColor = contentColor,
+        shadowElevation = shadowElevation,
+        materialElevation = null,
+        useEditionDefaultColors = containerColor == MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.padding(contentPadding),
@@ -156,11 +159,14 @@ fun AppOverlayCard(
         return
     }
 
-    Card(
+    EditionCardSurface(
         modifier = resolvedModifier,
         shape = shape,
-        colors = colors,
-        elevation = elevation,
+        containerColor = colors.containerColor,
+        contentColor = colors.contentColor,
+        shadowElevation = 0.dp,
+        materialElevation = elevation,
+        useEditionDefaultColors = colors.containerColor == MaterialTheme.colorScheme.surfaceContainerLow,
         content = content
     )
 }
@@ -195,11 +201,14 @@ fun AppCard(
         return
     }
 
-    Card(
+    EditionCardSurface(
         modifier = resolvedModifier,
         shape = shape,
-        colors = colors,
-        elevation = elevation,
+        containerColor = colors.containerColor,
+        contentColor = colors.contentColor,
+        shadowElevation = 0.dp,
+        materialElevation = elevation,
+        useEditionDefaultColors = colors.containerColor == MaterialTheme.colorScheme.surfaceContainerLow,
         content = content
     )
 }
@@ -281,7 +290,7 @@ fun AppAlertDialog(
             glassSettings
         }
     ) {
-        AlertDialog(
+        EditionAlertDialogSurface(
             onDismissRequest = onDismissRequest,
             confirmButton = {
                 if (glassActive) DisableDialogWindowDimEffect()
@@ -331,6 +340,15 @@ fun AppModalBottomSheet(
 ) {
     val glassSettings = LocalAppGlassSettings.current
     val glassActive = glassSettings.active && glassSettings.overlayBackdrop != null
+    if (!glassActive) {
+        EditionModalBottomSheet(
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            sheetState = sheetState,
+            content = content,
+        )
+        return
+    }
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     val sheetContent: @Composable ColumnScope.() -> Unit = if (glassActive) {
         {

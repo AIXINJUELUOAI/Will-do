@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material
+import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -142,7 +143,7 @@ private fun WeekControllerBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        IconButton(onClick = { if (viewingWeek > 1) onWeekChange(viewingWeek - 1) }) {
+        EditionIconButton(onClick = { if (viewingWeek > 1) onWeekChange(viewingWeek - 1) }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Prev", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(HeaderIconSize))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onReset() }) {
@@ -159,7 +160,7 @@ private fun WeekControllerBar(
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-        IconButton(onClick = { if (viewingWeek < totalWeeks) onWeekChange(viewingWeek + 1) }) {
+        EditionIconButton(onClick = { if (viewingWeek < totalWeeks) onWeekChange(viewingWeek + 1) }) {
             Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(HeaderIconSize))
         }
     }

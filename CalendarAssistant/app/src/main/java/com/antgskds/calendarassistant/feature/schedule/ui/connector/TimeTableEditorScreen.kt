@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionFloatingActionButton
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -360,7 +361,7 @@ fun MaterialTimeTableEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FloatingActionButton(
+            EditionFloatingActionButton(
                 onClick = { haptics.click(); showLayoutConfigDialog = true },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -374,7 +375,7 @@ fun MaterialTimeTableEditorScreen(
                 )
             }
 
-            FloatingActionButton(
+            EditionFloatingActionButton(
                 onClick = {
                     if (!isChronologicalTimeTable(generatedNodes)) {
                         haptics.error()

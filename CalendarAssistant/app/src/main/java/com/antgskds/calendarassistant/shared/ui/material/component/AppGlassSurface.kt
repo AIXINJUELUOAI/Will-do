@@ -27,6 +27,9 @@ data class AppGlassSettings(
 ) {
     val active: Boolean
         get() = enabled && backdrop != null
+
+    val overlayActive: Boolean
+        get() = enabled && overlayBackdrop != null
 }
 
 val LocalAppGlassSettings = staticCompositionLocalOf { AppGlassSettings() }
@@ -72,7 +75,7 @@ fun AppOverlayGlassSurface(
 ) {
     val settings = LocalAppGlassSettings.current
     val parentBackdrop = settings.overlayBackdrop
-    if (!settings.active || parentBackdrop == null) {
+    if (!settings.overlayActive || parentBackdrop == null) {
         Box(modifier = modifier.background(fallbackColor, shape)) {
             content()
         }
@@ -109,7 +112,7 @@ private fun Modifier.appMiuiBlurMaterial(
     backdrop: LayerBackdrop?
 ): Modifier {
     val settings = LocalAppGlassSettings.current
-    if (!settings.active || backdrop == null) return this
+    if (!settings.enabled || backdrop == null) return this
 
     val density = LocalDensity.current
     val blurRadiusPx = with(density) { settings.blurRadiusDp.dp.toPx() }

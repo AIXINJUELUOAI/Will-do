@@ -17,6 +17,12 @@ import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMod
 import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker
+import com.antgskds.calendarassistant.shared.ui.edition.EditionActionSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSideChoiceSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSliderSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitchSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionAdvanceReminderSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionVolumeLongPressSettingItem
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -44,6 +50,25 @@ fun SwitchSettingItem(
     onCheckedChange: (Boolean) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
+) {
+    EditionSwitchSettingItem(
+        title = title,
+        subtitle = subtitle,
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+    )
+}
+
+@Composable
+fun MaterialSwitchSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
 ) {
     val haptics = rememberAppHaptics()
     Row(
@@ -74,6 +99,25 @@ fun SideChoiceSettingItem(
     onSideSelected: (String) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
+) {
+    EditionSideChoiceSettingItem(
+        title = title,
+        subtitle = subtitle,
+        selectedSide = selectedSide,
+        onSideSelected = onSideSelected,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+    )
+}
+
+@Composable
+fun MaterialSideChoiceSettingItem(
+    title: String,
+    subtitle: String,
+    selectedSide: String,
+    onSideSelected: (String) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
 ) {
     val haptics = rememberAppHaptics()
     Row(
@@ -126,6 +170,33 @@ fun ActionSettingItem(
     cardSubtitleStyle: TextStyle,
     cardValueStyle: TextStyle
 ) {
+    EditionActionSettingItem(
+        title = title,
+        subtitle = subtitle,
+        value = value,
+        icon = icon,
+        enabled = enabled,
+        hapticOnClick = hapticOnClick,
+        onClick = onClick,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+        cardValueStyle = cardValueStyle,
+    )
+}
+
+@Composable
+fun MaterialActionSettingItem(
+    title: String,
+    subtitle: String,
+    value: String,
+    icon: ImageVector? = null,
+    enabled: Boolean,
+    hapticOnClick: Boolean = true,
+    onClick: () -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle,
+) {
     val haptics = rememberAppHaptics()
     Row(
         modifier = Modifier
@@ -163,7 +234,39 @@ fun SliderSettingItem(
     cardSubtitleStyle: TextStyle,
     cardValueStyle: TextStyle,
     showValueAsNumber: Boolean = false, // 新增参数
-    valueUnit: String = "ms"            // 新增参数
+    valueUnit: String = "ms",           // 新增参数
+    categoricalLabels: List<String>? = null,
+) {
+    EditionSliderSettingItem(
+        title = title,
+        subtitle = subtitle,
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        steps = steps,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+        cardValueStyle = cardValueStyle,
+        showValueAsNumber = showValueAsNumber,
+        valueUnit = valueUnit,
+        categoricalLabels = categoricalLabels,
+    )
+}
+
+@Composable
+fun MaterialSliderSettingItem(
+    title: String,
+    subtitle: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle,
+    showValueAsNumber: Boolean = false,
+    valueUnit: String = "ms",
+    categoricalLabels: List<String>? = null,
 ) {
     HapticValueChangeEffect(valueKey = sliderHapticBucket(value, valueRange, steps))
     // 根据 showValueAsNumber 决定显示逻辑
@@ -211,6 +314,29 @@ fun VolumeLongPressSettingItem(
     onActionChange: (Int) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
+) {
+    EditionVolumeLongPressSettingItem(
+        title = title,
+        subtitle = subtitle,
+        checked = checked,
+        action = action,
+        onCheckedChange = onCheckedChange,
+        onActionChange = onActionChange,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+    )
+}
+
+@Composable
+fun MaterialVolumeLongPressSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    action: Int,
+    onCheckedChange: (Boolean) -> Unit,
+    onActionChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
 ) {
     val normalizedAction = action.coerceIn(1, 3)
     HapticValueChangeEffect(valueKey = normalizedAction)
@@ -276,6 +402,29 @@ fun AdvanceReminderSettingItem(
     onMinutesChange: (Int) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle
+) {
+    EditionAdvanceReminderSettingItem(
+        title = title,
+        subtitle = subtitle,
+        checked = checked,
+        minutes = minutes,
+        onCheckedChange = onCheckedChange,
+        onMinutesChange = onMinutesChange,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+    )
+}
+
+@Composable
+fun MaterialAdvanceReminderSettingItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    minutes: Int,
+    onCheckedChange: (Boolean) -> Unit,
+    onMinutesChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
 ) {
     HapticValueChangeEffect(valueKey = minutes)
     val haptics = rememberAppHaptics()

@@ -19,6 +19,7 @@ interface PreferenceUiController {
     fun hasDuplicateAdvanceReminder(minutes: Int): Boolean
     fun updateUiSize(size: Int)
     fun updateScreenshotDelay(delay: Long)
+    fun updateQuickMemoAutoStop(enabled: Boolean? = null, seconds: Int? = null)
     fun updateDailySummaryTimes(morningMinuteOfDay: Int? = null, eveningMinuteOfDay: Int? = null, onUpdated: () -> Unit = {})
     fun updateEdgeBarSettings(enabled: Boolean? = null, side: String? = null, yPercent: Float? = null, widthDp: Int? = null, heightDp: Int? = null, alpha: Float? = null, singleTapAction: Int? = null, doubleTapAction: Int? = null, longPressAction: Int? = null)
     fun updatePreference(
@@ -26,7 +27,8 @@ interface PreferenceUiController {
         pickupAggregation: Boolean? = null, hapticFeedbackEnabled: Boolean? = null,
         edgeBarEnabled: Boolean? = null, networkSpeedCapsule: Boolean? = null,
         floatingWindow: Boolean? = null, advanceReminderEnabled: Boolean? = null,
-        advanceReminderMinutes: Int? = null, autoArchive: Boolean? = null,
+        advanceReminderMinutes: Int? = null, transitAutoCheckInEnabled: Boolean? = null,
+        transitAutoCheckInMinutes: Int? = null, autoArchive: Boolean? = null,
         recognitionMode: Int? = null, defaultEventDurationMinutes: Int? = null,
         useMultimodalAi: Boolean? = null, disableThinking: Boolean? = null,
         floatingEventRange: Int? = null, floatingExpandSide: String? = null,
@@ -37,6 +39,9 @@ interface PreferenceUiController {
         edgeBarSingleTapAction: Int? = null, edgeBarDoubleTapAction: Int? = null,
         edgeBarLongPressAction: Int? = null, volumeUpLongPressEnabled: Boolean? = null,
         volumeUpLongPressAction: Int? = null, smsMonitoring: Boolean? = null,
-        courseFeatureEnabled: Boolean? = null
+        courseFeatureEnabled: Boolean? = null, quickMemoRecordingDisplayMode: Int? = null,
+        voiceInputEnabled: Boolean? = null, floatingVoiceLongPressEnabled: Boolean? = null,
+        floatingTextQuickMemoAutoPinEnabled: Boolean? = null,
+        voiceQuickMemoAutoPinEnabled: Boolean? = null
     )
 }

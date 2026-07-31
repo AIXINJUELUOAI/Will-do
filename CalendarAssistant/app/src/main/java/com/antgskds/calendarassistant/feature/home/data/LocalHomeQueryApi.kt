@@ -10,6 +10,8 @@ import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.DayOfWeek
+import java.time.temporal.TemporalAdjusters
 import java.time.temporal.ChronoUnit
 
 class LocalHomeQueryApi : HomeQueryApi {
@@ -40,9 +42,25 @@ class LocalHomeQueryApi : HomeQueryApi {
             emptyList()
         }
 
+        val monthGridStart = selectedDate
+            .withDayOfMonth(1)
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val monthGridEnd = monthGridStart.plusDays(41)
+        val monthDisplayItems = ScheduleDisplayHelper.buildDisplayItems(
+            scheduleEvents,
+            monthGridStart,
+            monthGridEnd
+        )
+        val datesWithEvents = buildDatesWithEvents(
+            items = monthDisplayItems,
+            rangeStart = monthGridStart,
+            rangeEnd = monthGridEnd
+        )
+
         return HomeSnapshot(
             currentDateEvents = todayMerged,
-            tomorrowEvents = tomorrowMerged
+            tomorrowEvents = tomorrowMerged,
+            datesWithEvents = datesWithEvents,
         )
     }
 
@@ -107,5 +125,20 @@ class LocalHomeQueryApi : HomeQueryApi {
             compareBy(priorityKey).thenBy { it.startTime }
         }
         return items.sortedWith(comparator)
+    }
+
+    private fun buildDatesWithEvents(
+        items: List<ScheduleDisplayItem>,
+        rangeStart: LocalDate,
+        rangeEnd: LocalDate,
+    ): Set<LocalDate> = buildSet {
+        items.forEach { item ->
+            var date = maxOf(rangeStart, item.startDate)
+            val lastDate = minOf(rangeEnd, item.endDate)
+            while (!date.isAfter(lastDate)) {
+                if (overlapsDate(item, date)) add(date)
+                date = date.plusDays(1)
+            }
+        }
     }
 }

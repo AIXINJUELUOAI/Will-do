@@ -1,10 +1,13 @@
 package com.antgskds.calendarassistant.feature.home.ui.render
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomeShellUiState
-import com.antgskds.calendarassistant.feature.home.ui.render.material.MaterialHomeScreen
 
 @Composable
 fun HomeScreenContent(
@@ -15,12 +18,14 @@ fun HomeScreenContent(
     chrome: @Composable BoxScope.() -> Unit,
     overlay: @Composable BoxScope.() -> Unit,
 ) {
-    MaterialHomeScreen(
-        state = state,
-        onAction = onAction,
-        sidebar = sidebar,
-        content = content,
-        chrome = chrome,
-        overlay = overlay,
-    )
+    AppBackgroundStyleTheme(
+        enabled = state.backgroundEnabled,
+        miuiBlurEnabled = false,
+        cardAlphaPercent = 100,
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+            overlay()
+        }
+    }
 }

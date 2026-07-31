@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.home.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -281,7 +282,7 @@ fun MaterialBottomBarEditorScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconButton(
+                            EditionIconButton(
                                 onClick = {
                                     haptics.selection()
                                     val mutable = activeItems.toMutableList()
@@ -293,7 +294,7 @@ fun MaterialBottomBarEditorScreen(
                             ) {
                                 Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
                             }
-                            IconButton(
+                            EditionIconButton(
                                 onClick = {
                                     haptics.selection()
                                     val mutable = activeItems.toMutableList()
@@ -305,9 +306,9 @@ fun MaterialBottomBarEditorScreen(
                             ) {
                                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
                             }
-                            IconButton(
+                            EditionIconButton(
                                 onClick = {
-                                    if (activeItems.size <= 1) return@IconButton
+                                    if (activeItems.size <= 1) return@EditionIconButton
                                     haptics.warning()
                                     val mutable = activeItems.toMutableList().apply { remove(key) }
                                     onAction(BottomBarEditorUiAction.SaveConfig(mutable))

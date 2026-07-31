@@ -31,6 +31,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEvent
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseEditDialog
+import com.antgskds.calendarassistant.feature.schedule.ui.render.CourseManagerScreenContent
 import com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog.CourseItem
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.CourseManagerUiAction
@@ -50,7 +51,7 @@ fun CourseManagerScreen(
         TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
     }
 
-    MaterialCourseManagerScreen(
+    CourseManagerScreenContent(
         state = CourseManagerUiState(
             courses = courses,
             maxNodes = maxNodes,

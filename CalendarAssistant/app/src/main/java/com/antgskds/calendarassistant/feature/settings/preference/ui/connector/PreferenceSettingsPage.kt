@@ -1,4 +1,9 @@
 package com.antgskds.calendarassistant.feature.settings.preference.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
+import com.antgskds.calendarassistant.shared.ui.edition.EditionDropdownActionSettingItem
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitchSliderSettingItem
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.Manifest
@@ -49,13 +54,18 @@ import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToas
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker
 import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStore
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.settings.preference.ui.contract.PreferenceUiController
 import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceUiControllerAdapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -109,6 +119,24 @@ fun MaterialPreferenceSettingsScreen(
     var showDailySummaryMorningTimePicker by remember { mutableStateOf(false) }
     var showDailySummaryEveningTimePicker by remember { mutableStateOf(false) }
     var gestureActionPicker by remember { mutableStateOf<FloatingGestureActionPickerState?>(null) }
+    var quickMemoAsrModelStatus by remember { mutableStateOf(QuickMemoAsrModelStore.status(context)) }
+
+    val quickMemoAsrModelImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                QuickMemoAsrModelStore.importModelFile(context, uri)
+            }
+            quickMemoAsrModelStatus = QuickMemoAsrModelStore.status(context)
+            val message = result.fold(
+                onSuccess = { fileName -> "已导入 $fileName" },
+                onFailure = { error -> error.message ?: "模型导入失败" }
+            )
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
 
     val selectedSourceCalendars by remember(syncStatus.sourceCalendarIds, availableSyncCalendars) {
         derivedStateOf {
@@ -483,13 +511,11 @@ fun MaterialPreferenceSettingsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "单击动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarSingleTapAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.edgeBarSingleTapAction,
+                                    onActionSelected = { controller.updatePreference(edgeBarSingleTapAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.EDGE_BAR,
                                             FloatingGestureActionSlot.SINGLE_TAP
@@ -506,13 +532,11 @@ fun MaterialPreferenceSettingsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "双击动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarDoubleTapAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.edgeBarDoubleTapAction,
+                                    onActionSelected = { controller.updatePreference(edgeBarDoubleTapAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.EDGE_BAR,
                                             FloatingGestureActionSlot.DOUBLE_TAP
@@ -529,13 +553,11 @@ fun MaterialPreferenceSettingsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "长按动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.edgeBarLongPressAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.edgeBarLongPressAction,
+                                    onActionSelected = { controller.updatePreference(edgeBarLongPressAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.EDGE_BAR,
                                             FloatingGestureActionSlot.LONG_PRESS
@@ -678,13 +700,11 @@ fun MaterialPreferenceSettingsScreen(
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "单击动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallSingleTapAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.floatingBallSingleTapAction,
+                                    onActionSelected = { controller.updatePreference(floatingBallSingleTapAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.FLOATING_BALL,
                                             FloatingGestureActionSlot.SINGLE_TAP
@@ -700,13 +720,11 @@ fun MaterialPreferenceSettingsScreen(
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "双击动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallDoubleTapAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.floatingBallDoubleTapAction,
+                                    onActionSelected = { controller.updatePreference(floatingBallDoubleTapAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.FLOATING_BALL,
                                             FloatingGestureActionSlot.DOUBLE_TAP
@@ -722,13 +740,11 @@ fun MaterialPreferenceSettingsScreen(
                                     thickness = 0.5.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
-                                ActionSettingItem(
+                                FloatingGestureActionSettingItem(
                                     title = "长按动作",
-                                    subtitle = "当前：${FloatingBallGestureAction.label(settings.floatingBallLongPressAction)}",
-                                    value = "",
-                                    icon = Icons.Default.ChevronRight,
-                                    enabled = true,
-                                    onClick = {
+                                    currentAction = settings.floatingBallLongPressAction,
+                                    onActionSelected = { controller.updatePreference(floatingBallLongPressAction = it) },
+                                    onNativeClick = {
                                         gestureActionPicker = FloatingGestureActionPickerState(
                                             FloatingGestureActionTarget.FLOATING_BALL,
                                             FloatingGestureActionSlot.LONG_PRESS
@@ -805,6 +821,43 @@ fun MaterialPreferenceSettingsScreen(
                         }
                 }
             }
+
+            // ================== 随口记板块 ==================
+            Text("随口记", style = sectionTitleStyle)
+            QuickMemoPreferenceCard(
+                settings = settings,
+                asrModelStatus = quickMemoAsrModelStatus,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                onVoiceInputEnabledChange = { enabled ->
+                    controller.updatePreference(voiceInputEnabled = enabled)
+                    if (enabled) {
+                        app?.runtimeCenter?.startEdgeBarIfNeeded()
+                    } else if (!settings.isFloatingWindowEnabled) {
+                        stopEdgeBarService()
+                        stopFloatingBallService()
+                    }
+                },
+                onFloatingLongPressChange = { enabled ->
+                    controller.updatePreference(floatingVoiceLongPressEnabled = enabled)
+                },
+                onRecordingDisplayModeChange = { mode ->
+                    controller.updatePreference(quickMemoRecordingDisplayMode = mode)
+                },
+                onAutoStopEnabledChange = { enabled ->
+                    controller.updateQuickMemoAutoStop(enabled = enabled)
+                },
+                onAutoStopSecondsChange = { seconds ->
+                    controller.updateQuickMemoAutoStop(seconds = seconds)
+                },
+                onTextAutoPinChange = { enabled ->
+                    controller.updatePreference(floatingTextQuickMemoAutoPinEnabled = enabled)
+                },
+                onVoiceAutoPinChange = { enabled ->
+                    controller.updatePreference(voiceQuickMemoAutoPinEnabled = enabled)
+                },
+                onImportAsrModel = { quickMemoAsrModelImportLauncher.launch(arrayOf("*/*")) }
+            )
 
             // ================== 操作板块 ==================
             Text("操作", style = sectionTitleStyle)
@@ -999,6 +1052,45 @@ fun MaterialPreferenceSettingsScreen(
                         onMinutesChange = { minutes ->
                             controller.updatePreference(advanceReminderMinutes = minutes)
                         },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    val transitAutoCheckInOptions = MySettings.TRANSIT_AUTO_CHECK_IN_MINUTE_OPTIONS
+                    val transitAutoCheckInMinutes = MySettings.normalizeTransitAutoCheckInMinutes(
+                        settings.transitAutoCheckInMinutes
+                    )
+                    val transitAutoCheckInIndex = transitAutoCheckInOptions.indexOf(transitAutoCheckInMinutes)
+                    EditionSwitchSliderSettingItem(
+                        title = "列车与航班信息自动切换",
+                        subtitle = if (settings.transitAutoCheckInEnabled) {
+                            "出发前 ${transitAutoCheckInMinutes} 分钟自动标记为已检票或已登机"
+                        } else {
+                            "出发前自动切换到车次、航班和座位信息"
+                        },
+                        checked = settings.transitAutoCheckInEnabled,
+                        onCheckedChange = { enabled ->
+                            controller.updatePreference(transitAutoCheckInEnabled = enabled)
+                        },
+                        optionTitle = "自动切换时间",
+                        optionSummary = "可选 10、15 或 30 分钟",
+                        value = transitAutoCheckInIndex.toFloat(),
+                        valueText = "${transitAutoCheckInMinutes} 分钟",
+                        onValueChange = { value ->
+                            val index = value.roundToInt().coerceIn(transitAutoCheckInOptions.indices)
+                            controller.updatePreference(
+                                transitAutoCheckInMinutes = transitAutoCheckInOptions[index]
+                            )
+                        },
+                        valueRange = 0f..transitAutoCheckInOptions.lastIndex.toFloat(),
+                        steps = transitAutoCheckInOptions.size - 2,
+                        valueLabels = transitAutoCheckInOptions.map { "$it 分钟" },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
@@ -1439,6 +1531,204 @@ fun MaterialPreferenceSettingsScreen(
     }
 }
 
+@Composable
+private fun QuickMemoPreferenceCard(
+    settings: MySettings,
+    asrModelStatus: QuickMemoAsrModelStatus,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    onVoiceInputEnabledChange: (Boolean) -> Unit,
+    onFloatingLongPressChange: (Boolean) -> Unit,
+    onRecordingDisplayModeChange: (Int) -> Unit,
+    onAutoStopEnabledChange: (Boolean) -> Unit,
+    onAutoStopSecondsChange: (Int) -> Unit,
+    onTextAutoPinChange: (Boolean) -> Unit,
+    onVoiceAutoPinChange: (Boolean) -> Unit,
+    onImportAsrModel: () -> Unit,
+) {
+    SettingsCard {
+        SwitchSettingItem(
+            title = "随口记",
+            subtitle = "随口记功能总开关",
+            checked = settings.voiceInputEnabled,
+            onCheckedChange = onVoiceInputEnabledChange,
+            cardTitleStyle = cardTitleStyle,
+            cardSubtitleStyle = cardSubtitleStyle
+        )
+
+        AnimatedVisibility(
+            visible = settings.voiceInputEnabled,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                QuickMemoPreferenceDivider()
+                SwitchSettingItem(
+                    title = "悬浮窗长按随口记",
+                    subtitle = "呼出悬浮窗后，再次长按音量+开始随口记录音",
+                    checked = settings.floatingVoiceLongPressEnabled,
+                    onCheckedChange = onFloatingLongPressChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+
+                QuickMemoPreferenceDivider()
+                QuickMemoRecordingDisplayPreference(
+                    mode = settings.quickMemoRecordingDisplayMode,
+                    onModeChange = onRecordingDisplayModeChange
+                )
+
+                QuickMemoPreferenceDivider()
+                val normalizedSeconds = MySettings.normalizeQuickMemoAutoStopSeconds(
+                    settings.quickMemoAutoStopSeconds
+                )
+                HapticValueChangeEffect(valueKey = normalizedSeconds)
+                EditionSwitchSliderSettingItem(
+                    title = "自动结束录音",
+                    subtitle = if (settings.quickMemoAutoStopEnabled) {
+                        "录音 ${normalizedSeconds} 秒后自动保存"
+                    } else {
+                        "关闭时由用户手动结束并保存录音"
+                    },
+                    checked = settings.quickMemoAutoStopEnabled,
+                    onCheckedChange = onAutoStopEnabledChange,
+                    optionTitle = "自动结束时长",
+                    optionSummary = "录音达到设定时长后自动保存",
+                    value = normalizedSeconds.toFloat(),
+                    valueText = "${normalizedSeconds} 秒",
+                    onValueChange = { onAutoStopSecondsChange(it.roundToInt()) },
+                    valueRange = MySettings.QUICK_MEMO_AUTO_STOP_MIN_SECONDS.toFloat()..
+                        MySettings.QUICK_MEMO_AUTO_STOP_MAX_SECONDS.toFloat(),
+                    steps = 0,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+
+                QuickMemoPreferenceDivider()
+                SwitchSettingItem(
+                    title = "文本随口记同步挂起",
+                    subtitle = "随口记文本保存后，同步挂起到实况通知",
+                    checked = settings.floatingTextQuickMemoAutoPinEnabled,
+                    onCheckedChange = onTextAutoPinChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+
+                QuickMemoPreferenceDivider()
+                SwitchSettingItem(
+                    title = "语音随口记同步挂起",
+                    subtitle = "随口记语音转写后，同步挂起到实况通知",
+                    checked = settings.voiceQuickMemoAutoPinEnabled,
+                    onCheckedChange = onVoiceAutoPinChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle
+                )
+
+                QuickMemoPreferenceDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "语音转写模型",
+                            style = cardTitleStyle,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = formatQuickMemoAsrModelStatus(asrModelStatus),
+                            style = cardSubtitleStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    EditionButton(onClick = onImportAsrModel) {
+                        Text(if (asrModelStatus.ready) "更换模型" else "导入模型")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickMemoRecordingDisplayPreference(
+    mode: Int,
+    onModeChange: (Int) -> Unit,
+) {
+    val haptics = rememberAppHaptics()
+    val normalizedMode = QuickMemoRecordingDisplayMode.normalize(mode)
+    EditionCategoricalPreference(
+        title = "录音展示",
+        summary = if (normalizedMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
+            "所有入口录音时使用悬浮窗"
+        } else {
+            "所有入口录音时使用实况通知"
+        },
+        options = listOf("实况通知", "悬浮窗"),
+        selectedIndex = if (normalizedMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) 1 else 0,
+        onSelectedIndexChange = { index ->
+            haptics.selection()
+            onModeChange(
+                if (index == 1) {
+                    QuickMemoRecordingDisplayMode.FLOATING_WINDOW
+                } else {
+                    QuickMemoRecordingDisplayMode.LIVE_CAPSULE
+                }
+            )
+        }
+    )
+}
+
+@Composable
+private fun QuickMemoPreferenceDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
+}
+
+private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): String {
+    return when {
+        status.ready -> "已导入本地模型，可离线转写"
+        !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
+        !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
+        else -> "缺少 tokens.txt"
+    }
+}
+
+@Composable
+private fun FloatingGestureActionSettingItem(
+    title: String,
+    currentAction: Int,
+    onActionSelected: (Int) -> Unit,
+    onNativeClick: () -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle,
+) {
+    val actions = FloatingBallGestureAction.ALL
+    val normalizedAction = FloatingBallGestureAction.normalize(currentAction)
+    EditionDropdownActionSettingItem(
+        title = title,
+        subtitle = "当前：${FloatingBallGestureAction.label(normalizedAction)}",
+        options = actions.map { action ->
+            if (action == FloatingBallGestureAction.NONE) "无" else FloatingBallGestureAction.label(action)
+        },
+        selectedIndex = actions.indexOf(normalizedAction).coerceAtLeast(0),
+        onSelectedIndexChange = { onActionSelected(actions[it]) },
+        icon = Icons.Default.ChevronRight,
+        onNativeClick = onNativeClick,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
+        cardValueStyle = cardValueStyle,
+    )
+}
+
 private data class FloatingGestureActionPickerState(
     val target: FloatingGestureActionTarget,
     val slot: FloatingGestureActionSlot
@@ -1542,30 +1832,16 @@ private fun TwoOptionSettingItem(
     cardSubtitleStyle: TextStyle
 ) {
     val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = cardTitleStyle)
-            Text(subtitle, style = cardSubtitleStyle)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selectedValue == firstValue) {
-                Button(onClick = { haptics.selection(); onValueSelected(firstValue) }) { Text(firstLabel) }
-            } else {
-                OutlinedButton(onClick = { haptics.selection(); onValueSelected(firstValue) }) { Text(firstLabel) }
-            }
-            if (selectedValue == secondValue) {
-                Button(onClick = { haptics.selection(); onValueSelected(secondValue) }) { Text(secondLabel) }
-            } else {
-                OutlinedButton(onClick = { haptics.selection(); onValueSelected(secondValue) }) { Text(secondLabel) }
-            }
-        }
-    }
+    EditionCategoricalPreference(
+        title = title,
+        summary = subtitle,
+        options = listOf(firstLabel, secondLabel),
+        selectedIndex = if (selectedValue == secondValue) 1 else 0,
+        onSelectedIndexChange = {
+            haptics.selection()
+            onValueSelected(if (it == 1) secondValue else firstValue)
+        },
+    )
 }
 
 // ActionSettingItem 已抽至 SettingsRowComponents.kt
@@ -1642,7 +1918,7 @@ private fun SourceCalendarPickerSheet(
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(
+                            EditionCheckbox(
                                 checked = checked,
                                 onCheckedChange = { isChecked ->
                                     haptics.selection()
@@ -1667,7 +1943,7 @@ private fun SourceCalendarPickerSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            Button(
+            EditionButton(
                 onClick = { haptics.confirm(); onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
                 enabled = calendars.isNotEmpty() && selectedIds.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
@@ -1742,42 +2018,11 @@ fun FloatingEventRangeSlider(
     cardSubtitleStyle: TextStyle
 ) {
     HapticValueChangeEffect(valueKey = eventRange)
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        // 标题行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = cardTitleStyle)
-                Text(subtitle, style = cardSubtitleStyle)
-            }
-        }
-
-        // 滑块区域
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp)
-        ) {
-            // 标签行
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "全部日程", style = cardSubtitleStyle)
-                Text(text = "今日日程", style = cardSubtitleStyle)
-                Text(text = "今日+明日", style = cardSubtitleStyle)
-            }
-            Slider(
-                value = eventRange.toFloat(),
-                onValueChange = { onEventRangeChange(it.toInt()) },
-                valueRange = 0f..2f,
-                steps = 1
-            )
-        }
-    }
+    EditionCategoricalPreference(
+        title = title,
+        summary = subtitle,
+        options = listOf("全部日程", "今日日程", "今日+明日"),
+        selectedIndex = eventRange.coerceIn(0, 2),
+        onSelectedIndexChange = onEventRangeChange,
+    )
 }

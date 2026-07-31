@@ -59,6 +59,7 @@ import com.antgskds.calendarassistant.platform.widget.model.WidgetThemeMode
 import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
 import com.antgskds.calendarassistant.platform.widget.data.LocalWidgetScheduleQueryApi
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.CourseWidgetProvider
@@ -425,7 +426,7 @@ private fun WidgetAlphaSetting(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Slider(
+        EditionSlider(
             value = alpha,
             onValueChange = { onAlphaChange(it.coerceIn(0.6f, 1f)) },
             valueRange = 0.6f..1f

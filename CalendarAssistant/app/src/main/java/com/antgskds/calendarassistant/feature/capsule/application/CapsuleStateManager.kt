@@ -143,6 +143,7 @@ class CapsuleStateManager(
     private var voiceTranscriptionAutoClearJob: Job? = null
     private var textQuickMemoAutoClearJob: Job? = null
     private val weatherAutoClearJobs = ConcurrentHashMap<String, Job>()
+    private val transitAutoCheckInInFlight = ConcurrentHashMap.newKeySet<String>()
     private var lastOcrUpdateAt = 0L
 
     // 通知发布站（胶囊「一条线」的发布分支）：CapsuleStateManager 只算状态，发布交给它。
@@ -559,6 +560,9 @@ class CapsuleStateManager(
     ): CapsuleUiState {
         Log.d(TAG, ">>> computeCapsuleState 开始执行")
 
+        val scheduleEntries = buildCapsuleScheduleEntries(events, settings)
+        maybeAutoCheckInTransit(scheduleEntries, settings)
+
         val nowMillis = System.currentTimeMillis()
         val activeOcrCapsule = transient.ocr?.let { state ->
             if (state.expiresAt != null && nowMillis >= state.expiresAt) {
@@ -633,7 +637,7 @@ class CapsuleStateManager(
                     add(createTransientCapsuleItem(state))
                 }
             }
-            val scheduleCapsules = computeScheduleCapsules(events, settings)
+            val scheduleCapsules = computeScheduleCapsules(scheduleEntries, settings)
             return CapsuleUiState.Active(transientItems + scheduleCapsules)
         }
 
@@ -661,22 +665,23 @@ class CapsuleStateManager(
             return CapsuleUiState.None
         }
 
-        val capsules = computeScheduleCapsules(events, settings)
+        val capsules = computeScheduleCapsules(scheduleEntries, settings)
         return if (capsules.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(capsules)
     }
 
     private data class CapsuleScheduleEntry(
         val id: String,
         val notifId: Int,
-        val event: Event
+        val event: Event,
+        val action: ScheduleDisplayItem.ActionTarget
     )
 
     private fun computeScheduleCapsules(
-        events: List<Event>,
+        entries: List<CapsuleScheduleEntry>,
         settings: MySettings
     ): List<CapsuleUiState.Active.CapsuleItem> {
         val now = LocalDateTime.now()
-        val activeEntries = buildCapsuleScheduleEntries(events, settings).filter { entry ->
+        val activeEntries = entries.filter { entry ->
             isActiveCapsuleEntry(entry.event, settings, now)
         }
 
@@ -830,7 +835,8 @@ class CapsuleStateManager(
                     CapsuleScheduleEntry(
                         id = target.eventId.toString(),
                         notifId = NotificationIds.liveCapsule(target.eventId),
-                        event = event
+                        event = event,
+                        action = target
                     )
                 }
                 is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
@@ -841,7 +847,8 @@ class CapsuleStateManager(
                     CapsuleScheduleEntry(
                         id = item.stableKey,
                         notifId = NotificationIds.liveCapsule(item.stableKey),
-                        event = event
+                        event = event,
+                        action = target
                     )
                 }
             }
@@ -875,17 +882,52 @@ class CapsuleStateManager(
         return try {
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val startDateTime = LocalDateTime.of(event.startDate, LocalTime.parse(event.startTime, TIME_FORMATTER))
-            val effectiveStartTime = if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
-                startDateTime.minusMinutes(settings.advanceReminderMinutes.toLong())
-            } else {
-                startDateTime.minusMinutes(1)
-            }
+            val reminderLeadMinutes = if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {
+                settings.advanceReminderMinutes
+            } else 1
+            val transitAutoCheckInLeadMinutes = if (
+                settings.transitAutoCheckInEnabled && isCheckInTransitRule(resolveRuleId(event))
+            ) {
+                MySettings.normalizeTransitAutoCheckInMinutes(settings.transitAutoCheckInMinutes)
+            } else 0
+            val effectiveStartTime = startDateTime.minusMinutes(
+                maxOf(reminderLeadMinutes, transitAutoCheckInLeadMinutes).toLong()
+            )
 
             !event.isCompleted && now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
         } catch (e: Exception) {
             Log.e(TAG, "解析事件时间失败: ${event.title}", e)
             false
         }
+    }
+
+    private fun maybeAutoCheckInTransit(
+        entries: List<CapsuleScheduleEntry>,
+        settings: MySettings
+    ) {
+        if (!settings.transitAutoCheckInEnabled) return
+
+        val nowEpochSeconds = System.currentTimeMillis() / 1000L
+        val leadSeconds = MySettings.normalizeTransitAutoCheckInMinutes(settings.transitAutoCheckInMinutes) * 60L
+        entries.forEach { entry ->
+            val event = entry.event
+            val shouldCheckIn = event.isPending &&
+                isCheckInTransitRule(resolveRuleId(event)) &&
+                nowEpochSeconds >= event.startTS - leadSeconds &&
+                nowEpochSeconds < event.startTS
+            if (shouldCheckIn && transitAutoCheckInInFlight.add(entry.id)) {
+                Log.i(TAG, "列车/航班自动切换: id=${entry.id}, title=${event.title}")
+                scheduleCenter.checkInItem(entry.action)
+                appScope.launch {
+                    kotlinx.coroutines.delay(30_000)
+                    transitAutoCheckInInFlight.remove(entry.id)
+                }
+            }
+        }
+    }
+
+    private fun isCheckInTransitRule(ruleId: String): Boolean {
+        return ruleId == RuleMatchingEngine.RULE_TRAIN || ruleId == RuleMatchingEngine.RULE_FLIGHT
     }
 
     private fun createCapsuleItem(
@@ -934,6 +976,7 @@ class CapsuleStateManager(
             EventTags.PICKUP -> RuleMatchingEngine.RULE_PICKUP
             EventTags.FOOD -> RuleMatchingEngine.RULE_FOOD
             EventTags.TRAIN -> RuleMatchingEngine.RULE_TRAIN
+            EventTags.FLIGHT -> RuleMatchingEngine.RULE_FLIGHT
             EventTags.TAXI -> RuleMatchingEngine.RULE_TAXI
             EventTags.TICKET -> RuleMatchingEngine.RULE_TICKET
             EventTags.SENDER -> RuleMatchingEngine.RULE_SENDER

@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.update.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -110,7 +112,7 @@ fun MaterialAppUpdateScreen(
                 style = versionTitleStyle,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            OutlinedButton(
+            EditionOutlinedButton(
                 onClick = { onAction(AppUpdateUiAction.CheckForUpdates) },
                 enabled = !state.isChecking
             ) {
@@ -214,7 +216,7 @@ private fun AppVersionCard(
                         )
                     }
                     if (version.downloadUrl.isNotBlank()) {
-                        Button(
+                        EditionButton(
                             onClick = { onDownload(version.downloadUrl) },
                             modifier = Modifier.fillMaxWidth()
                         ) {

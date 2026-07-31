@@ -56,6 +56,7 @@ import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.feature.home.domain.sanitizeHomeStartPageKey
 import com.antgskds.calendarassistant.feature.home.domain.visibleHomeBottomItems
+import com.antgskds.calendarassistant.feature.home.ui.render.editionHomeEntries
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
 import com.antgskds.calendarassistant.shared.util.CrashHandler
@@ -296,7 +297,12 @@ class MainActivity : ComponentActivity() {
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val predictiveBackEnabled = settings.predictiveBackEnabled
                 val homeBottomItems = remember(settings.homeBottomItems, settings.voiceInputEnabled) {
-                    visibleHomeBottomItems(settings.homeBottomItems, quickMemoEnabled = settings.voiceInputEnabled)
+                    editionHomeEntries(
+                        visibleHomeBottomItems(
+                            settings.homeBottomItems,
+                            quickMemoEnabled = settings.voiceInputEnabled,
+                        ),
+                    )
                 }
                 val homeStartPageKey = remember(settings.homeStartPageKey, homeBottomItems) {
                     sanitizeHomeStartPageKey(settings.homeStartPageKey, homeBottomItems)
@@ -481,11 +487,13 @@ class MainActivity : ComponentActivity() {
                 val appSceneBackdrop = rememberLayerBackdrop()
                 val useMiuiBlurMaterial = settings.appBackgroundMiuiBlurTestEnabled &&
                     appBackgroundBitmap != null
+                val useHyperosSceneBlur = BuildConfig.UI_EDITION == "hyperos"
+                val captureSceneBackdrop = useMiuiBlurMaterial || useHyperosSceneBlur
 
                 AppGlassSettingsProvider(
                     settings = AppGlassSettings(
-                        enabled = useMiuiBlurMaterial,
-                        backdrop = appGlassBackdrop,
+                        enabled = captureSceneBackdrop,
+                        backdrop = appGlassBackdrop.takeIf { useMiuiBlurMaterial },
                         overlayBackdrop = appSceneBackdrop,
                         darkTheme = isDarkTheme
                     )
@@ -502,7 +510,7 @@ class MainActivity : ComponentActivity() {
                             .background(MaterialTheme.colorScheme.background)
                             .onSizeChanged { appBackgroundRootSize = it }
                             .then(
-                                if (useMiuiBlurMaterial) {
+                                if (captureSceneBackdrop) {
                                     Modifier.layerBackdrop(appSceneBackdrop)
                                 } else {
                                     Modifier

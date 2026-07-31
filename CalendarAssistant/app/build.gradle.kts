@@ -41,8 +41,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 92
-        versionName = "2.2.0"
+        versionCode = 93
+        versionName = "2.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_MODEL_EDITION", "false")
@@ -147,6 +147,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.3")
+    "hyperosImplementation"("top.yukonga.miuix.kmp:miuix-ui-android:0.9.3")
+    "hyperosImplementation"("top.yukonga.miuix.kmp:miuix-icons-android:0.9.3")
+    "hyperosImplementation"("top.yukonga.miuix.kmp:miuix-preference-android:0.9.3")
 
     // ✅✅✅ 新增关键依赖：修复 MainActivity 中的 viewModel() 报错
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

@@ -26,6 +26,7 @@ import com.antgskds.calendarassistant.feature.schedule.ui.contract.ArchivesDateG
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.ArchivesUiAction
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.ArchivesUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.material.component.SwipeableEventItem
+import com.antgskds.calendarassistant.feature.schedule.ui.render.ArchivesScreenContent
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import java.time.format.DateTimeFormatter
 
@@ -52,7 +53,7 @@ fun ArchivesPage(viewModel: MainViewModel) {
         grouped.map { (date, dateItems) -> ArchivesDateGroupUi(date, dateItems) }
     }
 
-    MaterialArchivesScreen(
+    ArchivesScreenContent(
         state = ArchivesUiState(
             groups = groups,
             currentYear = uiState.today.year,
