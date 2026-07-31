@@ -70,6 +70,7 @@ data class MainUiState(
     val settings: MySettings = MySettings(),
     val currentDateEvents: List<ScheduleDisplayItem> = emptyList(),
     val tomorrowEvents: List<ScheduleDisplayItem> = emptyList(),
+    val datesWithEvents: Set<LocalDate> = emptySet(),
     val weatherData: WeatherData? = null,
     val rawEventCount: Int = 0
 )
@@ -230,6 +231,7 @@ class MainViewModel(
             settings = settings,
             currentDateEvents = snapshot.currentDateEvents,
             tomorrowEvents = snapshot.tomorrowEvents,
+            datesWithEvents = snapshot.datesWithEvents,
             weatherData = if (settings.hasWeatherConfig()) weatherData else null,
             rawEventCount = activeEvents.size
         )

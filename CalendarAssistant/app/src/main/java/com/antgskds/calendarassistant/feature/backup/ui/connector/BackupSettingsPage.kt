@@ -1,4 +1,8 @@
 package com.antgskds.calendarassistant.feature.backup.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
+import com.antgskds.calendarassistant.shared.ui.edition.EditionRadioButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
 
 import android.content.ClipboardManager
 import android.net.Uri
@@ -326,7 +330,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
                 onImport = { haptics.click(); importPromptsLauncher.launch(arrayOf("application/json")) },
                 swapButtons = true, // 导出在左，导入在右
                 extraButton = {
-                    OutlinedButton(
+                    EditionOutlinedButton(
                         onClick = { haptics.confirm(); controller.checkPromptUpdatesManually() },
                         enabled = !promptCheckInProgress,
                         modifier = Modifier.fillMaxWidth()
@@ -552,7 +556,7 @@ private fun CourseImportConfirmSheet(
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
+                    EditionCheckbox(
                         checked = importSettings && parsed.canImportSettings,
                         enabled = parsed.canImportSettings,
                         onCheckedChange = { haptics.selection(); onImportSettingsChange(it) }
@@ -588,7 +592,7 @@ private fun CourseImportConfirmSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            Button(
+            EditionButton(
                 onClick = onConfirm,
                 enabled = parsed.courses.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
@@ -690,14 +694,14 @@ fun ImportOptionRadio(currentMode: ImportMode, contentBodyStyle: TextStyle, onMo
     }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
+            EditionRadioButton(
                 selected = currentMode == ImportMode.APPEND,
                 onClick = { select(ImportMode.APPEND) }
             )
             Text("追加 (保留现有课程，追加新课)", modifier = Modifier.clickable { select(ImportMode.APPEND) }, style = contentBodyStyle)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
+            EditionRadioButton(
                 selected = currentMode == ImportMode.OVERWRITE,
                 onClick = { select(ImportMode.OVERWRITE) }
             )
@@ -779,7 +783,7 @@ private fun BackupOptionsSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
+            EditionButton(
                 onClick = onConfirm,
                 enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings || normalizedOptions.includePrompts || normalizedOptions.includeQuickMemos,
                 modifier = Modifier.fillMaxWidth()
@@ -806,7 +810,7 @@ private fun BackupOptionRow(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = checked, enabled = enabled, onCheckedChange = { haptics.selection(); onCheckedChange(it) })
+        EditionCheckbox(checked = checked, enabled = enabled, onCheckedChange = { haptics.selection(); onCheckedChange(it) })
         Column(Modifier.padding(start = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -857,7 +861,7 @@ fun BackupCard(
                 extraButton()
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
+                    EditionOutlinedButton(
                         onClick = onImport,
                         modifier = Modifier.weight(1f)
                     ) {
@@ -866,7 +870,7 @@ fun BackupCard(
                         Text(importLabel)
                     }
                     if (showExport) {
-                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                        EditionOutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("导出")
@@ -878,13 +882,13 @@ fun BackupCard(
                     if (swapButtons) {
                         // 导出在左，导入在右
                         if (showExport) {
-                            OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                            EditionOutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
                                 Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("导出")
                             }
                         }
-                        OutlinedButton(
+                        EditionOutlinedButton(
                             onClick = onImport,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -894,7 +898,7 @@ fun BackupCard(
                         }
                     } else {
                         // 导入在左，导出在右
-                        OutlinedButton(
+                        EditionOutlinedButton(
                             onClick = onImport,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -903,7 +907,7 @@ fun BackupCard(
                             Text(importLabel)
                         }
                         if (showExport) {
-                            OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                            EditionOutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
                                 Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("导出")
@@ -916,13 +920,13 @@ fun BackupCard(
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showExport) {
-                        OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                        EditionOutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("导出")
                         }
                     }
-                    OutlinedButton(
+                    EditionOutlinedButton(
                         onClick = onImport,
                         modifier = Modifier.weight(if (showExport) 1f else 1f)
                     ) {

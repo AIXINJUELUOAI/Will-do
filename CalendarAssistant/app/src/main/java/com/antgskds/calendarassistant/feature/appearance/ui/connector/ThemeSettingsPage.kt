@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.appearance.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import android.os.Build
 import android.widget.Toast
@@ -42,6 +43,9 @@ import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.appearance.domain.AppBackgroundImageStore
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCardExitMillis
@@ -344,7 +348,7 @@ fun MaterialThemeSettingsScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                Button(
+                EditionButton(
                     onClick = {
                         showBackgroundActions = false
                         backgroundActionScope.launch {
@@ -454,7 +458,7 @@ private fun AppBackgroundImageColorSwitchCard(
                     style = cardSubtitleStyle
                 )
             }
-            Switch(
+            EditionSwitch(
                 checked = settings.appBackgroundImageColorEnabled && hasImage,
                 enabled = hasImage,
                 onCheckedChange = onImageColorEnabledChange
@@ -491,7 +495,7 @@ private fun AppBackgroundWallpaperBlurSwitchCard(
                     style = cardSubtitleStyle
                 )
             }
-            Switch(
+            EditionSwitch(
                 checked = settings.appBackgroundWallpaperBlurEnabled && hasImage,
                 enabled = hasImage,
                 onCheckedChange = onWallpaperBlurEnabledChange
@@ -511,39 +515,14 @@ private fun ThemeModeSliderSettingItem(
     cardValueStyle: androidx.compose.ui.text.TextStyle
 ) {
     HapticValueChangeEffect(valueKey = value)
-    val modeLabels = mapOf(1 to "跟随系统", 2 to "浅色模式", 3 to "深色模式")
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = cardTitleStyle)
-                Text(subtitle, style = cardSubtitleStyle)
-            }
-            Text(
-                text = modeLabels[value] ?: "",
-                style = cardValueStyle
-            )
-        }
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onValueChange(it.toInt()) },
-            valueRange = 1f..3f,
-            steps = 1
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = "跟随系统", style = cardSubtitleStyle)
-            Text(text = "浅色模式", style = cardSubtitleStyle)
-            Text(text = "深色模式", style = cardSubtitleStyle)
-        }
-    }
+    val options = listOf("跟随系统", "浅色模式", "深色模式")
+    EditionCategoricalPreference(
+        title = title,
+        summary = subtitle,
+        options = options,
+        selectedIndex = (value - 1).coerceIn(options.indices),
+        onSelectedIndexChange = { onValueChange(it + 1) },
+    )
 }
 
 @Composable
@@ -707,7 +686,7 @@ private fun RgbSliderItem(
             Text(label, style = cardTitleStyle)
             Text(value.toString(), style = cardValueStyle)
         }
-        Slider(
+        EditionSlider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.roundToInt().coerceIn(0, 255)) },
             valueRange = 0f..255f,

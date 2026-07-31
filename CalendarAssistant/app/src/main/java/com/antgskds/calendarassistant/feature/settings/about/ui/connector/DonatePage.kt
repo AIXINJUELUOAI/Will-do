@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.settings.about.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import android.content.ContentValues
 import android.content.Context
@@ -169,7 +170,7 @@ fun MaterialDonateScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
+            EditionButton(
                 onClick = {
                     haptics.confirm()
                     confettiTrigger += 1

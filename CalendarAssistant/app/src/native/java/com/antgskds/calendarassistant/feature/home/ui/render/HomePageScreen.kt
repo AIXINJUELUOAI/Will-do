@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.feature.schedule.presentation.model.Schedu
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.feature.home.ui.render.material.MaterialHomePage
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 
 @Composable
 fun HomePageScreen(
@@ -36,6 +37,7 @@ fun HomePageScreen(
     onScheduleProgressChange: (Float) -> Unit,
     onScheduleOffsetChange: (Float) -> Unit,
     onOpenWeatherDetail: () -> Unit,
+    onNavigateToSettings: (SettingsDestination) -> Unit,
 ) {
     MaterialHomePage(
         state = state,

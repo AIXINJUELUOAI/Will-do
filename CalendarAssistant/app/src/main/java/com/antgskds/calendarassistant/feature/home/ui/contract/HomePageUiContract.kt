@@ -13,6 +13,7 @@ data class HomePageUiState(
     val courseScheduleItems: List<ScheduleDisplayItem> = emptyList(),
     val currentDateEvents: List<ScheduleDisplayItem> = emptyList(),
     val tomorrowEvents: List<ScheduleDisplayItem> = emptyList(),
+    val datesWithEvents: Set<LocalDate> = emptySet(),
     val settings: MySettings = MySettings(),
     val weatherData: WeatherData? = null,
 )

@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -35,6 +36,7 @@ import com.antgskds.calendarassistant.feature.settings.data.model.eventColorHexT
 import com.antgskds.calendarassistant.feature.settings.data.model.normalizeEventColorHex
 import com.antgskds.calendarassistant.feature.settings.data.model.sanitizeEventColorPaletteHex
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
@@ -398,7 +400,7 @@ private fun AddColorEditorSheet(
                 Text("取消")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { onConfirm(currentHex) }) {
+            EditionButton(onClick = { onConfirm(currentHex) }) {
                 Text("确认添加")
             }
         }
@@ -413,7 +415,7 @@ private fun SheetRgbSliderItem(label: String, value: Int, onValueChange: (Int) -
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.width(24.dp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Slider(
+        EditionSlider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.roundToInt().coerceIn(0, 255)) },
             valueRange = 0f..255f,

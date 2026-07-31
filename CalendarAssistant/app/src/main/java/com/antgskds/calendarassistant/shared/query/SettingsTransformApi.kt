@@ -18,6 +18,8 @@ interface SettingsTransformApi {
         floatingWindow: Boolean? = null,
         advanceReminderEnabled: Boolean? = null,
         advanceReminderMinutes: Int? = null,
+        transitAutoCheckInEnabled: Boolean? = null,
+        transitAutoCheckInMinutes: Int? = null,
         autoArchive: Boolean? = null,
         recognitionMode: Int? = null,
         defaultEventDurationMinutes: Int? = null,

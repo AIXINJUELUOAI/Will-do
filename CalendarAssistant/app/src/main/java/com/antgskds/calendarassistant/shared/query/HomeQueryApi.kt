@@ -8,7 +8,8 @@ import java.time.LocalDateTime
 
 data class HomeSnapshot(
     val currentDateEvents: List<ScheduleDisplayItem>,     // 日程改用展示模型
-    val tomorrowEvents: List<ScheduleDisplayItem>
+    val tomorrowEvents: List<ScheduleDisplayItem>,
+    val datesWithEvents: Set<LocalDate> = emptySet(),
 )
 
 interface HomeQueryApi {

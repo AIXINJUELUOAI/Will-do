@@ -1,4 +1,9 @@
 package com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 
 import android.Manifest
 import android.app.AlarmManager
@@ -527,7 +532,7 @@ private fun OnboardingActionRow(
                     Text("上一步")
                 }
             }
-            Button(onClick = onNextOrFinish) {
+            EditionButton(onClick = onNextOrFinish) {
                 Text(if (page == totalPages - 1) "完成" else "下一步")
             }
         }
@@ -873,6 +878,7 @@ private fun FloatingQuickMemoConfigStep(
                 valueText = floatingEventRangeLabel(settings.floatingEventRange),
                 onValueChangeFinished = { onFloatingEventRangeChange(it.roundToInt().coerceIn(0, 2)) },
                 enabled = settings.isFloatingWindowEnabled,
+                categoricalLabels = listOf("全部日程", "今日日程", "今日+明日"),
             )
             HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
             OnboardingConfigRow(
@@ -1100,6 +1106,7 @@ private fun WeatherConfigStep(
                     valueText = floatingWeatherForecastRangeLabel(settings.floatingWeatherForecastRange),
                     onValueChangeFinished = { onFloatingForecastRangeChange(it.roundToInt().coerceIn(0, 2)) },
                     enabled = settings.weatherEnabled && settings.showWeatherInFloating,
+                    categoricalLabels = listOf("24小时", "3天", "5天"),
                 )
             }
         }
@@ -1131,14 +1138,14 @@ private fun WeatherConfigStep(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("天气接口配置", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                OutlinedTextField(
+                EditionTextField(
                     value = weatherApiUrl,
                     onValueChange = { weatherApiUrl = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("天气 API URL") },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                EditionTextField(
                     value = weatherApiKey,
                     onValueChange = { weatherApiKey = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -1200,21 +1207,21 @@ private fun AiConfigStep(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("AI 接口配置", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                OutlinedTextField(
+                EditionTextField(
                     value = aiName,
                     onValueChange = { aiName = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("模型名称") },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                EditionTextField(
                     value = aiUrl,
                     onValueChange = { aiUrl = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("AI API URL") },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                EditionTextField(
                     value = aiKey,
                     onValueChange = { aiKey = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -1268,7 +1275,19 @@ private fun OnboardingSliderRow(
     valueText: String,
     onValueChangeFinished: (Float) -> Unit,
     enabled: Boolean = true,
+    categoricalLabels: List<String>? = null,
 ) {
+    if (categoricalLabels != null) {
+        EditionCategoricalPreference(
+            title = title,
+            summary = subtitle,
+            options = categoricalLabels,
+            selectedIndex = (value - valueRange.start).roundToInt().coerceIn(categoricalLabels.indices),
+            onSelectedIndexChange = { onValueChangeFinished(valueRange.start + it) },
+            enabled = enabled,
+        )
+        return
+    }
     var sliderValue by remember(value) { mutableStateOf(value) }
     Column(
         modifier = Modifier
@@ -1299,7 +1318,7 @@ private fun OnboardingSliderRow(
                 modifier = Modifier.padding(start = 12.dp),
             )
         }
-        Slider(
+        EditionSlider(
             value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
             onValueChange = {
                 sliderValue = it
@@ -1323,34 +1342,14 @@ private fun OnboardingTwoOptionRow(
     onSelectRight: () -> Unit,
     enabled: Boolean = true,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .alpha(if (enabled) 1f else 0.56f)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selectedRight) {
-                TextButton(onClick = onSelectLeft, enabled = enabled) { Text(leftText) }
-                Button(onClick = onSelectRight, enabled = enabled) { Text(rightText) }
-            } else {
-                Button(onClick = onSelectLeft, enabled = enabled) { Text(leftText) }
-                TextButton(onClick = onSelectRight, enabled = enabled) { Text(rightText) }
-            }
-        }
-    }
+    EditionCategoricalPreference(
+        title = title,
+        summary = subtitle,
+        options = listOf(leftText, rightText),
+        selectedIndex = if (selectedRight) 1 else 0,
+        onSelectedIndexChange = { if (it == 1) onSelectRight() else onSelectLeft() },
+        enabled = enabled,
+    )
 }
 
 @Composable
@@ -1400,7 +1399,7 @@ private fun OnboardingConfigRow(
         }
         Spacer(Modifier.width(12.dp))
         if (checked != null && onCheckedChange != null) {
-            Switch(
+            EditionSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 enabled = enabled,
@@ -1581,7 +1580,7 @@ private fun FeatureModernRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Switch(
+        EditionSwitch(
             checked = item.enabled,
             onCheckedChange = onCheckedChange,
             enabled = item.requirementsMet,

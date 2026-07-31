@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.weather.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import androidx.compose.foundation.Canvas
@@ -180,7 +181,7 @@ fun MaterialWeatherDetailScreen(
             TopAppBar(
                 title = { Text("天气详情") },
                 navigationIcon = {
-                    IconButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) }) {
+                    EditionIconButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"

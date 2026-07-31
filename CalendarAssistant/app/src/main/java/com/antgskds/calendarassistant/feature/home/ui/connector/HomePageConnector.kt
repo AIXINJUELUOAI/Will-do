@@ -17,6 +17,7 @@ import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen
 import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleView
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 
 @Composable
 fun HomePageRoute(
@@ -46,6 +47,7 @@ fun HomePageRoute(
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
+    onNavigateToSettings: (SettingsDestination) -> Unit = {},
     settingsOverride: MySettings? = null,
 ) {
     val mainState by viewModel.uiState.collectAsState()
@@ -58,6 +60,7 @@ fun HomePageRoute(
             courseScheduleItems = mainState.courseScheduleItems,
             currentDateEvents = mainState.currentDateEvents,
             tomorrowEvents = mainState.tomorrowEvents,
+            datesWithEvents = mainState.datesWithEvents,
             settings = settingsOverride ?: mainState.settings,
             weatherData = mainState.weatherData,
         )
@@ -141,5 +144,6 @@ fun HomePageRoute(
         onScheduleProgressChange = onScheduleProgressChange,
         onScheduleOffsetChange = onScheduleOffsetChange,
         onOpenWeatherDetail = onOpenWeatherDetail,
+        onNavigateToSettings = onNavigateToSettings,
     )
 }

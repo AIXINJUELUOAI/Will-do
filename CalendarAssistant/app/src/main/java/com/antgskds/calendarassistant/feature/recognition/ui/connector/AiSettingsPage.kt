@@ -1,4 +1,5 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionFloatingActionButton
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +79,7 @@ import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiAction
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiState
+import com.antgskds.calendarassistant.feature.recognition.ui.render.AiSettingsScreen
 import kotlinx.coroutines.launch
 
 private const val PROVIDER_DEEPSEEK = "DeepSeek"
@@ -117,7 +118,7 @@ fun AiSettingsPage(
     uiSize: Int = 2
 ) {
     val settings by viewModel.settings.collectAsState()
-    MaterialAiSettingsScreen(
+    AiSettingsScreen(
         state = AiSettingsUiState(settings),
         uiSize = uiSize,
         onAction = { action ->
@@ -446,7 +447,7 @@ fun MaterialAiSettingsScreen(
             )
         }
 
-        FloatingActionButton(
+        EditionFloatingActionButton(
             onClick = {
                 if (!actionLoading) {
                     haptics.click()

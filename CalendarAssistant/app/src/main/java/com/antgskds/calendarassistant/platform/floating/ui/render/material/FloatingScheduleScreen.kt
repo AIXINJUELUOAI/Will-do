@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.platform.floating.ui.render.material
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -644,7 +646,7 @@ fun BottomInteractionArea(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (!showRecentVoiceMemo) {
-                            IconButton(
+                            EditionIconButton(
                                 onClick = { haptics.click(); onPickImage() },
                                 enabled = !isLoading,
                                 modifier = Modifier.size(40.dp)
@@ -2487,7 +2489,7 @@ private fun FloatingPickerOverlay(
                             Text("取消", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(Modifier.width(4.dp))
-                        Button(
+                        EditionButton(
                             onClick = { animateConfirm() },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                             modifier = Modifier
@@ -3107,14 +3109,14 @@ fun ScheduleCard(
                                                 Text("取消", fontSize = 13.sp)
                                             }
                                             Spacer(Modifier.width(8.dp))
-                                            Button(
+                                            EditionButton(
                                                 onClick = {
-                                                    if (isSaving) return@Button
+                                                    if (isSaving) return@EditionButton
                                                     val title = draftTitle.trim()
                                                     if (title.isBlank()) {
                                                         haptics.error()
                                                         android.widget.Toast.makeText(context, "标题不能为空", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@Button
+                                                        return@EditionButton
                                                     }
                                                     val startDt = try { LocalDateTime.of(draftStartDate, LocalTime.parse(draftStartTime)) } catch (e: Exception) { null }
                                                     val endDt = try { LocalDateTime.of(draftEndDate, LocalTime.parse(draftEndTime)) } catch (e: Exception) { null }
@@ -3122,12 +3124,12 @@ fun ScheduleCard(
                                                     if (startDt == null || endDt == null) {
                                                         haptics.error()
                                                         android.widget.Toast.makeText(context, "时间格式错误", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@Button
+                                                        return@EditionButton
                                                     }
                                                     if (endDt.isBefore(startDt)) {
                                                         haptics.error()
                                                         android.widget.Toast.makeText(context, "结束时间不能早于开始时间", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@Button
+                                                        return@EditionButton
                                                     }
 
                                                     focusManager.clearFocus(force = true)

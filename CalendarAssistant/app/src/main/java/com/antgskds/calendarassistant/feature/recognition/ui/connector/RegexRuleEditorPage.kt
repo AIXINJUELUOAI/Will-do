@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +38,7 @@ import com.antgskds.calendarassistant.feature.recognition.data.preferences.Regex
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRecognizer
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RegexScheduleRule
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.RegexRuleEditorUiAction
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.RegexRuleEditorUiState
 import java.time.Instant
@@ -126,7 +129,7 @@ fun MaterialRegexRuleEditorScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                EditionTextField(
                     value = testInput,
                     onValueChange = { testInput = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -149,7 +152,7 @@ fun MaterialRegexRuleEditorScreen(
                     }) {
                         Text("恢复默认")
                     }
-                    Button(onClick = { onAction(RegexRuleEditorUiAction.RunTest(testInput)) }) {
+                    EditionButton(onClick = { onAction(RegexRuleEditorUiAction.RunTest(testInput)) }) {
                         Text("测试")
                     }
                 }
@@ -192,7 +195,7 @@ private fun RegexRuleCard(
                     Text(rule.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
                     Text(rule.id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(
+                EditionSwitch(
                     checked = rule.enabled,
                     onCheckedChange = { onRuleChange(rule.copy(enabled = it)) }
                 )
@@ -200,21 +203,21 @@ private fun RegexRuleCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            OutlinedTextField(
+            EditionTextField(
                 value = rule.name,
                 onValueChange = { onRuleChange(rule.copy(name = it)) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("名称") },
                 singleLine = true
             )
-            OutlinedTextField(
+            EditionTextField(
                 value = rule.pattern,
                 onValueChange = { onRuleChange(rule.copy(pattern = it)) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("正则") },
                 minLines = 3
             )
-            OutlinedTextField(
+            EditionTextField(
                 value = rule.titleTemplate,
                 onValueChange = { onRuleChange(rule.copy(titleTemplate = it)) },
                 modifier = Modifier.fillMaxWidth(),
@@ -222,7 +225,7 @@ private fun RegexRuleCard(
                 supportingText = { Text("可用 {title}/{code} 或其他命名分组，如 {location}") },
                 singleLine = true
             )
-            OutlinedTextField(
+            EditionTextField(
                 value = rule.descriptionTemplate,
                 onValueChange = { onRuleChange(rule.copy(descriptionTemplate = it)) },
                 modifier = Modifier.fillMaxWidth(),
@@ -230,7 +233,7 @@ private fun RegexRuleCard(
                 supportingText = { Text("留空时使用原文；取件类可用 {code}|| 生成字段") },
                 singleLine = true
             )
-            OutlinedTextField(
+            EditionTextField(
                 value = rule.locationTemplate,
                 onValueChange = { onRuleChange(rule.copy(locationTemplate = it)) },
                 modifier = Modifier.fillMaxWidth(),
@@ -259,7 +262,7 @@ private fun RegexRuleCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(
+                EditionSwitch(
                     checked = rule.useCurrentTimeWhenMissing,
                     onCheckedChange = { onRuleChange(rule.copy(useCurrentTimeWhenMissing = it)) }
                 )
@@ -275,7 +278,7 @@ private fun RegexGroupField(
     modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit
 ) {
-    OutlinedTextField(
+    EditionTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,

@@ -25,6 +25,8 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         floatingWindow: Boolean?,
         advanceReminderEnabled: Boolean?,
         advanceReminderMinutes: Int?,
+        transitAutoCheckInEnabled: Boolean?,
+        transitAutoCheckInMinutes: Int?,
         autoArchive: Boolean?,
         recognitionMode: Int?,
         defaultEventDurationMinutes: Int?,
@@ -91,6 +93,14 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (floatingWindow != null) updated = updated.copy(isFloatingWindowEnabled = floatingWindow)
         if (advanceReminderEnabled != null) updated = updated.copy(isAdvanceReminderEnabled = advanceReminderEnabled)
         if (advanceReminderMinutes != null) updated = updated.copy(advanceReminderMinutes = advanceReminderMinutes)
+        if (transitAutoCheckInEnabled != null) {
+            updated = updated.copy(transitAutoCheckInEnabled = transitAutoCheckInEnabled)
+        }
+        if (transitAutoCheckInMinutes != null) {
+            updated = updated.copy(
+                transitAutoCheckInMinutes = MySettings.normalizeTransitAutoCheckInMinutes(transitAutoCheckInMinutes)
+            )
+        }
         if (autoArchive != null) updated = updated.copy(autoArchiveEnabled = autoArchive)
         if (recognitionMode != null) updated = updated.copy(recognitionMode = MySettings.normalizeRecognitionMode(recognitionMode))
         if (defaultEventDurationMinutes != null) updated = updated.copy(defaultEventDurationMinutes = defaultEventDurationMinutes)

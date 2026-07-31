@@ -2,13 +2,6 @@ package com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,12 +15,7 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,8 +23,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,26 +30,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import com.antgskds.calendarassistant.App
-import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStatus
-import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrModelStore
 import com.antgskds.calendarassistant.shared.util.PrivilegeManager
-import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
-import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
 import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
-import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiAction
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 @Composable
 fun LaboratoryPage(
@@ -74,29 +51,6 @@ fun LaboratoryPage(
 ) {
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var asrModelStatus by remember { mutableStateOf(QuickMemoAsrModelStore.status(context)) }
-
-    fun refreshAsrModelStatus() {
-        asrModelStatus = QuickMemoAsrModelStore.status(context)
-    }
-
-    val asrModelImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                QuickMemoAsrModelStore.importModelFile(context, uri)
-            }
-            refreshAsrModelStatus()
-            val message = result.fold(
-                onSuccess = { fileName -> "已导入 $fileName" },
-                onFailure = { error -> error.message ?: "模型导入失败" }
-            )
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        }
-    }
 
     LaunchedEffect(settings?.developerOptionsUnlocked, settings?.developerOptionsEnabled, settings?.developerOptionsDisabledAtMillis) {
         val current = settings ?: return@LaunchedEffect
@@ -122,27 +76,10 @@ fun LaboratoryPage(
     }
 
     MaterialLaboratoryScreen(
-        state = LaboratoryUiState(settings = settings, asrModelStatus = asrModelStatus),
+        state = LaboratoryUiState(settings = settings),
         uiSize = uiSize,
         onAction = { action ->
             when (action) {
-                is LaboratoryUiAction.SetVoiceInput -> {
-                    val current = settings
-                    settingsViewModel?.updatePreference(voiceInputEnabled = action.enabled)
-                    val app = context.applicationContext as? App
-                    if (action.enabled) {
-                        app?.runtimeCenter?.startEdgeBarIfNeeded()
-                    } else if (current?.isFloatingWindowEnabled != true) {
-                        app?.floatingCenter?.stopEdgeBarService()
-                        app?.floatingCenter?.stopFloatingBallService()
-                    }
-                }
-                is LaboratoryUiAction.SetFloatingLongPress -> settingsViewModel?.updatePreference(floatingVoiceLongPressEnabled = action.enabled)
-                is LaboratoryUiAction.SetRecordingDisplayMode -> settingsViewModel?.updatePreference(quickMemoRecordingDisplayMode = action.mode)
-                is LaboratoryUiAction.SetQuickMemoAutoStopEnabled -> settingsViewModel?.updateQuickMemoAutoStop(enabled = action.enabled)
-                is LaboratoryUiAction.SetQuickMemoAutoStopSeconds -> settingsViewModel?.updateQuickMemoAutoStop(seconds = action.seconds)
-                is LaboratoryUiAction.SetTextAutoPin -> settingsViewModel?.updatePreference(floatingTextQuickMemoAutoPinEnabled = action.enabled)
-                is LaboratoryUiAction.SetVoiceAutoPin -> settingsViewModel?.updatePreference(voiceQuickMemoAutoPinEnabled = action.enabled)
                 is LaboratoryUiAction.SetBraceletMode -> settingsViewModel?.updatePreference(braceletModeEnabled = action.enabled)
                 is LaboratoryUiAction.SetForceInstantCodeTime -> settingsViewModel?.updatePreference(forceInstantCodeTimeToNow = action.enabled)
                 is LaboratoryUiAction.SetPredictiveBack -> settingsViewModel?.updatePreference(predictiveBackEnabled = action.enabled)
@@ -161,7 +98,6 @@ fun LaboratoryPage(
                         ClipboardCodeMonitorService.stop(context)
                     }
                 }
-                LaboratoryUiAction.ImportAsrModel -> asrModelImportLauncher.launch(arrayOf("*/*"))
                 LaboratoryUiAction.OpenDeveloper -> onNavigateToDeveloper()
             }
         }
@@ -175,7 +111,6 @@ fun MaterialLaboratoryScreen(
     onAction: (LaboratoryUiAction) -> Unit
 ) {
     val settings = state.settings
-    val asrModelStatus = state.asrModelStatus
     val scrollState = rememberScrollState()
 
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides (settings?.hapticFeedbackEnabled ?: true)) {
@@ -187,39 +122,6 @@ fun MaterialLaboratoryScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (settings != null) {
-            Text(
-                text = "随口记",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            LaboratoryQuickMemoCard(
-                settings = settings,
-                asrModelStatus = asrModelStatus,
-                onVoiceInputEnabledChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetVoiceInput(enabled))
-                },
-                onFloatingLongPressChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetFloatingLongPress(enabled))
-                },
-                onRecordingDisplayModeChange = { mode ->
-                    onAction(LaboratoryUiAction.SetRecordingDisplayMode(mode))
-                },
-                onAutoStopEnabledChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetQuickMemoAutoStopEnabled(enabled))
-                },
-                onAutoStopSecondsChange = { seconds ->
-                    onAction(LaboratoryUiAction.SetQuickMemoAutoStopSeconds(seconds))
-                },
-                onTextAutoPinChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetTextAutoPin(enabled))
-                },
-                onVoiceAutoPinChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetVoiceAutoPin(enabled))
-                },
-                onImportAsrModel = { onAction(LaboratoryUiAction.ImportAsrModel) }
-            )
-
             Text(
                 text = "实验功能",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -297,103 +199,6 @@ fun MaterialLaboratoryScreen(
 }
 
 @Composable
-private fun LaboratoryQuickMemoCard(
-    settings: MySettings,
-    asrModelStatus: QuickMemoAsrModelStatus,
-    onVoiceInputEnabledChange: (Boolean) -> Unit,
-    onFloatingLongPressChange: (Boolean) -> Unit,
-    onRecordingDisplayModeChange: (Int) -> Unit,
-    onAutoStopEnabledChange: (Boolean) -> Unit,
-    onAutoStopSecondsChange: (Int) -> Unit,
-    onTextAutoPinChange: (Boolean) -> Unit,
-    onVoiceAutoPinChange: (Boolean) -> Unit,
-    onImportAsrModel: () -> Unit
-) {
-    AppCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            LaboratorySwitchRow(
-                title = "随口记",
-                subtitle = "随口记功能总开关",
-                checked = settings.voiceInputEnabled,
-                onCheckedChange = onVoiceInputEnabledChange
-            )
-
-            AnimatedVisibility(
-                visible = settings.voiceInputEnabled,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    LaboratoryDivider()
-                    LaboratorySwitchRow(
-                        title = "悬浮窗长按随口记",
-                        subtitle = "呼出悬浮窗后，再次长按音量+开始随口记录音",
-                        checked = settings.floatingVoiceLongPressEnabled,
-                        onCheckedChange = onFloatingLongPressChange
-                    )
-                    LaboratoryDivider()
-                    LaboratoryTwoOptionRow(
-                        title = "录音展示",
-                        subtitle = if (settings.quickMemoRecordingDisplayMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
-                            "所有入口录音时使用悬浮窗"
-                        } else {
-                            "所有入口录音时使用实况通知"
-                        },
-                        selectedValue = QuickMemoRecordingDisplayMode.normalize(settings.quickMemoRecordingDisplayMode),
-                        firstValue = QuickMemoRecordingDisplayMode.LIVE_CAPSULE,
-                        firstLabel = "实况通知",
-                        secondValue = QuickMemoRecordingDisplayMode.FLOATING_WINDOW,
-                        secondLabel = "悬浮窗",
-                        onValueSelected = onRecordingDisplayModeChange
-                    )
-                    LaboratoryDivider()
-                    LaboratoryAutoStopRow(
-                        checked = settings.quickMemoAutoStopEnabled,
-                        seconds = settings.quickMemoAutoStopSeconds,
-                        onCheckedChange = onAutoStopEnabledChange,
-                        onSecondsChange = onAutoStopSecondsChange
-                    )
-                    LaboratoryDivider()
-                    LaboratorySwitchRow(
-                        title = "文本随口记同步挂起",
-                        subtitle = "随口记文本保存后，同步挂起到实况通知",
-                        checked = settings.floatingTextQuickMemoAutoPinEnabled,
-                        onCheckedChange = onTextAutoPinChange
-                    )
-                    LaboratoryDivider()
-                    LaboratorySwitchRow(
-                        title = "语音随口记同步挂起",
-                        subtitle = "随口记语音转写后，同步挂起到实况通知",
-                        checked = settings.voiceQuickMemoAutoPinEnabled,
-                        onCheckedChange = onVoiceAutoPinChange
-                    )
-                    LaboratoryDivider()
-                    LaboratoryActionRow(
-                        title = "语音转写模型",
-                        subtitle = formatQuickMemoAsrModelStatus(asrModelStatus),
-                        buttonText = if (asrModelStatus.ready) "更换模型" else "导入模型",
-                        onClick = onImportAsrModel
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LaboratoryDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    )
-}
-
-@Composable
 private fun LaboratorySwitchCard(
     title: String,
     subtitle: String,
@@ -439,193 +244,9 @@ private fun LaboratorySwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(
+        EditionSwitch(
             checked = checked,
             onCheckedChange = { haptics.selection(); onCheckedChange(it) }
-        )
-    }
-}
-
-@Composable
-private fun LaboratoryAutoStopRow(
-    checked: Boolean,
-    seconds: Int,
-    onCheckedChange: (Boolean) -> Unit,
-    onSecondsChange: (Int) -> Unit
-) {
-    val normalizedSeconds = MySettings.normalizeQuickMemoAutoStopSeconds(seconds)
-    HapticValueChangeEffect(valueKey = normalizedSeconds)
-    val haptics = rememberAppHaptics()
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "自动结束录音",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (checked) {
-                        "录音 ${normalizedSeconds} 秒后自动保存"
-                    } else {
-                        "关闭时由用户手动结束并保存录音"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = checked,
-                onCheckedChange = {
-                    haptics.selection()
-                    onCheckedChange(it)
-                }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = checked,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("1 秒", style = MaterialTheme.typography.bodyMedium)
-                    Text("15 秒", style = MaterialTheme.typography.bodyMedium)
-                }
-                Slider(
-                    value = normalizedSeconds.toFloat(),
-                    onValueChange = { value ->
-                        onSecondsChange(value.roundToInt())
-                    },
-                    valueRange = MySettings.QUICK_MEMO_AUTO_STOP_MIN_SECONDS.toFloat()..
-                        MySettings.QUICK_MEMO_AUTO_STOP_MAX_SECONDS.toFloat(),
-                    steps = 0
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LaboratoryTwoOptionRow(
-    title: String,
-    subtitle: String,
-    selectedValue: Int,
-    firstValue: Int,
-    firstLabel: String,
-    secondValue: Int,
-    secondLabel: String,
-    onValueSelected: (Int) -> Unit
-) {
-    val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selectedValue == firstValue) {
-                Button(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
-                    Text(firstLabel)
-                }
-            } else {
-                OutlinedButton(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
-                    Text(firstLabel)
-                }
-            }
-            if (selectedValue == secondValue) {
-                Button(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
-                    Text(secondLabel)
-                }
-            } else {
-                OutlinedButton(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
-                    Text(secondLabel)
-                }
-            }
-        }
-    }
-}
-
-private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): String {
-    return when {
-        status.ready -> "已导入本地模型，可离线转写"
-        !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
-        !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
-        else -> "缺少 tokens.txt"
-    }
-}
-
-@Composable
-private fun LaboratoryActionRow(
-    title: String,
-    subtitle: String,
-    buttonText: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier.weight(1f).padding(end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Button(onClick = onClick) {
-            Text(buttonText)
-        }
-    }
-}
-
-@Composable
-private fun LaboratoryActionCard(
-    title: String,
-    subtitle: String,
-    buttonText: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    AppCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
-        LaboratoryActionRow(
-            title = title,
-            subtitle = subtitle,
-            buttonText = buttonText,
-            onClick = onClick
         )
     }
 }

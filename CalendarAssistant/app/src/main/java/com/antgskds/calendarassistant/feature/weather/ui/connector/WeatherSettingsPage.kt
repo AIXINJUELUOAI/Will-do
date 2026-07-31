@@ -1,4 +1,8 @@
 package com.antgskds.calendarassistant.feature.weather.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionFloatingActionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
+import com.antgskds.calendarassistant.shared.ui.edition.EditionOptionalCategoricalSettingItem
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.Manifest
@@ -76,8 +80,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
@@ -442,87 +446,43 @@ fun MaterialWeatherSettingsScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    SliderSettingItem(
+                    EditionCategoricalPreference(
                         title = "刷新频率",
-                        subtitle = when (refreshInterval) {
+                        summary = when (refreshInterval) {
                             15 -> "每 15 分钟刷新一次"
                             30 -> "每 30 分钟刷新一次"
                             else -> "每 60 分钟刷新一次"
                         },
-                        value = when (refreshInterval) {
-                            15 -> 0f
-                            30 -> 1f
-                            else -> 2f
+                        options = listOf("15分钟", "30分钟", "60分钟"),
+                        selectedIndex = when (refreshInterval) {
+                            15 -> 0
+                            30 -> 1
+                            else -> 2
                         },
-                        onValueChange = {
-                            refreshInterval = when (it.toInt()) {
+                        onSelectedIndexChange = {
+                            refreshInterval = when (it) {
                                 0 -> 15
                                 1 -> 30
                                 else -> 60
                             }
                         },
-                        valueRange = 0f..2f,
-                        steps = 1,
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle,
-                        cardValueStyle = cardValueStyle,
-                        showValueAsNumber = false,
-                        valueUnit = ""
                     )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("15min", style = cardSubtitleStyle)
-                        Text("30min", style = cardSubtitleStyle)
-                        Text("60min", style = cardSubtitleStyle)
-                    }
 
                     WeatherDivider()
 
-                    SwitchSettingItem(
+                    EditionOptionalCategoricalSettingItem(
                         title = "悬浮窗显示天气",
                         subtitle = "在悬浮窗顶部显示天气摘要卡片",
                         checked = showInFloating,
                         onCheckedChange = { showInFloating = it },
+                        optionTitle = "悬浮窗天气范围",
+                        optionSummary = floatingWeatherRangeLabel(floatingWeatherRange),
+                        options = listOf("24小时", "3天", "5天"),
+                        selectedIndex = floatingWeatherRange.coerceIn(0, 2),
+                        onSelectedIndexChange = { floatingWeatherRange = it },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-
-                    AnimatedVisibility(
-                        visible = showInFloating,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            SliderSettingItem(
-                                title = "悬浮窗天气范围",
-                                subtitle = floatingWeatherRangeLabel(floatingWeatherRange),
-                                value = floatingWeatherRange.toFloat(),
-                                onValueChange = { floatingWeatherRange = it.toInt().coerceIn(0, 2) },
-                                valueRange = 0f..2f,
-                                steps = 1,
-                                cardTitleStyle = cardTitleStyle,
-                                cardSubtitleStyle = cardSubtitleStyle,
-                                cardValueStyle = cardValueStyle,
-                                showValueAsNumber = false,
-                                valueUnit = ""
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("24小时", style = cardSubtitleStyle)
-                                Text("3天", style = cardSubtitleStyle)
-                                Text("5天", style = cardSubtitleStyle)
-                            }
-                        }
-                    }
 
                     WeatherDivider()
 
@@ -537,37 +497,28 @@ fun MaterialWeatherSettingsScreen(
 
                     WeatherDivider()
 
-                    SwitchSettingItem(
+                    EditionOptionalCategoricalSettingItem(
                         title = "天气风险提醒",
                         subtitle = "根据未来${warningLookaheadHours}小时预报推断风险并提醒",
                         checked = riskWarningEnabled,
                         onCheckedChange = { riskWarningEnabled = it },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
-                    )
-
-                    SliderSettingItem(
-                        title = "风险扫描范围",
-                        subtitle = "未来 ${warningLookaheadHours} 小时",
-                        value = when (warningLookaheadHours) {
-                            12 -> 0f
-                            24 -> 1f
-                            else -> 2f
+                        optionTitle = "风险扫描范围",
+                        optionSummary = "未来 ${warningLookaheadHours} 小时",
+                        options = listOf("12小时", "24小时", "48小时"),
+                        selectedIndex = when (warningLookaheadHours) {
+                            12 -> 0
+                            24 -> 1
+                            else -> 2
                         },
-                        onValueChange = {
-                            warningLookaheadHours = when (it.toInt()) {
+                        onSelectedIndexChange = {
+                            warningLookaheadHours = when (it) {
                                 0 -> 12
                                 1 -> 24
                                 else -> 48
                             }
                         },
-                        valueRange = 0f..2f,
-                        steps = 1,
                         cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle,
-                        cardValueStyle = cardValueStyle,
-                        showValueAsNumber = false,
-                        valueUnit = ""
+                        cardSubtitleStyle = cardSubtitleStyle
                     )
 
                 }
@@ -608,9 +559,9 @@ fun MaterialWeatherSettingsScreen(
             Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
 
-        FloatingActionButton(
+        EditionFloatingActionButton(
             onClick = {
-                if (actionLoading) return@FloatingActionButton
+                if (actionLoading) return@EditionFloatingActionButton
                 scope.launch {
                     val draft = normalizeDraft()
                     if (draft.weatherEnabled && !validateDraft(draft)) {
@@ -896,7 +847,7 @@ private fun WeatherLocationPickerSheet(
                 )
             }
 
-            Button(
+            EditionButton(
                 onClick = { haptics.confirm(); selectedLocation?.let(onConfirm) },
                 enabled = selectedLocation != null,
                 modifier = Modifier.fillMaxWidth()

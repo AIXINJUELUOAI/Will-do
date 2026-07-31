@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.quickmemo.ui.render.material
+import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -319,7 +321,7 @@ fun MaterialQuickMemoDetailScreen(
                     ),
                     title = { Text("随口记详情") },
                     navigationIcon = {
-                        IconButton(onClick = { haptics.click(); onBack() }) {
+                        EditionIconButton(onClick = { haptics.click(); onBack() }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回",
@@ -416,7 +418,7 @@ fun MaterialQuickMemoDetailScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun QuickMemoListItem(
+internal fun QuickMemoListItem(
     memo: QuickMemoEntity,
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
@@ -732,7 +734,7 @@ private fun QuickMemoListItem(
 }
 
 @Composable
-private fun QuickMemoDetailContent(
+internal fun QuickMemoDetailContent(
     memo: QuickMemoEntity,
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
@@ -1080,7 +1082,7 @@ private fun QuickMemoDetailContent(
         Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 
-        QuickMemoDetailBottomBar(
+        com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailActionBar(
             isRecordingVoice = isRecordingVoice,
             isSavingVoice = isSavingVoice,
             hasVoice = memo.audioPath?.isNotBlank() == true,
@@ -1143,7 +1145,7 @@ private fun QuickMemoRecordPermissionCard(onGrantClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
                 )
             }
-            Button(onClick = onGrantClick) {
+            EditionButton(onClick = onGrantClick) {
                 Text("授权")
             }
         }
@@ -1164,7 +1166,7 @@ private fun QuickMemoTextButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickMemoDetailBottomBar(
+internal fun MaterialQuickMemoDetailBottomBar(
     isRecordingVoice: Boolean,
     isSavingVoice: Boolean,
     hasVoice: Boolean,

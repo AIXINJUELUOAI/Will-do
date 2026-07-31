@@ -1,4 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.connector
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.app.Activity
@@ -49,6 +52,8 @@ import com.antgskds.calendarassistant.feature.settings.developer.application.Deb
 import com.antgskds.calendarassistant.feature.settings.data.model.LiveNotificationTemplateMode
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
+import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
@@ -502,13 +507,13 @@ fun MaterialDeveloperScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedButton(
+                    EditionOutlinedButton(
                         onClick = { onAction(DeveloperUiAction.ResetUiScale) },
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("恢复默认")
                     }
-                    Button(
+                    EditionButton(
                         onClick = {
                             onAction(DeveloperUiAction.ApplyUiScale(scaleSmall, scaleMedium, scaleLarge))
                         },
@@ -835,7 +840,7 @@ private fun UiScaleSliderRow(
             Text(text = title, style = cardTitleStyle)
             Text(text = String.format(Locale.US, "%.2f", value), style = cardValueStyle)
         }
-        Slider(
+        EditionSlider(
             value = value.coerceIn(valueRange.start, valueRange.endInclusive),
             onValueChange = onValueChange,
             valueRange = valueRange
@@ -884,54 +889,16 @@ private fun DeveloperOptionsCard(
     val normalizedMode = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode)
     val selectedIndex = modes.indexOf(normalizedMode).takeIf { it >= 0 } ?: 0
     SettingsCard {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "原生实况通知模板",
-                style = titleStyle,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "控制原生实况通知使用完整多行内容还是两行精简内容；仅影响原生通知通道。",
-                style = subtitleStyle
-            )
-            Text(
-                text = "当前：${liveTemplateModeLabel(modes[selectedIndex])}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Slider(
-                value = selectedIndex.toFloat(),
-                onValueChange = { value ->
-                    val nextIndex = value.roundToInt().coerceIn(0, modes.lastIndex)
-                    val nextMode = modes[nextIndex]
-                    if (nextMode != normalizedMode) {
-                        haptics.selection()
-                        onLiveNotificationTemplateModeChange(nextMode)
-                    }
-                },
-                valueRange = 0f..modes.lastIndex.toFloat(),
-                steps = (modes.size - 2).coerceAtLeast(0)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                modes.forEach { mode ->
-                    Text(
-                        text = liveTemplateModeLabel(mode),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (mode == normalizedMode) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-            }
-        }
+        EditionCategoricalPreference(
+            title = "原生实况通知模板",
+            summary = "控制原生实况通知使用完整多行内容还是两行精简内容；仅影响原生通知通道。",
+            options = modes.map(::liveTemplateModeLabel),
+            selectedIndex = selectedIndex,
+            onSelectedIndexChange = { index ->
+                haptics.selection()
+                onLiveNotificationTemplateModeChange(modes[index])
+            },
+        )
         RowDivider()
         SwitchSettingItem(
             title = "随口记挂起固定标题",
@@ -1021,7 +988,7 @@ private fun LogExportSheet(
                     }
                 )
             }
-            Button(
+            EditionButton(
                 onClick = { haptics.confirm(); onExport(selectedMinutes) },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1057,7 +1024,7 @@ private fun LogExportOptionRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Checkbox(checked = selected, onCheckedChange = { onSelect() })
+        EditionCheckbox(checked = selected, onCheckedChange = { onSelect() })
     }
 }
 
@@ -1139,7 +1106,7 @@ private fun DebugActionSelectSheet(
                     )
                 }
             }
-            Button(
+            EditionButton(
                 onClick = { haptics.confirm(); onRun(selectedActions) },
                 enabled = selectedActions.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
@@ -1176,7 +1143,7 @@ private fun DebugActionOptionRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Checkbox(checked = selected, onCheckedChange = { onSelect() })
+        EditionCheckbox(checked = selected, onCheckedChange = { onSelect() })
     }
 }
 
@@ -1271,7 +1238,7 @@ private fun DeveloperActionRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Button(
+        EditionButton(
             onClick = onRun,
             enabled = !running
         ) {

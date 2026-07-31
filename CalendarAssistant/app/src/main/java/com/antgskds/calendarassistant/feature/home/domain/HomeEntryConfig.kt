@@ -5,6 +5,7 @@ object HomeEntryKey {
     const val TODAY = "today"
     const val ALL = "all"
     const val NOTE = "note"
+    const val SETTINGS = "settings"
 }
 
 fun sanitizeHomeBottomItems(raw: List<String>): List<String> {
