@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +55,7 @@ import com.antgskds.calendarassistant.shared.ui.material.component.WheelTimePick
 import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayCard
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.feature.schedule.ui.render.RepeatRulePickerDialog
+import com.antgskds.calendarassistant.platform.navigation.MapNavigationLauncher
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DialogEdgeToEdgeEffect
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
@@ -230,6 +233,7 @@ fun MaterialAddEventDialog(
 ) {
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val context = LocalContext.current
     val isEditing = editDraft != null
     val draftKey = editDraft?.hashCode() ?: 0
     val eventColors = remember(settings.eventColorPaletteHex) { resolveEventColors(settings.eventColorPaletteHex) }
@@ -506,7 +510,29 @@ fun MaterialAddEventDialog(
                         onValueChange = { index, value -> structuredFieldValues[index] = value }
                     )
                 } else {
-                    OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("地点") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(
+                        value = location,
+                        onValueChange = { location = it },
+                        label = { Text("地点") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(
+                                enabled = location.isNotBlank(),
+                                onClick = {
+                                    haptics.click()
+                                    if (!MapNavigationLauncher.openLocation(context, location)) {
+                                        onShowMessage("未找到可用的地图应用")
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Navigation,
+                                    contentDescription = "在地图中搜索该地点"
+                                )
+                            }
+                        }
+                    )
                     OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
                 }
 

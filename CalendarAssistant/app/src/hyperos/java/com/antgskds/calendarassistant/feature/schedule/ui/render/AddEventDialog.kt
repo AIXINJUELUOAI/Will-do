@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.app.ui.theme.material.resolveEventColors
 import com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft
@@ -33,6 +34,8 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.feature.recognition.domain.rule.RecognitionRuleCatalog
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.platform.navigation.MapNavigationLauncher
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelReminderPickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelTimePickerDialog
@@ -50,6 +53,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -113,6 +117,8 @@ fun AddEventDialog(
     onDismiss: () -> Unit,
     onConfirm: (EventPatch) -> Unit,
 ) {
+    val context = LocalContext.current
+    val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val draftKey = editDraft?.hashCode() ?: 0
     val formatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val initialStart = remember(draftKey) {
@@ -262,6 +268,22 @@ fun AddEventDialog(
                 label = "地点",
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(
+                        enabled = location.isNotBlank(),
+                        onClick = {
+                            haptics.click()
+                            if (!MapNavigationLauncher.openLocation(context, location)) {
+                                onShowMessage("未找到可用的地图应用")
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Normal.Location,
+                            contentDescription = "在地图中搜索该地点",
+                        )
+                    }
+                },
             )
             val activeStructuredFields = structuredFields[eventTag]
             if (activeStructuredFields == null) {
