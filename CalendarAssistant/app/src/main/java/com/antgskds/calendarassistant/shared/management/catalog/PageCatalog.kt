@@ -62,7 +62,7 @@ object PageCatalog {
         PageEntry(SettingsDestination.Schedule, "settings_schedule", "课表设置", PageVisibility.USER, "综合课表设置（旧版，建议用上面细分项）"),
 
         // —— 其他设置（普通用户）——
-        PageEntry(SettingsDestination.AI, "settings_ai", "模型配置", PageVisibility.USER, "配置 AI 识别模型（API、多模态等）"),
+        PageEntry(SettingsDestination.AI, "settings_ai", "模型与连接", PageVisibility.USER, "配置 AI 识别模型与 WebDAV 连接"),
         PageEntry(SettingsDestination.Weather, "settings_weather", "天气", PageVisibility.USER, "天气位置与预警设置"),
         PageEntry(SettingsDestination.Preference, "settings_preference", "偏好设置", PageVisibility.USER, "通用偏好：显示、操作、通知、日程等开关"),
         PageEntry(SettingsDestination.ScheduleColors, "settings_schedule_colors", "日程颜色", PageVisibility.USER, "自定义新建和识别日程使用的颜色色盘（从偏好设置进入）"),

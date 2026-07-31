@@ -2,7 +2,10 @@ package com.antgskds.calendarassistant.feature.recognition.ui.contract
 
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
-data class AiSettingsUiState(val settings: MySettings)
+data class AiSettingsUiState(
+    val settings: MySettings,
+    val webDavPasswordStored: Boolean,
+)
 
 sealed interface AiSettingsUiAction {
     data class SaveTextModel(val key: String, val name: String, val url: String) : AiSettingsUiAction

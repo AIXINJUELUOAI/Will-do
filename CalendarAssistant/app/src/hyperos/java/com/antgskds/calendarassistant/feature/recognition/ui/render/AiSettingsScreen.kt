@@ -28,6 +28,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionTestResult
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiAction
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiState
 import kotlinx.coroutines.launch
@@ -78,6 +80,7 @@ fun AiSettingsScreen(
     uiSize: Int,
     onAction: (AiSettingsUiAction) -> Unit,
     fetchModels: suspend (String, String) -> ModelListResult,
+    testWebDavConnection: suspend (WebDavConnectionInput) -> WebDavConnectionTestResult,
 ) {
     val settings = state.settings
     val context = LocalContext.current
@@ -97,6 +100,13 @@ fun AiSettingsScreen(
     var fetchedSignature by remember(multimodal) { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var keyVisible by remember(multimodal) { mutableStateOf(false) }
+    var webDavBaseUrl by remember(settings.webDavBaseUrl) { mutableStateOf(settings.webDavBaseUrl) }
+    var webDavUsername by remember(settings.webDavUsername) { mutableStateOf(settings.webDavUsername) }
+    var webDavRemotePath by remember(settings.webDavRemotePath) { mutableStateOf(settings.webDavRemotePath) }
+    var webDavPassword by remember { mutableStateOf("") }
+    var webDavPasswordStored by remember(state.webDavPasswordStored) { mutableStateOf(state.webDavPasswordStored) }
+    var webDavPasswordVisible by remember { mutableStateOf(false) }
+    var webDavLoading by remember { mutableStateOf(false) }
 
     val providers = HyperProviderPresets.keys.toList() + Custom
     val providerIndex = providers.indexOf(provider).coerceAtLeast(0)
@@ -172,6 +182,40 @@ fun AiSettingsScreen(
             return
         }
         save(normalizedUrl, modelName.trim(), modelKey.trim())
+    }
+
+    fun handleWebDavTest() {
+        if (webDavLoading) return
+        if (webDavBaseUrl.isBlank()) {
+            message("请填写 WebDAV 地址")
+            return
+        }
+        if (webDavPassword.isBlank() && !webDavPasswordStored) {
+            message("请填写 WebDAV 密码")
+            return
+        }
+        scope.launch {
+            webDavLoading = true
+            try {
+                val result = testWebDavConnection(
+                    WebDavConnectionInput(
+                        baseUrl = webDavBaseUrl,
+                        username = webDavUsername,
+                        remotePath = webDavRemotePath,
+                        password = webDavPassword,
+                    )
+                )
+                if (result.success) {
+                    if (webDavPassword.isNotBlank()) webDavPasswordStored = true
+                    webDavPassword = ""
+                }
+                message(result.message)
+            } catch (error: Exception) {
+                message("连接失败：${error.message.orEmpty().take(32)}")
+            } finally {
+                webDavLoading = false
+            }
+        }
     }
 
     Column(
@@ -282,6 +326,68 @@ fun AiSettingsScreen(
             } else {
                 Text(if (provider == Custom && customModels.isEmpty()) "测试并获取模型" else "保存配置")
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "WebDAV 连接",
+            color = MiuixTheme.colorScheme.primary,
+            fontSize = MiuixTheme.textStyles.title3.fontSize,
+        )
+        TextField(
+            value = webDavBaseUrl,
+            onValueChange = { webDavBaseUrl = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "服务器地址",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        )
+        TextField(
+            value = webDavUsername,
+            onValueChange = { webDavUsername = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "用户名",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+        )
+        TextField(
+            value = webDavRemotePath,
+            onValueChange = { webDavRemotePath = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "远程目录",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+        )
+        TextField(
+            value = webDavPassword,
+            onValueChange = { webDavPassword = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = if (webDavPasswordStored) "密码（已保存，留空则继续使用）" else "密码",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            trailingIcon = {
+                IconButton(onClick = { webDavPasswordVisible = !webDavPasswordVisible }) {
+                    Icon(
+                        imageVector = if (webDavPasswordVisible) MiuixIcons.Normal.Hide else MiuixIcons.Normal.Show,
+                        contentDescription = if (webDavPasswordVisible) "隐藏密码" else "显示密码",
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            },
+            visualTransformation = if (webDavPasswordVisible) {
+                androidx.compose.ui.text.input.VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+        )
+        Button(
+            onClick = ::handleWebDavTest,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !webDavLoading,
+            colors = ButtonDefaults.buttonColorsPrimary(),
+        ) {
+            if (webDavLoading) CircularProgressIndicator() else Text("测试并保存")
         }
     }
 }

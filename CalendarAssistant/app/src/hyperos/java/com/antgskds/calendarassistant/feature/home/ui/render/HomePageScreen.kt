@@ -791,7 +791,7 @@ private fun HyperSettingsOverview(
             ),
             "功能设置" to listOf(
                 HyperSettingsItem("偏好设置", "通知、识别和操作选项", SettingsDestination.Preference, MiuixIcons.Normal.Tune),
-                HyperSettingsItem("模型配置", "配置识别模型和 API", SettingsDestination.AI, MiuixIcons.Normal.Scan),
+                HyperSettingsItem("模型与连接", "配置 AI 模型和 WebDAV", SettingsDestination.AI, MiuixIcons.Normal.Scan),
                 HyperSettingsItem("天气", "天气数据和风险提醒", SettingsDestination.Weather, MiuixIcons.Normal.Theme),
                 HyperSettingsItem("主题设置", "深色模式、壁纸和显示效果", SettingsDestination.Theme, MiuixIcons.Normal.Theme),
             ),

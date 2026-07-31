@@ -330,11 +330,11 @@ private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestina
 private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
     SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            // 模型配置
+            // 模型与连接
             SidebarActionItem(
                 icon = Icons.Default.Android,
-                title = "模型配置",
-                subtitle = "API Key 与模型",
+                title = "模型与连接",
+                subtitle = "AI 模型与 WebDAV",
                 onClick = { onNavigate(SettingsDestination.AI) }
             )
             SidebarActionItem(

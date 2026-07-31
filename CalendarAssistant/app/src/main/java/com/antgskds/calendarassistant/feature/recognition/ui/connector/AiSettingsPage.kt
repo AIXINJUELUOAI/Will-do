@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +72,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ApiModelProvider
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionTestResult
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
 import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToast
@@ -119,7 +122,10 @@ fun AiSettingsPage(
 ) {
     val settings by viewModel.settings.collectAsState()
     AiSettingsScreen(
-        state = AiSettingsUiState(settings),
+        state = AiSettingsUiState(
+            settings = settings,
+            webDavPasswordStored = viewModel.hasStoredWebDavPassword(),
+        ),
         uiSize = uiSize,
         onAction = { action ->
             when (action) {
@@ -127,7 +133,8 @@ fun AiSettingsPage(
                 is AiSettingsUiAction.SaveMultimodalModel -> viewModel.updateMultimodalAiSettings(action.key, action.name, action.url)
             }
         },
-        fetchModels = ApiModelProvider::fetchAvailableModels
+        fetchModels = ApiModelProvider::fetchAvailableModels,
+        testWebDavConnection = viewModel::testAndSaveWebDavConnection,
     )
 }
 
@@ -137,7 +144,8 @@ fun MaterialAiSettingsScreen(
     state: AiSettingsUiState,
     uiSize: Int = 2,
     onAction: (AiSettingsUiAction) -> Unit,
-    fetchModels: suspend (String, String) -> ModelListResult
+    fetchModels: suspend (String, String) -> ModelListResult,
+    testWebDavConnection: suspend (WebDavConnectionInput) -> WebDavConnectionTestResult,
 ) {
     val settings = state.settings
     val scrollState = rememberScrollState()
@@ -166,6 +174,14 @@ fun MaterialAiSettingsScreen(
     var isProviderExpanded by remember { mutableStateOf(false) }
     var isModelExpanded by remember { mutableStateOf(false) }
     var actionLoading by remember { mutableStateOf(false) }
+    var webDavLoading by remember { mutableStateOf(false) }
+    var webDavBaseUrl by remember(settings.webDavBaseUrl) { mutableStateOf(settings.webDavBaseUrl) }
+    var webDavUsername by remember(settings.webDavUsername) { mutableStateOf(settings.webDavUsername) }
+    var webDavRemotePath by remember(settings.webDavRemotePath) { mutableStateOf(settings.webDavRemotePath) }
+    var webDavPassword by remember { mutableStateOf("") }
+    var webDavPasswordStored by remember(state.webDavPasswordStored) {
+        mutableStateOf(state.webDavPasswordStored)
+    }
 
     val activeProvider = if (isMultimodalEnabled) mmProvider else textProvider
     val activeModelUrl = if (isMultimodalEnabled) mmModelUrl else textModelUrl
@@ -336,6 +352,37 @@ fun MaterialAiSettingsScreen(
         saveCurrent(normalizedUrl, effectiveModelName, activeModelKey)
     }
 
+    suspend fun onTestWebDavClick() {
+        if (webDavBaseUrl.isBlank()) {
+            showToast("请填写 WebDAV 地址", ToastType.ERROR)
+            return
+        }
+        if (webDavPassword.isBlank() && !webDavPasswordStored) {
+            showToast("请填写 WebDAV 密码", ToastType.ERROR)
+            return
+        }
+        webDavLoading = true
+        val result = try {
+            testWebDavConnection(
+                WebDavConnectionInput(
+                    baseUrl = webDavBaseUrl,
+                    username = webDavUsername,
+                    remotePath = webDavRemotePath,
+                    password = webDavPassword,
+                )
+            )
+        } finally {
+            webDavLoading = false
+        }
+        if (result.success) {
+            if (webDavPassword.isNotBlank()) webDavPasswordStored = true
+            webDavPassword = ""
+            showToast(result.message)
+        } else {
+            showToast(result.message, ToastType.ERROR)
+        }
+    }
+
     val modelOptions = if (activeProvider == PROVIDER_CUSTOM) {
         activeCustomModels
     } else {
@@ -436,6 +483,24 @@ fun MaterialAiSettingsScreen(
                 customMode = activeProvider == PROVIDER_CUSTOM
             )
 
+            Text("WebDAV 连接", style = sectionTitleStyle)
+            WebDavConfigForm(
+                baseUrl = webDavBaseUrl,
+                username = webDavUsername,
+                remotePath = webDavRemotePath,
+                password = webDavPassword,
+                passwordStored = webDavPasswordStored,
+                loading = webDavLoading,
+                onBaseUrlChange = { webDavBaseUrl = it },
+                onUsernameChange = { webDavUsername = it },
+                onRemotePathChange = { webDavRemotePath = it },
+                onPasswordChange = { webDavPassword = it },
+                onTest = { scope.launch { onTestWebDavClick() } },
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
+
             Spacer(modifier = Modifier.height(120.dp))
             Text(
                 text = saveHintText,
@@ -485,6 +550,83 @@ fun MaterialAiSettingsScreen(
     LaunchedEffect(isMultimodalEnabled) {
         isProviderExpanded = false
         isModelExpanded = false
+    }
+}
+
+@Composable
+private fun WebDavConfigForm(
+    baseUrl: String,
+    username: String,
+    remotePath: String,
+    password: String,
+    passwordStored: Boolean,
+    loading: Boolean,
+    onBaseUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onRemotePathChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onTest: () -> Unit,
+    cardTitleStyle: TextStyle,
+    cardValueStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
+) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            TextInputItem(
+                title = "服务器地址",
+                value = baseUrl,
+                onValueChange = onBaseUrlChange,
+                placeholder = "https://example.com/dav",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
+            MyDivider()
+            TextInputItem(
+                title = "用户名",
+                value = username,
+                onValueChange = onUsernameChange,
+                placeholder = "WebDAV 用户名",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
+            MyDivider()
+            TextInputItem(
+                title = "远程目录",
+                value = remotePath,
+                onValueChange = onRemotePathChange,
+                placeholder = "/WillDo",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
+            MyDivider()
+            TextInputItem(
+                title = "密码",
+                value = password,
+                onValueChange = onPasswordChange,
+                placeholder = if (passwordStored) "已保存，留空则继续使用" else "WebDAV 密码",
+                cardTitleStyle = cardTitleStyle,
+                cardValueStyle = cardValueStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
+            Button(
+                onClick = onTest,
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("测试并保存")
+                }
+            }
+        }
     }
 }
 
@@ -710,7 +852,7 @@ private fun TextInputItem(
     var fieldValue by remember(value) {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
     }
-    val isPasswordField = title == "API Key"
+    val isPasswordField = title == "API Key" || title == "密码"
     val visualTransformation = if (isPasswordField && !isFocused && value.isNotEmpty()) {
         PasswordVisualTransformation()
     } else {

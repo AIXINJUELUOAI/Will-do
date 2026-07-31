@@ -9,6 +9,9 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavConnectionCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
+import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionTestResult
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleaner
 import com.antgskds.calendarassistant.feature.schedule.data.maintenance.DuplicateEventCleanupResult
@@ -53,7 +56,8 @@ class SettingsViewModel(
     private val settingsTransformApi: SettingsTransformApi,
     private val scheduleInsightsQueryApi: ScheduleInsightsQueryApi,
     private val legacyNoteMigrationCenter: LegacyNoteMigrator,
-    private val duplicateEventCleanupCenter: DuplicateEventCleaner
+    private val duplicateEventCleanupCenter: DuplicateEventCleaner,
+    private val webDavConnectionCenter: WebDavConnectionCoordinator,
 ) : ViewModel() {
     private val backgroundImageStore = AppBackgroundImageStore(appContext)
 
@@ -556,6 +560,14 @@ class SettingsViewModel(
                         themeColorScheme = if (current.appBackgroundImageColorEnabled) ThemeColorScheme.DEFAULT.name else current.themeColorScheme
                     )
                 )
+        }
+    }
+
+    fun hasStoredWebDavPassword(): Boolean = webDavConnectionCenter.hasStoredPassword()
+
+    suspend fun testAndSaveWebDavConnection(input: WebDavConnectionInput): WebDavConnectionTestResult {
+        return withContext(Dispatchers.IO) {
+            webDavConnectionCenter.testAndSave(input)
         }
     }
 
