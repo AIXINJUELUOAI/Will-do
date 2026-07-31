@@ -97,6 +97,11 @@ data class MySettings(
     val isLocalSemanticEnabled: Boolean = false,
     val selectedLocalModelId: String = "",
 
+    // WebDAV 连接；密码由 Android Keystore 独立保护，不进入设置备份
+    val webDavBaseUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavRemotePath: String = "/WillDo",
+
     // 功能开关
     val showTomorrowEvents: Boolean = false,
     val isDailySummaryEnabled: Boolean = false,

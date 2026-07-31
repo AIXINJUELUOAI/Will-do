@@ -225,7 +225,8 @@ class MainActivity : ComponentActivity() {
                         settingsTransformApi = app.settingsTransformApi,
                         scheduleInsightsQueryApi = app.scheduleInsightsQueryApi,
                         legacyNoteMigrationCenter = app.legacyNoteMigrationCenter,
-                        duplicateEventCleanupCenter = app.duplicateEventCleanupCenter
+                        duplicateEventCleanupCenter = app.duplicateEventCleanupCenter,
+                        webDavConnectionCenter = app.webDavConnectionCenter,
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }

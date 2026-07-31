@@ -2066,7 +2066,7 @@ private enum class OnboardingStep(
         isSkippableConfig = true,
     ),
     MODEL(
-        "模型配置",
+        "模型与连接",
         "配置 AI 接口、多模态、本地语义等识别能力。",
         isSkippableConfig = true,
     ),

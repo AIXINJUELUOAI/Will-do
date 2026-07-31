@@ -45,6 +45,9 @@ import com.antgskds.calendarassistant.shared.query.AlarmRoutingQueryApi
 import com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavConnectionCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.data.KtorWebDavRemoteStore
+import com.antgskds.calendarassistant.feature.cloudsync.data.WebDavCredentialStore
 import com.antgskds.calendarassistant.shared.query.ScheduleQueryApi
 import com.antgskds.calendarassistant.shared.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherOperationApi
@@ -182,6 +185,15 @@ class App : Application() {
                 settingsRepository.saveSettings(newSettings)
             }
         }
+    }
+
+    val webDavConnectionCenter: WebDavConnectionCoordinator by lazy {
+        WebDavConnectionCoordinator(
+            remoteStore = KtorWebDavRemoteStore.createAndroid(),
+            credentialStore = WebDavCredentialStore(applicationContext),
+            settingsQueryApi = settingsQueryApi,
+            settingsOperationApi = settingsOperationApi,
+        )
     }
 
     // ══════════════════════════════════════════════════════════════════════
