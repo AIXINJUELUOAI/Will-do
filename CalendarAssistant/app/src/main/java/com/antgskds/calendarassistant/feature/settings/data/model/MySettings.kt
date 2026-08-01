@@ -100,7 +100,11 @@ data class MySettings(
     // WebDAV 连接；密码由 Android Keystore 独立保护，不进入设置备份
     val webDavBaseUrl: String = "",
     val webDavUsername: String = "",
-    val webDavRemotePath: String = "/WillDo",
+    val webDavSyncEnabled: Boolean = false,
+    val webDavWifiOnly: Boolean = false,
+    val webDavForegroundSyncIntervalSeconds: Int = 30,
+    // 仅开发者使用；为空时固定使用 WillDo/sync/v2
+    val webDavRemotePathOverride: String = "",
 
     // 功能开关
     val showTomorrowEvents: Boolean = false,

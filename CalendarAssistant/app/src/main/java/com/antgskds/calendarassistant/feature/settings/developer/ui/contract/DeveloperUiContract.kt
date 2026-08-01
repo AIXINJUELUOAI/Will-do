@@ -19,6 +19,7 @@ sealed interface DeveloperUiAction {
     data class SetListReverse(val kind: DeveloperListKind, val enabled: Boolean) : DeveloperUiAction
     data class SetDragField(val field: DeveloperDragField, val enabled: Boolean) : DeveloperUiAction
     data class SetDragHotZone(val percent: Int) : DeveloperUiAction
+    data class SetWebDavRemoteRoot(val value: String) : DeveloperUiAction
     data class ApplyUiScale(val small: Float, val medium: Float, val large: Float) : DeveloperUiAction
     data object ResetUiScale : DeveloperUiAction
     data object ResetListOrder : DeveloperUiAction

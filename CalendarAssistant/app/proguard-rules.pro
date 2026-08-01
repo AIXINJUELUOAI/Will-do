@@ -26,6 +26,11 @@
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }
 
+# WebDAV V2 uses Gson reflection for its encrypted wire format. Keep these
+# names and generic members stable across release builds and app updates.
+-keep class com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2** { *; }
+-keep class com.antgskds.calendarassistant.feature.schedule.domain.model.Attendee { *; }
+
 # Xposed loads hook entry classes by the fully qualified names listed in assets/xposed_init.
 -keep class com.antgskds.calendarassistant.platform.xposed.** { *; }
 

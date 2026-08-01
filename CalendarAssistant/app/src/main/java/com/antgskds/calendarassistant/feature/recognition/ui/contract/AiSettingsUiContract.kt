@@ -1,10 +1,13 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.contract
 
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2RuntimeStatus
 
 data class AiSettingsUiState(
     val settings: MySettings,
     val webDavPasswordStored: Boolean,
+    val syncPassphraseStored: Boolean,
+    val syncStatus: SyncV2RuntimeStatus,
 )
 
 sealed interface AiSettingsUiAction {

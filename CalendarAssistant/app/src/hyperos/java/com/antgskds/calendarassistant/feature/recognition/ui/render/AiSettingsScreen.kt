@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -23,9 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.recognition.application.ai.ModelListResult
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
@@ -33,19 +36,17 @@ import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionT
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiAction
 import com.antgskds.calendarassistant.feature.recognition.ui.contract.AiSettingsUiState
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Hide
-import top.yukonga.miuix.kmp.icon.extended.Show
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.antgskds.calendarassistant.shared.ui.material.settings.SliderSettingItem
+import com.antgskds.calendarassistant.shared.ui.material.settings.SwitchSettingItem
 
 private const val DeepSeek = "DeepSeek"
 private const val OpenAi = "OpenAI"
@@ -81,9 +82,16 @@ fun AiSettingsScreen(
     onAction: (AiSettingsUiAction) -> Unit,
     fetchModels: suspend (String, String) -> ModelListResult,
     testWebDavConnection: suspend (WebDavConnectionInput) -> WebDavConnectionTestResult,
+    readStoredWebDavPassword: () -> String,
+    readStoredSyncPassphrase: () -> String,
+    onSyncEnabledChange: (Boolean) -> Unit,
+    onWifiOnlyChange: (Boolean) -> Unit,
+    onForegroundSyncIntervalChange: (Int) -> Unit,
+    onSyncNow: () -> Unit,
 ) {
     val settings = state.settings
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val multimodal = settings.useMultimodalAi
     val initialUrl = if (multimodal) settings.mmModelUrl else settings.modelUrl
@@ -99,13 +107,19 @@ fun AiSettingsScreen(
     var customModels by remember(multimodal) { mutableStateOf(emptyList<String>()) }
     var fetchedSignature by remember(multimodal) { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
-    var keyVisible by remember(multimodal) { mutableStateOf(false) }
+    var keyFocused by remember(multimodal) { mutableStateOf(false) }
     var webDavBaseUrl by remember(settings.webDavBaseUrl) { mutableStateOf(settings.webDavBaseUrl) }
     var webDavUsername by remember(settings.webDavUsername) { mutableStateOf(settings.webDavUsername) }
-    var webDavRemotePath by remember(settings.webDavRemotePath) { mutableStateOf(settings.webDavRemotePath) }
-    var webDavPassword by remember { mutableStateOf("") }
     var webDavPasswordStored by remember(state.webDavPasswordStored) { mutableStateOf(state.webDavPasswordStored) }
-    var webDavPasswordVisible by remember { mutableStateOf(false) }
+    var webDavPassword by remember(state.webDavPasswordStored) {
+        mutableStateOf(if (state.webDavPasswordStored) readStoredWebDavPassword() else "")
+    }
+    var webDavPasswordFocused by remember { mutableStateOf(false) }
+    var syncPassphraseStored by remember(state.syncPassphraseStored) { mutableStateOf(state.syncPassphraseStored) }
+    var syncPassphrase by remember(state.syncPassphraseStored) {
+        mutableStateOf(if (state.syncPassphraseStored) readStoredSyncPassphrase() else "")
+    }
+    var syncPassphraseFocused by remember { mutableStateOf(false) }
     var webDavLoading by remember { mutableStateOf(false) }
 
     val providers = HyperProviderPresets.keys.toList() + Custom
@@ -139,6 +153,7 @@ fun AiSettingsScreen(
 
     fun handleSave() {
         if (loading) return
+        focusManager.clearFocus()
         if (modelKey.isBlank()) {
             message("请先填写 API Key")
             return
@@ -186,12 +201,17 @@ fun AiSettingsScreen(
 
     fun handleWebDavTest() {
         if (webDavLoading) return
+        focusManager.clearFocus()
         if (webDavBaseUrl.isBlank()) {
             message("请填写 WebDAV 地址")
             return
         }
         if (webDavPassword.isBlank() && !webDavPasswordStored) {
             message("请填写 WebDAV 密码")
+            return
+        }
+        if (syncPassphrase.isBlank() && !syncPassphraseStored) {
+            message("请填写同步密码")
             return
         }
         scope.launch {
@@ -201,13 +221,13 @@ fun AiSettingsScreen(
                     WebDavConnectionInput(
                         baseUrl = webDavBaseUrl,
                         username = webDavUsername,
-                        remotePath = webDavRemotePath,
                         password = webDavPassword,
+                        syncPassphrase = syncPassphrase,
                     )
                 )
                 if (result.success) {
                     if (webDavPassword.isNotBlank()) webDavPasswordStored = true
-                    webDavPassword = ""
+                    if (syncPassphrase.isNotBlank()) syncPassphraseStored = true
                 }
                 message(result.message)
             } catch (error: Exception) {
@@ -231,6 +251,41 @@ fun AiSettingsScreen(
             color = MiuixTheme.colorScheme.primary,
             fontSize = MiuixTheme.textStyles.title3.fontSize,
         )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                SwitchSettingItem(
+                    title = "多设备同步",
+                    subtitle = "同步日程、随口记及其附件",
+                    checked = settings.webDavSyncEnabled,
+                    onCheckedChange = onSyncEnabledChange,
+                    cardTitleStyle = TextStyle.Default,
+                    cardSubtitleStyle = TextStyle.Default,
+                )
+                SwitchSettingItem(
+                    title = "仅在 Wi-Fi 下同步",
+                    subtitle = "移动网络下暂停自动同步",
+                    checked = settings.webDavWifiOnly,
+                    onCheckedChange = onWifiOnlyChange,
+                    cardTitleStyle = TextStyle.Default,
+                    cardSubtitleStyle = TextStyle.Default,
+                )
+                SliderSettingItem(
+                    title = "前台同步间隔",
+                    subtitle = "应用在前台时自动同步的时间间隔",
+                    value = settings.webDavForegroundSyncIntervalSeconds.toFloat(),
+                    onValueChange = {
+                        onForegroundSyncIntervalChange(it.roundToInt().coerceIn(1, 300))
+                    },
+                    valueRange = 1f..300f,
+                    steps = 0,
+                    cardTitleStyle = TextStyle.Default,
+                    cardSubtitleStyle = TextStyle.Default,
+                    cardValueStyle = TextStyle.Default,
+                    showValueAsNumber = true,
+                    valueUnit = " 秒",
+                )
+            }
+        }
         Text(
             text = "当前模式：${if (multimodal) "多模态 AI" else "文本 AI"}（在偏好设置中切换）",
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -294,20 +349,13 @@ fun AiSettingsScreen(
                 fetchedSignature = null
                 customModels = emptyList()
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { keyFocused = it.isFocused },
             label = "API Key",
             useLabelAsPlaceholder = true,
             singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = { keyVisible = !keyVisible }) {
-                    Icon(
-                        imageVector = if (keyVisible) MiuixIcons.Normal.Hide else MiuixIcons.Normal.Show,
-                        contentDescription = if (keyVisible) "隐藏 API Key" else "显示 API Key",
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            },
-            visualTransformation = if (keyVisible) {
+            visualTransformation = if (keyFocused) {
                 androidx.compose.ui.text.input.VisualTransformation.None
             } else {
                 PasswordVisualTransformation()
@@ -315,16 +363,16 @@ fun AiSettingsScreen(
         )
 
         Spacer(Modifier.height(4.dp))
-        Button(
-            onClick = ::handleSave,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = !loading,
-            colors = ButtonDefaults.buttonColorsPrimary(),
+            horizontalArrangement = Arrangement.End,
         ) {
-            if (loading) {
-                CircularProgressIndicator()
-            } else {
-                Text(if (provider == Custom && customModels.isEmpty()) "测试并获取模型" else "保存配置")
+            Button(
+                onClick = ::handleSave,
+                enabled = !loading,
+                colors = ButtonDefaults.buttonColorsPrimary(),
+            ) {
+                if (loading) CircularProgressIndicator() else Text("连接")
             }
         }
 
@@ -352,42 +400,64 @@ fun AiSettingsScreen(
             singleLine = true,
         )
         TextField(
-            value = webDavRemotePath,
-            onValueChange = { webDavRemotePath = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = "远程目录",
-            useLabelAsPlaceholder = true,
-            singleLine = true,
-        )
-        TextField(
             value = webDavPassword,
             onValueChange = { webDavPassword = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = if (webDavPasswordStored) "密码（已保存，留空则继续使用）" else "密码",
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { webDavPasswordFocused = it.isFocused },
+            label = "WebDAV 密码",
             useLabelAsPlaceholder = true,
             singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = { webDavPasswordVisible = !webDavPasswordVisible }) {
-                    Icon(
-                        imageVector = if (webDavPasswordVisible) MiuixIcons.Normal.Hide else MiuixIcons.Normal.Show,
-                        contentDescription = if (webDavPasswordVisible) "隐藏密码" else "显示密码",
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            },
-            visualTransformation = if (webDavPasswordVisible) {
+            visualTransformation = if (webDavPasswordFocused) {
                 androidx.compose.ui.text.input.VisualTransformation.None
             } else {
                 PasswordVisualTransformation()
             },
         )
-        Button(
-            onClick = ::handleWebDavTest,
+        TextField(
+            value = syncPassphrase,
+            onValueChange = { syncPassphrase = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { syncPassphraseFocused = it.isFocused },
+            label = "同步密码",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            visualTransformation = if (syncPassphraseFocused) {
+                androidx.compose.ui.text.input.VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+        )
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = !webDavLoading,
-            colors = ButtonDefaults.buttonColorsPrimary(),
+            horizontalArrangement = Arrangement.End,
         ) {
-            if (webDavLoading) CircularProgressIndicator() else Text("测试并保存")
+            Button(
+                onClick = ::handleWebDavTest,
+                enabled = !webDavLoading,
+                colors = ButtonDefaults.buttonColorsPrimary(),
+            ) {
+                if (webDavLoading) CircularProgressIndicator() else Text("连接")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("同步状态")
+                Text(state.syncStatus.message, color = MiuixTheme.colorScheme.onSurfaceVariantActions)
+                if (state.syncStatus.pendingAssetCount > 0) {
+                    Text("${state.syncStatus.pendingAssetCount} 个附件等待同步")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Button(onClick = onSyncNow, colors = ButtonDefaults.buttonColorsPrimary()) {
+                        Text("立即同步")
+                    }
+                }
+            }
         }
     }
 }

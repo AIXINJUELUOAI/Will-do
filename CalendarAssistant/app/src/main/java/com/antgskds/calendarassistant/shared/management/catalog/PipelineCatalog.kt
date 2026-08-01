@@ -80,6 +80,11 @@ object PipelineCatalog {
             Maturity.TRANSITION,
             "本地日程 ↔ 系统日历同步编排；失败不回滚本地入库（重试 Worker 见 WorkerCatalog，规划中）",
         ),
+        PipelineEntry(
+            "WebDAV 多设备状态同步", Chain.SYNC, "feature/cloudsync/application/WebDavSyncV2Coordinator",
+            Maturity.PIPELINE,
+            "按设备发布完整最终状态，在本地合并版本向量、墓碑和全局不可变附件",
+        ),
 
         // —— 通知 ——
         PipelineEntry(

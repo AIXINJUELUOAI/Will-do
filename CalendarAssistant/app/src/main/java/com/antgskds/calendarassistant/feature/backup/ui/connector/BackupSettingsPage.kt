@@ -74,7 +74,17 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
     var showBackupExportSheet by remember { mutableStateOf(false) }
     var showBackupImportSheet by remember { mutableStateOf(false) }
     var exportOptions by remember { mutableStateOf(AppBackupOptions(includeEvents = true)) }
-    var importOptions by remember { mutableStateOf(AppBackupOptions(includeEvents = true, includeSettings = true, includeAttachments = true, includePrompts = true)) }
+    var importOptions by remember {
+        mutableStateOf(
+            AppBackupOptions(
+                includeEvents = true,
+                includeSettings = true,
+                includeAttachments = true,
+                includePrompts = true,
+                includeQuickMemos = true
+            )
+        )
+    }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingImportIsZip by remember { mutableStateOf(false) }
     val promptLocalVersion by controller.promptLocalVersion.collectAsState()
@@ -216,14 +226,15 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
         if (uri != null) {
             val type = context.contentResolver.getType(uri).orEmpty()
             val name = uri.lastPathSegment.orEmpty()
+            val isZip = type.contains("zip", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
             pendingImportUri = uri
-            pendingImportIsZip = type.contains("zip", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
+            pendingImportIsZip = isZip
             importOptions = AppBackupOptions(
                 includeEvents = true,
                 includeSettings = true,
-                includeAttachments = pendingImportIsZip,
+                includeAttachments = isZip,
                 includePrompts = true,
-                includeQuickMemos = pendingImportIsZip
+                includeQuickMemos = isZip
             )
             showBackupImportSheet = true
         }
@@ -434,11 +445,11 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
                 confirmText = "导出",
                 onOptionsChange = { exportOptions = it },
                 onDismiss = { showBackupExportSheet = false },
-                onConfirm = {
+                onConfirm = { selectedOptions ->
                     haptics.confirm()
                     showBackupExportSheet = false
-                    val includeEvents = exportOptions.includeEvents || exportOptions.includeAttachments
-                    val normalized = exportOptions.copy(includeEvents = includeEvents, includeAttachments = includeEvents)
+                    val includeEvents = selectedOptions.includeEvents || selectedOptions.includeAttachments
+                    val normalized = selectedOptions.copy(includeEvents = includeEvents, includeAttachments = includeEvents)
                     exportOptions = normalized
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                     if (normalized.includeEvents || normalized.includeQuickMemos) {
@@ -462,16 +473,16 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
                     showBackupImportSheet = false
                     pendingImportUri = null
                 },
-                onConfirm = {
+                onConfirm = { selectedOptions ->
                     haptics.confirm()
                     val uri = pendingImportUri ?: return@BackupOptionsSheet
                     showBackupImportSheet = false
                     scope.launch(Dispatchers.IO) {
                         val result = if (pendingImportIsZip) {
-                            controller.importBackupZip(uri, importOptions)
+                            controller.importBackupZip(uri, selectedOptions)
                         } else {
                             val jsonString = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                            controller.importBackupJson(jsonString, importOptions)
+                            controller.importBackupJson(jsonString, selectedOptions)
                         }
                         withContext(Dispatchers.Main) {
                             if (result.isSuccess) showToast(formatBackupImportResult(result.getOrThrow()), ToastType.SUCCESS)
@@ -720,7 +731,7 @@ private fun BackupOptionsSheet(
     confirmText: String,
     onOptionsChange: (AppBackupOptions) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: (AppBackupOptions) -> Unit
 ) {
     val normalizedIncludeEvents = options.includeEvents || options.includeAttachments
     val normalizedOptions = options.copy(
@@ -784,7 +795,7 @@ private fun BackupOptionsSheet(
             )
             Spacer(modifier = Modifier.height(16.dp))
             EditionButton(
-                onClick = onConfirm,
+                onClick = { onConfirm(normalizedOptions) },
                 enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings || normalizedOptions.includePrompts || normalizedOptions.includeQuickMemos,
                 modifier = Modifier.fillMaxWidth()
             ) {

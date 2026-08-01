@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.feature.settings.developer.ui.connector
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.app.Activity
@@ -129,6 +130,13 @@ fun DeveloperPage(
                 DeveloperDragField.DESCRIPTION -> settingsViewModel.updateFloatingDragTextOptions(includeDescription = action.enabled)
             }
             is DeveloperUiAction.SetDragHotZone -> settingsViewModel.updateFloatingDragHotZonePercent(action.percent)
+            is DeveloperUiAction.SetWebDavRemoteRoot -> runCatching {
+                settingsViewModel.updateWebDavRemotePathOverride(action.value)
+            }.onSuccess {
+                Toast.makeText(context, "WebDAV 测试目录已更新", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, it.message ?: "目录无效", Toast.LENGTH_SHORT).show()
+            }
             is DeveloperUiAction.ApplyUiScale -> settingsViewModel.updateUiScaleFactors(
                 small = action.small,
                 medium = action.medium,
@@ -188,6 +196,9 @@ fun MaterialDeveloperScreen(
     var pendingBatch by remember { mutableStateOf<DebugActionBatch?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var webDavRemoteRoot by remember(settings.webDavRemotePathOverride) {
+        mutableStateOf(settings.webDavRemotePathOverride)
+    }
     var showLogExportSheet by remember { mutableStateOf(false) }
     var quickActionSheet by remember { mutableStateOf<QuickActionSheetSpec?>(null) }
     var scaleSmall by remember(settings.uiScaleSmall, settings.uiScaleMedium, settings.uiScaleLarge) {
@@ -472,6 +483,36 @@ fun MaterialDeveloperScreen(
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle
                 )
+            }
+
+            Text(text = "WebDAV 调试", style = sectionTitleStyle)
+            SettingsCard {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    EditionTextField(
+                        value = webDavRemoteRoot,
+                        onValueChange = { webDavRemoteRoot = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("同步根目录覆盖") },
+                        singleLine = true,
+                    )
+                    Text(
+                        text = "实际目录：/${webDavRemoteRoot.trim().trim('/').ifBlank { "WillDo" }}/sync/v2",
+                        style = cardSubtitleStyle,
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        EditionOutlinedButton(
+                            onClick = {
+                                webDavRemoteRoot = ""
+                                onAction(DeveloperUiAction.SetWebDavRemoteRoot(""))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("恢复默认") }
+                        EditionButton(
+                            onClick = { onAction(DeveloperUiAction.SetWebDavRemoteRoot(webDavRemoteRoot)) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("应用目录") }
+                    }
+                }
             }
 
             Text(text = "页面缩放", style = sectionTitleStyle)

@@ -9,6 +9,9 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 
 @Dao
 interface EventsDao {
+    @Query("SELECT * FROM events ORDER BY id ASC")
+    fun getAllEventsForSync(): List<Event>
+
     @Query("SELECT * FROM events WHERE archived_at IS NULL ORDER BY start_ts ASC")
     fun getAllEventsOrTasks(): List<Event>
 

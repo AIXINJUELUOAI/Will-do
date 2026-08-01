@@ -156,6 +156,7 @@ private fun configDomainSubtitle(domain: ConfigDomain): String = when (domain) {
     ConfigDomain.WEATHER -> "天气风险阈值与显示配置"
     ConfigDomain.NOTIFICATION -> "通知展示、提醒时长与发布策略"
     ConfigDomain.VOICE -> "随口记与悬浮窗长按配置"
+    ConfigDomain.SYNC -> "多设备同步与网络策略"
 }
 
 @Composable

@@ -51,6 +51,11 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry(
+            "WebDAV 版本合并策略", Chain.SYNC, "feature/cloudsync/domain/SyncV2VersionPolicy",
+            Maturity.ACTIVE,
+            "使用版本向量判断先后与并发，稳定选择可见版本并保留并发分支",
+        ),
         // —— 通知 / 提醒 ——
         PolicyEntry(
             "提醒策略", Chain.NOTIFICATION, "store/reminder/ReminderPolicy",
