@@ -27,6 +27,7 @@ enum class ConfigDomain(val label: String) {
     WEATHER("天气"),
     NOTIFICATION("通知"),
     VOICE("语音"),
+    SYNC("同步"),
 }
 
 /** 暴露级别（§5.5）。编辑页按级别决定是否渲染；SYSTEM_INTERNAL 不渲染。 */
@@ -76,6 +77,52 @@ class ConfigItem(
 object ConfigCatalog {
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.USER_SETTING,
+            key = "sync.webdav.enabled",
+            label = "多设备同步",
+            description = "同步日程、随口记及其附件。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.Toggle,
+            get = { if (it.webDavSyncEnabled) 1 else 0 },
+            set = { s, v -> s.copy(webDavSyncEnabled = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.USER_SETTING,
+            key = "sync.webdav.wifi_only",
+            label = "仅在 Wi-Fi 下同步",
+            description = "移动网络下暂停自动同步。",
+            exposure = ConfigExposure.USER_EDITABLE,
+            control = ConfigControl.Toggle,
+            get = { if (it.webDavWifiOnly) 1 else 0 },
+            set = { s, v -> s.copy(webDavWifiOnly = v != 0) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.POLICY,
+            key = "sync.webdav.foreground_interval_seconds",
+            label = "前台同步间隔",
+            description = "应用处于前台时轮询其他设备状态的间隔。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.IntInput(min = 1, max = 300, unitLabel = " 秒"),
+            get = { it.webDavForegroundSyncIntervalSeconds },
+            set = { s, v -> s.copy(webDavForegroundSyncIntervalSeconds = v.coerceIn(1, 300)) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.POLICY,
+            key = "sync.webdav.remote_root_override",
+            label = "WebDAV 测试根目录覆盖",
+            description = "仅由开发者页专用输入框维护，系统始终追加 sync/v2。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.IntInput(min = 0, max = 0),
+            get = { 0 },
+            set = { s, _ -> s },
+            getText = { it.webDavRemotePathOverride },
+            setText = { s, v -> s.copy(webDavRemotePathOverride = v) },
+        ),
         ConfigItem(
             domain = ConfigDomain.APPEARANCE,
             kind = ConfigKind.USER_SETTING,

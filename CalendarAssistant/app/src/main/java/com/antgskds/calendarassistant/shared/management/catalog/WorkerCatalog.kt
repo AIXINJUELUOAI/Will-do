@@ -59,6 +59,11 @@ object WorkerCatalog {
     )
 
     val workers: List<WorkerEntry> = listOf(
+        WorkerEntry(
+            "WebDAV 多设备同步任务", Chain.SYNC, "feature/cloudsync/application/WebDavSyncV2Worker",
+            Trigger.PERIODIC, Maturity.ACTIVE,
+            "每 15 分钟调用 V2 状态同步主流程，前台轮询与它共用同一协调器",
+        ),
         // —— 识别 ——
         WorkerEntry(
             "图片分享识别任务", Chain.RECOGNITION, "core/service/image/ImageShareRecognitionWorker",

@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
 import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavConnectionCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavSyncV2Coordinator
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionTestResult
 import com.antgskds.calendarassistant.feature.settings.diagnostics.application.DiagnosticLogExporter
@@ -58,11 +59,13 @@ class SettingsViewModel(
     private val legacyNoteMigrationCenter: LegacyNoteMigrator,
     private val duplicateEventCleanupCenter: DuplicateEventCleaner,
     private val webDavConnectionCenter: WebDavConnectionCoordinator,
+    private val webDavSyncV2Center: WebDavSyncV2Coordinator,
 ) : ViewModel() {
     private val backgroundImageStore = AppBackgroundImageStore(appContext)
 
     // 直接观察 QueryApi 的数据源
     val settings = settingsQueryApi.settings
+    val webDavSyncStatus = webDavSyncV2Center.status
 
     // 日历同步状态
     private val _syncStatus = MutableStateFlow(CalendarSyncManager.SyncStatus(
@@ -565,10 +568,44 @@ class SettingsViewModel(
 
     fun hasStoredWebDavPassword(): Boolean = webDavConnectionCenter.hasStoredPassword()
 
+    fun hasStoredSyncPassphrase(): Boolean = webDavConnectionCenter.hasStoredSyncPassphrase()
+
+    fun readStoredWebDavPassword(): String = webDavConnectionCenter.readStoredPassword()
+
+    fun readStoredSyncPassphrase(): String = webDavConnectionCenter.readStoredSyncPassphrase()
+
     suspend fun testAndSaveWebDavConnection(input: WebDavConnectionInput): WebDavConnectionTestResult {
         return withContext(Dispatchers.IO) {
             webDavConnectionCenter.testAndSave(input)
         }
+    }
+
+    fun updateWebDavSyncOptions(
+        enabled: Boolean? = null,
+        wifiOnly: Boolean? = null,
+        foregroundIntervalSeconds: Int? = null,
+    ) {
+        val current = settings.value
+        settingsOperationApi.updateSettings(
+            current.copy(
+                webDavSyncEnabled = enabled ?: current.webDavSyncEnabled,
+                webDavWifiOnly = wifiOnly ?: current.webDavWifiOnly,
+                webDavForegroundSyncIntervalSeconds = foregroundIntervalSeconds
+                    ?.coerceIn(1, 300)
+                    ?: current.webDavForegroundSyncIntervalSeconds,
+            )
+        )
+    }
+
+    fun syncWebDavNow() {
+        viewModelScope.launch(Dispatchers.IO) { webDavSyncV2Center.syncNow(force = true) }
+    }
+
+    fun updateWebDavRemotePathOverride(value: String) {
+        val normalized = value.trim().trim('/')
+        require(normalized.split('/').none { it == "." || it == ".." }) { "远端目录不能包含 . 或 .." }
+        webDavSyncV2Center.resetRemoteTracking()
+        settingsOperationApi.updateSettings(settings.value.copy(webDavRemotePathOverride = normalized))
     }
 
     fun updateAppBackgroundImageColorEnabled(enabled: Boolean, onResult: (Boolean, String) -> Unit = { _, _ -> }) {

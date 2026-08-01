@@ -227,6 +227,7 @@ class MainActivity : ComponentActivity() {
                         legacyNoteMigrationCenter = app.legacyNoteMigrationCenter,
                         duplicateEventCleanupCenter = app.duplicateEventCleanupCenter,
                         webDavConnectionCenter = app.webDavConnectionCenter,
+                        webDavSyncV2Center = app.webDavSyncV2Center,
                     ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
@@ -768,6 +769,16 @@ class MainActivity : ComponentActivity() {
         val eventId = intent?.getLongExtra(EXTRA_OPEN_EVENT_ID, -1L)?.takeIf { it > 0L } ?: return
         pendingEventDialogLaunch.value = PendingEventDialogLaunch(eventId)
         intent.removeExtra(EXTRA_OPEN_EVENT_ID)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (application as App).webDavForegroundSyncV2Center.start()
+    }
+
+    override fun onStop() {
+        (application as App).webDavForegroundSyncV2Center.stop()
+        super.onStop()
     }
 
     override fun onResume() {

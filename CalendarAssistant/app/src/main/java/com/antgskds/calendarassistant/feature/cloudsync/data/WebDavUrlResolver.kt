@@ -27,6 +27,13 @@ internal class WebDavUrlResolver(
         return buildUrl(remoteSegments + fileName)
     }
 
+    fun descendantUrl(relativePath: String): String = buildUrl(remoteSegments + parseRelativeSegments(relativePath))
+
+    fun descendantDirectoryUrls(relativeDirectory: String): List<String> {
+        val segments = parseRelativeSegments(relativeDirectory)
+        return segments.indices.map { index -> buildUrl(remoteSegments + segments.take(index + 1)) }
+    }
+
     private fun buildUrl(segments: List<String>): String {
         val basePath = baseUri.rawPath.orEmpty().trimEnd('/')
         val suffix = segments.joinToString("/") { encodePathSegment(it) }
@@ -55,6 +62,15 @@ internal class WebDavUrlResolver(
         val segments = raw.trim().replace('\\', '/').split('/').filter { it.isNotBlank() }
         require(segments.isNotEmpty()) { "远程目录不能为空" }
         require(segments.none { it == "." || it == ".." }) { "远程目录不能包含 . 或 .." }
+        return segments
+    }
+
+    private fun parseRelativeSegments(raw: String): List<String> {
+        val value = raw.trim().replace('\\', '/')
+        require(value.isNotEmpty() && !value.startsWith('/')) { "相对路径不能为空或以 / 开头" }
+        val segments = value.split('/').filter { it.isNotBlank() }
+        require(segments.isNotEmpty()) { "相对路径不能为空" }
+        require(segments.none { it == "." || it == ".." }) { "相对路径不能包含 . 或 .." }
         return segments
     }
 

@@ -46,6 +46,9 @@ import com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinator
 import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavConnectionCoordinator
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavForegroundSyncV2Controller
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavSyncV2Coordinator
+import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavSyncV2Worker
 import com.antgskds.calendarassistant.feature.cloudsync.data.KtorWebDavRemoteStore
 import com.antgskds.calendarassistant.feature.cloudsync.data.WebDavCredentialStore
 import com.antgskds.calendarassistant.shared.query.ScheduleQueryApi
@@ -88,6 +91,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -187,12 +192,34 @@ class App : Application() {
         }
     }
 
+    private val webDavRemoteStore by lazy { KtorWebDavRemoteStore.createAndroid() }
+    private val webDavCredentialStore by lazy { WebDavCredentialStore(applicationContext) }
+
     val webDavConnectionCenter: WebDavConnectionCoordinator by lazy {
         WebDavConnectionCoordinator(
-            remoteStore = KtorWebDavRemoteStore.createAndroid(),
-            credentialStore = WebDavCredentialStore(applicationContext),
+            remoteStore = webDavRemoteStore,
+            credentialStore = webDavCredentialStore,
             settingsQueryApi = settingsQueryApi,
             settingsOperationApi = settingsOperationApi,
+        )
+    }
+
+    val webDavSyncV2Center: WebDavSyncV2Coordinator by lazy {
+        WebDavSyncV2Coordinator(
+            context = applicationContext,
+            remoteStore = webDavRemoteStore,
+            credentialStore = webDavCredentialStore,
+            settingsQueryApi = settingsQueryApi,
+            onDataChanged = { scheduleCenter.refreshAll() },
+        )
+    }
+
+    val webDavForegroundSyncV2Center: WebDavForegroundSyncV2Controller by lazy {
+        WebDavForegroundSyncV2Controller(
+            context = applicationContext,
+            appScope = appScope,
+            settingsQueryApi = settingsQueryApi,
+            coordinator = webDavSyncV2Center,
         )
     }
 
@@ -493,6 +520,13 @@ class App : Application() {
         reminderCenter.startEventSubscriptions()
         reminderCenter.reconcileAll()
         widgetCenter.startSubscriptions()
+        WebDavSyncV2Worker.scheduleForSettings(applicationContext, settingsRepository.settingsFlow.value)
+        appScope.launch {
+            settingsRepository.settingsFlow
+                .map { it.webDavSyncEnabled to it.webDavWifiOnly }
+                .distinctUntilChanged()
+                .collect { WebDavSyncV2Worker.scheduleForSettings(applicationContext, settingsRepository.settingsFlow.value) }
+        }
         AppLogger.i(TAG, "main app routines started")
     }
 

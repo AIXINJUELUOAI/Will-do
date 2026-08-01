@@ -22,15 +22,31 @@ class WebDavCredentialStore(context: Context) {
 
     fun hasPassword(): Boolean = readPassword() != null
 
+    fun hasSyncPassphrase(): Boolean = readSecrets()?.syncPassphrase?.isNotEmpty() == true
+
     @OptIn(ExperimentalEncodingApi::class)
     fun savePassword(password: String) {
         require(password.isNotEmpty()) { "WebDAV 密码不能为空" }
+        saveSecrets((readSecrets() ?: StoredSecrets()).copy(webDavPassword = password))
+    }
+
+    fun saveSyncPassphrase(passphrase: String) {
+        require(passphrase.isNotEmpty()) { "同步密码不能为空" }
+        saveSecrets((readSecrets() ?: StoredSecrets()).copy(syncPassphrase = passphrase))
+    }
+
+    fun readPassword(): String? = readSecrets()?.webDavPassword?.takeIf { it.isNotEmpty() }
+
+    fun readSyncPassphrase(): String? = readSecrets()?.syncPassphrase?.takeIf { it.isNotEmpty() }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun saveSecrets(secrets: StoredSecrets) {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply {
             init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         }
         val payload = EncryptedCredential(
             iv = Base64.encode(cipher.iv),
-            ciphertext = Base64.encode(cipher.doFinal(password.toByteArray(Charsets.UTF_8))),
+            ciphertext = Base64.encode(cipher.doFinal(json.encodeToString(secrets).toByteArray(Charsets.UTF_8))),
         )
         val output = credentialFile.startWrite()
         try {
@@ -43,7 +59,7 @@ class WebDavCredentialStore(context: Context) {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    fun readPassword(): String? {
+    private fun readSecrets(): StoredSecrets? {
         if (!credentialFile.baseFile.exists()) return null
         return runCatching {
             val payload = credentialFile.openRead().use { input ->
@@ -56,7 +72,9 @@ class WebDavCredentialStore(context: Context) {
                     GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(payload.iv)),
                 )
             }
-            cipher.doFinal(Base64.decode(payload.ciphertext)).toString(Charsets.UTF_8)
+            val plain = cipher.doFinal(Base64.decode(payload.ciphertext)).toString(Charsets.UTF_8)
+            runCatching { json.decodeFromString<StoredSecrets>(plain) }
+                .getOrElse { StoredSecrets(webDavPassword = plain) }
         }.getOrElse {
             clear()
             null
@@ -89,6 +107,12 @@ class WebDavCredentialStore(context: Context) {
     private data class EncryptedCredential(
         val iv: String,
         val ciphertext: String,
+    )
+
+    @Serializable
+    private data class StoredSecrets(
+        val webDavPassword: String = "",
+        val syncPassphrase: String = "",
     )
 
     companion object {

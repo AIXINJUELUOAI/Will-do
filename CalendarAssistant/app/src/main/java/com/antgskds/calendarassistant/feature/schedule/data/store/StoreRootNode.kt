@@ -152,6 +152,28 @@ class StoreRootNode(context: Context) {
         localNode.deleteEvent(id)
     }
 
+    /** Applies a WebDAV revision without turning it into a new local user edit. */
+    fun applyRemoteEvent(event: Event): Long {
+        val localId = localNode.upsertEvent(event)
+        val localEvent = event.copy(id = localId)
+        val stored = if (evaluateSystemPush(syncRequested = true, tag = localEvent.tag).allow) {
+            syncNode.updateToSystem(localEvent)
+        } else {
+            localEvent
+        }
+        localNode.upsertEvent(stored.copy(lastUpdated = event.lastUpdated))
+        return localId
+    }
+
+    /** Deletes a WebDAV tombstone target without emitting a local manual operation. */
+    fun deleteRemoteEvent(id: Long) {
+        val event = localNode.getEvent(id) ?: return
+        if (allowSystemPush(syncRequested = true)) {
+            syncNode.deleteFromSystem(event)
+        }
+        localNode.deleteEvent(id)
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // 重复事件编辑
     // ══════════════════════════════════════════════════════════════════════

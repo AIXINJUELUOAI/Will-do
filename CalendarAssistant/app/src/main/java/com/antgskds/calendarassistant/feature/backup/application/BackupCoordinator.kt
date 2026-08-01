@@ -356,9 +356,6 @@ class BackupCoordinator(
         } else {
             null
         }
-        if (options.includeSettings && data.settings != null) {
-            settingsOperationApi.updateSettings(restoreAppBackgroundSetting(data.settings, data.appBackgroundImageFileName, attachmentsDir))
-        }
         val promptsImported = if (options.includePrompts && !data.promptsJson.isNullOrBlank()) {
             AiPrompts.importFromJson(appContext, data.promptsJson)
         } else {
@@ -374,9 +371,26 @@ class BackupCoordinator(
         } else {
             0
         }
+        val settingsImported = options.includeSettings && data.settings != null
+        if (settingsImported) {
+            // Restoring density/theme settings can recreate MainActivity and cancel the UI-owned
+            // import coroutine. Apply settings only after every database and file import is done.
+            settingsOperationApi.updateSettings(
+                restoreAppBackgroundSetting(
+                    data.settings ?: error("备份文件缺少设置数据"),
+                    data.appBackgroundImageFileName,
+                    attachmentsDir
+                )
+            )
+        }
+        Log.i(
+            TAG,
+            "Import app backup finished events=${eventsResult != null}, settings=$settingsImported, " +
+                "prompts=$promptsImported, attachments=$importedAttachments, quickMemos=$importedQuickMemos"
+        )
         return AppBackupImportResult(
             eventsResult = eventsResult,
-            settingsImported = options.includeSettings && data.settings != null,
+            settingsImported = settingsImported,
             promptsImported = promptsImported,
             attachmentsImported = importedAttachments,
             quickMemosImported = importedQuickMemos

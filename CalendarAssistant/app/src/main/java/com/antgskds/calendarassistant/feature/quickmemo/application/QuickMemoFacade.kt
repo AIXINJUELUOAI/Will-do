@@ -66,6 +66,13 @@ class QuickMemoFacade(
         appScope.launch(Dispatchers.IO) {
             repository.quickMemos.collect { list ->
                 _quickMemos.value = list
+                Log.i(
+                    TAG,
+                    "quick memo flow updated count=${list.size} " +
+                        "text=${list.count { it.type == QuickMemoType.TEXT }} " +
+                        "voice=${list.count { it.type == QuickMemoType.VOICE }} " +
+                        "image=${list.count { it.type == QuickMemoType.IMAGE }}",
+                )
             }
         }
         appScope.launch(Dispatchers.IO) {

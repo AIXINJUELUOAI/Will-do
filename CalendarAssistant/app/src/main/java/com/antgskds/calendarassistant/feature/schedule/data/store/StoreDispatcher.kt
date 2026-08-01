@@ -35,6 +35,10 @@ class StoreDispatcher private constructor(context: Context) {
     fun deleteEvent(id: Long, deleteFromSystem: Boolean = true) =
         rootNode.deleteEvent(id, deleteFromSystem)
 
+    fun applyRemoteEvent(event: Event): Long = rootNode.applyRemoteEvent(event)
+
+    fun deleteRemoteEvent(id: Long) = rootNode.deleteRemoteEvent(id)
+
     // ── 重复事件 ──
     fun editRecurringEvent(parentEventId: Long, editedOccurrence: Event, mode: RecurringMode, occurrenceTs: Long, syncToSystem: Boolean = true): Long? =
         rootNode.editRecurringEvent(parentEventId, editedOccurrence, mode, occurrenceTs, syncToSystem)

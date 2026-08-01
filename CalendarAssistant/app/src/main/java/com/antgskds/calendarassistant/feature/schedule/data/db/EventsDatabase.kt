@@ -10,6 +10,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventAttachmentsDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventTypesDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventsDao
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2AssetLinkEntity
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2BindingEntity
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2Dao
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2MetaEntity
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2PeerEntity
+import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2RevisionEntity
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.REGULAR_EVENT_TYPE_ID
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventAttachment
@@ -28,9 +34,14 @@ import java.util.concurrent.Executors
         EventAttachment::class,
         NoteEntity::class,
         QuickMemoEntity::class,
-        QuickMemoSuggestionEntity::class
+        QuickMemoSuggestionEntity::class,
+        SyncV2BindingEntity::class,
+        SyncV2RevisionEntity::class,
+        SyncV2AssetLinkEntity::class,
+        SyncV2PeerEntity::class,
+        SyncV2MetaEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +52,7 @@ abstract class EventsDatabase : RoomDatabase() {
     abstract fun eventAttachmentsDao(): EventAttachmentsDao
     abstract fun notesDao(): NotesDao
     abstract fun quickMemoDao(): QuickMemoDao
+    abstract fun syncV2Dao(): SyncV2Dao
 
     companion object {
         @Volatile
@@ -52,7 +64,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -267,6 +279,22 @@ abstract class EventsDatabase : RoomDatabase() {
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE events ADD COLUMN code_qr_payload TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_bindings (record_key TEXT NOT NULL PRIMARY KEY, entity_type TEXT NOT NULL, sync_uuid TEXT NOT NULL, local_id INTEGER, selected_revision_id TEXT NOT NULL, observed_payload_hash TEXT NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sync_v2_bindings_entity_type_local_id ON sync_v2_bindings(entity_type, local_id)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sync_v2_bindings_entity_type_sync_uuid ON sync_v2_bindings(entity_type, sync_uuid)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_revisions (revision_id TEXT NOT NULL PRIMARY KEY, record_key TEXT NOT NULL, entity_type TEXT NOT NULL, sync_uuid TEXT NOT NULL, parent_revision_ids_json TEXT NOT NULL, version_vector_json TEXT NOT NULL, modified_at INTEGER NOT NULL, modified_by_device_id TEXT NOT NULL, status TEXT NOT NULL, payload_json TEXT NOT NULL, attachments_json TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_v2_revisions_record_key ON sync_v2_revisions(record_key)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_v2_revisions_sync_uuid ON sync_v2_revisions(sync_uuid)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_asset_links (attachment_uuid TEXT NOT NULL PRIMARY KEY, record_key TEXT NOT NULL, role TEXT NOT NULL, local_attachment_id INTEGER, local_path TEXT NOT NULL, asset_key TEXT NOT NULL, display_name TEXT NOT NULL, mime_type TEXT NOT NULL, plain_size INTEGER NOT NULL, plain_sha256 TEXT NOT NULL, source TEXT NOT NULL, created_at INTEGER NOT NULL, file_last_modified INTEGER NOT NULL, download_pending INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_v2_asset_links_record_key ON sync_v2_asset_links(record_key)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_v2_asset_links_local_attachment_id ON sync_v2_asset_links(local_attachment_id)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_peers (device_id TEXT NOT NULL PRIMARY KEY, etag TEXT NOT NULL, generation INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_meta (`key` TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
             }
         }
     }
