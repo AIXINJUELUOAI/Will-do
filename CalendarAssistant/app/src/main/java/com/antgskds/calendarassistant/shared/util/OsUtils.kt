@@ -23,12 +23,18 @@ object OsUtils {
     }
 
     fun isColorOsLike(): Boolean {
-        val manufacturer = Build.MANUFACTURER.lowercase()
-        val brand = Build.BRAND.lowercase()
-        val display = Build.DISPLAY.lowercase()
-        return manufacturer in COLOR_OS_BRANDS ||
-            brand in COLOR_OS_BRANDS ||
-            display.contains("coloros") ||
+        val buildIdentity = listOf(
+            Build.MANUFACTURER,
+            Build.BRAND,
+            Build.MODEL,
+            Build.PRODUCT,
+            Build.DEVICE,
+            Build.DISPLAY,
+            Build.FINGERPRINT
+        ).joinToString(" ").lowercase()
+        return COLOR_OS_BRANDS.any { marker -> buildIdentity.contains(marker) } ||
+            buildIdentity.contains("coloros") ||
+            buildIdentity.contains("oxygenos") ||
             getSystemProperty("ro.build.version.opporom").isNotBlank() ||
             getSystemProperty("ro.oplus.version").isNotBlank() ||
             getSystemProperty("ro.build.version.oplusrom").isNotBlank()

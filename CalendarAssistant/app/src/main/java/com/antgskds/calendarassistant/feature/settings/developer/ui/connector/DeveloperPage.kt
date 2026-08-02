@@ -84,8 +84,6 @@ fun DeveloperPage(
     onNavigateToConfig: () -> Unit = {},
     onNavigateToRegexRules: () -> Unit = {},
     onNavigateToOnboardingGuide: () -> Unit = {},
-    onNavigateToOnboardingLiveCapsuleDemo: () -> Unit = {},
-    onNavigateToMiuiComponentLab: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as? App
@@ -151,8 +149,6 @@ fun DeveloperPage(
             DeveloperUiAction.OpenConfig -> onNavigateToConfig()
             DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
             DeveloperUiAction.OpenOnboardingGuide -> onNavigateToOnboardingGuide()
-            DeveloperUiAction.OpenOnboardingLiveCapsuleDemo -> onNavigateToOnboardingLiveCapsuleDemo()
-            DeveloperUiAction.OpenMiuiComponentLab -> onNavigateToMiuiComponentLab()
         } },
         runDebugActions = { ids ->
             val target = app ?: return@MaterialDeveloperScreen DebugBatchResult(0, listOf("应用上下文不可用"))
@@ -455,30 +451,6 @@ fun MaterialDeveloperScreen(
                     icon = Icons.Default.ChevronRight,
                     enabled = true,
                     onClick = { onAction(DeveloperUiAction.OpenOnboardingGuide) },
-                    cardTitleStyle = cardTitleStyle,
-                    cardSubtitleStyle = cardSubtitleStyle,
-                    cardValueStyle = cardSubtitleStyle
-                )
-                RowDivider()
-                ActionSettingItem(
-                    title = "实况胶囊演示",
-                    subtitle = "单独预览顶部实况通知从摄像头位置展开的动画",
-                    value = "",
-                    icon = Icons.Default.ChevronRight,
-                    enabled = true,
-                    onClick = { onAction(DeveloperUiAction.OpenOnboardingLiveCapsuleDemo) },
-                    cardTitleStyle = cardTitleStyle,
-                    cardSubtitleStyle = cardSubtitleStyle,
-                    cardValueStyle = cardSubtitleStyle
-                )
-                RowDivider()
-                ActionSettingItem(
-                    title = "MIUI 组件实验",
-                    subtitle = "参考 HyperCeiler，预览主题、设置控件、下拉弹层和弹窗",
-                    value = "",
-                    icon = Icons.Default.ChevronRight,
-                    enabled = true,
-                    onClick = { onAction(DeveloperUiAction.OpenMiuiComponentLab) },
                     cardTitleStyle = cardTitleStyle,
                     cardSubtitleStyle = cardSubtitleStyle,
                     cardValueStyle = cardSubtitleStyle

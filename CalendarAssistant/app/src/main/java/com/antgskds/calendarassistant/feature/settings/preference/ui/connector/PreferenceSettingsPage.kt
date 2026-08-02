@@ -7,7 +7,9 @@ import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitchSliderSetti
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -40,17 +42,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.platform.floating.EdgeBarService
 import com.antgskds.calendarassistant.platform.floating.FloatingBallService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
+import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialogTitle
-import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
-import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToast
+import com.antgskds.calendarassistant.shared.ui.material.component.UniversalSnackbar
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker
 import com.antgskds.calendarassistant.feature.settings.data.model.FloatingBallGestureAction
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
@@ -60,6 +63,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.data.asr.QuickMemoAsrMod
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.settings.preference.ui.contract.PreferenceUiController
 import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceUiControllerAdapter
@@ -68,26 +72,54 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+enum class PreferenceSection {
+    DISPLAY,
+    QUICK_MEMO,
+    OPERATION,
+    NOTIFICATION,
+    AI,
+    SCHEDULE,
+    COURSE,
+    SCREENSHOT,
+}
+
+data class PreferenceItemVisibility(
+    val showUiSize: Boolean = true,
+    val showTomorrowEvents: Boolean = true,
+    val showBottomBarEditor: Boolean = true,
+    val showWidgetSettings: Boolean = true,
+    val showHapticFeedback: Boolean = true,
+    val showNetworkSpeedCapsule: Boolean = true,
+    val showAutoArchive: Boolean = true,
+    val showScheduleColors: Boolean = true,
+)
+
 @Composable
 fun PreferenceSettingsPage(
     viewModel: SettingsViewModel,
     uiSize: Int = 2,
+    visibleSections: Set<PreferenceSection> = PreferenceSection.entries.toSet(),
+    itemVisibility: PreferenceItemVisibility = PreferenceItemVisibility(),
+    footerContent: @Composable ColumnScope.() -> Unit = {},
     onNavigateToBottomBarEditor: () -> Unit = {},
     onNavigateToWidgetSettings: () -> Unit = {},
     onNavigateToScheduleColors: () -> Unit = {},
     onNavigateToSemesterConfig: () -> Unit = {},
     onNavigateToCourseManage: () -> Unit = {},
-    onNavigateToTimeTableManage: () -> Unit = {}
+    onNavigateToTimeTableManage: () -> Unit = {},
 ) {
     MaterialPreferenceSettingsScreen(
         controller = remember(viewModel) { PreferenceUiControllerAdapter(viewModel) },
         uiSize = uiSize,
+        visibleSections = visibleSections,
+        itemVisibility = itemVisibility,
+        footerContent = footerContent,
         onNavigateToBottomBarEditor = onNavigateToBottomBarEditor,
         onNavigateToWidgetSettings = onNavigateToWidgetSettings,
         onNavigateToScheduleColors = onNavigateToScheduleColors,
         onNavigateToSemesterConfig = onNavigateToSemesterConfig,
         onNavigateToCourseManage = onNavigateToCourseManage,
-        onNavigateToTimeTableManage = onNavigateToTimeTableManage
+        onNavigateToTimeTableManage = onNavigateToTimeTableManage,
     )
 }
 
@@ -95,12 +127,15 @@ fun PreferenceSettingsPage(
 fun MaterialPreferenceSettingsScreen(
     controller: PreferenceUiController,
     uiSize: Int = 2,
+    visibleSections: Set<PreferenceSection> = PreferenceSection.entries.toSet(),
+    itemVisibility: PreferenceItemVisibility = PreferenceItemVisibility(),
+    footerContent: @Composable ColumnScope.() -> Unit = {},
     onNavigateToBottomBarEditor: () -> Unit = {},
     onNavigateToWidgetSettings: () -> Unit = {},
     onNavigateToScheduleColors: () -> Unit = {},
     onNavigateToSemesterConfig: () -> Unit = {},
     onNavigateToCourseManage: () -> Unit = {},
-    onNavigateToTimeTableManage: () -> Unit = {}
+    onNavigateToTimeTableManage: () -> Unit = {},
 ) {
     val settings by controller.settings.collectAsState()
     val syncStatus by controller.syncStatus.collectAsState()
@@ -110,6 +145,7 @@ fun MaterialPreferenceSettingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val permissionGate = rememberPermissionGate(snackbarHostState)
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -176,6 +212,7 @@ fun MaterialPreferenceSettingsScreen(
                 refreshOverlayPermission()
                 controller.refreshSyncStatus()
                 controller.refreshSyncCalendars()
+                permissionGate.resumePending()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -229,67 +266,116 @@ fun MaterialPreferenceSettingsScreen(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    // 日历权限请求
-    var showPermissionDialog by remember { mutableStateOf(false) }
+    // 权限请求统一由 PermissionGate 续接，授权返回后再执行原开启动作。
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        permissionGate.resumePending()
+    }
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            controller.enableCalendarSyncAndSyncNow { result ->
-                // initCalendarObserver removed - sync handled by StoreRootNode
-                controller.refreshSyncCalendars()
-                if (result.isSuccess) {
-                    snackbarHostState.showSnackbar("日历同步已开启，并已立即同步")
-                } else {
-                    snackbarHostState.showSnackbar("日历同步开启失败：${result.exceptionOrNull()?.message ?: "未知错误"}")
-                }
-            }
-        } else {
-            scope.launch {
-                val result = snackbarHostState.showSnackbar(
-                    message = "需要日历权限才能使用同步功能",
-                    actionLabel = "去设置",
-                    duration = SnackbarDuration.Long
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    try {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        context.startActivity(Intent(Settings.ACTION_SETTINGS))
-                    }
-                }
-            }
-        }
+    ) {
+        permissionGate.resumePending()
     }
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (!allGranted) {
-            controller.updatePreference(smsMonitoring = false)
-            (context.applicationContext as? App)?.refreshSmsObserver(enabled = false)
+    ) {
+        permissionGate.resumePending()
+    }
+    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        permissionGate.resumePending()
+    }
+
+    fun hasNotificationPermission(): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && manager?.areNotificationsEnabled() == true
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            (context.applicationContext as? App)?.refreshSmsObserver(enabled = true)
-            if (!SmsNotificationListenerService.isEnabled(context)) {
-                Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
-                SmsNotificationListenerService.requestEnable(context)
-            }
+            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            })
         }
     }
 
-    val requestCalendarPermission = {
-        showPermissionDialog = false
+    fun hasSmsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
+    fun hasCalendarPermission(): Boolean =
+        app?.permissionCenter?.hasCalendarPermissions(context) == true ||
+            (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED)
+
+    fun hasRecordAudioPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    fun requestAccessibilityPermission() {
+        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    fun requestSmsPermission() {
+        smsPermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.RECEIVE_SMS,
+                Manifest.permission.READ_SMS
+            )
+        )
+    }
+
+    fun requestRecordAudioPermission() {
+        recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    fun enableSmsMonitoring() {
+        controller.updatePreference(smsMonitoring = true)
+        (context.applicationContext as? App)?.refreshSmsObserver(enabled = true)
+        if (!SmsNotificationListenerService.isEnabled(context)) {
+            Toast.makeText(context, "建议开启通知监听兜底（系统短信）", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun requestCalendarPermission() {
         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
         } else {
             emptyArray()
         }
         calendarPermissionLauncher.launch(permissions)
+    }
+
+    fun enableCalendarSync() {
+        controller.enableCalendarSyncAndSyncNow { result ->
+            controller.refreshSyncCalendars()
+            if (result.isSuccess) {
+                showToast("日历同步已开启，并已立即同步")
+            } else {
+                showToast("日历同步开启失败", ToastType.ERROR)
+            }
+        }
+    }
+
+    fun requireNotificationWhenEnabling(enabled: Boolean, update: () -> Unit) {
+        if (enabled) {
+            permissionGate.require(
+                permissionName = "通知权限",
+                isGranted = ::hasNotificationPermission,
+                requestPermission = ::requestNotificationPermission,
+                onGranted = update,
+            )
+        } else {
+            update()
+        }
     }
 
     CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
@@ -303,8 +389,10 @@ fun MaterialPreferenceSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ================== 显示板块 ==================
+            if (PreferenceSection.DISPLAY in visibleSections) {
             Text("显示", style = sectionTitleStyle)
             SettingsCard {
+                if (itemVisibility.showUiSize) {
                     SliderSettingItem(
                         title = "界面大小",
                         subtitle = "调整界面缩放（相对于设备原生大小）",
@@ -322,6 +410,8 @@ fun MaterialPreferenceSettingsScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                }
+                if (itemVisibility.showTomorrowEvents) {
                     SwitchSettingItem(
                         title = "显示明日日程",
                         subtitle = "在今日日程列表底部预览明日安排",
@@ -335,6 +425,8 @@ fun MaterialPreferenceSettingsScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                }
+                if (itemVisibility.showBottomBarEditor) {
                     ActionSettingItem(
                         title = "底栏编辑",
                         subtitle = "自定义首页底栏顺序和默认启动页",
@@ -351,6 +443,8 @@ fun MaterialPreferenceSettingsScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                }
+                if (itemVisibility.showWidgetSettings) {
                     ActionSettingItem(
                         title = "桌面小组件",
                         subtitle = "预览小组件并调整主题、透明度等显示设置",
@@ -367,49 +461,40 @@ fun MaterialPreferenceSettingsScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                }
                     SwitchSettingItem(
                         title = "悬浮日程",
                         subtitle = "在悬浮窗中显示日程",
                         checked = settings.isFloatingWindowEnabled,
                         onCheckedChange = { isChecked ->
-                            if (isChecked && !hasOverlayPermission) {
-                                openOverlayPermissionSettings()
-                                return@SwitchSettingItem
+                            val updateFloatingWindow = {
+                                controller.updatePreference(
+                                    floatingWindow = isChecked,
+                                    edgeBarEnabled = if (isChecked || settings.voiceInputEnabled) settings.edgeBarEnabled else false,
+                                    floatingBallEnabled = if (isChecked || settings.voiceInputEnabled) settings.floatingBallEnabled else false
+                                )
+                                if (!isChecked && !settings.voiceInputEnabled) {
+                                    stopEdgeBarService()
+                                    stopFloatingBallService()
+                                } else {
+                                    if (settings.edgeBarEnabled) startEdgeBarService()
+                                    if (settings.floatingBallEnabled) startFloatingBallService()
+                                }
                             }
-                            controller.updatePreference(
-                                floatingWindow = isChecked,
-                                edgeBarEnabled = if (isChecked || settings.voiceInputEnabled) settings.edgeBarEnabled else false,
-                                floatingBallEnabled = if (isChecked || settings.voiceInputEnabled) settings.floatingBallEnabled else false
-                            )
-                            if (!isChecked && !settings.voiceInputEnabled) {
-                                stopEdgeBarService()
-                                stopFloatingBallService()
+                            if (isChecked) {
+                                permissionGate.require(
+                                    permissionName = "悬浮窗权限",
+                                    isGranted = { hasOverlayPermission },
+                                    requestPermission = ::openOverlayPermissionSettings,
+                                    onGranted = updateFloatingWindow,
+                                )
                             } else {
-                                if (settings.edgeBarEnabled) startEdgeBarService()
-                                if (settings.floatingBallEnabled) startFloatingBallService()
+                                updateFloatingWindow()
                             }
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "需要悬浮窗权限才能正常使用",
-                            style = cardSubtitleStyle,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
             }
 
             AnimatedVisibility(
@@ -466,15 +551,23 @@ fun MaterialPreferenceSettingsScreen(
                             subtitle = "在屏幕边缘显示侧边栏",
                             checked = settings.edgeBarEnabled,
                             onCheckedChange = { isChecked ->
-                                if (isChecked && !hasOverlayPermission) {
-                                    openOverlayPermissionSettings()
-                                    return@SwitchSettingItem
+                                val updateEdgeBar = {
+                                    controller.updateEdgeBarSettings(enabled = isChecked)
+                                    if (isChecked) {
+                                        startEdgeBarService()
+                                    } else {
+                                        stopEdgeBarService()
+                                    }
                                 }
-                                controller.updateEdgeBarSettings(enabled = isChecked)
                                 if (isChecked) {
-                                    startEdgeBarService()
+                                    permissionGate.require(
+                                        permissionName = "悬浮窗权限",
+                                        isGranted = { hasOverlayPermission },
+                                        requestPermission = ::openOverlayPermissionSettings,
+                                        onGranted = updateEdgeBar,
+                                    )
                                 } else {
-                                    stopEdgeBarService()
+                                    updateEdgeBar()
                                 }
                             },
                             cardTitleStyle = cardTitleStyle,
@@ -674,15 +767,23 @@ fun MaterialPreferenceSettingsScreen(
                             subtitle = "在屏幕中显示悬浮球",
                             checked = settings.floatingBallEnabled,
                             onCheckedChange = { isChecked ->
-                                if (isChecked && !hasOverlayPermission) {
-                                    openOverlayPermissionSettings()
-                                    return@SwitchSettingItem
+                                val updateFloatingBall = {
+                                    controller.updatePreference(floatingBallEnabled = isChecked)
+                                    if (isChecked) {
+                                        startFloatingBallService()
+                                    } else {
+                                        stopFloatingBallService()
+                                    }
                                 }
-                                controller.updatePreference(floatingBallEnabled = isChecked)
                                 if (isChecked) {
-                                    startFloatingBallService()
+                                    permissionGate.require(
+                                        permissionName = "悬浮窗权限",
+                                        isGranted = { hasOverlayPermission },
+                                        requestPermission = ::openOverlayPermissionSettings,
+                                        onGranted = updateFloatingBall,
+                                    )
                                 } else {
-                                    stopFloatingBallService()
+                                    updateFloatingBall()
                                 }
                             },
                             cardTitleStyle = cardTitleStyle,
@@ -822,7 +923,10 @@ fun MaterialPreferenceSettingsScreen(
                 }
             }
 
+            }
+
             // ================== 随口记板块 ==================
+            if (PreferenceSection.QUICK_MEMO in visibleSections) {
             Text("随口记", style = sectionTitleStyle)
             QuickMemoPreferenceCard(
                 settings = settings,
@@ -839,7 +943,16 @@ fun MaterialPreferenceSettingsScreen(
                     }
                 },
                 onFloatingLongPressChange = { enabled ->
-                    controller.updatePreference(floatingVoiceLongPressEnabled = enabled)
+                    if (enabled) {
+                        permissionGate.require(
+                            permissionName = "麦克风权限",
+                            isGranted = ::hasRecordAudioPermission,
+                            requestPermission = ::requestRecordAudioPermission,
+                            onGranted = { controller.updatePreference(floatingVoiceLongPressEnabled = true) },
+                        )
+                    } else {
+                        controller.updatePreference(floatingVoiceLongPressEnabled = false)
+                    }
                 },
                 onRecordingDisplayModeChange = { mode ->
                     controller.updatePreference(quickMemoRecordingDisplayMode = mode)
@@ -851,17 +964,39 @@ fun MaterialPreferenceSettingsScreen(
                     controller.updateQuickMemoAutoStop(seconds = seconds)
                 },
                 onTextAutoPinChange = { enabled ->
-                    controller.updatePreference(floatingTextQuickMemoAutoPinEnabled = enabled)
+                    if (enabled) {
+                        permissionGate.require(
+                            permissionName = "通知权限",
+                            isGranted = ::hasNotificationPermission,
+                            requestPermission = ::requestNotificationPermission,
+                            onGranted = { controller.updatePreference(floatingTextQuickMemoAutoPinEnabled = true) },
+                        )
+                    } else {
+                        controller.updatePreference(floatingTextQuickMemoAutoPinEnabled = false)
+                    }
                 },
                 onVoiceAutoPinChange = { enabled ->
-                    controller.updatePreference(voiceQuickMemoAutoPinEnabled = enabled)
+                    if (enabled) {
+                        permissionGate.require(
+                            permissionName = "通知权限",
+                            isGranted = ::hasNotificationPermission,
+                            requestPermission = ::requestNotificationPermission,
+                            onGranted = { controller.updatePreference(voiceQuickMemoAutoPinEnabled = true) },
+                        )
+                    } else {
+                        controller.updatePreference(voiceQuickMemoAutoPinEnabled = false)
+                    }
                 },
                 onImportAsrModel = { quickMemoAsrModelImportLauncher.launch(arrayOf("*/*")) }
             )
 
+            }
+
             // ================== 操作板块 ==================
+            if (PreferenceSection.OPERATION in visibleSections) {
             Text("操作", style = sectionTitleStyle)
             SettingsCard {
+                if (itemVisibility.showHapticFeedback) {
                     SwitchSettingItem(
                         title = "触感反馈",
                         subtitle = "点击、长按和滑动到阈值时提供轻微反馈",
@@ -875,16 +1010,29 @@ fun MaterialPreferenceSettingsScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                }
                     VolumeLongPressSettingItem(
                         title = "长按音量+",
                         subtitle = "自定义长按音量+动作",
                         checked = settings.volumeUpLongPressEnabled,
                         action = settings.volumeUpLongPressAction,
                         onCheckedChange = { isChecked ->
-                            controller.updatePreference(
-                                volumeUpLongPressEnabled = isChecked,
-                                volumeUpLongPressAction = if (isChecked) settings.volumeUpLongPressAction.coerceIn(1, 3) else settings.volumeUpLongPressAction
-                            )
+                            val updateVolumeShortcut = {
+                                controller.updatePreference(
+                                    volumeUpLongPressEnabled = isChecked,
+                                    volumeUpLongPressAction = if (isChecked) settings.volumeUpLongPressAction.coerceIn(1, 3) else settings.volumeUpLongPressAction
+                                )
+                            }
+                            if (isChecked) {
+                                permissionGate.require(
+                                    permissionName = "无障碍权限",
+                                    isGranted = { TextAccessibilityService.isConnected() },
+                                    requestPermission = ::requestAccessibilityPermission,
+                                    onGranted = updateVolumeShortcut,
+                                )
+                            } else {
+                                updateVolumeShortcut()
+                            }
                         },
                         onActionChange = { action ->
                             controller.updatePreference(volumeUpLongPressAction = action)
@@ -898,41 +1046,26 @@ fun MaterialPreferenceSettingsScreen(
                         checked = settings.isSmsMonitoringEnabled,
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
-                                smsPermissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.READ_SMS
-                                    )
+                                permissionGate.require(
+                                    permissionName = "短信权限",
+                                    isGranted = ::hasSmsPermission,
+                                    requestPermission = ::requestSmsPermission,
+                                    onGranted = ::enableSmsMonitoring,
                                 )
                             } else {
                                 (context.applicationContext as? App)?.refreshSmsObserver(enabled = false)
+                                controller.updatePreference(smsMonitoring = false)
                             }
-                            controller.updatePreference(smsMonitoring = isChecked)
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "需要短信读取权限",
-                            style = cardSubtitleStyle,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
+            }
+
             }
 
             // ================== 通知板块 ==================
+            if (PreferenceSection.NOTIFICATION in visibleSections) {
             Text("通知", style = sectionTitleStyle)
             SettingsCard {
                     SwitchSettingItem(
@@ -940,9 +1073,11 @@ fun MaterialPreferenceSettingsScreen(
                         subtitle = "今日 ${formatMinuteOfDay(settings.dailySummaryMorningMinuteOfDay)}，明日 ${formatMinuteOfDay(settings.dailySummaryEveningMinuteOfDay)}",
                         checked = settings.isDailySummaryEnabled,
                         onCheckedChange = { isChecked ->
-                            controller.updatePreference(dailySummary = isChecked)
-                            if (isChecked) {
-                                app?.runtimeCenter?.scheduleDailySummary()
+                            requireNotificationWhenEnabling(isChecked) {
+                                controller.updatePreference(dailySummary = isChecked)
+                                if (isChecked) {
+                                    app?.runtimeCenter?.scheduleDailySummary()
+                                }
                             }
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -995,8 +1130,10 @@ fun MaterialPreferenceSettingsScreen(
                         subtitle = "日程开始时显示实况通知",
                         checked = settings.isLiveCapsuleEnabled,
                         onCheckedChange = { isChecked ->
-                            controller.updatePreference(liveCapsule = isChecked)
-                            if (isChecked) showToast("实况胶囊已开启", ToastType.INFO)
+                            requireNotificationWhenEnabling(isChecked) {
+                                controller.updatePreference(liveCapsule = isChecked)
+                                if (isChecked) showToast("实况通知已开启", ToastType.INFO)
+                            }
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -1041,11 +1178,13 @@ fun MaterialPreferenceSettingsScreen(
                         checked = settings.isAdvanceReminderEnabled,
                         minutes = settings.advanceReminderMinutes,
                         onCheckedChange = { isChecked ->
-                            controller.updatePreference(advanceReminderEnabled = isChecked)
-                            if (isChecked && settings.advanceReminderMinutes > 0) {
-                                val hasDuplicate = controller.hasDuplicateAdvanceReminder(settings.advanceReminderMinutes)
-                                if (hasDuplicate) {
-                                    showToast("检测到可能存在的重复提醒", ToastType.INFO)
+                            requireNotificationWhenEnabling(isChecked) {
+                                controller.updatePreference(advanceReminderEnabled = isChecked)
+                                if (isChecked && settings.advanceReminderMinutes > 0) {
+                                    val hasDuplicate = controller.hasDuplicateAdvanceReminder(settings.advanceReminderMinutes)
+                                    if (hasDuplicate) {
+                                        showToast("检测到可能存在的重复提醒", ToastType.INFO)
+                                    }
                                 }
                             }
                         },
@@ -1076,7 +1215,9 @@ fun MaterialPreferenceSettingsScreen(
                         },
                         checked = settings.transitAutoCheckInEnabled,
                         onCheckedChange = { enabled ->
-                            controller.updatePreference(transitAutoCheckInEnabled = enabled)
+                            requireNotificationWhenEnabling(enabled) {
+                                controller.updatePreference(transitAutoCheckInEnabled = enabled)
+                            }
                         },
                         optionTitle = "自动切换时间",
                         optionSummary = "可选 10、15 或 30 分钟",
@@ -1095,6 +1236,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
+                if (itemVisibility.showNetworkSpeedCapsule) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
@@ -1106,7 +1248,9 @@ fun MaterialPreferenceSettingsScreen(
                         subtitle = "在状态栏显示下载速度",
                         checked = settings.isNetworkSpeedCapsuleEnabled,
                         onCheckedChange = { isChecked ->
-                            controller.updatePreference(networkSpeedCapsule = isChecked)
+                            requireNotificationWhenEnabling(isChecked) {
+                                controller.updatePreference(networkSpeedCapsule = isChecked)
+                            }
                         },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -1129,11 +1273,15 @@ fun MaterialPreferenceSettingsScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
+                }
 
             }
 
 
+            }
+
             // ================== AI 板块 ==================
+            if (PreferenceSection.AI in visibleSections) {
             Text("AI", style = sectionTitleStyle)
             SettingsCard {
                     RecognitionModeSettingItem(
@@ -1181,7 +1329,10 @@ fun MaterialPreferenceSettingsScreen(
 
             }
 
+            }
+
             // ================== 日程板块 ==================
+            if (PreferenceSection.SCHEDULE in visibleSections) {
             Text("日程", style = sectionTitleStyle)
             SettingsCard {
                     SwitchSettingItem(
@@ -1190,18 +1341,12 @@ fun MaterialPreferenceSettingsScreen(
                         checked = syncStatus.isEnabled,
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
-                                if (app?.permissionCenter?.hasCalendarPermissions(context) == true) {
-                                    controller.enableCalendarSyncAndSyncNow { result ->
-                                        // initCalendarObserver removed - sync handled by StoreRootNode
-                                        if (result.isSuccess) {
-                                            showToast("日历同步已开启，并已立即同步")
-                                        } else {
-                                            showToast("日历同步开启失败", ToastType.ERROR)
-                                        }
-                                    }
-                                } else {
-                                    showPermissionDialog = true
-                                }
+                                permissionGate.require(
+                                    permissionName = "日历读写权限",
+                                    isGranted = ::hasCalendarPermission,
+                                    requestPermission = ::requestCalendarPermission,
+                                    onGranted = ::enableCalendarSync,
+                                )
                             } else {
                                 controller.toggleCalendarSync(false)
                                 showToast("日历同步已关闭")
@@ -1231,13 +1376,14 @@ fun MaterialPreferenceSettingsScreen(
                                 } else {
                                     "${syncStatus.sourceCalendarIds.size} 个"
                                 },
-                                enabled = syncStatus.hasPermission,
+                                enabled = true,
                                 onClick = {
-                                    if (syncStatus.hasPermission) {
-                                        showSourceCalendarSheet = true
-                                    } else {
-                                        showPermissionDialog = true
-                                    }
+                                    permissionGate.require(
+                                        permissionName = "日历读写权限",
+                                        isGranted = ::hasCalendarPermission,
+                                        requestPermission = ::requestCalendarPermission,
+                                        onGranted = { showSourceCalendarSheet = true },
+                                    )
                                 },
                                 cardTitleStyle = cardTitleStyle,
                                 cardSubtitleStyle = cardSubtitleStyle,
@@ -1269,6 +1415,7 @@ fun MaterialPreferenceSettingsScreen(
                         }
                     }
 
+                if (itemVisibility.showAutoArchive) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
@@ -1284,6 +1431,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
+                }
 
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -1299,6 +1447,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
                     )
+                if (itemVisibility.showScheduleColors) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         thickness = 0.5.dp,
@@ -1314,14 +1463,18 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
                     )
+                }
+            }
+
             }
 
             // ================== 课表板块 ==================
+            if (PreferenceSection.COURSE in visibleSections) {
             Text("课表", style = sectionTitleStyle)
             SettingsCard {
                     SwitchSettingItem(
-                        title = "启用课表功能",
-                        subtitle = "关闭后无法在主页下滑进入课表",
+                        title = "主页下滑进入课表",
+                        subtitle = "开启后可在主页下滑进入课表",
                         checked = settings.courseFeatureEnabled,
                         onCheckedChange = { isChecked ->
                             controller.updatePreference(courseFeatureEnabled = isChecked)
@@ -1393,7 +1546,10 @@ fun MaterialPreferenceSettingsScreen(
                     }
             }
 
+            }
+
             // ================== 截图板块 (新) ==================
+            if (PreferenceSection.SCREENSHOT in visibleSections) {
             // 注意：现在它在 Column 内部，位于“日程”卡片之后
             Text("截图", style = sectionTitleStyle)
             SettingsCard {
@@ -1411,6 +1567,9 @@ fun MaterialPreferenceSettingsScreen(
                         valueUnit = "ms"
                     )
             }
+            }
+
+            footerContent()
 
         } // <--- Column 结束在这里，确保所有板块都在里面
 
@@ -1419,20 +1578,7 @@ fun MaterialPreferenceSettingsScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp + bottomInset),
-            snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
-        )
-
-        PredictiveFloatingActionCard(
-            visible = showPermissionDialog,
-            title = "需要日历权限",
-            content = "为了让您在系统日历中查看和管理课程与日程，需要授予应用读取和写入日历的权限。",
-            confirmText = "授予权限",
-            dismissText = "取消",
-            isDestructive = false,
-            isLoading = false,
-            predictiveBackEnabled = settings.predictiveBackEnabled,
-            onConfirm = requestCalendarPermission,
-            onDismiss = { showPermissionDialog = false }
+            snackbar = { data -> UniversalSnackbar(data = data, type = currentToastType) }
         )
 
         if (showSourceCalendarSheet) {
@@ -1575,7 +1721,9 @@ private fun QuickMemoPreferenceCard(
                 QuickMemoPreferenceDivider()
                 QuickMemoRecordingDisplayPreference(
                     mode = settings.quickMemoRecordingDisplayMode,
-                    onModeChange = onRecordingDisplayModeChange
+                    onModeChange = onRecordingDisplayModeChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                 )
 
                 QuickMemoPreferenceDivider()
@@ -1658,6 +1806,8 @@ private fun QuickMemoPreferenceCard(
 private fun QuickMemoRecordingDisplayPreference(
     mode: Int,
     onModeChange: (Int) -> Unit,
+    cardTitleStyle: TextStyle,
+    cardSubtitleStyle: TextStyle,
 ) {
     val haptics = rememberAppHaptics()
     val normalizedMode = QuickMemoRecordingDisplayMode.normalize(mode)
@@ -1679,7 +1829,9 @@ private fun QuickMemoRecordingDisplayPreference(
                     QuickMemoRecordingDisplayMode.LIVE_CAPSULE
                 }
             )
-        }
+        },
+        titleTextStyle = cardTitleStyle,
+        summaryTextStyle = cardSubtitleStyle,
     )
 }
 
@@ -2024,5 +2176,7 @@ fun FloatingEventRangeSlider(
         options = listOf("全部日程", "今日日程", "今日+明日"),
         selectedIndex = eventRange.coerceIn(0, 2),
         onSelectedIndexChange = onEventRangeChange,
+        titleTextStyle = cardTitleStyle,
+        summaryTextStyle = cardSubtitleStyle,
     )
 }

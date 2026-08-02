@@ -22,8 +22,6 @@ import com.antgskds.calendarassistant.feature.settings.developer.ui.connector.Co
 import com.antgskds.calendarassistant.feature.settings.developer.ui.connector.DeveloperPage
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector.LaboratoryPage
 import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
-import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingLiveCapsuleDemoPage
-import com.antgskds.calendarassistant.feature.settings.developer.ui.render.MiuiComponentLabScreen
 import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSettingsPage
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiAction
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiState
@@ -137,7 +135,7 @@ private fun SettingsPageRouteContent(
             uiSize = uiSize,
         )
 
-        SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, uiSize)
+        SettingsDestination.CourseManage -> CourseManagerScreen(mainViewModel, settingsViewModel, uiSize)
         SettingsDestination.TimeTableManage -> TimeTableEditorScreen(settingsViewModel, uiSize)
         SettingsDestination.Preference -> PreferenceSettingsPage(
             viewModel = settingsViewModel,
@@ -177,18 +175,14 @@ private fun SettingsPageRouteContent(
             onNavigateToConfig = { onNavigateTo(SettingsDestination.ConfigEditor) },
             onNavigateToRegexRules = { onNavigateTo(SettingsDestination.RegexRuleEditor) },
             onNavigateToOnboardingGuide = { onNavigateTo(SettingsDestination.OnboardingGuide) },
-            onNavigateToOnboardingLiveCapsuleDemo = { onNavigateTo(SettingsDestination.OnboardingLiveCapsuleDemo) },
-            onNavigateToMiuiComponentLab = { onNavigateTo(SettingsDestination.MiuiComponentLab) },
         )
 
         SettingsDestination.ConfigEditor -> ConfigEditorPage(uiSize = uiSize)
         SettingsDestination.OnboardingGuide -> OnboardingGuidePage(
             settingsViewModel = settingsViewModel,
+            mainViewModel = mainViewModel,
             uiSize = uiSize,
-            onImportConfig = { onNavigateTo(SettingsDestination.Backup) },
         )
-        SettingsDestination.OnboardingLiveCapsuleDemo -> OnboardingLiveCapsuleDemoPage(uiSize = uiSize)
-        SettingsDestination.MiuiComponentLab -> MiuiComponentLabScreen(uiSize = uiSize)
         SettingsDestination.RegexRuleEditor -> RegexRuleEditorPage(uiSize = uiSize)
         SettingsDestination.BottomBarEditor -> BottomBarEditorPage(
             settingsViewModel = settingsViewModel,

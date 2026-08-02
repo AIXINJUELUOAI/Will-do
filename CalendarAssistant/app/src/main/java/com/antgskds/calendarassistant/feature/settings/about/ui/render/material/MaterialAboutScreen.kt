@@ -102,10 +102,6 @@ fun MaterialAboutScreen(state: AboutUiState, onAction: (AboutUiAction) -> Unit) 
             AboutIcon(R.drawable.ic_file, "个人博客") { haptics.click(); onAction(AboutUiAction.OpenBlog) }
             AboutIcon(R.drawable.ic_coffee, "捐赠") { haptics.click(); onAction(AboutUiAction.OpenDonate) }
         }
-        Spacer(Modifier.height(16.dp))
-        Text("本软件已完整开源并遵守 GPLv3 协议", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Text(state.daemonStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(32.dp))
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }

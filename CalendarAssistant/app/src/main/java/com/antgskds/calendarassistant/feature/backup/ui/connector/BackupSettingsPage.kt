@@ -499,7 +499,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CourseImportConfirmSheet(
+internal fun CourseImportConfirmSheet(
     parsed: ParsedCourseImport,
     currentSemesterStartDate: String,
     importMode: ImportMode,

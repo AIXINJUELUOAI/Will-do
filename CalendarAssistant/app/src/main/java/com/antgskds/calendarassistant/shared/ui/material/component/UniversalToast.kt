@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +42,9 @@ enum class ToastType {
 @Composable
 fun UniversalToast(
     message: String,
-    type: ToastType = ToastType.INFO
+    type: ToastType = ToastType.INFO,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     val (icon, tint) = when (type) {
         ToastType.SUCCESS -> Icons.Rounded.CheckCircle to Color(0xFF4CAF50)
@@ -78,8 +81,31 @@ fun UniversalToast(
                     fontWeight = FontWeight.Medium
                 )
             )
+            if (actionLabel != null && onAction != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onAction) {
+                    androidx.compose.material3.Text(
+                        text = actionLabel,
+                        color = tint,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
+}
+
+@Composable
+fun UniversalSnackbar(
+    data: SnackbarData,
+    type: ToastType = ToastType.INFO,
+) {
+    UniversalToast(
+        message = data.visuals.message,
+        type = type,
+        actionLabel = data.visuals.actionLabel,
+        onAction = data.visuals.actionLabel?.let { data::performAction },
+    )
 }
 
 /**

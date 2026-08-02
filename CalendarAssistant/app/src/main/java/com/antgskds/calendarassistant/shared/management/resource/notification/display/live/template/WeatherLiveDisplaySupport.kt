@@ -126,7 +126,8 @@ internal object WeatherLiveDisplaySupport {
             primaryText = primaryText,
             secondaryText = fallbackLines.getOrNull(0),
             tertiaryText = if (mode == Mode.COMPACT) null else fallbackLines.getOrNull(1),
-            expandedText = expandedLines.joinToString("\n").ifBlank { fallbackLines.joinToString("\n") }.ifBlank { null }
+            expandedText = expandedLines.joinToString("\n").ifBlank { fallbackLines.joinToString("\n") }.ifBlank { null },
+            isCompact = mode == Mode.COMPACT
         )
     }
 

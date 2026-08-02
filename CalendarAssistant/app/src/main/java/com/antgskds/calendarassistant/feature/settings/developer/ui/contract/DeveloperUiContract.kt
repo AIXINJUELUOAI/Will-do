@@ -26,6 +26,4 @@ sealed interface DeveloperUiAction {
     data object OpenConfig : DeveloperUiAction
     data object OpenRegexRules : DeveloperUiAction
     data object OpenOnboardingGuide : DeveloperUiAction
-    data object OpenOnboardingLiveCapsuleDemo : DeveloperUiAction
-    data object OpenMiuiComponentLab : DeveloperUiAction
 }

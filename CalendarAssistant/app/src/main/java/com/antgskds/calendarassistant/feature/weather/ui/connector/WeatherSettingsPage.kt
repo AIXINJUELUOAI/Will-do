@@ -1,13 +1,16 @@
 package com.antgskds.calendarassistant.feature.weather.ui.connector
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
-import com.antgskds.calendarassistant.shared.ui.edition.EditionFloatingActionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOptionalCategoricalSettingItem
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -37,7 +40,6 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -49,7 +51,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -90,6 +92,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherApiAdapter
@@ -104,9 +107,10 @@ import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocati
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
-import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToast
+import com.antgskds.calendarassistant.shared.ui.material.component.UniversalSnackbar
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherSettingsUiState
 import kotlinx.coroutines.CancellationException
@@ -117,7 +121,8 @@ import kotlinx.coroutines.launch
 fun WeatherSettingsPage(
     viewModel: SettingsViewModel,
     uiSize: Int = 2,
-    onOpenWeatherDetail: () -> Unit = {}
+    onOpenWeatherDetail: () -> Unit = {},
+    showCacheSection: Boolean = true,
 ) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
@@ -129,6 +134,7 @@ fun WeatherSettingsPage(
         state = WeatherSettingsUiState(settings, weatherData, locationCatalog),
         uiSize = uiSize,
         onOpenWeatherDetail = onOpenWeatherDetail,
+        showCacheSection = showCacheSection,
         persistWeather = { draft ->
             viewModel.updateWeatherSettings(
                 enabled = draft.weatherEnabled, provider = WeatherApiAdapter.PROVIDER_QWEATHER,
@@ -157,6 +163,7 @@ fun MaterialWeatherSettingsScreen(
     state: WeatherSettingsUiState,
     uiSize: Int = 2,
     onOpenWeatherDetail: () -> Unit,
+    showCacheSection: Boolean = true,
     persistWeather: suspend (MySettings) -> Unit,
     refreshWeather: suspend (MySettings) -> Result<Unit>
 ) {
@@ -170,6 +177,7 @@ fun MaterialWeatherSettingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val permissionGate = rememberPermissionGate(snackbarHostState)
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val density = LocalDensity.current
     val bottomInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
@@ -208,7 +216,6 @@ fun MaterialWeatherSettingsScreen(
     var riskWarningEnabled by remember(settings) { mutableStateOf(settings.weatherRiskWarningEnabled) }
     var warningLookaheadHours by remember(settings) { mutableIntStateOf(settings.weatherWarningLookaheadHours.coerceIn(1, 168)) }
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermissionGranted(context)) }
-    var pendingEnableByPermissionRequest by remember { mutableStateOf(false) }
     var actionLoading by remember { mutableStateOf(false) }
     var showLocationSheet by remember { mutableStateOf(false) }
     var isLocationModeExpanded by remember { mutableStateOf(false) }
@@ -224,33 +231,68 @@ fun MaterialWeatherSettingsScreen(
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        hasLocationPermission = granted
-        if (pendingEnableByPermissionRequest) {
-            enabled = granted
-            pendingEnableByPermissionRequest = false
-            if (!granted) {
-                showToast("需要定位权限才能启用天气", ToastType.ERROR)
-            }
-        }
+    ) {
+        hasLocationPermission = hasLocationPermissionGranted(context)
+        permissionGate.resumePending()
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionGate.resumePending()
     }
 
     LaunchedEffect(Unit) {
         hasLocationPermission = hasLocationPermissionGranted(context)
     }
 
-    LaunchedEffect(enabled, locationMode, selectedLocation?.id) {
-        val needsLocationPermission = locationMode == WeatherRepository.LOCATION_MODE_AUTO
-        if (enabled && needsLocationPermission && !hasLocationPermission) {
-            pendingEnableByPermissionRequest = true
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasLocationPermission = hasLocationPermissionGranted(context)
+                permissionGate.resumePending()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun requestLocationPermission() {
+        locationPermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             )
+        )
+    }
+
+    fun hasNotificationPermission(): Boolean {
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            })
+        }
+    }
+
+    fun requireNotificationWhenEnabling(enabled: Boolean, update: () -> Unit) {
+        if (enabled) {
+            permissionGate.require(
+                permissionName = "通知权限",
+                isGranted = ::hasNotificationPermission,
+                requestPermission = ::requestNotificationPermission,
+                onGranted = update,
+            )
+        } else {
+            update()
         }
     }
 
@@ -319,14 +361,15 @@ fun MaterialWeatherSettingsScreen(
         }
         val needsLocationPermission = draft.weatherLocationMode == WeatherRepository.LOCATION_MODE_AUTO
         if (needsLocationPermission && !hasLocationPermission) {
-            pendingEnableByPermissionRequest = true
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
+            permissionGate.require(
+                permissionName = "定位权限",
+                isGranted = { hasLocationPermissionGranted(context) },
+                requestPermission = ::requestLocationPermission,
+                onGranted = {
+                    hasLocationPermission = true
+                    enabled = true
+                },
             )
-            showToast("请先授予定位权限", ToastType.ERROR)
             return false
         }
         return true
@@ -364,15 +407,17 @@ fun MaterialWeatherSettingsScreen(
                         onCheckedChange = {
                             if (!it) {
                                 enabled = false
-                            } else if (locationMode == WeatherRepository.LOCATION_MODE_MANUAL || selectedLocation != null || hasLocationPermission) {
+                            } else if (locationMode == WeatherRepository.LOCATION_MODE_MANUAL) {
                                 enabled = true
                             } else {
-                                pendingEnableByPermissionRequest = true
-                                locationPermissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
+                                permissionGate.require(
+                                    permissionName = "定位权限",
+                                    isGranted = { hasLocationPermissionGranted(context) },
+                                    requestPermission = ::requestLocationPermission,
+                                    onGranted = {
+                                        hasLocationPermission = true
+                                        enabled = true
+                                    },
                                 )
                             }
                         },
@@ -425,10 +470,20 @@ fun MaterialWeatherSettingsScreen(
                             WeatherRepository.LOCATION_MODE_MANUAL to "手动定位"
                         ),
                         onOptionSelected = { value, _ ->
-                            locationMode = value
                             isLocationModeExpanded = false
                             if (value == WeatherRepository.LOCATION_MODE_MANUAL) {
+                                locationMode = value
                                 showLocationSheet = true
+                            } else {
+                                permissionGate.require(
+                                    permissionName = "定位权限",
+                                    isGranted = { hasLocationPermissionGranted(context) },
+                                    requestPermission = ::requestLocationPermission,
+                                    onGranted = {
+                                        hasLocationPermission = true
+                                        locationMode = WeatherRepository.LOCATION_MODE_AUTO
+                                    },
+                                )
                             }
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -490,7 +545,11 @@ fun MaterialWeatherSettingsScreen(
                         title = "官方天气预警",
                         subtitle = "气象部门正式发布的预警信号",
                         checked = warningEnabled,
-                        onCheckedChange = { warningEnabled = it },
+                        onCheckedChange = { checked ->
+                            requireNotificationWhenEnabling(checked) {
+                                warningEnabled = checked
+                            }
+                        },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
@@ -501,7 +560,11 @@ fun MaterialWeatherSettingsScreen(
                         title = "天气风险提醒",
                         subtitle = "根据未来${warningLookaheadHours}小时预报推断风险并提醒",
                         checked = riskWarningEnabled,
-                        onCheckedChange = { riskWarningEnabled = it },
+                        onCheckedChange = { checked ->
+                            requireNotificationWhenEnabling(checked) {
+                                riskWarningEnabled = checked
+                            }
+                        },
                         optionTitle = "风险扫描范围",
                         optionSummary = "未来 ${warningLookaheadHours} 小时",
                         options = listOf("12小时", "24小时", "48小时"),
@@ -524,7 +587,61 @@ fun MaterialWeatherSettingsScreen(
                 }
             }
 
-            weatherData?.let { data ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val draft = normalizeDraft()
+                            if (draft.weatherEnabled && !validateDraft(draft)) {
+                                haptics.error()
+                                return@launch
+                            }
+
+                            persistWeather(draft)
+                            haptics.confirm()
+                            showToast("天气配置已保存", ToastType.SUCCESS)
+                            if (!draft.weatherEnabled) return@launch
+                            actionLoading = true
+                            try {
+                                val result = try {
+                                    refreshWeather(draft)
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (error: Exception) {
+                                    Result.failure(error)
+                                }
+                                if (result.isSuccess) {
+                                    showToast("天气连接成功", ToastType.SUCCESS)
+                                } else {
+                                    haptics.error()
+                                    val message = result.exceptionOrNull()?.message?.replace("HTTP ", "").orEmpty().take(18)
+                                    showToast(
+                                        if (message.isBlank()) "连接失败，不影响已保存配置" else "连接失败:$message（不影响已保存配置）",
+                                        ToastType.ERROR
+                                    )
+                                }
+                            } finally {
+                                actionLoading = false
+                            }
+                        }
+                    },
+                    enabled = !actionLoading,
+                ) {
+                    if (actionLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (actionLoading) "连接中" else "连接")
+                }
+            }
+
+            if (showCacheSection) weatherData?.let { data ->
                 Text("当前缓存", style = sectionTitleStyle)
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -559,69 +676,12 @@ fun MaterialWeatherSettingsScreen(
             Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
 
-        EditionFloatingActionButton(
-            onClick = {
-                if (actionLoading) return@EditionFloatingActionButton
-                scope.launch {
-                    val draft = normalizeDraft()
-                    if (draft.weatherEnabled && !validateDraft(draft)) {
-                        haptics.error()
-                        return@launch
-                    }
-
-                    persistWeather(draft)
-                    haptics.confirm()
-                    showToast("天气配置已保存", ToastType.SUCCESS)
-                    if (!draft.weatherEnabled) return@launch
-                    actionLoading = true
-                    try {
-                        val result = try {
-                            refreshWeather(draft)
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (error: Exception) {
-                            Result.failure(error)
-                        }
-                        if (result.isSuccess) {
-                            showToast("天气连接成功", ToastType.SUCCESS)
-                        } else {
-                            haptics.error()
-                            val message = result.exceptionOrNull()?.message?.replace("HTTP ", "").orEmpty().take(18)
-                            showToast(
-                                if (message.isBlank()) "连接失败，不影响已保存配置" else "连接失败:$message（不影响已保存配置）",
-                                ToastType.ERROR
-                            )
-                        }
-                    } finally {
-                        actionLoading = false
-                    }
-                }
-            },
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 32.dp + bottomInset)
-                .size(72.dp)
-        ) {
-            if (actionLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(30.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 3.dp
-                )
-            } else {
-                Icon(Icons.Default.Check, contentDescription = "保存", modifier = Modifier.size(34.dp))
-            }
-        }
-
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp + bottomInset),
-            snackbar = { data -> UniversalToast(message = data.visuals.message, type = currentToastType) }
+            snackbar = { data -> UniversalSnackbar(data = data, type = currentToastType) }
         )
 
         if (showLocationSheet) {
