@@ -1,8 +1,6 @@
 package com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector
 import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
-import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
-import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 
 import android.Manifest
@@ -20,8 +18,9 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,28 +33,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.automirrored.rounded.ViewSidebar
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,10 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,15 +69,31 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
+import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector.LaboratorySettingsContent
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector.LaboratoryItemVisibility
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiAction
+import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiState
+import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSection
+import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceItemVisibility
+import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSettingsPage
+import com.antgskds.calendarassistant.feature.recognition.ui.connector.AiSettingsPage
+import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherSettingsPage
+import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
-import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToast
+import com.antgskds.calendarassistant.shared.ui.material.component.UniversalSnackbar
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
+import com.antgskds.calendarassistant.shared.ui.material.settings.ActionSettingItem
+import com.antgskds.calendarassistant.shared.ui.material.settings.SliderSettingItem
+import com.antgskds.calendarassistant.shared.ui.material.settings.SwitchSettingItem
+import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
 import com.antgskds.calendarassistant.shared.util.OsUtils
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -102,9 +102,9 @@ private const val ONBOARDING_LOG_TAG = "OnboardingGuide"
 @Composable
 fun OnboardingGuidePage(
     settingsViewModel: SettingsViewModel,
+    mainViewModel: MainViewModel,
     uiSize: Int = 2,
     onFinish: (() -> Unit)? = null,
-    onImportConfig: (() -> Unit)? = null,
 ) {
     val settings by settingsViewModel.settings.collectAsState()
     val syncStatus by settingsViewModel.syncStatus.collectAsState()
@@ -112,15 +112,21 @@ fun OnboardingGuidePage(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val permissionGate = rememberPermissionGate(snackbarHostState)
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     var page by remember { mutableIntStateOf(0) }
-    var setupMode by remember { mutableStateOf<OnboardingSetupMode?>(null) }
     var permissionSnapshot by remember { mutableStateOf(readOnboardingPermissions(context)) }
     val blockedFeatureWarnings = remember { mutableStateMapOf<FeatureKey, String>() }
-    val steps = remember(settings, syncStatus.isEnabled, setupMode) {
-        buildOnboardingSteps(settings, syncStatus.isEnabled, setupMode)
-    }
+    var currentToastType by remember { mutableStateOf(ToastType.INFO) }
+    val steps = remember { buildOnboardingSteps() }
     val currentStep = steps.getOrElse(page) { steps.last() }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionSnapshot = readOnboardingPermissions(context)
+        settingsViewModel.refreshSyncStatus()
+        permissionGate.resumePending()
+    }
 
     fun refreshPermissions() {
         permissionSnapshot = readOnboardingPermissions(context)
@@ -128,6 +134,7 @@ fun OnboardingGuidePage(
     }
 
     fun toast(message: String, type: ToastType = ToastType.INFO) {
+        currentToastType = type
         scope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(message)
@@ -215,6 +222,16 @@ fun OnboardingGuidePage(
         }
     }
 
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            openAppNotificationSettings(context)
+        }
+    }
+
     fun blockFeature(featureKey: FeatureKey, message: String) {
         blockedFeatureWarnings[featureKey] = message
         page = 0
@@ -279,6 +296,37 @@ fun OnboardingGuidePage(
         }
     }
 
+    fun handleLaboratoryAction(action: LaboratoryUiAction) {
+        when (action) {
+            is LaboratoryUiAction.SetBraceletMode -> {
+                settingsViewModel.updatePreference(braceletModeEnabled = action.enabled)
+            }
+            is LaboratoryUiAction.SetForceInstantCodeTime -> {
+                settingsViewModel.updatePreference(forceInstantCodeTimeToNow = action.enabled)
+            }
+            is LaboratoryUiAction.SetPredictiveBack -> {
+                settingsViewModel.updatePreference(predictiveBackEnabled = action.enabled)
+            }
+            is LaboratoryUiAction.SetClipboardRecognition -> {
+                settingsViewModel.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
+                if (action.enabled) {
+                    PrivilegeManager.refreshPrivilege()
+                    toast(
+                        if (PrivilegeManager.hasPrivilege) {
+                            "已启用完整后台识别"
+                        } else {
+                            "未获取 Shizuku/Root 权限，仅在打开软件时识别"
+                        }
+                    )
+                    ClipboardCodeMonitorService.startIfNeeded(context)
+                } else {
+                    ClipboardCodeMonitorService.stop(context)
+                }
+            }
+            LaboratoryUiAction.OpenDeveloper -> Unit
+        }
+    }
+
     fun finishOnboarding() {
         if (onFinish != null) {
             onFinish()
@@ -305,33 +353,16 @@ fun OnboardingGuidePage(
         }
     }
 
-    fun applyAuthorRecommended() {
-        setupMode = OnboardingSetupMode.AUTHOR_RECOMMENDED
-        blockedFeatureWarnings.clear()
-        if (permissionSnapshot.overlay) settingsViewModel.updatePreference(floatingWindow = true)
-        if (permissionSnapshot.overlay && permissionSnapshot.microphone) settingsViewModel.updatePreference(voiceInputEnabled = true)
-        if (liveNotificationRequirementMet(permissionSnapshot)) settingsViewModel.updatePreference(liveCapsule = true)
-        if (permissionSnapshot.notification) {
-            settingsViewModel.updatePreference(dailySummary = true)
-            settingsViewModel.updatePreference(advanceReminderEnabled = true)
-            settingsViewModel.updatePreference(braceletModeEnabled = true)
-        }
-        if (permissionSnapshot.calendar) settingsViewModel.toggleCalendarSync(true)
-        if (permissionSnapshot.location || settings.weatherManualLocationId.isNotBlank()) {
-            updateWeather(enabled = true, warningEnabled = permissionSnapshot.notification, riskWarningEnabled = permissionSnapshot.notification)
-        }
-        settingsViewModel.updatePreference(courseFeatureEnabled = false)
-        toast("已应用作者推荐")
-        page = 2
-    }
-
     LaunchedEffect(Unit) {
         refreshPermissions()
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refreshPermissions()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshPermissions()
+                permissionGate.resumePending()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -351,125 +382,94 @@ fun OnboardingGuidePage(
                 featureCount = onboardingFeatureItems(settings, syncStatus.isEnabled, permissionSnapshot).size,
             )
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            Box(modifier = Modifier.weight(1f)) {
                 when (currentStep) {
-                    OnboardingStep.PERMISSIONS -> PermissionStep(
-                        snapshot = permissionSnapshot,
-                        onOpenPermission = ::openPermission,
-                    )
-                    OnboardingStep.SETUP_MODE -> SetupModeStep(
-                        selectedMode = setupMode,
-                        onAuthorRecommended = {
-                            haptics.confirm()
-                            applyAuthorRecommended()
+                    OnboardingStep.PERMISSIONS -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        PermissionStep(
+                            snapshot = permissionSnapshot,
+                            onOpenPermission = ::openPermission,
+                        )
+                    }
+                    OnboardingStep.SCHEDULE_REMINDER -> PreferenceSettingsPage(
+                        viewModel = settingsViewModel,
+                        uiSize = uiSize,
+                        visibleSections = setOf(
+                            PreferenceSection.OPERATION,
+                            PreferenceSection.NOTIFICATION,
+                            PreferenceSection.SCHEDULE,
+                        ),
+                        itemVisibility = PreferenceItemVisibility(
+                            showHapticFeedback = false,
+                            showNetworkSpeedCapsule = false,
+                            showAutoArchive = false,
+                            showScheduleColors = false,
+                        ),
+                        footerContent = {
+                            LaboratorySettingsContent(
+                                state = LaboratoryUiState(settings),
+                                onAction = ::handleLaboratoryAction,
+                                showDeveloperEntry = false,
+                                itemVisibility = LaboratoryItemVisibility(
+                                    showForceInstantCodeTime = false,
+                                    showPredictiveBack = false,
+                                ),
+                                onBraceletModeChange = { enabled ->
+                                    if (enabled) {
+                                        permissionGate.require(
+                                            permissionName = "通知权限",
+                                            isGranted = { areAppNotificationsEnabled(context) },
+                                            requestPermission = ::requestNotificationPermission,
+                                            onGranted = { settingsViewModel.updatePreference(braceletModeEnabled = true) },
+                                        )
+                                    } else {
+                                        settingsViewModel.updatePreference(braceletModeEnabled = false)
+                                    }
+                                },
+                            )
                         },
-                        onCustom = {
-                            haptics.confirm()
-                            setupMode = OnboardingSetupMode.CUSTOM
-                            page = 2
-                        },
-                        onImport = {
-                            haptics.confirm()
-                            setupMode = OnboardingSetupMode.IMPORT_CONFIG
-                            if (onImportConfig != null) {
-                                onImportConfig()
-                            } else {
-                                toast("请在备份页面导入配置")
-                            }
-                        },
-                    )
-                    OnboardingStep.FEATURES -> FeatureStep(
-                        settings = settings,
-                        syncEnabled = syncStatus.isEnabled,
-                        snapshot = permissionSnapshot,
-                        warnings = blockedFeatureWarnings,
-                        onFeatureChange = ::setFeature,
-                        onOpenPermissionPage = { page = 0 },
-                    )
-                    OnboardingStep.SCHEDULE_REMINDER -> ScheduleReminderConfigStep(
-                        settings = settings,
-                        syncEnabled = syncStatus.isEnabled,
-                        snapshot = permissionSnapshot,
-                        onFeatureChange = ::setFeature,
-                        onOpenPermission = ::openPermission,
-                        onAdvanceReminderMinutesChange = {
-                            settingsViewModel.updatePreference(advanceReminderMinutes = it)
-                        },
-                    )
-                    OnboardingStep.FLOATING_QUICK_MEMO -> FloatingQuickMemoConfigStep(
-                        settings = settings,
-                        snapshot = permissionSnapshot,
-                        onFeatureChange = ::setFeature,
-                        onOpenPermission = ::openPermission,
-                        onFloatingEventRangeChange = {
-                            settingsViewModel.updatePreference(floatingEventRange = it)
-                        },
-                        onFloatingExpandSideChange = {
-                            settingsViewModel.updatePreference(floatingExpandSide = it)
-                        },
-                        onEdgeBarEnabledChange = {
-                            settingsViewModel.updateEdgeBarSettings(enabled = it)
-                        },
-                        onEdgeBarHeightChange = {
-                            settingsViewModel.updateEdgeBarSettings(heightDp = it)
-                        },
-                        onEdgeBarAlphaChange = {
-                            settingsViewModel.updateEdgeBarSettings(alpha = it)
-                        },
-                        onFloatingBallEnabledChange = {
-                            settingsViewModel.updatePreference(floatingBallEnabled = it)
-                        },
-                        onFloatingBallSizeChange = {
-                            settingsViewModel.updatePreference(floatingBallSizeDp = it)
-                        },
-                        onFloatingBallAlphaChange = {
-                            settingsViewModel.updatePreference(floatingBallAlpha = it)
-                        },
-                        onFloatingTextQuickMemoAutoPinChange = {
-                            settingsViewModel.updatePreference(floatingTextQuickMemoAutoPinEnabled = it)
-                        },
-                        onVoiceQuickMemoAutoPinChange = {
-                            settingsViewModel.updatePreference(voiceQuickMemoAutoPinEnabled = it)
+                        onNavigateToScheduleColors = {
+                            toast("可在完成引导后进入日程颜色设置")
                         },
                     )
-                    OnboardingStep.MODEL -> AiConfigStep(
-                        settings = settings,
-                        onMultimodalChange = { settingsViewModel.updatePreference(useMultimodalAi = it) },
-                        onDisableThinkingChange = { settingsViewModel.updatePreference(disableThinking = it) },
-                        onLocalSemanticChange = { settingsViewModel.updatePreference(localSemanticEnabled = it) },
-                        onSaveAiConfig = { key, name, url ->
-                            settingsViewModel.updateAiSettings(key = key, name = name, url = url)
-                            toast("AI 配置已保存")
+                    OnboardingStep.FLOATING_QUICK_MEMO -> PreferenceSettingsPage(
+                        viewModel = settingsViewModel,
+                        uiSize = uiSize,
+                        visibleSections = setOf(
+                            PreferenceSection.DISPLAY,
+                            PreferenceSection.QUICK_MEMO,
+                        ),
+                        itemVisibility = PreferenceItemVisibility(
+                            showUiSize = false,
+                            showTomorrowEvents = false,
+                            showBottomBarEditor = false,
+                            showWidgetSettings = false,
+                        ),
+                        onNavigateToBottomBarEditor = {
+                            toast("可在完成引导后进入底栏编辑")
+                        },
+                        onNavigateToWidgetSettings = {
+                            toast("可在完成引导后进入桌面小组件设置")
                         },
                     )
-                    OnboardingStep.WEATHER -> WeatherConfigStep(
-                        settings = settings,
-                        snapshot = permissionSnapshot,
-                        onWeatherEnabledChange = { updateWeather(enabled = it) },
-                        onWeatherWarningChange = { updateWeather(warningEnabled = it, riskWarningEnabled = it) },
-                        onShowInFloatingChange = { updateWeather(showInFloating = it) },
-                        onRefreshIntervalChange = { updateWeather(refreshInterval = it) },
-                        onWarningLookaheadChange = { updateWeather(warningLookaheadHours = it) },
-                        onFloatingForecastRangeChange = { updateWeather(floatingWeatherForecastRange = it) },
-                        onSaveWeatherConfig = { apiUrl, apiKey ->
-                            updateWeather(apiUrl = apiUrl, apiKey = apiKey)
-                            toast("天气配置已保存")
-                        },
-                        onRequestLocationPermission = { openPermission(PermissionKey.LOCATION) },
+                    OnboardingStep.MODEL -> AiSettingsPage(
+                        viewModel = settingsViewModel,
+                        mainViewModel = mainViewModel,
+                        uiSize = uiSize,
                     )
-                    OnboardingStep.COURSE -> CourseConfigStep(
-                        settings = settings,
-                        onCourseFeatureChange = { setFeature(FeatureKey.COURSE, it) },
+                    OnboardingStep.WEATHER -> WeatherSettingsPage(
+                        viewModel = settingsViewModel,
+                        uiSize = uiSize,
+                        showCacheSection = false,
+                        onOpenWeatherDetail = {
+                            toast("完成天气配置后，可从设置页查看天气详情")
+                        },
                     )
                 }
-
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
@@ -496,8 +496,9 @@ fun OnboardingGuidePage(
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
                 .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
-            snackbar = { data -> UniversalToast(message = data.visuals.message, type = ToastType.INFO) }
+            snackbar = { data -> UniversalSnackbar(data = data, type = currentToastType) }
         )
+
     }
 }
 
@@ -635,107 +636,47 @@ private fun PermissionSection(
     onOpenPermission: (PermissionKey) -> Unit,
 ) {
     if (items.isEmpty()) return
+    val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
+                style = sectionTitleStyle,
             )
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = cardSubtitleStyle,
             )
         }
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 items.forEachIndexed { index, item ->
-                    PermissionModernRow(item = item, onClick = { onOpenPermission(item.key) })
-                    if (index != items.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SetupModeStep(
-    selectedMode: OnboardingSetupMode?,
-    onAuthorRecommended: () -> Unit,
-    onCustom: () -> Unit,
-    onImport: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SetupModeCard(
-            icon = Icons.Rounded.AutoAwesome,
-            title = "作者推荐",
-            subtitle = "按推荐方案开启常用功能，适合第一次使用。",
-            selected = selectedMode == OnboardingSetupMode.AUTHOR_RECOMMENDED,
-            onClick = onAuthorRecommended,
-        )
-        SetupModeCard(
-            icon = Icons.Rounded.Tune,
-            title = "自己配置",
-            subtitle = "逐项选择功能开关，再按需进入后续配置页。",
-            selected = selectedMode == OnboardingSetupMode.CUSTOM,
-            onClick = onCustom,
-        )
-        SetupModeCard(
-            icon = Icons.Rounded.UploadFile,
-            title = "导入配置",
-            subtitle = "从备份文件恢复设置、日程、随口记等数据。",
-            selected = selectedMode == OnboardingSetupMode.IMPORT_CONFIG,
-            onClick = onImport,
-        )
-    }
-}
-
-@Composable
-private fun SetupModeCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    AppSettingsCard(
-        modifier = Modifier.clickable { onClick() },
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f),
-                modifier = Modifier.size(48.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp),
+                    ActionSettingItem(
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        value = permissionStatusText(item),
+                        enabled = true,
+                        onClick = { onOpenPermission(item.key) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle,
                     )
+                    if (index != items.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.CheckCircle,
-                    contentDescription = null,
-                    tint = permissionGrantedColor(),
-                    modifier = Modifier.size(22.dp),
-                )
             }
         }
     }
@@ -751,16 +692,29 @@ private fun FeatureStep(
     onOpenPermissionPage: () -> Unit,
 ) {
     val features = onboardingFeatureItems(settings, syncEnabled, snapshot)
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
     AppSettingsCard {
         Column(modifier = Modifier.padding(vertical = 4.dp)) {
             features.forEachIndexed { index, item ->
-                FeatureModernRow(
-                    item = item,
-                    warning = warnings[item.key],
+                val warning = warnings[item.key].takeUnless { it.isNullOrBlank() }
+                    ?: item.warning.takeUnless { item.requirementsMet || it.isBlank() }
+                SwitchSettingItem(
+                    title = item.title,
+                    subtitle = if (warning == null) item.subtitle else "${item.subtitle}；$warning",
+                    checked = item.enabled,
                     onCheckedChange = { onFeatureChange(item.key, it) },
-                    onOpenPermissionPage = onOpenPermissionPage,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    enabled = item.requirementsMet,
+                    onDisabledClick = onOpenPermissionPage,
                 )
-                if (index != features.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
+                if (index != features.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
         }
     }
@@ -775,65 +729,85 @@ private fun ScheduleReminderConfigStep(
     onOpenPermission: (PermissionKey) -> Unit,
     onAdvanceReminderMinutesChange: (Int) -> Unit,
 ) {
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     AppSettingsCard {
         Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            OnboardingConfigRow(
-                icon = Icons.Rounded.NotificationsActive,
+            SwitchSettingItem(
                 title = "每日提醒",
                 subtitle = "今日提醒和明日预告",
                 checked = settings.isDailySummaryEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.DAILY_SUMMARY, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.notification,
-                onClick = if (snapshot.notification) null else ({ onOpenPermission(PermissionKey.NOTIFICATION) }),
+                onDisabledClick = if (snapshot.notification) null else ({ onOpenPermission(PermissionKey.NOTIFICATION) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.Timer,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "提前提醒",
                 subtitle = "日程开始前提前提醒",
                 checked = settings.isAdvanceReminderEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.ADVANCE_REMINDER, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.notification,
-                onClick = if (snapshot.notification) null else ({ onOpenPermission(PermissionKey.NOTIFICATION) }),
+                onDisabledClick = if (snapshot.notification) null else ({ onOpenPermission(PermissionKey.NOTIFICATION) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.Sync,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "日历同步",
                 subtitle = "与系统日历同步日程",
                 checked = syncEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.CALENDAR_SYNC, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.calendar,
-                onClick = if (snapshot.calendar) null else ({ onOpenPermission(PermissionKey.CALENDAR) }),
+                onDisabledClick = if (snapshot.calendar) null else ({ onOpenPermission(PermissionKey.CALENDAR) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.DynamicFeed,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "实况通知",
                 subtitle = "以胶囊/灵动形态显示提醒",
                 checked = settings.isLiveCapsuleEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.LIVE_NOTIFICATION, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = liveNotificationRequirementMet(snapshot),
-                onClick = if (liveNotificationRequirementMet(snapshot)) null else ({ onOpenPermission(PermissionKey.LIVE_NOTIFICATION) }),
+                onDisabledClick = if (liveNotificationRequirementMet(snapshot)) null else ({ onOpenPermission(PermissionKey.LIVE_NOTIFICATION) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.Watch,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "手环模式",
                 subtitle = "开启后，将同步发送一条普通通知以同步到手环",
                 checked = settings.braceletModeEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.BRACELET_MODE, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.notification,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SliderSettingItem(
                 title = "提前分钟",
                 subtitle = "日程开始前多久提醒",
                 value = settings.advanceReminderMinutes.toFloat(),
+                onValueChange = { onAdvanceReminderMinutesChange(it.roundToInt()) },
                 valueRange = 5f..120f,
                 steps = 22,
-                valueText = "${settings.advanceReminderMinutes} 分钟",
-                onValueChangeFinished = { onAdvanceReminderMinutesChange(it.roundToInt()) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+                showValueAsNumber = true,
+                valueUnit = " 分钟",
                 enabled = settings.isAdvanceReminderEnabled,
             )
         }
@@ -857,141 +831,174 @@ private fun FloatingQuickMemoConfigStep(
     onFloatingTextQuickMemoAutoPinChange: (Boolean) -> Unit,
     onVoiceQuickMemoAutoPinChange: (Boolean) -> Unit,
 ) {
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     AppSettingsCard {
         Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            OnboardingConfigRow(
-                icon = Icons.Rounded.OpenInBrowser,
+            SwitchSettingItem(
                 title = "日程悬浮",
                 subtitle = "桌面悬浮窗、侧边栏、悬浮球入口",
                 checked = settings.isFloatingWindowEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.FLOATING_WINDOW, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.overlay,
-                onClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
+                onDisabledClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            EditionCategoricalPreference(
                 title = "日程范围",
-                subtitle = floatingEventRangeLabel(settings.floatingEventRange),
-                value = settings.floatingEventRange.toFloat(),
-                valueRange = 0f..2f,
-                steps = 1,
-                valueText = floatingEventRangeLabel(settings.floatingEventRange),
-                onValueChangeFinished = { onFloatingEventRangeChange(it.roundToInt().coerceIn(0, 2)) },
+                summary = floatingEventRangeLabel(settings.floatingEventRange),
+                options = listOf("全部日程", "今日日程", "今日+明日"),
+                selectedIndex = settings.floatingEventRange.coerceIn(0, 2),
+                onSelectedIndexChange = onFloatingEventRangeChange,
                 enabled = settings.isFloatingWindowEnabled,
-                categoricalLabels = listOf("全部日程", "今日日程", "今日+明日"),
+                titleTextStyle = cardTitleStyle,
+                summaryTextStyle = cardSubtitleStyle,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.Mic,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "随口记",
                 subtitle = "文字/语音随口记入口",
                 checked = settings.voiceInputEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.QUICK_MEMO, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.overlay && snapshot.microphone,
-                onClick = if (snapshot.overlay && snapshot.microphone) null else ({ onOpenPermission(if (!snapshot.overlay) PermissionKey.OVERLAY else PermissionKey.MICROPHONE) }),
+                onDisabledClick = if (snapshot.overlay && snapshot.microphone) null else ({ onOpenPermission(if (!snapshot.overlay) PermissionKey.OVERLAY else PermissionKey.MICROPHONE) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.AutoMirrored.Rounded.ViewSidebar,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "侧边栏",
                 subtitle = "屏幕边缘滑动呼出悬浮入口",
                 checked = settings.edgeBarEnabled,
                 onCheckedChange = onEdgeBarEnabledChange,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.overlay && (settings.isFloatingWindowEnabled || settings.voiceInputEnabled),
-                onClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
+                onDisabledClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingTwoOptionRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            EditionCategoricalPreference(
                 title = "展开方向",
-                subtitle = "悬浮窗从哪一侧滑入",
-                leftText = "左侧",
-                rightText = "右侧",
-                selectedRight = settings.floatingExpandSide == "RIGHT",
-                onSelectLeft = { onFloatingExpandSideChange("LEFT") },
-                onSelectRight = { onFloatingExpandSideChange("RIGHT") },
+                summary = "悬浮窗从哪一侧滑入",
+                options = listOf("左侧", "右侧"),
+                selectedIndex = if (settings.floatingExpandSide == "RIGHT") 1 else 0,
+                onSelectedIndexChange = { onFloatingExpandSideChange(if (it == 1) "RIGHT" else "LEFT") },
                 enabled = settings.isFloatingWindowEnabled || settings.voiceInputEnabled,
+                titleTextStyle = cardTitleStyle,
+                summaryTextStyle = cardSubtitleStyle,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SliderSettingItem(
                 title = "侧栏高度",
                 subtitle = "调整侧边栏触发区域高度",
                 value = settings.edgeBarHeightDp.toFloat(),
+                onValueChange = { onEdgeBarHeightChange(it.roundToInt()) },
                 valueRange = 80f..220f,
                 steps = 13,
-                valueText = "${settings.edgeBarHeightDp} dp",
-                onValueChangeFinished = { onEdgeBarHeightChange(it.roundToInt()) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+                showValueAsNumber = true,
+                valueUnit = " dp",
                 enabled = settings.edgeBarEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SliderSettingItem(
                 title = "侧栏透明",
                 subtitle = "调整侧边栏可见程度",
                 value = settings.edgeBarAlpha * 100f,
+                onValueChange = { onEdgeBarAlphaChange((it / 100f).coerceIn(0.1f, 1f)) },
                 valueRange = 10f..100f,
                 steps = 8,
-                valueText = "${(settings.edgeBarAlpha * 100f).roundToInt()}%",
-                onValueChangeFinished = { onEdgeBarAlphaChange((it / 100f).coerceIn(0.1f, 1f)) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+                showValueAsNumber = true,
+                valueUnit = "%",
                 enabled = settings.edgeBarEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.RadioButtonChecked,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "悬浮球",
                 subtitle = "桌面常驻圆形快捷入口",
                 checked = settings.floatingBallEnabled,
                 onCheckedChange = onFloatingBallEnabledChange,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.overlay && (settings.isFloatingWindowEnabled || settings.voiceInputEnabled),
-                onClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
+                onDisabledClick = if (snapshot.overlay) null else ({ onOpenPermission(PermissionKey.OVERLAY) }),
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SliderSettingItem(
                 title = "悬浮球大小",
                 subtitle = "调整悬浮球显示尺寸",
                 value = settings.floatingBallSizeDp.toFloat(),
+                onValueChange = { onFloatingBallSizeChange(it.roundToInt()) },
                 valueRange = 40f..80f,
                 steps = 7,
-                valueText = "${settings.floatingBallSizeDp} dp",
-                onValueChangeFinished = { onFloatingBallSizeChange(it.roundToInt()) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+                showValueAsNumber = true,
+                valueUnit = " dp",
                 enabled = settings.floatingBallEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingSliderRow(
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SliderSettingItem(
                 title = "悬浮球透明",
                 subtitle = "调整悬浮球可见程度",
                 value = settings.floatingBallAlpha * 100f,
+                onValueChange = { onFloatingBallAlphaChange((it / 100f).coerceIn(0.1f, 1f)) },
                 valueRange = 10f..100f,
                 steps = 8,
-                valueText = "${(settings.floatingBallAlpha * 100f).roundToInt()}%",
-                onValueChangeFinished = { onFloatingBallAlphaChange((it / 100f).coerceIn(0.1f, 1f)) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+                showValueAsNumber = true,
+                valueUnit = "%",
                 enabled = settings.floatingBallEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.PushPin,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "文本挂起",
                 subtitle = "文本随口记保存后同步挂到实况通知",
                 checked = settings.floatingTextQuickMemoAutoPinEnabled,
                 onCheckedChange = onFloatingTextQuickMemoAutoPinChange,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = settings.voiceInputEnabled && settings.isLiveCapsuleEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.PushPin,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "语音挂起",
                 subtitle = "语音随口记转写完成后同步挂到实况通知",
                 checked = settings.voiceQuickMemoAutoPinEnabled,
                 onCheckedChange = onVoiceQuickMemoAutoPinChange,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = settings.voiceInputEnabled && settings.isLiveCapsuleEnabled,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            SwitchSettingItem(
                 title = "音量键快捷",
                 subtitle = "通过无障碍监听音量键长按触发随口记",
                 checked = settings.volumeUpLongPressEnabled,
                 onCheckedChange = { onFeatureChange(FeatureKey.VOLUME_SHORTCUT, it) },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
                 enabled = snapshot.accessibility,
-                onClick = if (snapshot.accessibility) null else ({ onOpenPermission(PermissionKey.ACCESSIBILITY) }),
+                onDisabledClick = if (snapshot.accessibility) null else ({ onOpenPermission(PermissionKey.ACCESSIBILITY) }),
             )
         }
     }
@@ -1001,31 +1008,61 @@ private fun FloatingQuickMemoConfigStep(
 private fun CourseConfigStep(
     settings: MySettings,
     onCourseFeatureChange: (Boolean) -> Unit,
+    onImportCourses: () -> Unit,
 ) {
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     AppSettingsCard {
         Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            OnboardingConfigRow(
-                icon = Icons.Rounded.School,
+            SwitchSettingItem(
                 title = "课程功能",
                 subtitle = "课程表、学期设置和课程提醒入口",
                 checked = settings.courseFeatureEnabled,
                 onCheckedChange = onCourseFeatureChange,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.DateRange,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            ActionSettingItem(
+                title = "导入 WakeUp 课表",
+                subtitle = "支持 WakeUp 文件和分享口令，可同步学期与作息时间",
+                value = "导入",
+                enabled = settings.courseFeatureEnabled,
+                onClick = onImportCourses,
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            ActionSettingItem(
                 title = "学期设置",
                 subtitle = if (settings.semesterStartDate.isBlank()) "未设置，可稍后在课程设置中完善" else "已设置：${settings.semesterStartDate}",
-                status = if (settings.semesterStartDate.isBlank()) "未配置" else "已配置",
-                statusGranted = settings.semesterStartDate.isNotBlank(),
+                value = if (settings.semesterStartDate.isBlank()) "未配置" else "已配置",
+                enabled = false,
+                onClick = {},
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-            OnboardingConfigRow(
-                icon = Icons.Rounded.TableRows,
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            ActionSettingItem(
                 title = "上课时间",
                 subtitle = if (settings.timeTableJson.isBlank()) "未配置，可稍后导入或手动编辑课程表" else "已配置课程时间表",
-                status = if (settings.timeTableJson.isBlank()) "未配置" else "已配置",
-                statusGranted = settings.timeTableJson.isNotBlank(),
+                value = if (settings.timeTableJson.isBlank()) "未配置" else "已配置",
+                enabled = false,
+                onClick = {},
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+                cardValueStyle = cardValueStyle,
             )
         }
     }
@@ -1046,88 +1083,114 @@ private fun WeatherConfigStep(
 ) {
     var weatherApiUrl by remember(settings.weatherApiUrl) { mutableStateOf(settings.weatherApiUrl) }
     var weatherApiKey by remember(settings.weatherApiKey) { mutableStateOf(settings.weatherApiKey) }
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Cloud,
+                SwitchSettingItem(
                     title = "天气服务",
                     subtitle = "开启天气卡片和天气提醒基础能力",
                     checked = settings.weatherEnabled,
                     onCheckedChange = onWeatherEnabledChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Warning,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SwitchSettingItem(
                     title = "天气预警",
                     subtitle = "同步开启天气预警和天气风险提醒",
                     checked = settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled,
                     onCheckedChange = onWeatherWarningChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                     enabled = settings.weatherEnabled,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.OpenInBrowser,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SwitchSettingItem(
                     title = "悬浮窗显示天气",
                     subtitle = "在悬浮窗内显示天气信息",
                     checked = settings.showWeatherInFloating,
                     onCheckedChange = onShowInFloatingChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                     enabled = settings.weatherEnabled,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingSliderRow(
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SliderSettingItem(
                     title = "刷新间隔",
                     subtitle = "天气数据自动刷新频率",
                     value = settings.weatherRefreshInterval.toFloat(),
+                    onValueChange = { onRefreshIntervalChange(it.roundToInt()) },
                     valueRange = 15f..180f,
                     steps = 10,
-                    valueText = "${settings.weatherRefreshInterval} 分钟",
-                    onValueChangeFinished = { onRefreshIntervalChange(it.roundToInt()) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
+                    showValueAsNumber = true,
+                    valueUnit = " 分钟",
                     enabled = settings.weatherEnabled,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingSliderRow(
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SliderSettingItem(
                     title = "预警范围",
                     subtitle = "检查未来多久内的天气风险",
                     value = settings.weatherWarningLookaheadHours.toFloat(),
+                    onValueChange = { onWarningLookaheadChange(it.roundToInt()) },
                     valueRange = 6f..72f,
                     steps = 10,
-                    valueText = "${settings.weatherWarningLookaheadHours} 小时",
-                    onValueChangeFinished = { onWarningLookaheadChange(it.roundToInt()) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
+                    showValueAsNumber = true,
+                    valueUnit = " 小时",
                     enabled = settings.weatherEnabled && (settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled),
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingSliderRow(
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                EditionCategoricalPreference(
                     title = "预测范围",
-                    subtitle = floatingWeatherForecastRangeLabel(settings.floatingWeatherForecastRange),
-                    value = settings.floatingWeatherForecastRange.toFloat(),
-                    valueRange = 0f..2f,
-                    steps = 1,
-                    valueText = floatingWeatherForecastRangeLabel(settings.floatingWeatherForecastRange),
-                    onValueChangeFinished = { onFloatingForecastRangeChange(it.roundToInt().coerceIn(0, 2)) },
+                    summary = floatingWeatherForecastRangeLabel(settings.floatingWeatherForecastRange),
+                    options = listOf("24小时", "3天", "5天"),
+                    selectedIndex = settings.floatingWeatherForecastRange.coerceIn(0, 2),
+                    onSelectedIndexChange = onFloatingForecastRangeChange,
                     enabled = settings.weatherEnabled && settings.showWeatherInFloating,
-                    categoricalLabels = listOf("24小时", "3天", "5天"),
+                    titleTextStyle = cardTitleStyle,
+                    summaryTextStyle = cardSubtitleStyle,
                 )
             }
         }
 
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.LocationOn,
+                ActionSettingItem(
                     title = "定位状态",
                     subtitle = if (snapshot.location) "已获得定位权限，可自动定位城市" else "未获得定位权限，也可以之后手动选择城市",
-                    status = if (snapshot.location) "已就绪" else "去授权",
-                    statusGranted = snapshot.location,
-                    onClick = if (snapshot.location) null else onRequestLocationPermission,
+                    value = if (snapshot.location) "已就绪" else "去授权",
+                    enabled = !snapshot.location,
+                    onClick = onRequestLocationPermission,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Place,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ActionSettingItem(
                     title = "手动城市",
                     subtitle = settings.weatherManualLocationName.ifBlank { "未选择，可稍后在天气设置中选择" },
-                    status = if (settings.weatherManualLocationId.isNotBlank()) "已配置" else "未配置",
-                    statusGranted = settings.weatherManualLocationId.isNotBlank(),
+                    value = if (settings.weatherManualLocationId.isNotBlank()) "已配置" else "未配置",
+                    enabled = false,
+                    onClick = {},
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
                 )
             }
         }
@@ -1137,7 +1200,7 @@ private fun WeatherConfigStep(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("天气接口配置", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Text("天气接口配置", style = cardTitleStyle)
                 EditionTextField(
                     value = weatherApiUrl,
                     onValueChange = { weatherApiUrl = it },
@@ -1152,10 +1215,11 @@ private fun WeatherConfigStep(
                     label = { Text("天气 API Key") },
                     singleLine = true,
                 )
-                CapsuleNavigationButton(
-                    text = "保存天气配置",
-                    onClick = { onSaveWeatherConfig(weatherApiUrl.trim(), weatherApiKey.trim()) },
-                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    EditionButton(onClick = { onSaveWeatherConfig(weatherApiUrl.trim(), weatherApiKey.trim()) }) {
+                        Text("保存天气配置")
+                    }
+                }
             }
         }
     }
@@ -1172,31 +1236,51 @@ private fun AiConfigStep(
     var aiKey by remember(settings.modelKey) { mutableStateOf(settings.modelKey) }
     var aiName by remember(settings.modelName) { mutableStateOf(settings.modelName) }
     var aiUrl by remember(settings.modelUrl) { mutableStateOf(settings.modelUrl) }
+    val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    )
+    val cardValueStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontWeight = FontWeight.Normal,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.SmartToy,
+                ActionSettingItem(
                     title = "AI 模型",
                     subtitle = settings.modelName.ifBlank { "未配置模型名称，AI 识别暂不可用" },
-                    status = if (settings.modelKey.isNotBlank() && settings.modelUrl.isNotBlank()) "已配置" else "未配置",
-                    statusGranted = settings.modelKey.isNotBlank() && settings.modelUrl.isNotBlank(),
+                    value = if (settings.modelKey.isNotBlank() && settings.modelUrl.isNotBlank()) "已配置" else "未配置",
+                    enabled = false,
+                    onClick = {},
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Link,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ActionSettingItem(
                     title = "接口地址",
                     subtitle = settings.modelUrl.ifBlank { "未填写接口地址" },
-                    status = if (settings.modelUrl.isNotBlank()) "已配置" else "未配置",
-                    statusGranted = settings.modelUrl.isNotBlank(),
+                    value = if (settings.modelUrl.isNotBlank()) "已配置" else "未配置",
+                    enabled = false,
+                    onClick = {},
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.AutoAwesome,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ActionSettingItem(
                     title = "识别模式",
                     subtitle = RecognitionMode.label(settings.recognitionMode),
-                    status = "当前",
-                    statusGranted = true,
+                    value = "当前",
+                    enabled = false,
+                    onClick = {},
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                    cardValueStyle = cardValueStyle,
                 )
             }
         }
@@ -1206,7 +1290,7 @@ private fun AiConfigStep(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("AI 接口配置", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Text("AI 接口配置", style = cardTitleStyle)
                 EditionTextField(
                     value = aiName,
                     onValueChange = { aiName = it },
@@ -1228,271 +1312,45 @@ private fun AiConfigStep(
                     label = { Text("AI API Key") },
                     singleLine = true,
                 )
-                CapsuleNavigationButton(
-                    text = "保存 AI 配置",
-                    onClick = { onSaveAiConfig(aiKey.trim(), aiName.trim(), aiUrl.trim()) },
-                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    EditionButton(onClick = { onSaveAiConfig(aiKey.trim(), aiName.trim(), aiUrl.trim()) }) {
+                        Text("保存 AI 配置")
+                    }
+                }
             }
         }
 
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.ImageSearch,
+                SwitchSettingItem(
                     title = "多模态 AI",
                     subtitle = "用于图片识别等能力，需要额外配置多模态模型",
                     checked = settings.useMultimodalAi,
                     onCheckedChange = onMultimodalChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Psychology,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SwitchSettingItem(
                     title = "禁用思考",
                     subtitle = "适用于不需要 reasoning 的模型或场景",
                     checked = settings.disableThinking,
                     onCheckedChange = onDisableThinkingChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
-                OnboardingConfigRow(
-                    icon = Icons.Rounded.Memory,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SwitchSettingItem(
                     title = "本地语义",
                     subtitle = "使用本地语义能力辅助识别，未配置本地模型时可跳过",
                     checked = settings.isLocalSemanticEnabled,
                     onCheckedChange = onLocalSemanticChange,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
                 )
             }
         }
     }
-}
-
-@Composable
-private fun OnboardingSliderRow(
-    title: String,
-    subtitle: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    valueText: String,
-    onValueChangeFinished: (Float) -> Unit,
-    enabled: Boolean = true,
-    categoricalLabels: List<String>? = null,
-) {
-    if (categoricalLabels != null) {
-        EditionCategoricalPreference(
-            title = title,
-            summary = subtitle,
-            options = categoricalLabels,
-            selectedIndex = (value - valueRange.start).roundToInt().coerceIn(categoricalLabels.indices),
-            onSelectedIndexChange = { onValueChangeFinished(valueRange.start + it) },
-            enabled = enabled,
-        )
-        return
-    }
-    var sliderValue by remember(value) { mutableStateOf(value) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .alpha(if (enabled) 1f else 0.56f)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = valueText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 12.dp),
-            )
-        }
-        EditionSlider(
-            value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = {
-                sliderValue = it
-                onValueChangeFinished(it)
-            },
-            valueRange = valueRange,
-            steps = steps,
-            enabled = enabled,
-        )
-    }
-}
-
-@Composable
-private fun OnboardingTwoOptionRow(
-    title: String,
-    subtitle: String,
-    leftText: String,
-    rightText: String,
-    selectedRight: Boolean,
-    onSelectLeft: () -> Unit,
-    onSelectRight: () -> Unit,
-    enabled: Boolean = true,
-) {
-    EditionCategoricalPreference(
-        title = title,
-        summary = subtitle,
-        options = listOf(leftText, rightText),
-        selectedIndex = if (selectedRight) 1 else 0,
-        onSelectedIndexChange = { if (it == 1) onSelectRight() else onSelectLeft() },
-        enabled = enabled,
-    )
-}
-
-@Composable
-private fun OnboardingConfigRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean? = null,
-    onCheckedChange: ((Boolean) -> Unit)? = null,
-    enabled: Boolean = true,
-    status: String? = null,
-    statusGranted: Boolean = false,
-    onClick: (() -> Unit)? = null,
-) {
-    val rowModifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(rowModifier)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f),
-            modifier = Modifier.size(34.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        if (checked != null && onCheckedChange != null) {
-            EditionSwitch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                enabled = enabled,
-            )
-        } else if (status != null) {
-            ConfigStatusChip(text = status, granted = statusGranted)
-        }
-    }
-}
-
-@Composable
-private fun ConfigStatusChip(text: String, granted: Boolean) {
-    Surface(
-        color = if (granted) permissionGrantedColor().copy(alpha = 0.14f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
-        contentColor = if (granted) permissionGrantedColor() else MaterialTheme.colorScheme.primary,
-        shape = RoundedCornerShape(999.dp),
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-        )
-    }
-}
-
-@Composable
-private fun PermissionModernRow(
-    item: PermissionItem,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = permissionIconContainerColor(item),
-            modifier = Modifier.size(34.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = getPermissionIcon(item.key),
-                    contentDescription = null,
-                    tint = permissionIconTint(item),
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(item.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-            Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(12.dp))
-        if (item.uiState == PermissionUiState.GRANTED || item.uiState == PermissionUiState.SYSTEM_ALLOWED) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(0.72f)) {
-                Icon(
-                    imageVector = Icons.Rounded.CheckCircle,
-                    contentDescription = null,
-                    tint = permissionGrantedColor(),
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = permissionStatusText(item),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = permissionGrantedColor(),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        } else {
-            PermissionStatusChip(
-                granted = false,
-                text = permissionStatusText(item),
-                level = item.level,
-            )
-        }
-    }
-}
-
-@Composable
-private fun permissionIconContainerColor(item: PermissionItem): Color = when {
-    item.uiState == PermissionUiState.GRANTED || item.uiState == PermissionUiState.SYSTEM_ALLOWED -> permissionGrantedColor().copy(alpha = 0.14f)
-    else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
-}
-
-@Composable
-private fun permissionIconTint(item: PermissionItem): Color = when {
-    item.uiState == PermissionUiState.GRANTED || item.uiState == PermissionUiState.SYSTEM_ALLOWED -> permissionGrantedColor()
-    else -> MaterialTheme.colorScheme.primary
 }
 
 private fun permissionStatusText(item: PermissionItem): String = when (item.uiState) {
@@ -1512,170 +1370,6 @@ private fun floatingWeatherForecastRangeLabel(range: Int): String = when (range.
     0 -> "当前天气"
     1 -> "今日预测"
     else -> "今日和明日"
-}
-
-@Composable
-private fun permissionGrantedColor(): Color = Color(0xFF2E7D32)
-
-@Composable
-private fun FeatureModernRow(
-    item: FeatureItem,
-    warning: String?,
-    onCheckedChange: (Boolean) -> Unit,
-    onOpenPermissionPage: () -> Unit,
-) {
-    val blocked = !item.requirementsMet
-    val rowModifier = if (blocked) {
-        Modifier.clickable { onOpenPermissionPage() }
-    } else {
-        Modifier
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(rowModifier)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.38f),
-            modifier = Modifier.size(34.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = getFeatureIcon(item.key),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(item.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-            Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (blocked || warning != null) {
-                Row(
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .clickable { onOpenPermissionPage() },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = warning ?: item.warning,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        EditionSwitch(
-            checked = item.enabled,
-            onCheckedChange = onCheckedChange,
-            enabled = item.requirementsMet,
-        )
-    }
-}
-
-private fun getPermissionIcon(key: PermissionKey): ImageVector = when (key) {
-    PermissionKey.NOTIFICATION -> Icons.Rounded.Notifications
-    PermissionKey.LIVE_NOTIFICATION -> Icons.Rounded.Notifications
-    PermissionKey.OVERLAY -> Icons.Rounded.Layers
-    PermissionKey.MICROPHONE -> Icons.Rounded.Mic
-    PermissionKey.CALENDAR -> Icons.Rounded.CalendarToday
-    PermissionKey.EXACT_ALARM -> Icons.Rounded.Alarm
-    PermissionKey.BATTERY -> Icons.Rounded.BatterySaver
-    PermissionKey.AUTOSTART -> Icons.Rounded.RocketLaunch
-    PermissionKey.LOCATION -> Icons.Rounded.LocationOn
-    PermissionKey.ACCESSIBILITY -> Icons.Rounded.Accessibility
-    PermissionKey.NOTIFICATION_LISTENER -> Icons.Rounded.MarkEmailRead
-    PermissionKey.SMS -> Icons.Rounded.Sms
-    PermissionKey.SHIZUKU_ROOT -> Icons.Rounded.Terminal
-}
-
-private fun getFeatureIcon(key: FeatureKey): ImageVector = when (key) {
-    FeatureKey.FLOATING_WINDOW -> Icons.Rounded.OpenInBrowser
-    FeatureKey.QUICK_MEMO -> Icons.Rounded.Mic
-    FeatureKey.LIVE_NOTIFICATION -> Icons.Rounded.DynamicFeed
-    FeatureKey.DAILY_SUMMARY -> Icons.Rounded.WbSunny
-    FeatureKey.CALENDAR_SYNC -> Icons.Rounded.Sync
-    FeatureKey.ADVANCE_REMINDER -> Icons.Rounded.Timer
-    FeatureKey.WEATHER -> Icons.Rounded.Cloud
-    FeatureKey.WEATHER_ALERT -> Icons.Rounded.Warning
-    FeatureKey.BRACELET_MODE -> Icons.Rounded.Watch
-    FeatureKey.SMS_RECOGNITION -> Icons.Rounded.Sms
-    FeatureKey.VOLUME_SHORTCUT -> Icons.AutoMirrored.Rounded.VolumeUp
-    FeatureKey.COURSE -> Icons.Rounded.School
-}
-
-@Composable
-private fun StatusPill(text: String, container: Color) {
-    Surface(color = container, shape = RoundedCornerShape(999.dp)) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelMedium,
-        )
-    }
-}
-
-@Composable
-private fun CapsuleNavigationButton(
-    text: String,
-    onClick: () -> Unit,
-    filled: Boolean = true,
-) {
-    Surface(
-        modifier = Modifier.clickable { onClick() },
-        color = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f),
-        contentColor = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-        shape = RoundedCornerShape(999.dp),
-        tonalElevation = 3.dp,
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 11.dp),
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-        )
-    }
-}
-
-@Composable
-private fun PermissionStatusChip(
-    granted: Boolean,
-    text: String,
-    level: RequirementLevel = RequirementLevel.RECOMMENDED,
-) {
-    val container = if (granted) {
-        permissionGrantedColor().copy(alpha = 0.14f)
-    } else when (level) {
-        RequirementLevel.REQUIRED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.64f)
-        RequirementLevel.RECOMMENDED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
-        RequirementLevel.OPTIONAL -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.40f)
-    }
-    val content = if (granted) {
-        permissionGrantedColor()
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
-    Surface(color = container, contentColor = content, shape = RoundedCornerShape(999.dp)) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-        )
-    }
 }
 
 private fun onboardingPermissionItems(snapshot: PermissionSnapshot): List<PermissionItem> = listOf(
@@ -2002,41 +1696,13 @@ private fun openAppDetails(context: Context) {
 
 private fun Intent.addNewTask(): Intent = apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-private fun buildOnboardingSteps(
-    settings: MySettings,
-    syncEnabled: Boolean,
-    setupMode: OnboardingSetupMode?
-): List<OnboardingStep> {
-    return buildList {
-        add(OnboardingStep.PERMISSIONS)
-        add(OnboardingStep.SETUP_MODE)
-        if (setupMode == null || setupMode == OnboardingSetupMode.IMPORT_CONFIG) return@buildList
-        if (setupMode == OnboardingSetupMode.CUSTOM) add(OnboardingStep.FEATURES)
-        if (shouldShowScheduleReminderStep(settings, syncEnabled)) add(OnboardingStep.SCHEDULE_REMINDER)
-        if (settings.isFloatingWindowEnabled || settings.voiceInputEnabled || settings.volumeUpLongPressEnabled) add(OnboardingStep.FLOATING_QUICK_MEMO)
-        if (setupMode == OnboardingSetupMode.AUTHOR_RECOMMENDED || shouldShowModelStep(settings)) add(OnboardingStep.MODEL)
-        if (settings.weatherEnabled || settings.weatherWarningEnabled || settings.weatherRiskWarningEnabled) add(OnboardingStep.WEATHER)
-        if (settings.courseFeatureEnabled) add(OnboardingStep.COURSE)
-    }
-}
-
-private fun shouldShowScheduleReminderStep(settings: MySettings, syncEnabled: Boolean): Boolean {
-    return settings.isDailySummaryEnabled ||
-        settings.isAdvanceReminderEnabled ||
-        settings.isLiveCapsuleEnabled ||
-        settings.braceletModeEnabled ||
-        syncEnabled
-}
-
-private fun shouldShowModelStep(settings: MySettings): Boolean {
-    return settings.modelKey.isNotBlank() ||
-        settings.modelName.isNotBlank() ||
-        settings.modelUrl.isNotBlank() ||
-        settings.useMultimodalAi ||
-        settings.isLocalSemanticEnabled
-}
-
-private enum class OnboardingSetupMode { AUTHOR_RECOMMENDED, CUSTOM, IMPORT_CONFIG }
+private fun buildOnboardingSteps(): List<OnboardingStep> = listOf(
+    OnboardingStep.PERMISSIONS,
+    OnboardingStep.SCHEDULE_REMINDER,
+    OnboardingStep.FLOATING_QUICK_MEMO,
+    OnboardingStep.MODEL,
+    OnboardingStep.WEATHER,
+)
 
 private enum class OnboardingStep(
     val title: String,
@@ -2046,14 +1712,6 @@ private enum class OnboardingStep(
     PERMISSIONS(
         "配置基础权限",
         "开启必要权限，确保随口记、提醒、日历同步和实况通知稳定运行。"
-    ),
-    SETUP_MODE(
-        "选择配置方式",
-        "你可以使用作者推荐，也可以自己逐项配置，老用户可直接导入备份。"
-    ),
-    FEATURES(
-        "选择启用功能",
-        "根据已授权的权限开启功能。缺少权限的功能会保持关闭，之后也可以在设置中调整。"
     ),
     SCHEDULE_REMINDER(
         "日程和提醒",
@@ -2073,11 +1731,6 @@ private enum class OnboardingStep(
     WEATHER(
         "天气配置",
         "配置天气服务、天气预警、定位和天气接口。",
-        isSkippableConfig = true,
-    ),
-    COURSE(
-        "课程配置",
-        "配置课程功能、学期信息和上课时间表。",
         isSkippableConfig = true,
     ),
 }

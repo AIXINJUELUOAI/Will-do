@@ -7,7 +7,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import com.antgskds.calendarassistant.BuildConfig
-import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiAction
 import com.antgskds.calendarassistant.feature.settings.about.ui.contract.AboutUiState
 import com.antgskds.calendarassistant.feature.settings.about.ui.render.AboutScreen
@@ -33,7 +32,6 @@ fun AboutPage(
         hasDonated = settings.hasDonated,
         developerOptionsUnlocked = settings.developerOptionsUnlocked,
         hapticFeedbackEnabled = settings.hapticFeedbackEnabled,
-        daemonStatus = daemonStatus()
     )
     AboutScreen(
         state = state,
@@ -53,14 +51,7 @@ private fun defaultAboutUiState(): AboutUiState = AboutUiState(
     hasDonated = false,
     developerOptionsUnlocked = false,
     hapticFeedbackEnabled = true,
-    daemonStatus = daemonStatus()
 )
-
-private fun daemonStatus(): String = when (PrivilegeManager.privilegeType) {
-    PrivilegeManager.PrivilegeType.SHIZUKU -> "Daemon: Shizuku Active"
-    PrivilegeManager.PrivilegeType.ROOT -> "Daemon: Root Active"
-    PrivilegeManager.PrivilegeType.NONE -> "Daemon: None"
-}
 
 private fun handleAboutAction(
     action: AboutUiAction,

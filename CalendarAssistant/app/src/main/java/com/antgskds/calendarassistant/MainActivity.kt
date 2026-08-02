@@ -489,12 +489,10 @@ class MainActivity : ComponentActivity() {
                 val appSceneBackdrop = rememberLayerBackdrop()
                 val useMiuiBlurMaterial = settings.appBackgroundMiuiBlurTestEnabled &&
                     appBackgroundBitmap != null
-                val useHyperosSceneBlur = BuildConfig.UI_EDITION == "hyperos"
-                val captureSceneBackdrop = useMiuiBlurMaterial || useHyperosSceneBlur
 
                 AppGlassSettingsProvider(
                     settings = AppGlassSettings(
-                        enabled = captureSceneBackdrop,
+                        enabled = useMiuiBlurMaterial,
                         backdrop = appGlassBackdrop.takeIf { useMiuiBlurMaterial },
                         overlayBackdrop = appSceneBackdrop,
                         darkTheme = isDarkTheme
@@ -512,7 +510,7 @@ class MainActivity : ComponentActivity() {
                             .background(MaterialTheme.colorScheme.background)
                             .onSizeChanged { appBackgroundRootSize = it }
                             .then(
-                                if (captureSceneBackdrop) {
+                                if (useMiuiBlurMaterial) {
                                     Modifier.layerBackdrop(appSceneBackdrop)
                                 } else {
                                     Modifier
@@ -550,17 +548,11 @@ class MainActivity : ComponentActivity() {
                         ) {
                             OnboardingGuidePage(
                                 settingsViewModel = settingsViewModel,
+                                mainViewModel = mainViewModel,
                                 uiSize = settings.uiSize,
                                 onFinish = {
                                     markOnboardingCompleted()
                                     navController.navigate(AppRoutes.Home) {
-                                        launchSingleTop = true
-                                        popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
-                                    }
-                                },
-                                onImportConfig = {
-                                    markOnboardingCompleted()
-                                    navController.navigate(AppRoutes.settings(SettingsDestination.Backup.name)) {
                                         launchSingleTop = true
                                         popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
                                     }

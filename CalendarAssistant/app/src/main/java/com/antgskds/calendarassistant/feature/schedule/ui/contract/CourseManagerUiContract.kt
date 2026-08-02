@@ -11,6 +11,7 @@ data class CourseManagerUiState(
 )
 
 sealed interface CourseManagerUiAction {
+    data object ImportCourses : CourseManagerUiAction
     data class AddCourse(val course: Course) : CourseManagerUiAction
     data class UpdateCourse(val course: Course) : CourseManagerUiAction
     data class DeleteCourse(val course: Course) : CourseManagerUiAction

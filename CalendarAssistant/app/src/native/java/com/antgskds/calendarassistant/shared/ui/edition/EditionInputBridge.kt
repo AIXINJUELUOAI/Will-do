@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.text.KeyboardActions
@@ -235,17 +236,22 @@ fun EditionCategoricalPreference(
     onSelectedIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    titleTextStyle: TextStyle? = null,
+    summaryTextStyle: TextStyle? = null,
 ) {
     val safeIndex = selectedIndex.coerceIn(0, options.lastIndex.coerceAtLeast(0))
+    val resolvedTitleTextStyle = titleTextStyle ?: MaterialTheme.typography.bodyLarge
+    val resolvedSummaryTextStyle = summaryTextStyle
+        ?: MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(title, style = resolvedTitleTextStyle)
         if (summary.isNotBlank()) {
-            Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(summary, style = resolvedSummaryTextStyle)
         }
         if (options.size == 2) {
             Row(

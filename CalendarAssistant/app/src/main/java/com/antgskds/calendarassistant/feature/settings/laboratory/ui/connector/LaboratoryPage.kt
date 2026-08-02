@@ -1,8 +1,17 @@
 package com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
+import android.Manifest
+import android.app.NotificationManager
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,16 +37,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiAction
@@ -112,15 +128,95 @@ fun MaterialLaboratoryScreen(
 ) {
     val settings = state.settings
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val permissionGate = rememberPermissionGate(snackbarHostState)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionGate.resumePending()
+    }
+
+    fun hasNotificationPermission(): Boolean {
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            })
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) permissionGate.resumePending()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides (settings?.hapticFeedbackEnabled ?: true)) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            LaboratorySettingsContent(
+                state = state,
+                onAction = onAction,
+                onBraceletModeChange = { enabled ->
+                    if (enabled) {
+                        permissionGate.require(
+                            permissionName = "通知权限",
+                            isGranted = ::hasNotificationPermission,
+                            requestPermission = ::requestNotificationPermission,
+                            onGranted = { onAction(LaboratoryUiAction.SetBraceletMode(true)) },
+                        )
+                    } else {
+                        onAction(LaboratoryUiAction.SetBraceletMode(false))
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+        )
+    }
+    }
+}
+
+data class LaboratoryItemVisibility(
+    val showForceInstantCodeTime: Boolean = true,
+    val showClipboardRecognition: Boolean = true,
+    val showPredictiveBack: Boolean = true,
+    val showBraceletMode: Boolean = true,
+)
+
+@Composable
+fun LaboratorySettingsContent(
+    state: LaboratoryUiState,
+    onAction: (LaboratoryUiAction) -> Unit,
+    showDeveloperEntry: Boolean = true,
+    itemVisibility: LaboratoryItemVisibility = LaboratoryItemVisibility(),
+    onBraceletModeChange: ((Boolean) -> Unit)? = null,
+) {
+    val settings = state.settings
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (settings != null) {
             Text(
                 text = "实验功能",
@@ -128,7 +224,7 @@ fun MaterialLaboratoryScreen(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            LaboratorySwitchCard(
+            if (itemVisibility.showForceInstantCodeTime) LaboratorySwitchCard(
                 title = "取件类事件使用当前时间",
                 subtitle = "开启后取件码、取餐码、取票码、寄件码会忽略 AI 返回时间，入库时改为当前时间",
                 checked = settings.forceInstantCodeTimeToNow,
@@ -137,7 +233,7 @@ fun MaterialLaboratoryScreen(
                 }
             )
 
-            LaboratorySwitchCard(
+            if (itemVisibility.showClipboardRecognition) LaboratorySwitchCard(
                 title = "剪贴板取件类识别（Beta）",
                 subtitle = "识别剪贴板中的取件码、取餐码、取票码和寄件码",
                 checked = settings.clipboardCodeRecognitionEnabled,
@@ -146,7 +242,7 @@ fun MaterialLaboratoryScreen(
                 }
             )
 
-            LaboratorySwitchCard(
+            if (itemVisibility.showPredictiveBack) LaboratorySwitchCard(
                 title = "预测性返回手势",
                 subtitle = "侧滑返回时页面支持跟手动画效果",
                 checked = settings.predictiveBackEnabled,
@@ -155,16 +251,17 @@ fun MaterialLaboratoryScreen(
                 }
             )
 
-            LaboratorySwitchCard(
+            if (itemVisibility.showBraceletMode) LaboratorySwitchCard(
                 title = "手环模式",
                 subtitle = "开启后，将同步发送一条普通通知以同步到手环",
                 checked = settings.braceletModeEnabled,
                 onCheckedChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetBraceletMode(enabled))
+                    onBraceletModeChange?.invoke(enabled)
+                        ?: onAction(LaboratoryUiAction.SetBraceletMode(enabled))
                 }
             )
 
-            if (settings.developerOptionsUnlocked) {
+            if (showDeveloperEntry && settings.developerOptionsUnlocked) {
                 Text(
                     text = "开发者",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -192,9 +289,6 @@ fun MaterialLaboratoryScreen(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-    }
     }
 }
 

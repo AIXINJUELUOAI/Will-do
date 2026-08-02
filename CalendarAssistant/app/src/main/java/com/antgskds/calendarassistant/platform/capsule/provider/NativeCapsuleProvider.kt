@@ -58,16 +58,18 @@ class NativeCapsuleProvider : ICapsuleProvider {
             if (item.type == CapsuleType.QUICK_MEMO_RECORDING) " " else display.secondaryText ?: " "
         )
 
-        val expandedText = if (item.type == CapsuleType.QUICK_MEMO_RECORDING) {
-            " "
-        } else {
-            display.expandedText ?: display.secondaryText ?: " "
+        if (!display.isCompact) {
+            val expandedText = if (item.type == CapsuleType.QUICK_MEMO_RECORDING) {
+                " "
+            } else {
+                display.expandedText ?: display.secondaryText ?: " "
+            }
+            builder.setStyle(
+                Notification.BigTextStyle()
+                    .setBigContentTitle(display.primaryText)
+                    .bigText(expandedText)
+            )
         }
-        builder.setStyle(
-            Notification.BigTextStyle()
-                .setBigContentTitle(display.primaryText)
-                .bigText(expandedText)
-        )
 
         // Android 15+: 请求提升为实况通知（Live Activity）
         if (Build.VERSION.SDK_INT >= 35) {

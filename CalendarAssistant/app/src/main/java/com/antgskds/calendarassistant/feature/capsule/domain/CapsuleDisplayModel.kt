@@ -13,6 +13,7 @@ data class CapsuleDisplayModel(
     val secondaryText: String? = null,
     val tertiaryText: String? = null,
     val expandedText: String? = null,
+    val isCompact: Boolean = false,
     val tapOpensPickupList: Boolean = false,
     val tapEventId: String? = null,
     val action: CapsuleActionSpec? = null,

@@ -5,7 +5,6 @@ data class AboutUiState(
     val hasDonated: Boolean,
     val developerOptionsUnlocked: Boolean,
     val hapticFeedbackEnabled: Boolean,
-    val daemonStatus: String
 )
 
 sealed interface AboutUiAction {

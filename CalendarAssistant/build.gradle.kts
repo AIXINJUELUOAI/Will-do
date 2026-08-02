@@ -29,9 +29,6 @@ data class ArchitectureGuardrailRule(
 
 val architectureGuardrailsBaselineFile = file("gradle/architecture-guardrails-baseline.txt")
 val centerFilesBaselineFile = file("gradle/center-files-baseline.txt")
-val mainUiEditionMetadataAllowlist = setOf(
-    "app/src/main/java/com/antgskds/calendarassistant/feature/settings/about/ui/connector/AboutPage.kt"
-)
 
 fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String>, List<Int>> {
     val rules = listOf(
@@ -62,24 +59,18 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
         ArchitectureGuardrailRule(
             id = "FLAVOR_CONCRETE_BUSINESS_IMPORT",
             regex = Regex("import\\s+com\\.antgskds\\.calendarassistant\\.(ui\\.viewmodel|app\\.ui\\.state|core\\.center|data\\.(repository|store))"),
-            description = "Flavor UI must consume contracts instead of concrete business implementations",
-            pathRegex = Regex("app/src/(native|hyperos)/.*")
+            description = "Native UI hosts must consume contracts instead of concrete business implementations",
+            pathRegex = Regex("app/src/native/.*")
         ),
         ArchitectureGuardrailRule(
             id = "RUNTIME_UI_STYLE",
             regex = Regex("\\bUiStyle\\b|updateUiStyle|settings\\.uiStyle|calendarassistant\\.miui"),
             description = "UI edition is selected at build time, not at runtime"
-        ),
-        ArchitectureGuardrailRule(
-            id = "MAIN_UI_EDITION_USAGE",
-            regex = Regex("\\bBuildConfig\\.UI_EDITION\\b"),
-            description = "Shared main code must not branch business behavior by UI edition",
-            pathRegex = Regex("app/src/main/.*")
         )
     )
 
     val candidateFiles = linkedSetOf<File>()
-    listOf("app/src/main", "app/src/native", "app/src/hyperos").forEach { sourceRoot ->
+    listOf("app/src/main", "app/src/native").forEach { sourceRoot ->
         fileTree(projectRoot.resolve(sourceRoot)) { include("**/*.kt") }.files.forEach(candidateFiles::add)
     }
 
@@ -89,10 +80,7 @@ fun collectArchitectureGuardrailHits(projectRoot: File): Map<Pair<String, String
         val lines = target.readLines()
         val relativePath = target.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
 
-        rules.filter { rule ->
-            rule.pathRegex.matches(relativePath) &&
-                !(rule.id == "MAIN_UI_EDITION_USAGE" && relativePath in mainUiEditionMetadataAllowlist)
-        }.forEach { rule ->
+        rules.filter { rule -> rule.pathRegex.matches(relativePath) }.forEach { rule ->
             lines.forEachIndexed { index, line ->
                 if (rule.regex.containsMatchIn(line)) {
                     val key = rule.id to relativePath
@@ -187,7 +175,7 @@ fun extractRegisteredEnumMembers(
 
 tasks.register("checkArchitectureGuardrails") {
     group = "verification"
-    description = "Checks architecture boundaries, Center allowlist, and flavor host symmetry"
+    description = "Checks architecture boundaries, Center allowlist, and catalog registration"
 
     doLast {
         val hits = collectArchitectureGuardrailHits(rootDir)
@@ -204,7 +192,7 @@ tasks.register("checkArchitectureGuardrails") {
             ?.map { it.replace('\\', '/') }
             ?.toSet()
             .orEmpty()
-        val currentCenters = listOf("app/src/main", "app/src/native", "app/src/hyperos")
+        val currentCenters = listOf("app/src/main", "app/src/native")
             .flatMap { sourceRoot ->
                 fileTree(rootDir.resolve(sourceRoot)) {
                     include("**/*Center.kt")
@@ -215,22 +203,6 @@ tasks.register("checkArchitectureGuardrails") {
             }
             .toSet()
         val newCenters = currentCenters - allowedCenters
-
-        fun collectFlavorHosts(flavor: String): Set<String> {
-            val hostRoot = rootDir.resolve(
-                "app/src/$flavor/java/com/antgskds/calendarassistant"
-            )
-            return fileTree(hostRoot) {
-                include("**/*.kt")
-            }.files.map { hostFile ->
-                hostFile.relativeTo(hostRoot).path.replace(File.separatorChar, '/')
-            }.toSet()
-        }
-
-        val nativeHosts = collectFlavorHosts("native")
-        val hyperosHosts = collectFlavorHosts("hyperos")
-        val missingInHyperos = nativeHosts - hyperosHosts
-        val missingInNative = hyperosHosts - nativeHosts
 
         val settingsDestinations = extractEnumMembers(
             rootDir.resolve(
@@ -265,8 +237,6 @@ tasks.register("checkArchitectureGuardrails") {
         if (
             unexpected.isEmpty() &&
             newCenters.isEmpty() &&
-            missingInHyperos.isEmpty() &&
-            missingInNative.isEmpty() &&
             pagesNotRegistered.isEmpty() &&
             kindsNotRegistered.isEmpty()
         ) {
@@ -281,12 +251,6 @@ tasks.register("checkArchitectureGuardrails") {
             println("- [$ruleId] $path:$lineDesc")
         }
         newCenters.sorted().forEach { println("- [NEW_CENTER_FILE] $it") }
-        missingInHyperos.sorted().forEach {
-            println("- [FLAVOR_HOST_MISSING_IN_HYPEROS] $it")
-        }
-        missingInNative.sorted().forEach {
-            println("- [FLAVOR_HOST_MISSING_IN_NATIVE] $it")
-        }
         pagesNotRegistered.sorted().forEach {
             println("- [PAGE_NOT_REGISTERED] SettingsDestination.$it")
         }

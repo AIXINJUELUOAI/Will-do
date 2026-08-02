@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
@@ -49,7 +50,9 @@ fun SwitchSettingItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     cardTitleStyle: TextStyle,
-    cardSubtitleStyle: TextStyle
+    cardSubtitleStyle: TextStyle,
+    enabled: Boolean = true,
+    onDisabledClick: (() -> Unit)? = null,
 ) {
     EditionSwitchSettingItem(
         title = title,
@@ -58,6 +61,8 @@ fun SwitchSettingItem(
         onCheckedChange = onCheckedChange,
         cardTitleStyle = cardTitleStyle,
         cardSubtitleStyle = cardSubtitleStyle,
+        enabled = enabled,
+        onDisabledClick = onDisabledClick,
     )
 }
 
@@ -69,10 +74,23 @@ fun MaterialSwitchSettingItem(
     onCheckedChange: (Boolean) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
+    enabled: Boolean = true,
+    onDisabledClick: (() -> Unit)? = null,
 ) {
     val haptics = rememberAppHaptics()
+    val disabledClickModifier = if (!enabled && onDisabledClick != null) {
+        Modifier.clickable {
+            haptics.selection()
+            onDisabledClick()
+        }
+    } else {
+        Modifier
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(disabledClickModifier)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -82,6 +100,7 @@ fun MaterialSwitchSettingItem(
         }
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = {
                 haptics.selection()
                 onCheckedChange(it)
@@ -236,6 +255,7 @@ fun SliderSettingItem(
     showValueAsNumber: Boolean = false, // 新增参数
     valueUnit: String = "ms",           // 新增参数
     categoricalLabels: List<String>? = null,
+    enabled: Boolean = true,
 ) {
     EditionSliderSettingItem(
         title = title,
@@ -250,6 +270,7 @@ fun SliderSettingItem(
         showValueAsNumber = showValueAsNumber,
         valueUnit = valueUnit,
         categoricalLabels = categoricalLabels,
+        enabled = enabled,
     )
 }
 
@@ -267,6 +288,7 @@ fun MaterialSliderSettingItem(
     showValueAsNumber: Boolean = false,
     valueUnit: String = "ms",
     categoricalLabels: List<String>? = null,
+    enabled: Boolean = true,
 ) {
     HapticValueChangeEffect(valueKey = sliderHapticBucket(value, valueRange, steps))
     // 根据 showValueAsNumber 决定显示逻辑
@@ -278,7 +300,12 @@ fun MaterialSliderSettingItem(
         sizeLabels[value] ?: ""
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.56f)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -298,7 +325,8 @@ fun MaterialSliderSettingItem(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
-            steps = steps
+            steps = steps,
+            enabled = enabled,
         )
     }
 }

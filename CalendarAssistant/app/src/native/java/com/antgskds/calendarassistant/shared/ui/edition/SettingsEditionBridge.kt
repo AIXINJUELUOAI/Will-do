@@ -33,6 +33,8 @@ fun EditionSwitchSettingItem(
     onCheckedChange: (Boolean) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
+    enabled: Boolean = true,
+    onDisabledClick: (() -> Unit)? = null,
 ) = MaterialSwitchSettingItem(
     title,
     subtitle,
@@ -40,6 +42,8 @@ fun EditionSwitchSettingItem(
     onCheckedChange,
     cardTitleStyle,
     cardSubtitleStyle,
+    enabled,
+    onDisabledClick,
 )
 
 @Composable
@@ -219,6 +223,7 @@ fun EditionSliderSettingItem(
     showValueAsNumber: Boolean,
     valueUnit: String,
     categoricalLabels: List<String>?,
+    enabled: Boolean = true,
 ) = MaterialSliderSettingItem(
     title,
     subtitle,
@@ -232,6 +237,7 @@ fun EditionSliderSettingItem(
     showValueAsNumber,
     valueUnit,
     categoricalLabels,
+    enabled,
 )
 
 @Composable

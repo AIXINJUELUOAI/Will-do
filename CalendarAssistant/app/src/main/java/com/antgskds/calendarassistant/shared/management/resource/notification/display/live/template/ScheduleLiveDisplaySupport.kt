@@ -61,6 +61,7 @@ internal object ScheduleLiveDisplaySupport {
             secondaryText = fallbackLines.getOrNull(0),
             tertiaryText = if (mode == Mode.COMPACT) null else fallbackLines.getOrNull(1),
             expandedText = bodyLines.filterNot { it == headerTitle }.joinToString("\n").ifBlank { null },
+            isCompact = mode == Mode.COMPACT,
             action = action
         )
     }
