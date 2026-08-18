@@ -386,7 +386,11 @@ fun MaterialAddEventDialog(
                         contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
                     ) {
                         AppOverlayCard(
-                            modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .widthIn(max = 720.dp)
+                                .fillMaxWidth()
+                                .heightIn(max = 670.dp),
                             shape = RoundedCornerShape(28.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {

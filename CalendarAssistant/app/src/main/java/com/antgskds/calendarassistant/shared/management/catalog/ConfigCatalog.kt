@@ -37,6 +37,13 @@ enum class ConfigExposure {
     SYSTEM_INTERNAL,  // 系统内部，不在编辑页出现
 }
 
+/** Agent 对配置项的访问级别。权限开关和系统内部项不得由 Agent 自行放权。 */
+enum class AgentConfigAccess {
+    NONE,
+    READ_ONLY,
+    READ_WRITE,
+}
+
 /** 配置层级：用户显式设置 vs 系统底层策略。开发者编辑器先服务 POLICY，用户页将来服务 USER_SETTING。 */
 enum class ConfigKind {
     USER_SETTING,   // 用户显式设置（天气开关、刷新间隔…），偏产品功能
@@ -72,6 +79,7 @@ class ConfigItem(
     val getText: (MySettings) -> String = { "" },
     val setText: (MySettings, String) -> MySettings = { s, _ -> s },
     val visible: (MySettings) -> Boolean = { true },
+    val agentAccess: AgentConfigAccess = AgentConfigAccess.READ_WRITE,
 )
 
 object ConfigCatalog {
@@ -122,6 +130,42 @@ object ConfigCatalog {
             set = { s, _ -> s },
             getText = { it.webDavRemotePathOverride },
             setText = { s, v -> s.copy(webDavRemotePathOverride = v) },
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.USER_SETTING,
+            key = "agent.api.enabled",
+            label = "允许 Agent 访问",
+            description = "开启后，官方 Agent 可以访问 WillDo 提供的日程、课程、随口记、设置和诊断能力。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.Toggle,
+            get = { if (it.agentApiEnabled) 1 else 0 },
+            set = { s, v -> s.copy(agentApiEnabled = v != 0) },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.USER_SETTING,
+            key = "agent.connection_management.enabled",
+            label = "允许 Agent 管理连接配置",
+            description = "允许 Agent 管理模型、天气和 WebDAV 连接；已有密钥和密码不会以明文返回。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.Toggle,
+            get = { if (it.agentConnectionManagementEnabled) 1 else 0 },
+            set = { s, v -> s.copy(agentConnectionManagementEnabled = v != 0) },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.SYNC,
+            kind = ConfigKind.POLICY,
+            key = "agent.database_operations.enabled",
+            label = "允许 Agent 操作数据库（高风险）",
+            description = "允许 Agent 查询、修改和删除数据库中的业务数据；仅用于开发和数据清理。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.Toggle,
+            get = { if (it.agentDatabaseOperationsEnabled) 1 else 0 },
+            set = { s, v -> s.copy(agentDatabaseOperationsEnabled = v != 0) },
+            agentAccess = AgentConfigAccess.NONE,
         ),
         ConfigItem(
             domain = ConfigDomain.APPEARANCE,

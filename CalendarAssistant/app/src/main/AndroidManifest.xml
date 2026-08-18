@@ -8,6 +8,12 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="com.antgskds.calendarassistant.SEND_ISLAND" />
 
+    <!-- 官方 Agent 跨进程接口，仅允许使用相同签名的应用访问。 -->
+    <permission
+        android:name="com.antgskds.calendarassistant.permission.AGENT_API"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.antgskds.calendarassistant.permission.AGENT_API" />
+
     <!-- 基础网络与通知 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -28,7 +34,6 @@
 
     <!-- 前台服务 (胶囊) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -267,15 +272,6 @@
             </intent-filter>
         </receiver>
 
-        <service
-            android:name=".platform.clipboard.ClipboardCodeMonitorService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="clipboard_code_monitor" />
-        </service>
-
         <!-- 4. 侧边栏唤起服务 -->
         <service
             android:name=".platform.floating.EdgeBarService"
@@ -404,6 +400,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Agent API ContentProvider（外部 Agent 应用跨进程数据访问） -->
+        <provider
+            android:name=".shared.api.WillDoAgentProvider"
+            android:authorities="com.antgskds.calendarassistant.agent"
+            android:exported="true"
+            android:enabled="true"
+            android:grantUriPermissions="true"
+            android:permission="com.antgskds.calendarassistant.permission.AGENT_API" />
 
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver

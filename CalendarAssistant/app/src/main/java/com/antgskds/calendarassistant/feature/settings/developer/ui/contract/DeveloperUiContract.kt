@@ -13,6 +13,7 @@ enum class DeveloperDragField { TITLE, TIME, LOCATION, DESCRIPTION }
 
 sealed interface DeveloperUiAction {
     data class SetEnabled(val enabled: Boolean) : DeveloperUiAction
+    data class SetSimulateRoot(val enabled: Boolean) : DeveloperUiAction
     data class SetQuickMemoPinnedFixedTitle(val enabled: Boolean) : DeveloperUiAction
     data class SetSmsPickupDedup(val enabled: Boolean) : DeveloperUiAction
     data class SetLiveTemplateMode(val mode: String) : DeveloperUiAction

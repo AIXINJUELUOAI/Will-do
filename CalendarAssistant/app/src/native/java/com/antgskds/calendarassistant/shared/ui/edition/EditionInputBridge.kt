@@ -14,10 +14,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.text.KeyboardActions
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
+import com.antgskds.calendarassistant.shared.ui.material.settings.settingsSliderLabelTextStyle
 
 @Composable
 fun EditionSwitch(
@@ -238,53 +241,129 @@ fun EditionCategoricalPreference(
     enabled: Boolean = true,
     titleTextStyle: TextStyle? = null,
     summaryTextStyle: TextStyle? = null,
+    valueTextStyle: TextStyle? = null,
+    showSelectedValue: Boolean = true,
+    labelsAboveSlider: Boolean = false,
+    sliderTopPadding: Dp = 0.dp,
+    highlightSelectedLabel: Boolean = false,
 ) {
     val safeIndex = selectedIndex.coerceIn(0, options.lastIndex.coerceAtLeast(0))
-    val resolvedTitleTextStyle = titleTextStyle ?: MaterialTheme.typography.bodyLarge
+    val resolvedTitleTextStyle = titleTextStyle ?: MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
     val resolvedSummaryTextStyle = summaryTextStyle
-        ?: MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, style = resolvedTitleTextStyle)
-        if (summary.isNotBlank()) {
-            Text(summary, style = resolvedSummaryTextStyle)
-        }
-        if (options.size == 2) {
+        ?: MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        )
+    val resolvedValueTextStyle = valueTextStyle ?: MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val sliderLabelStyle = settingsSliderLabelTextStyle()
+    if (options.size == 2) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = resolvedTitleTextStyle)
+                if (summary.isNotBlank()) {
+                    Text(summary, style = resolvedSummaryTextStyle)
+                }
+            }
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 options.forEachIndexed { index, option ->
                     if (safeIndex == index) {
                         Button(
                             onClick = { onSelectedIndexChange(index) },
-                            modifier = Modifier.weight(1f),
                             enabled = enabled,
                         ) { Text(option) }
                     } else {
                         OutlinedButton(
                             onClick = { onSelectedIndexChange(index) },
-                            modifier = Modifier.weight(1f),
                             enabled = enabled,
                         ) { Text(option) }
                     }
                 }
             }
-        } else if (options.isNotEmpty()) {
+        }
+    } else if (options.isNotEmpty()) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = resolvedTitleTextStyle)
+                    if (summary.isNotBlank()) {
+                        Text(summary, style = resolvedSummaryTextStyle)
+                    }
+                }
+                if (showSelectedValue) {
+                    Text(options[safeIndex], style = resolvedValueTextStyle)
+                }
+            }
+            if (labelsAboveSlider) {
+                CategoricalSliderLabels(
+                    options = options,
+                    selectedIndex = safeIndex,
+                    baseStyle = sliderLabelStyle,
+                    highlightSelected = highlightSelectedLabel,
+                    modifier = Modifier.padding(top = sliderTopPadding, start = 4.dp, end = 4.dp),
+                )
+            }
             Slider(
                 value = safeIndex.toFloat(),
                 onValueChange = { onSelectedIndexChange(it.toInt().coerceIn(options.indices)) },
                 enabled = enabled,
                 valueRange = 0f..options.lastIndex.toFloat(),
                 steps = (options.size - 2).coerceAtLeast(0),
+                modifier = if (labelsAboveSlider) Modifier else Modifier.padding(top = sliderTopPadding),
             )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                options.forEach { Text(it, style = MaterialTheme.typography.labelSmall) }
+            if (!labelsAboveSlider) {
+                CategoricalSliderLabels(
+                    options = options,
+                    selectedIndex = safeIndex,
+                    baseStyle = sliderLabelStyle,
+                    highlightSelected = highlightSelectedLabel,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoricalSliderLabels(
+    options: List<String>,
+    selectedIndex: Int,
+    baseStyle: TextStyle,
+    highlightSelected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        options.forEachIndexed { index, option ->
+            Text(
+                text = option,
+                style = if (highlightSelected && index == selectedIndex) {
+                    baseStyle.copy(color = MaterialTheme.colorScheme.primary)
+                } else {
+                    baseStyle
+                },
+            )
         }
     }
 }

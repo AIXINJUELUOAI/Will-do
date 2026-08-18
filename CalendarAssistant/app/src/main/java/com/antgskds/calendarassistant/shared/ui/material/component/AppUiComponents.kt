@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
@@ -275,12 +276,13 @@ fun AppAlertDialog(
     val glassSettings = LocalAppGlassSettings.current
     val glassActive = glassSettings.active && glassSettings.overlayBackdrop != null
     val childBackdrop = rememberLayerBackdrop()
+    val responsiveModifier = modifier.widthIn(max = 560.dp)
     val dialogModifier = if (glassActive) {
-        modifier
+        responsiveModifier
             .layerBackdrop(childBackdrop)
             .appMiuiOverlayBlurMaterial(shape)
     } else {
-        modifier
+        responsiveModifier
     }
 
     CompositionLocalProvider(

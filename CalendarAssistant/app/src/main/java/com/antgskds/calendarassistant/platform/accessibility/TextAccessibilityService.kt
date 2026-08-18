@@ -73,6 +73,7 @@ class TextAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TextAccessibilityService"
+        private const val RECOGNITION_LOG_TAG = "WillDoRecognition"
         private const val RECOGNITION_SOURCE_TYPE = "accessibility"
         private const val RECOGNITION_SOURCE_ID = "accessibility.screenshot"
         const val ACTION_CANCEL_ANALYSIS = "ACTION_CANCEL_ANALYSIS"
@@ -511,6 +512,11 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     fun startAnalysis(delayDuration: Duration = 500.milliseconds, fromShortcut: Boolean = false) {
+        Log.i(
+            RECOGNITION_LOG_TAG,
+            "accessibility start requested delayMs=${delayDuration.inWholeMilliseconds} " +
+                "shortcut=$fromShortcut connected=${isConnected()} busy=${isAnalyzing.get()}"
+        )
         if (!isAnalyzing.compareAndSet(false, true)) {
             Log.d(TAG, "已有分析任务在执行中，跳过本次请求")
             return
@@ -545,6 +551,7 @@ class TextAccessibilityService : AccessibilityService() {
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshotResult: ScreenshotResult) {
+                    Log.i(RECOGNITION_LOG_TAG, "accessibility screenshot captured")
                     showProgressNotification(RecognitionNormalDisplay.analyzing())
                     // ✅ 将耗时的分析工作移到后台线程
                     analysisJob = serviceScope.launch(Dispatchers.IO) {
@@ -552,6 +559,7 @@ class TextAccessibilityService : AccessibilityService() {
                     }
                 }
                 override fun onFailure(errorCode: Int) {
+                    Log.e(RECOGNITION_LOG_TAG, "accessibility screenshot failed code=$errorCode")
                     Log.w(TAG, "takeScreenshot 失败: code=$errorCode")
                     showResultNotification(RecognitionNormalDisplay.screenshotFailed(buildScreenshotFailureContent(errorCode)), useOcrCapsule = true)
                 }
@@ -565,6 +573,7 @@ class TextAccessibilityService : AccessibilityService() {
             val colorSpace = result.colorSpace
             val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
             if (bitmap == null) {
+                Log.e(RECOGNITION_LOG_TAG, "accessibility hardware bitmap wrap failed")
                 hardwareBuffer.close()
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
@@ -588,6 +597,10 @@ class TextAccessibilityService : AccessibilityService() {
 
             val settings = settingsQueryApi.settings.value
             if (!settings.isRecognitionConfigReady()) {
+                Log.w(
+                    RECOGNITION_LOG_TAG,
+                    "accessibility image rejected configReady=false multimodal=${settings.useMultimodalAi}"
+                )
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
                     showResultNotification(RecognitionNormalDisplay.configMissing(settings.recognitionConfigMissingMessage()), autoLaunch = true, useOcrCapsule = true, durationMs = 12000L)
@@ -597,6 +610,12 @@ class TextAccessibilityService : AccessibilityService() {
             }
 
             val traceId = EventIdentity.newTraceId("accessibility")
+            Log.i(
+                RECOGNITION_LOG_TAG,
+                "accessibility dispatching recognition trace=$traceId " +
+                    "size=${softwareBitmap.width}x${softwareBitmap.height} " +
+                    "multimodal=${settings.useMultimodalAi}"
+            )
             val analysisResult = app.recognitionCenter.analyzeImage(
                 bitmap = softwareBitmap,
                 settings = settings,

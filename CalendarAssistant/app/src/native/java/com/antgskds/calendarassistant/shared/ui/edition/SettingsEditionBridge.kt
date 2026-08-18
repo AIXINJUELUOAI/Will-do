@@ -24,6 +24,7 @@ import com.antgskds.calendarassistant.shared.ui.material.settings.MaterialSideCh
 import com.antgskds.calendarassistant.shared.ui.material.settings.MaterialSliderSettingItem
 import com.antgskds.calendarassistant.shared.ui.material.settings.MaterialSwitchSettingItem
 import com.antgskds.calendarassistant.shared.ui.material.settings.MaterialVolumeLongPressSettingItem
+import com.antgskds.calendarassistant.shared.ui.material.settings.settingsSliderLabelTextStyle
 
 @Composable
 fun EditionSwitchSettingItem(
@@ -59,6 +60,7 @@ fun EditionOptionalCategoricalSettingItem(
     onSelectedIndexChange: (Int) -> Unit,
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
+    cardValueStyle: TextStyle? = null,
 ) {
     Column {
         MaterialSwitchSettingItem(
@@ -80,6 +82,9 @@ fun EditionOptionalCategoricalSettingItem(
                 options = options,
                 selectedIndex = selectedIndex,
                 onSelectedIndexChange = onSelectedIndexChange,
+                titleTextStyle = cardTitleStyle,
+                summaryTextStyle = cardSubtitleStyle,
+                valueTextStyle = cardValueStyle,
             )
         }
     }
@@ -102,6 +107,7 @@ fun EditionSwitchSliderSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
 ) {
+    val sliderLabelStyle = settingsSliderLabelTextStyle()
     Column {
         MaterialSwitchSettingItem(
             title = title,
@@ -124,12 +130,12 @@ fun EditionSwitchSliderSettingItem(
                 ) {
                     if (valueLabels.isNotEmpty()) {
                         valueLabels.forEach { label ->
-                            Text(label, style = cardSubtitleStyle)
+                            Text(label, style = sliderLabelStyle)
                         }
                     } else {
-                        Text(valueRange.start.toInt().toString(), style = cardSubtitleStyle)
-                        Text(valueText, style = cardSubtitleStyle)
-                        Text(valueRange.endInclusive.toInt().toString(), style = cardSubtitleStyle)
+                        Text(valueRange.start.toInt().toString(), style = sliderLabelStyle)
+                        Text(valueText, style = sliderLabelStyle)
+                        Text(valueRange.endInclusive.toInt().toString(), style = sliderLabelStyle)
                     }
                 }
                 Slider(

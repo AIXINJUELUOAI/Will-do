@@ -173,6 +173,32 @@ class App : Application() {
     }
 
     // ══════════════════════════════════════════════════════════════════════
+    // Agent API（外部 Agent 应用跨进程数据访问）
+    // ══════════════════════════════════════════════════════════════════════
+
+    val agentDataService: com.antgskds.calendarassistant.shared.api.AgentDataService by lazy {
+        com.antgskds.calendarassistant.shared.api.AgentDataService(
+            appContext = applicationContext,
+            scheduleFacade = scheduleCenter,
+            quickMemoFacade = quickMemoCenter,
+            eventAttachmentManager = eventAttachmentManager,
+            settingsQueryApi = settingsQueryApi,
+            settingsOperationApi = settingsOperationApi,
+            webDavConnectionCoordinator = webDavConnectionCenter,
+            webDavSyncCoordinator = webDavSyncV2Center,
+            databaseService = com.antgskds.calendarassistant.shared.api.AgentDatabaseService(
+                context = applicationContext,
+                settingsQueryApi = settingsQueryApi,
+                scheduleFacade = scheduleCenter,
+            ),
+            weatherQueryApi = weatherQueryApi,
+            weatherOperationApi = weatherOperationApi,
+            diagnosticLogExporter = diagnosticLogCenter,
+            backupCoordinator = backupCenter,
+        )
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     // 设置（独立于日程底层）
     // ══════════════════════════════════════════════════════════════════════
 
@@ -461,6 +487,8 @@ class App : Application() {
             Log.i(TAG, "secondary app process started early: $processName, skipping main init")
             return
         }
+
+        com.antgskds.calendarassistant.shared.util.PrivilegeManager.initCheck(this)
 
         AppLogger.init(this)
         AppLogger.i(TAG, "main app process started")

@@ -54,6 +54,7 @@ import com.antgskds.calendarassistant.feature.home.ui.render.HomeActionDialog
 import com.antgskds.calendarassistant.feature.home.ui.render.editionHomeEntries
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -97,6 +98,8 @@ fun HomeScreen(
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
+    val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
+    val useNavigationRail = adaptiveLayoutInfo.useNavigationRail
     // 从 settings 读取主题状态
     val settings by settingsViewModel.settings.collectAsState()
     val uiState by mainViewModel.uiState.collectAsState()
@@ -173,6 +176,10 @@ fun HomeScreen(
     var isActionExpanded by remember { mutableStateOf(false) }
     var searchRequestId by remember { mutableIntStateOf(0) }
     var imageRequestId by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(useNavigationRail) {
+        if (useNavigationRail) isSidebarOpen = false
+    }
 
     val storedHomeBottomItems = remember(settings.homeBottomItems) {
         sanitizeHomeBottomItems(settings.homeBottomItems)
@@ -412,14 +419,22 @@ fun HomeScreen(
 
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val cardFloatingBarOffset =
-        IntegratedFloatingBarHeight +
-            IntegratedFloatingBarBottomSpacing +
+        if (useNavigationRail) {
             bottomInset
+        } else {
+            IntegratedFloatingBarHeight +
+                IntegratedFloatingBarBottomSpacing +
+                bottomInset
+        }
     val toastFloatingBarOffset =
-        IntegratedFloatingBarVisualHeight +
-            IntegratedFloatingBarToastGap +
-            IntegratedFloatingBarBottomSpacing +
-            bottomInset
+        if (useNavigationRail) {
+            bottomInset + 16.dp
+        } else {
+            IntegratedFloatingBarVisualHeight +
+                IntegratedFloatingBarToastGap +
+                IntegratedFloatingBarBottomSpacing +
+                bottomInset
+        }
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
 
     HomeScreenContent(
@@ -427,8 +442,9 @@ fun HomeScreen(
             backgroundEnabled = hasAppBackground,
             backgroundMiuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
             backgroundCardAlphaPercent = settings.appBackgroundCardAlphaPercent,
-            isSidebarOpen = isSidebarOpen,
-            sidebarGestureEnabled = !isScheduleExpanded,
+            isSidebarOpen = !useNavigationRail && isSidebarOpen,
+            sidebarGestureEnabled = !useNavigationRail && !isScheduleExpanded,
+            useNavigationRail = useNavigationRail,
         ),
         onAction = { action ->
             when (action) {
@@ -453,6 +469,7 @@ fun HomeScreen(
             HomePageRoute(
                 viewModel = mainViewModel,
                 currentPageKey = effectiveSelectedPageKey,
+                pageOrder = homeBottomItems,
                 uiSize = settings.uiSize,
                 pickupTimestamp = pickupTimestamp,
                 openCourseRequestId = openCourseRequestId,
@@ -461,7 +478,9 @@ fun HomeScreen(
                 onActionExpandedChange = { isActionExpanded = it },
                 searchRequestId = searchRequestId,
                 imageRequestId = imageRequestId,
-                isSidebarOpen = isSidebarOpen,
+                isSidebarOpen = !useNavigationRail && isSidebarOpen,
+                isWideNavigation = useNavigationRail,
+                isTwoPane = adaptiveLayoutInfo.useTwoPaneContent,
                 onPageChange = onSelectedPageKeyChange,
                 onAddEventClick = { openPrimaryCreateDialog() },
                 onEditItem = { item -> beginEditItem(item) },
@@ -483,7 +502,8 @@ fun HomeScreen(
             )
         },
         chrome = {
-        IntegratedFloatingBar(
+        if (!useNavigationRail) {
+            IntegratedFloatingBar(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
             isSidebarOpen = isSidebarOpen,
@@ -526,7 +546,8 @@ fun HomeScreen(
                     alpha = 1f - clamped
                 }
                 .zIndex(3f)
-        )
+            )
+        }
         },
         overlay = {
         val deleteItem = scheduleItemToDelete

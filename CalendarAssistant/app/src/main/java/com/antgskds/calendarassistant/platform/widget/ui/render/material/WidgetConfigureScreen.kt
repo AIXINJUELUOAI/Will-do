@@ -2,12 +2,14 @@ package com.antgskds.calendarassistant.platform.widget.ui.render.material
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -52,67 +54,74 @@ fun MaterialWidgetConfigureScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            Text(
-                text = "这些设置只作用于当前桌面小组件。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text("主题", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-            WidgetConfigureThemeOption.entries.forEach { option ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAction(WidgetConfigureUiAction.SelectTheme(option)) }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = state.selectedTheme == option,
-                        onClick = { onAction(WidgetConfigureUiAction.SelectTheme(option)) }
-                    )
-                    Text(
-                        text = when (option) {
-                            WidgetConfigureThemeOption.FOLLOW_APP -> "跟随软件"
-                            WidgetConfigureThemeOption.LIGHT -> "浅色"
-                            WidgetConfigureThemeOption.DARK -> "深色"
-                        },
-                        modifier = Modifier.padding(start = 8.dp),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Text(
-                text = "背景不透明度 ${state.backgroundAlphaPercent}%",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Slider(
-                value = state.backgroundAlphaPercent.toFloat(),
-                onValueChange = { value ->
-                    onAction(WidgetConfigureUiAction.ChangeBackgroundAlpha(value.roundToInt().coerceIn(60, 100)))
-                },
-                valueRange = 60f..100f,
-                steps = 39,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.padding(top = 4.dp))
-            Button(
-                onClick = { onAction(WidgetConfigureUiAction.Save) },
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 720.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("保存")
+                Text(
+                    text = "这些设置只作用于当前桌面小组件。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text("主题", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                WidgetConfigureThemeOption.entries.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAction(WidgetConfigureUiAction.SelectTheme(option)) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = state.selectedTheme == option,
+                            onClick = { onAction(WidgetConfigureUiAction.SelectTheme(option)) }
+                        )
+                        Text(
+                            text = when (option) {
+                                WidgetConfigureThemeOption.FOLLOW_APP -> "跟随软件"
+                                WidgetConfigureThemeOption.LIGHT -> "浅色"
+                                WidgetConfigureThemeOption.DARK -> "深色"
+                            },
+                            modifier = Modifier.padding(start = 8.dp),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+                Text(
+                    text = "背景不透明度 ${state.backgroundAlphaPercent}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Slider(
+                    value = state.backgroundAlphaPercent.toFloat(),
+                    onValueChange = { value ->
+                        onAction(WidgetConfigureUiAction.ChangeBackgroundAlpha(value.roundToInt().coerceIn(60, 100)))
+                    },
+                    valueRange = 60f..100f,
+                    steps = 39,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.padding(top = 4.dp))
+                Button(
+                    onClick = { onAction(WidgetConfigureUiAction.Save) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("保存")
+                }
             }
         }
     }

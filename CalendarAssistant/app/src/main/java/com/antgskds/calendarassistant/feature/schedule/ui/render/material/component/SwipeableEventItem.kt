@@ -46,11 +46,13 @@ import kotlin.math.roundToInt
 fun SwipeableEventItem(
     item: ScheduleDisplayItem,
     isRevealed: Boolean,
+    selected: Boolean = false,
     timeRefreshToken: Long = 0L,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
+    onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
     uiSize: Int = 2,
     isArchivePage: Boolean = false,
@@ -191,7 +193,7 @@ fun SwipeableEventItem(
                 .combinedClickable(
                     onClick = {
                         haptics.click()
-                        if (isRevealed) onCollapse() else onEdit()
+                        if (isRevealed) onCollapse() else onClick?.invoke() ?: onEdit()
                     },
                     onLongClick = onLongPress?.let { callback ->
                         {
@@ -201,7 +203,7 @@ fun SwipeableEventItem(
                         }
                     }
                 ),
-            color = Color.Transparent,
+            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
             shadowElevation = 0.dp
         ) {
             Column(

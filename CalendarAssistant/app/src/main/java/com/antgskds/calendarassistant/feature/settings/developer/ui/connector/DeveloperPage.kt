@@ -54,7 +54,6 @@ import com.antgskds.calendarassistant.feature.settings.data.model.LiveNotificati
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
-import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
@@ -106,6 +105,9 @@ fun DeveloperPage(
         uiSize = uiSize,
         onAction = { action -> when (action) {
             is DeveloperUiAction.SetEnabled -> settingsViewModel.setDeveloperOptionsEnabled(action.enabled)
+            is DeveloperUiAction.SetSimulateRoot -> settingsViewModel.updatePreference(
+                developerSimulateRootEnabled = action.enabled,
+            )
             is DeveloperUiAction.SetQuickMemoPinnedFixedTitle -> {
                 settingsViewModel.setQuickMemoPinnedFixedTitleEnabled(action.enabled) {
                     refreshScope.launch {
@@ -416,6 +418,18 @@ fun MaterialDeveloperScreen(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
                 return@Column
+            }
+
+            Text(text = "权限调试", style = sectionTitleStyle)
+            SettingsCard {
+                SwitchSettingItem(
+                    title = "模拟 Root 权限",
+                    subtitle = "仅模拟初始化权限页交互，不执行任何系统授权命令",
+                    checked = settings.developerSimulateRootEnabled,
+                    onCheckedChange = { onAction(DeveloperUiAction.SetSimulateRoot(it)) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
             }
 
             // 配置编辑入口
@@ -901,17 +915,57 @@ private fun DeveloperOptionsCard(
     val modes = LiveNotificationTemplateMode.ALL
     val normalizedMode = LiveNotificationTemplateMode.normalize(liveNotificationTemplateMode)
     val selectedIndex = modes.indexOf(normalizedMode).takeIf { it >= 0 } ?: 0
+    val sliderLabelStyle = settingsSliderLabelTextStyle()
     SettingsCard {
-        EditionCategoricalPreference(
-            title = "原生实况通知模板",
-            summary = "控制原生实况通知使用完整多行内容还是两行精简内容；仅影响原生通知通道。",
-            options = modes.map(::liveTemplateModeLabel),
-            selectedIndex = selectedIndex,
-            onSelectedIndexChange = { index ->
-                haptics.selection()
-                onLiveNotificationTemplateModeChange(modes[index])
-            },
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "原生实况通知模板",
+                style = titleStyle,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "控制原生实况通知使用完整多行内容还是两行精简内容；仅影响原生通知通道。",
+                style = subtitleStyle,
+            )
+            Text(
+                text = "当前：${liveTemplateModeLabel(modes[selectedIndex])}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Slider(
+                value = selectedIndex.toFloat(),
+                onValueChange = { value ->
+                    val nextIndex = value.roundToInt().coerceIn(0, modes.lastIndex)
+                    val nextMode = modes[nextIndex]
+                    if (nextMode != normalizedMode) {
+                        haptics.selection()
+                        onLiveNotificationTemplateModeChange(nextMode)
+                    }
+                },
+                valueRange = 0f..modes.lastIndex.toFloat(),
+                steps = (modes.size - 2).coerceAtLeast(0),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                modes.forEach { mode ->
+                    Text(
+                        text = liveTemplateModeLabel(mode),
+                        style = sliderLabelStyle.copy(
+                            color = if (mode == normalizedMode) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                sliderLabelStyle.color
+                            },
+                        ),
+                    )
+                }
+            }
+        }
         RowDivider()
         SwitchSettingItem(
             title = "随口记挂起固定标题",

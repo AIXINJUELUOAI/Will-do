@@ -36,6 +36,7 @@ fun PredictiveFloatingActionCard(
     predictiveBackEnabled: Boolean = true,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    onDismissRequest: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     actionsBelowContent: Boolean = false,
     actionContent: (@Composable RowScope.() -> Unit)? = null
@@ -76,7 +77,7 @@ fun PredictiveFloatingActionCard(
         ) {
             PredictiveBottomDialogHost(
                 visible = visible && dialogReady,
-                onDismiss = onDismiss,
+                onDismiss = onDismissRequest ?: onDismiss,
                 dismissEnabled = !isLoading || allowDismissWhileLoading,
                 dismissOnClickOutside = dismissOnClickOutside,
                 predictiveBackEnabled = predictiveBackEnabled,

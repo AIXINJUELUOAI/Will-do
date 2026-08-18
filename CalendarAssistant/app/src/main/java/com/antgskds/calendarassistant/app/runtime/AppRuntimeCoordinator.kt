@@ -11,7 +11,6 @@ import com.antgskds.calendarassistant.platform.receiver.DailySummaryReceiver
 import com.antgskds.calendarassistant.platform.receiver.KeepAliveReceiver
 import com.antgskds.calendarassistant.platform.receiver.ReminderReconcileReceiver
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
-import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -31,8 +30,6 @@ class AppRuntimeCoordinator(
     }
 
     private var networkSpeedMonitorJob: Job? = null
-    private var clipboardCodeMonitorJob: Job? = null
-
     fun startAppRoutines() {
         restoreSmsNotificationListenerIfNeeded()
         startPeriodicSync()
@@ -40,7 +37,6 @@ class AppRuntimeCoordinator(
         scheduleReminderReconcile()
         startNetworkSpeedMonitoring()
         startEdgeBarIfNeeded()
-        startClipboardCodeMonitoring()
     }
 
     fun restoreAfterBoot() {
@@ -50,7 +46,6 @@ class AppRuntimeCoordinator(
         startPeriodicSync()
         restoreSmsNotificationListenerIfNeeded()
         startEdgeBarIfNeeded()
-        startClipboardCodeMonitoring()
     }
 
     fun startPeriodicSync() {
@@ -112,16 +107,4 @@ class AppRuntimeCoordinator(
         }
     }
 
-    fun startClipboardCodeMonitoring() {
-        if (clipboardCodeMonitorJob?.isActive == true) return
-        clipboardCodeMonitorJob = appScope.launch {
-            settingsQueryApi.settings.collectLatest { settings ->
-                if (settings.clipboardCodeRecognitionEnabled) {
-                    ClipboardCodeMonitorService.startIfNeeded(appContext)
-                } else {
-                    ClipboardCodeMonitorService.stop(appContext)
-                }
-            }
-        }
-    }
 }

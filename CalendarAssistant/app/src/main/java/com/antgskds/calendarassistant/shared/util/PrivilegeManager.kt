@@ -1,13 +1,24 @@
 package com.antgskds.calendarassistant.shared.util
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import moe.shizuku.server.IShizukuService
 import moe.shizuku.server.IRemoteProcess
 import rikka.shizuku.Shizuku
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.DataOutputStream
 import java.io.InputStreamReader
@@ -15,19 +26,30 @@ import java.io.InputStreamReader
 object PrivilegeManager {
     private const val TAG = "PrivilegeManager"
 
-    var privilegeType = PrivilegeType.NONE
-        private set
-
     enum class PrivilegeType { NONE, SHIZUKU, ROOT }
+
+    private val _privilegeTypeFlow = MutableStateFlow(PrivilegeType.NONE)
+    val privilegeTypeFlow: StateFlow<PrivilegeType> = _privilegeTypeFlow.asStateFlow()
+
+    var privilegeType: PrivilegeType
+        get() = _privilegeTypeFlow.value
+        private set(value) {
+            if (_privilegeTypeFlow.value == value) return
+            Log.i(TAG, "Privilege type changed: ${_privilegeTypeFlow.value} -> $value")
+            _privilegeTypeFlow.value = value
+        }
 
     val hasPrivilege: Boolean
         get() = privilegeType != PrivilegeType.NONE
 
     private var isInitialized = false
+    private var pendingShizukuResult: ((Boolean) -> Unit)? = null
+    private val rootRequestMutex = Mutex()
+    private val privilegeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         Log.d(TAG, "Shizuku binder received")
-        checkShizukuPermission()
+        refreshShizukuPermission()
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
@@ -38,15 +60,23 @@ object PrivilegeManager {
     }
 
     private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-        if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            privilegeType = PrivilegeType.SHIZUKU
+        val granted = grantResult == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            if (privilegeType != PrivilegeType.ROOT) {
+                privilegeType = PrivilegeType.SHIZUKU
+            }
             Log.d(TAG, "Shizuku permission granted")
         } else {
             Log.w(TAG, "Shizuku permission denied")
         }
+        val callback = pendingShizukuResult
+        pendingShizukuResult = null
+        if (callback != null) {
+            Handler(Looper.getMainLooper()).post { callback(granted) }
+        }
     }
 
-    fun initCheck() {
+    fun initCheck(context: Context? = null) {
         if (isInitialized) {
             Log.d(TAG, "Already initialized, skipping")
             return
@@ -55,19 +85,13 @@ object PrivilegeManager {
 
         Log.d(TAG, "Starting privilege check...")
 
-        if (checkRoot()) {
-            privilegeType = PrivilegeType.ROOT
-            Log.d(TAG, "Root privilege acquired")
-            return
-        }
-
         try {
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
             
             if (Shizuku.pingBinder()) {
                 Log.d(TAG, "Shizuku binder available")
-                checkShizukuPermission()
+                refreshShizukuPermission()
             } else {
                 Log.d(TAG, "Shizuku binder not available")
             }
@@ -75,15 +99,18 @@ object PrivilegeManager {
             Log.e(TAG, "Shizuku check failed", e)
         }
 
+        val appContext = context?.applicationContext
+        if (appContext != null && wasRootPreviouslyGranted(appContext)) {
+            privilegeScope.launch {
+                requestRootAccess(appContext)
+            }
+        }
+
         Log.d(TAG, "Privilege check completed: $privilegeType")
     }
 
     fun refreshPrivilege(): PrivilegeType {
         if (privilegeType == PrivilegeType.ROOT || privilegeType == PrivilegeType.SHIZUKU) {
-            return privilegeType
-        }
-        if (checkRoot()) {
-            privilegeType = PrivilegeType.ROOT
             return privilegeType
         }
         try {
@@ -96,15 +123,75 @@ object PrivilegeManager {
         return privilegeType
     }
 
-    private fun checkShizukuPermission() {
-        try {
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                privilegeType = PrivilegeType.SHIZUKU
-                Log.d(TAG, "Shizuku permission already granted")
+    suspend fun requestRootAccess(context: Context? = null): Boolean = withContext(Dispatchers.IO) {
+        rootRequestMutex.withLock {
+            if (privilegeType == PrivilegeType.ROOT) return@withLock true
+            val granted = checkRoot()
+            if (granted) {
+                privilegeType = PrivilegeType.ROOT
+                context?.applicationContext
+                    ?.getSharedPreferences(PRIVILEGE_PREFS, Context.MODE_PRIVATE)
+                    ?.edit()
+                    ?.putBoolean(ROOT_PREVIOUSLY_GRANTED, true)
+                    ?.apply()
+                Log.d(TAG, "Root privilege acquired")
             } else {
-                Log.d(TAG, "Requesting Shizuku permission...")
+                context?.applicationContext
+                    ?.getSharedPreferences(PRIVILEGE_PREFS, Context.MODE_PRIVATE)
+                    ?.edit()
+                    ?.putBoolean(ROOT_PREVIOUSLY_GRANTED, false)
+                    ?.apply()
+            }
+            granted
+        }
+    }
+
+    fun wasRootPreviouslyGranted(context: Context): Boolean =
+        context.applicationContext
+            .getSharedPreferences(PRIVILEGE_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(ROOT_PREVIOUSLY_GRANTED, false)
+
+    fun hasRootBinary(): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "command -v su"))
+            process.waitFor() == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun requestShizukuAccess(onResult: (Boolean) -> Unit = {}) {
+        try {
+            if (!Shizuku.pingBinder()) {
+                onResult(false)
+                return
+            }
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                if (privilegeType != PrivilegeType.ROOT) {
+                    privilegeType = PrivilegeType.SHIZUKU
+                }
+                onResult(true)
+            } else {
+                pendingShizukuResult = onResult
                 Shizuku.addRequestPermissionResultListener(permissionResultListener)
                 Shizuku.requestPermission(0)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Shizuku permission request failed", e)
+            pendingShizukuResult = null
+            onResult(false)
+        }
+    }
+
+    private fun refreshShizukuPermission() {
+        try {
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                if (privilegeType != PrivilegeType.ROOT) {
+                    privilegeType = PrivilegeType.SHIZUKU
+                }
+                Log.d(TAG, "Shizuku permission already granted")
+            } else {
+                Log.d(TAG, "Shizuku permission not granted")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Shizuku permission check failed", e)
@@ -270,4 +357,7 @@ object PrivilegeManager {
             false
         }
     }
+
+    private const val PRIVILEGE_PREFS = "privilege_manager"
+    private const val ROOT_PREVIOUSLY_GRANTED = "root_previously_granted"
 }

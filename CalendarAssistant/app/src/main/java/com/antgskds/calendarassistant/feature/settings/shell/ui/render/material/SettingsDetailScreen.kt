@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -18,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -47,6 +52,8 @@ import com.antgskds.calendarassistant.app.ui.navigation.navBackwardExitTransitio
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
 
 private fun NavGraphBuilder.settingsPageComposable(
     route: String,
@@ -78,6 +85,19 @@ fun MaterialSettingsDetailScreen(
     val backStackEntry by settingsNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: state.initialRoute
     var isSidebarOpen by remember { mutableStateOf(false) }
+    val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
+    val usePersistentSidebar = adaptiveLayoutInfo.useTwoPaneContent
+    val selectedDestination = remember(currentRoute) {
+        if (currentRoute == PageCatalog.weatherDetailPage.route) {
+            PageCatalog.weatherDetailPage.parentDestination
+        } else {
+            PageCatalog.navigablePages.firstOrNull { it.route == currentRoute }?.destination
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(usePersistentSidebar) {
+        if (usePersistentSidebar) isSidebarOpen = false
+    }
 
     fun navigateToDestination(target: SettingsDestination) {
         if (target == SettingsDestination.Logout) {
@@ -118,82 +138,107 @@ fun MaterialSettingsDetailScreen(
         miuiBlurEnabled = state.backgroundMiuiBlurEnabled,
         cardAlphaPercent = state.backgroundCardAlphaPercent,
     ) {
-        PushSlideLayout(
-            isOpen = isSidebarOpen,
-            onOpenChange = { isSidebarOpen = it },
-            enableGesture = true,
-            contentContainerColor = if (state.backgroundEnabled) {
-                Color.Transparent
-            } else {
-                MaterialTheme.colorScheme.background
-            },
-            sidebar = {
-                SettingsSidebar(
-                    isDarkMode = state.isDarkMode,
-                    glassMode = state.backgroundEnabled,
-                    hasAppUpdate = state.hasAppUpdate,
-                    onThemeToggle = { isDark ->
-                        onAction(SettingsDetailUiAction.SetDarkMode(isDark))
-                    },
-                    onNavigate = ::navigateToDestination,
-                )
-            },
-            bottomBar = {},
-            content = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clipToBounds(),
+        val settingsContent: @Composable () -> Unit = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds(),
+            ) {
+                NavHost(
+                    navController = settingsNavController,
+                    startDestination = state.initialRoute,
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    NavHost(
-                        navController = settingsNavController,
-                        startDestination = state.initialRoute,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        PageCatalog.navigablePages.forEach { page ->
-                            val route = requireNotNull(page.route)
-                            settingsPageComposable(route) {
-                                MaterialSettingsPage(
-                                    route = route,
-                                    destination = page.destination,
-                                    title = page.title,
-                                    state = state,
-                                    onBack = ::handleBackNavigation,
-                                    onAction = onAction,
-                                ) {
-                                    pageContent(
-                                        route,
-                                        page.destination,
-                                        ::navigateToDestination,
-                                        ::navigateToRoute,
-                                    )
-                                }
+                    PageCatalog.navigablePages.forEach { page ->
+                        val route = requireNotNull(page.route)
+                        settingsPageComposable(route) {
+                            MaterialSettingsPage(
+                                route = route,
+                                destination = page.destination,
+                                title = page.title,
+                                state = state,
+                                onBack = ::handleBackNavigation,
+                                onAction = onAction,
+                            ) {
+                                pageContent(
+                                    route,
+                                    page.destination,
+                                    ::navigateToDestination,
+                                    ::navigateToRoute,
+                                )
                             }
                         }
+                    }
 
-                        PageCatalog.weatherDetailPage.let { page ->
-                            settingsPageComposable(page.route) {
-                                MaterialSettingsPage(
-                                    route = page.route,
-                                    destination = page.parentDestination,
-                                    title = page.title,
-                                    state = state,
-                                    onBack = ::handleBackNavigation,
-                                    onAction = onAction,
-                                ) {
-                                    pageContent(
-                                        page.route,
-                                        page.parentDestination,
-                                        ::navigateToDestination,
-                                        ::navigateToRoute,
-                                    )
-                                }
+                    PageCatalog.weatherDetailPage.let { page ->
+                        settingsPageComposable(page.route) {
+                            MaterialSettingsPage(
+                                route = page.route,
+                                destination = page.parentDestination,
+                                title = page.title,
+                                state = state,
+                                onBack = ::handleBackNavigation,
+                                onAction = onAction,
+                            ) {
+                                pageContent(
+                                    page.route,
+                                    page.parentDestination,
+                                    ::navigateToDestination,
+                                    ::navigateToRoute,
+                                )
                             }
                         }
                     }
                 }
-            },
-        )
+            }
+        }
+
+        if (usePersistentSidebar) {
+            AdaptiveTwoPaneLayout(
+                primaryFraction = 0.42f,
+                primaryMaxWidth = 320.dp,
+                primary = {
+                    SettingsSidebar(
+                        modifier = Modifier.fillMaxSize(),
+                        isDarkMode = state.isDarkMode,
+                        glassMode = state.backgroundEnabled,
+                        hasAppUpdate = state.hasAppUpdate,
+                        reserveFloatingBarSpace = false,
+                        selectedDestination = selectedDestination,
+                        onThemeToggle = { isDark ->
+                            onAction(SettingsDetailUiAction.SetDarkMode(isDark))
+                        },
+                        onNavigate = ::navigateToDestination,
+                    )
+                },
+                secondary = settingsContent,
+            )
+        } else {
+            PushSlideLayout(
+                isOpen = isSidebarOpen,
+                onOpenChange = { isSidebarOpen = it },
+                enableGesture = true,
+                contentContainerColor = if (state.backgroundEnabled) {
+                    Color.Transparent
+                } else {
+                    MaterialTheme.colorScheme.background
+                },
+                sidebar = {
+                    SettingsSidebar(
+                        isDarkMode = state.isDarkMode,
+                        glassMode = state.backgroundEnabled,
+                        hasAppUpdate = state.hasAppUpdate,
+                        selectedDestination = selectedDestination,
+                        onThemeToggle = { isDark ->
+                            onAction(SettingsDetailUiAction.SetDarkMode(isDark))
+                        },
+                        onNavigate = ::navigateToDestination,
+                    )
+                },
+                bottomBar = {},
+                content = settingsContent,
+            )
+        }
     }
 
     BackHandler(enabled = isSidebarOpen || !state.navigationPredictiveBackEnabled) {
@@ -213,6 +258,7 @@ private fun MaterialSettingsPage(
     content: @Composable () -> Unit,
 ) {
     val haptics = rememberAppHaptics(state.hapticEnabled)
+    val useWideHeader = LocalAdaptiveLayoutInfo.current.useNavigationRail
     val pageContainerColor = if (state.pageHasAppBackground) {
         Color.Transparent
     } else {
@@ -227,7 +273,62 @@ private fun MaterialSettingsPage(
             containerColor = pageContainerColor,
             contentWindowInsets = WindowInsets(0),
             topBar = {
-                CenterAlignedTopAppBar(
+                val navigationContent: @Composable () -> Unit = {
+                    IconButton(
+                        onClick = {
+                            haptics.click()
+                            onBack()
+                        },
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(
+                                when (state.uiSize) {
+                                    1 -> 24.dp
+                                    2 -> 28.dp
+                                    else -> 32.dp
+                                },
+                            ),
+                        )
+                    }
+                }
+                val actionsContent: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                    if (destination == SettingsDestination.CourseManage && state.courseCount > 0) {
+                        IconButton(onClick = { showClearCoursesConfirm = true }) {
+                            Icon(
+                                Icons.Default.DeleteSweep,
+                                contentDescription = "清空课程",
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
+                    if (destination == SettingsDestination.Archives && state.archiveCount > 0) {
+                        IconButton(
+                            onClick = {
+                                haptics.click()
+                                showClearArchivesConfirm = true
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteSweep,
+                                contentDescription = "清空归档",
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
+                }
+                if (useWideHeader) TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = pageContainerColor,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                    title = { Text(title) },
+                    navigationIcon = navigationContent,
+                    actions = actionsContent,
+                ) else CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = pageContainerColor,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -235,51 +336,8 @@ private fun MaterialSettingsPage(
                         actionIconContentColor = MaterialTheme.colorScheme.onBackground,
                     ),
                     title = { Text(title) },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = {
-                                haptics.click()
-                                onBack()
-                            },
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                                modifier = Modifier.size(
-                                    when (state.uiSize) {
-                                        1 -> 24.dp
-                                        2 -> 28.dp
-                                        else -> 32.dp
-                                    },
-                                ),
-                            )
-                        }
-                    },
-                    actions = {
-                        if (destination == SettingsDestination.CourseManage && state.courseCount > 0) {
-                            IconButton(onClick = { showClearCoursesConfirm = true }) {
-                                Icon(
-                                    Icons.Default.DeleteSweep,
-                                    contentDescription = "清空课程",
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                        if (destination == SettingsDestination.Archives && state.archiveCount > 0) {
-                            IconButton(
-                                onClick = {
-                                    haptics.click()
-                                    showClearArchivesConfirm = true
-                                },
-                            ) {
-                                Icon(
-                                    Icons.Default.DeleteSweep,
-                                    contentDescription = "清空归档",
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                    },
+                    navigationIcon = navigationContent,
+                    actions = actionsContent,
                 )
             },
         ) { innerPadding ->
@@ -287,8 +345,16 @@ private fun MaterialSettingsPage(
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                content()
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 960.dp)
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                ) {
+                    content()
+                }
             }
         }
 

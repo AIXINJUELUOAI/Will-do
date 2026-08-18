@@ -8,9 +8,17 @@ import org.json.JSONObject
 
 object WeatherApiAdapter {
     const val PROVIDER_QWEATHER = "qweather"
+    const val PROVIDER_CAIYUN = "caiyun"
+
+    fun normalizeProvider(provider: String): String {
+        return if (provider == PROVIDER_CAIYUN) PROVIDER_CAIYUN else PROVIDER_QWEATHER
+    }
 
     fun defaultUrl(provider: String): String {
-        return "https://YOUR_HOST"
+        return when (normalizeProvider(provider)) {
+            PROVIDER_CAIYUN -> "https://api.caiyunapp.com/v2.7"
+            else -> "https://YOUR_HOST"
+        }
     }
 
     fun resolveRequestUrl(provider: String, rawValue: String, path: String = "/v7/weather/now"): String {
@@ -26,7 +34,20 @@ object WeatherApiAdapter {
 
     fun parse(provider: String, rawBody: String, location: WeatherLocation): WeatherData {
         val root = JSONObject(rawBody)
-        return parseQWeather(root, location)
+        return when (normalizeProvider(provider)) {
+            PROVIDER_CAIYUN -> CaiyunWeatherAdapter.parse(root, location)
+            else -> parseQWeather(root, location)
+        }
+    }
+
+    fun resolveCaiyunRequestUrl(rawValue: String, token: String, location: WeatherLocation): String {
+        val base = rawValue.trim().trimEnd('/').ifBlank { defaultUrl(PROVIDER_CAIYUN) }
+        val normalizedBase = when {
+            base.endsWith("/weather") -> base.removeSuffix("/weather")
+            else -> base
+        }
+        val coordinate = "${formatCoordinate(location.longitude)},${formatCoordinate(location.latitude)}"
+        return "$normalizedBase/${token.trim()}/$coordinate/weather"
     }
 
     fun parseHourly(rawBody: String): List<WeatherHourlyForecast> {
@@ -197,5 +218,9 @@ object WeatherApiAdapter {
         if (code.isNotBlank() && code != "200") {
             throw IllegalStateException("QWeather error $code")
         }
+    }
+
+    private fun formatCoordinate(value: Double): String {
+        return java.lang.String.format(java.util.Locale.US, "%.4f", value)
     }
 }

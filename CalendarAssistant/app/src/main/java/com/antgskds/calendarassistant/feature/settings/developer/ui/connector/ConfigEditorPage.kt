@@ -37,9 +37,8 @@ import com.antgskds.calendarassistant.shared.management.catalog.ConfigControl
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigDomain
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigItem
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
-import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
-import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
-import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiAction
 import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiState
@@ -197,14 +196,19 @@ private fun ConfigItemControl(
                 is ConfigControl.IntOptions -> {
                     val current = item.get(currentSettings)
                     val idx = control.options.indexOfFirst { it.value == current }.coerceAtLeast(0)
-                    EditionCategoricalPreference(
-                        title = "选项",
-                        summary = control.options.getOrNull(idx)?.label.orEmpty(),
-                        options = control.options.map { it.label },
-                        selectedIndex = idx,
-                        onSelectedIndexChange = { newIdx ->
+                    Text(
+                        text = control.options.getOrNull(idx)?.label.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Slider(
+                        value = idx.toFloat(),
+                        onValueChange = { value ->
+                            val newIdx = value.roundToInt().coerceIn(0, control.options.lastIndex)
                             if (newIdx != idx) onPick(item.set(currentSettings, control.options[newIdx].value))
                         },
+                        valueRange = 0f..control.options.lastIndex.coerceAtLeast(1).toFloat(),
+                        steps = (control.options.size - 2).coerceAtLeast(0),
                     )
                 }
                 is ConfigControl.IntInput -> {
@@ -214,7 +218,7 @@ private fun ConfigItemControl(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    EditionSlider(
+                    Slider(
                         value = current.toFloat(),
                         onValueChange = { v ->
                             val stepped = control.min + ((v - control.min) / control.step).roundToInt() * control.step
@@ -226,7 +230,7 @@ private fun ConfigItemControl(
                 }
                 is ConfigControl.Toggle -> {
                     val current = item.get(currentSettings)
-                    EditionSwitch(
+                    Switch(
                         checked = current != 0,
                         onCheckedChange = { checked -> onPick(item.set(currentSettings, if (checked) 1 else 0)) }
                     )

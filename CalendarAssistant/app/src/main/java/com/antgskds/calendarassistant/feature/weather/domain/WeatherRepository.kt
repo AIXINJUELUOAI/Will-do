@@ -9,13 +9,6 @@ import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.request.url
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.isSuccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +22,6 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
-import java.util.Locale
 
 class WeatherRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
@@ -41,6 +33,8 @@ class WeatherRepository private constructor(context: Context) {
     }
     private val mutex = Mutex()
     private val client by lazy { HttpClient(Android) }
+    private val qWeatherClient by lazy { QWeatherProviderClient(client) }
+    private val caiyunWeatherClient by lazy { CaiyunWeatherProviderClient(client) }
     private val locationProvider by lazy { AndroidLocationProvider(appContext) }
     private val locationStabilityGate by lazy { WeatherLocationStabilityGate(appContext) }
     private val notifier by lazy { WeatherNotifier(appContext) }
@@ -50,7 +44,8 @@ class WeatherRepository private constructor(context: Context) {
     suspend fun refreshIfNeeded(settings: MySettings): Result<WeatherData?> {
         if (!settings.hasWeatherConfig()) return Result.success(null)
         val cached = _weatherData.value
-        if (cached != null && !isExpired(cached, settings.weatherRefreshInterval)) {
+        val provider = WeatherApiAdapter.normalizeProvider(settings.weatherProvider)
+        if (cached != null && cached.provider == provider && !isExpired(cached, settings.weatherRefreshInterval)) {
             return Result.success(cached)
         }
         val refreshed = forceRefresh(settings)
@@ -66,35 +61,26 @@ class WeatherRepository private constructor(context: Context) {
             if (!settings.hasWeatherConfig()) {
                 Result.failure(IllegalStateException("Weather not configured"))
             } else {
+                val providerClient = providerClient(settings.weatherProvider)
                 val requestLocation = resolveRequestLocation(settings)
-                val resolvedLocation = applyTrustedLocationFallback(enrichLocation(settings, requestLocation))
+                val resolvedLocation = applyTrustedLocationFallback(
+                    runCatching { providerClient.enrichLocation(settings, requestLocation) }
+                        .getOrDefault(requestLocation)
+                )
                 saveCachedLocation(resolvedLocation)
                 saveTrustedLocation(resolvedLocation)
-                val rawBody = requestWeather(settings, resolvedLocation, "/v7/weather/now")
-                val hourly = runCatching {
-                    WeatherApiAdapter.parseHourly(requestWeather(settings, resolvedLocation, "/v7/weather/24h"))
-                }.getOrDefault(emptyList())
-                val daily = runCatching {
-                    WeatherApiAdapter.parseDaily(requestWeather(settings, resolvedLocation, "/v7/weather/7d"))
-                }.getOrDefault(emptyList())
-                val (alerts, attributions) = if (settings.weatherWarningEnabled) {
-                    runCatching { requestAlerts(settings, resolvedLocation) }.getOrDefault(emptyList<WeatherAlertData>() to emptyList())
-                } else {
-                    emptyList<WeatherAlertData>() to emptyList()
-                }
-                val dedupedAlerts = dedupeAlerts(alerts, resolvedLocation)
+                val providerData = providerClient.fetch(settings, resolvedLocation)
+                val dedupedAlerts = dedupeAlerts(providerData.alerts, resolvedLocation)
                 val risks = if (settings.weatherRiskWarningEnabled) {
-                    WeatherRiskAnalyzer.analyze(hourly, settings.weatherWarningLookaheadHours, settings)
+                    WeatherRiskAnalyzer.analyze(providerData.hourlyForecast, settings.weatherWarningLookaheadHours, settings)
                         .filterNot { risk -> riskCategory(risk.title, risk.weatherText) in officialRiskCategories(dedupedAlerts) }
                 } else {
                     emptyList()
                 }
-                val parsed = WeatherApiAdapter.parse(WeatherApiAdapter.PROVIDER_QWEATHER, rawBody, resolvedLocation).copy(
-                    hourlyForecast = hourly,
-                    dailyForecast = daily,
+                val parsed = providerData.copy(
+                    provider = providerClient.providerId,
                     alerts = dedupedAlerts,
-                    riskAlerts = risks,
-                    attributions = attributions
+                    riskAlerts = risks
                 )
                 saveCachedWeather(parsed)
                 _weatherData.value = parsed
@@ -115,62 +101,34 @@ class WeatherRepository private constructor(context: Context) {
                 Result.success(parsed)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "refresh weather failed", e)
-            Result.failure(e)
+            val provider = WeatherApiAdapter.normalizeProvider(settings.weatherProvider)
+            if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) {
+                Log.e(TAG, "refresh weather failed: provider=caiyun, error=${e.javaClass.simpleName}")
+                Result.failure(sanitizeCaiyunError(e))
+            } else {
+                Log.e(TAG, "refresh weather failed", e)
+                Result.failure(e)
+            }
         }
     }
 
-    private suspend fun requestWeather(settings: MySettings, requestLocation: WeatherLocation, path: String): String {
-        val endpoint = WeatherApiAdapter.resolveRequestUrl(
-            provider = WeatherApiAdapter.PROVIDER_QWEATHER,
-            rawValue = settings.weatherApiUrl.ifBlank { WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_QWEATHER) },
-            path = path
-        )
-        val response: HttpResponse = client.get {
-            url(endpoint)
-            parameter("location", toLocationParam(requestLocation))
-            header("X-QW-Api-Key", settings.weatherApiKey.trim())
+    private fun sanitizeCaiyunError(error: Exception): Exception {
+        val message = error.message.orEmpty()
+        val safeMessage = when {
+            message == "Location unavailable" -> message
+            message == "Weather not configured" -> message
+            message.startsWith("HTTP ") -> message
+            message.startsWith("Caiyun error ") -> message
+            else -> "彩云天气连接失败"
         }
-        if (!response.status.isSuccess()) {
-            throw IllegalStateException("HTTP ${response.status.value}")
-        }
-        return response.bodyAsText()
+        return IllegalStateException(safeMessage)
     }
 
-    private suspend fun requestAlerts(settings: MySettings, requestLocation: WeatherLocation): Pair<List<WeatherAlertData>, List<String>> {
-        val endpoint = WeatherApiAdapter.resolveRequestUrl(
-            provider = WeatherApiAdapter.PROVIDER_QWEATHER,
-            rawValue = settings.weatherApiUrl.ifBlank { WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_QWEATHER) },
-            path = "/weatheralert/v1/current/${formatCoordinate(requestLocation.latitude)}/${formatCoordinate(requestLocation.longitude)}"
-        )
-        val response: HttpResponse = client.get {
-            url(endpoint)
-            parameter("localTime", "true")
-            header("X-QW-Api-Key", settings.weatherApiKey.trim())
+    private fun providerClient(provider: String): WeatherProviderClient {
+        return when (WeatherApiAdapter.normalizeProvider(provider)) {
+            WeatherApiAdapter.PROVIDER_CAIYUN -> caiyunWeatherClient
+            else -> qWeatherClient
         }
-        if (!response.status.isSuccess()) {
-            throw IllegalStateException("HTTP ${response.status.value}")
-        }
-        return WeatherApiAdapter.parseAlerts(response.bodyAsText())
-    }
-
-    private suspend fun requestGeoLocation(settings: MySettings, query: String): WeatherLocation? {
-        val endpoint = WeatherApiAdapter.resolveRequestUrl(
-            provider = WeatherApiAdapter.PROVIDER_QWEATHER,
-            rawValue = settings.weatherApiUrl.ifBlank { WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_QWEATHER) },
-            path = "/geo/v2/city/lookup"
-        )
-        val response: HttpResponse = client.get {
-            url(endpoint)
-            parameter("location", query)
-            parameter("number", "1")
-            parameter("lang", "zh")
-            header("X-QW-Api-Key", settings.weatherApiKey.trim())
-        }
-        if (!response.status.isSuccess()) {
-            throw IllegalStateException("HTTP ${response.status.value}")
-        }
-        return WeatherApiAdapter.parseGeoLocation(response.bodyAsText())
     }
 
     private fun dedupeAlerts(alerts: List<WeatherAlertData>, location: WeatherLocation): List<WeatherAlertData> {
@@ -248,17 +206,6 @@ class WeatherRepository private constructor(context: Context) {
         throw currentResult.exceptionOrNull() ?: IllegalStateException("Location unavailable")
     }
 
-    private suspend fun enrichLocation(settings: MySettings, location: WeatherLocation): WeatherLocation {
-        if (location.name.isNotBlank() && location.locationId.isNotBlank()) return location
-        if (location.source == "manual") return location
-
-        val query = toCoordinateParam(location)
-        return runCatching { requestGeoLocation(settings, query) }
-            .getOrNull()
-            ?.copy(source = location.source)
-            ?: location
-    }
-
     private fun applyTrustedLocationFallback(location: WeatherLocation): WeatherLocation {
         if (location.hasTrustedName()) return location
         val trusted = loadTrustedLocation() ?: return location
@@ -284,18 +231,6 @@ class WeatherRepository private constructor(context: Context) {
             adm2 = settings.weatherManualAdm2,
             country = settings.weatherManualCountry
         )
-    }
-
-    private fun toLocationParam(location: WeatherLocation): String {
-        return location.locationId.ifBlank { toCoordinateParam(location) }
-    }
-
-    private fun toCoordinateParam(location: WeatherLocation): String {
-        return "${formatCoordinate(location.longitude)},${formatCoordinate(location.latitude)}"
-    }
-
-    private fun formatCoordinate(value: Double): String {
-        return String.format(Locale.US, "%.2f", value)
     }
 
     private fun loadCachedWeather(): WeatherData? {
@@ -459,5 +394,10 @@ class WeatherRepository private constructor(context: Context) {
 }
 
 fun MySettings.hasWeatherConfig(): Boolean {
-    return weatherEnabled && weatherApiKey.isNotBlank() && weatherApiUrl.isNotBlank()
+    val provider = WeatherApiAdapter.normalizeProvider(weatherProvider)
+    val hasEndpoint = when (provider) {
+        WeatherApiAdapter.PROVIDER_CAIYUN -> true
+        else -> weatherApiUrl.isNotBlank()
+    }
+    return weatherEnabled && weatherApiKey.isNotBlank() && hasEndpoint
 }

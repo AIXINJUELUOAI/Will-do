@@ -5,12 +5,10 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeCandidate
-import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParseMode
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint
-import com.antgskds.calendarassistant.shared.util.PrivilegeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,17 +54,11 @@ class ClipboardCodeIngestCoordinator(
     private val processingKeys = mutableSetOf<String>()
     private var lastSeenPromptTextHash: String? = null
     private var lastPromptedTextHash: String? = null
-    @Volatile private var privilegedMonitorActive = false
 
     fun checkClipboardForPrompt(source: String) {
         appScope.launch {
             checkClipboardForPromptInternal(source)
         }
-    }
-
-    fun setPrivilegedMonitorActive(active: Boolean) {
-        privilegedMonitorActive = active
-        Log.d(TAG, "Privileged clipboard monitor active=$active")
     }
 
     fun confirmPendingPrompt() {
@@ -97,70 +89,27 @@ class ClipboardCodeIngestCoordinator(
         }
     }
 
-    suspend fun autoIngestCurrentClipboard(source: String): Boolean {
-        val snapshot = readClipboardSnapshot(source) ?: return false
-        return autoIngestSnapshot(snapshot, source)
-    }
-
-    suspend fun autoIngestText(text: String, source: String): Boolean {
-        val snapshot = createSnapshot(text, source) ?: return false
-        return autoIngestSnapshot(snapshot, source)
-    }
-
     private suspend fun checkClipboardForPromptInternal(source: String) {
         if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
             Log.d(TAG, "Skip clipboard prompt from $source: setting disabled")
             return
         }
-        if (PrivilegeManager.hasPrivilege && privilegedMonitorActive) {
-            Log.d(TAG, "Skip clipboard prompt from $source: privileged monitor active")
-            return
-        }
         val snapshot = readClipboardSnapshot(source) ?: return
         if (shouldSkipRepeatedPrompt(snapshot, source)) return
-        val candidate = InstantCodeParser.parseClipboard(snapshot.text, InstantCodeParseMode.CLIPBOARD_CONFIRM)
+        val candidate = InstantCodeParser.parseClipboard(snapshot.text)
         if (candidate == null) {
             Log.d(TAG, "Skip clipboard prompt from $source: no instant code matched")
             return
         }
-        val shouldProcess = beginProcessing(snapshot.instanceKey, source) ?: return
-        if (!shouldProcess) return
-        try {
-            val draft = InstantCodeParser.toDraft(candidate)
-            val fingerprint = SmsPickupFingerprint.fromDraft(draft) ?: fingerprintOf(candidate.code)
-            Log.d(TAG, "Clipboard code prompt from $source: ${candidate.type.displayLabel} ${candidate.code}")
-            markPrompted(snapshot.textHash)
-            _pendingPrompt.value = ClipboardCodePrompt(candidate, fingerprint, snapshot.instanceKey)
-        } finally {
-            endProcessing(snapshot.instanceKey)
-        }
-    }
-
-    private suspend fun autoIngestSnapshot(snapshot: ClipboardSnapshot, source: String): Boolean {
-        if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
-            Log.d(TAG, "Skip clipboard auto ingest from $source: setting disabled")
-            return false
-        }
-        val text = snapshot.text
-        val candidate = InstantCodeParser.parseClipboard(text, InstantCodeParseMode.CLIPBOARD_AUTO) ?: return false
         val draft = InstantCodeParser.toDraft(candidate)
         val fingerprint = SmsPickupFingerprint.fromDraft(draft) ?: fingerprintOf(candidate.code)
         val processingKeys = listOf(snapshot.instanceKey, fingerprintKey(fingerprint))
-        val shouldProcess = beginProcessing(processingKeys, source) ?: return false
-        if (!shouldProcess) return false
-        return try {
-            val added = runCatching { ingestCommandApi.ingestInstantCode(draft, source) }
-                .onFailure { Log.w(TAG, "Clipboard code auto ingest failed", it) }
-                .getOrNull()
-            if (added != null) {
-                markHandled(processingKeys)
-                Log.d(TAG, "Clipboard code auto ingested: ${candidate.type.displayLabel} ${candidate.code}")
-                true
-            } else {
-                markFailed(snapshot.instanceKey)
-                Log.d(TAG, "Clipboard code auto ingest returned null: ${candidate.type.displayLabel} ${candidate.code}")
-                false
-            }
+        val shouldProcess = beginProcessing(processingKeys, source) ?: return
+        if (!shouldProcess) return
+        try {
+            Log.d(TAG, "Clipboard code prompt from $source: ${candidate.type.displayLabel} ${candidate.code}")
+            markPrompted(snapshot.textHash)
+            _pendingPrompt.value = ClipboardCodePrompt(candidate, fingerprint, snapshot.instanceKey)
         } finally {
             endProcessing(processingKeys)
         }
@@ -222,10 +171,6 @@ class ClipboardCodeIngestCoordinator(
             .also { if (it == null) Log.d(TAG, "Skip clipboard from $source: empty or unreadable") }
     }
 
-    private suspend fun beginProcessing(key: String, source: String): Boolean? = stateMutex.withLock {
-        beginProcessingLocked(listOf(key), source)
-    }
-
     private suspend fun beginProcessing(keys: List<String>, source: String): Boolean? = stateMutex.withLock {
         beginProcessingLocked(keys, source)
     }
@@ -255,10 +200,6 @@ class ClipboardCodeIngestCoordinator(
                 true
             }
         }
-    }
-
-    private suspend fun endProcessing(key: String) {
-        stateMutex.withLock { processingKeys.remove(key) }
     }
 
     private suspend fun endProcessing(keys: List<String>) {

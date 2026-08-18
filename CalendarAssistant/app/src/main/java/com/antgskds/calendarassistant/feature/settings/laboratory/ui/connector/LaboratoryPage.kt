@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +44,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.antgskds.calendarassistant.shared.util.PrivilegeManager
-import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
@@ -66,7 +63,6 @@ fun LaboratoryPage(
     onNavigateToDeveloper: () -> Unit = {}
 ) {
     val settings by settingsViewModel?.settings?.collectAsState() ?: remember { mutableStateOf(null) }
-    val context = LocalContext.current
 
     LaunchedEffect(settings?.developerOptionsUnlocked, settings?.developerOptionsEnabled, settings?.developerOptionsDisabledAtMillis) {
         val current = settings ?: return@LaunchedEffect
@@ -101,18 +97,6 @@ fun LaboratoryPage(
                 is LaboratoryUiAction.SetPredictiveBack -> settingsViewModel?.updatePreference(predictiveBackEnabled = action.enabled)
                 is LaboratoryUiAction.SetClipboardRecognition -> {
                     settingsViewModel?.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
-                    if (action.enabled) {
-                        PrivilegeManager.refreshPrivilege()
-                        val message = if (PrivilegeManager.hasPrivilege) {
-                            "已启用完整后台识别，识别到取件类内容将自动创建日程"
-                        } else {
-                            "未获取 Shizuku/Root 权限，仅打开软件时识别，并向你确认是否入库"
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                        ClipboardCodeMonitorService.startIfNeeded(context)
-                    } else {
-                        ClipboardCodeMonitorService.stop(context)
-                    }
                 }
                 LaboratoryUiAction.OpenDeveloper -> onNavigateToDeveloper()
             }
@@ -235,7 +219,7 @@ fun LaboratorySettingsContent(
 
             if (itemVisibility.showClipboardRecognition) LaboratorySwitchCard(
                 title = "剪贴板取件类识别（Beta）",
-                subtitle = "识别剪贴板中的取件码、取餐码、取票码和寄件码",
+                subtitle = "打开 WillDo 时检查剪贴板中的取件码、取餐码、取票码和寄件码，命中后询问是否创建日程",
                 checked = settings.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
                     onAction(LaboratoryUiAction.SetClipboardRecognition(enabled))

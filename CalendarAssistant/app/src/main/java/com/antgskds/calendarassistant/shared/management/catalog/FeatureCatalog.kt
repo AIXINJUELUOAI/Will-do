@@ -67,6 +67,7 @@ object FeatureCatalog {
         FeatureEntry("快捷备忘", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "语音/文字快捷备忘"),
         FeatureEntry("图片随口记", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "系统图片/分享图片保存为随口记素材"),
         FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "便签编辑与存储"),
+        FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记数据"),
 
         // —— 横切支撑 ——
         FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),

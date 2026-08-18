@@ -28,6 +28,7 @@ fun AllEventsRoute(
     uiSize: Int = 2,
     searchQuery: String = "",
     extraBottomPadding: Dp = 0.dp,
+    twoPane: Boolean = false,
     hapticEnabled: Boolean = true
 ) {
     val mainState by viewModel.uiState.collectAsState()
@@ -59,6 +60,7 @@ fun AllEventsRoute(
         state = connection.state,
         uiSize = uiSize,
         extraBottomPadding = extraBottomPadding,
+        twoPane = twoPane,
         hapticEnabled = hapticEnabled,
         onAction = { action ->
             when (action) {

@@ -10,6 +10,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -38,6 +39,15 @@ class DiagnosticLogExporter(private val context: Context) {
             }
             AppLogger.i("DiagnosticLogExporter", "exported diagnostic log file=$fileName minutes=${minutes ?: -1}")
             WillDoDownloadLogNode.publicPath(WillDoDownloadLogNode.EXPORT_DIR, fileName)
+        }
+    }
+
+    suspend fun exportAgentLogBundle(target: File, minutes: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(minutes in AGENT_LOG_MINUTES) { "日志范围仅支持 5、30 或 60 分钟" }
+            target.parentFile?.mkdirs()
+            target.writeText(DiagnosticLogRedactor.redact(buildMergedLogText(minutes)), Charsets.UTF_8)
+            AppLogger.i("DiagnosticLogExporter", "exported redacted Agent diagnostics minutes=$minutes")
         }
     }
 
@@ -345,5 +355,6 @@ class DiagnosticLogExporter(private val context: Context) {
 
     companion object {
         private const val LOGCAT_TIMEOUT_MS = 15_000L
+        private val AGENT_LOG_MINUTES = setOf(5, 30, 60)
     }
 }

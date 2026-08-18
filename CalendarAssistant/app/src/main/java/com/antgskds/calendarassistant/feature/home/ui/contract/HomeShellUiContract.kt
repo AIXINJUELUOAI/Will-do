@@ -6,6 +6,7 @@ data class HomeShellUiState(
     val backgroundCardAlphaPercent: Int,
     val isSidebarOpen: Boolean,
     val sidebarGestureEnabled: Boolean,
+    val useNavigationRail: Boolean,
 )
 
 sealed interface HomeShellUiAction {
