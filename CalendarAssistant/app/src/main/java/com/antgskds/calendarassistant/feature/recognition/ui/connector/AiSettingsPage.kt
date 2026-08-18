@@ -132,6 +132,10 @@ fun AiSettingsPage(
             when (action) {
                 is AiSettingsUiAction.SaveTextModel -> viewModel.updateAiSettings(action.key, action.name, action.url)
                 is AiSettingsUiAction.SaveMultimodalModel -> viewModel.updateMultimodalAiSettings(action.key, action.name, action.url)
+                is AiSettingsUiAction.SetAgentAccess -> viewModel.updateAgentAccessOptions(accessEnabled = action.enabled)
+                is AiSettingsUiAction.SetAgentConnectionManagement -> {
+                    viewModel.updateAgentAccessOptions(connectionManagementEnabled = action.enabled)
+                }
             }
         },
         fetchModels = ApiModelProvider::fetchAvailableModels,
@@ -499,6 +503,43 @@ fun MaterialAiSettingsScreen(
                     }
                 },
             )
+
+            Text("Agent 访问", style = sectionTitleStyle)
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    SwitchSettingItem(
+                        title = "允许 Agent 访问",
+                        subtitle = "允许 Agent 访问、操作 WillDo 数据",
+                        checked = settings.agentApiEnabled,
+                        onCheckedChange = { onAction(AiSettingsUiAction.SetAgentAccess(it)) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                    )
+                    AnimatedVisibility(
+                        visible = settings.agentApiEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            MyDivider()
+                            SwitchSettingItem(
+                                title = "允许 Agent 管理连接配置",
+                                subtitle = "允许 Agent 管理模型、天气、WebDAV 连接",
+                                checked = settings.agentConnectionManagementEnabled,
+                                onCheckedChange = {
+                                    onAction(AiSettingsUiAction.SetAgentConnectionManagement(it))
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                            )
+                        }
+                    }
+                }
+            }
 
             Text("WebDAV 连接", style = sectionTitleStyle)
             WebDavConfigForm(

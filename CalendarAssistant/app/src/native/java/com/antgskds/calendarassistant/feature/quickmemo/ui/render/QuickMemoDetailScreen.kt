@@ -14,6 +14,7 @@ fun QuickMemoDetailScreen(
     backgroundMode: Boolean,
     miuiBlurEnabled: Boolean,
     cardAlphaPercent: Int,
+    embedded: Boolean,
     autoStopDurationMs: Long?,
     onAction: (QuickMemoUiAction) -> Unit
 ) {
@@ -25,6 +26,7 @@ fun QuickMemoDetailScreen(
         backgroundMode = backgroundMode,
         miuiBlurEnabled = miuiBlurEnabled,
         cardAlphaPercent = cardAlphaPercent,
+        embedded = embedded,
         autoStopDurationMs = autoStopDurationMs,
         onAction = onAction
     )

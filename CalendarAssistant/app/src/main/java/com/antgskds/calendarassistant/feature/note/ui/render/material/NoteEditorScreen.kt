@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -408,21 +409,28 @@ fun MaterialNoteEditorScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .imePadding()
+                    .imePadding(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                key(editorSessionKey) {
-                    PlainNoteEditor(
-                        title = titleText,
-                        onTitleChange = { titleText = it },
-                        document = document,
-                        onDocumentChange = { document = it },
-                        controller = editorController,
-                        onOpenAttachment = ::openAttachment,
-                        onImageShortcut = { imagePicker.launch("image/*") },
-                        onFileShortcut = { attachmentPicker.launch(arrayOf("*/*")) },
-                        modifier = Modifier.fillMaxSize(),
-                        textColor = MaterialTheme.colorScheme.onSurface
-                    )
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 960.dp)
+                        .fillMaxSize(),
+                ) {
+                    key(editorSessionKey) {
+                        PlainNoteEditor(
+                            title = titleText,
+                            onTitleChange = { titleText = it },
+                            document = document,
+                            onDocumentChange = { document = it },
+                            controller = editorController,
+                            onOpenAttachment = ::openAttachment,
+                            onImageShortcut = { imagePicker.launch("image/*") },
+                            onFileShortcut = { attachmentPicker.launch(arrayOf("*/*")) },
+                            modifier = Modifier.fillMaxSize(),
+                            textColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }

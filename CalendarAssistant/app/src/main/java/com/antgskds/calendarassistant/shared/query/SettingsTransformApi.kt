@@ -58,6 +58,7 @@ interface SettingsTransformApi {
         developerOptionsUnlocked: Boolean? = null,
         developerOptionsEnabled: Boolean? = null,
         developerOptionsDisabledAtMillis: Long? = null,
+        developerSimulateRootEnabled: Boolean? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null,
         weatherLocationStabilityRequiredHits: Int? = null,

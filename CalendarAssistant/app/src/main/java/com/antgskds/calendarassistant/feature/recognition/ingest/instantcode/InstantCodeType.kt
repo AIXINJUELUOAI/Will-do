@@ -15,12 +15,6 @@ enum class InstantCodeType(
     SENDER(EventTags.SENDER, "寄件", "寄件码", "寄件", "📮")
 }
 
-enum class InstantCodeParseMode {
-    SMS,
-    CLIPBOARD_CONFIRM,
-    CLIPBOARD_AUTO
-}
-
 data class InstantCodeCandidate(
     val type: InstantCodeType,
     val code: String,

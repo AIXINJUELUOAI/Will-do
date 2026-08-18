@@ -22,17 +22,6 @@ object SystemNormalDisplay {
         )
     }
 
-    fun clipboardMonitorChannelName(): String = "剪贴板取件类识别"
-
-    fun clipboardMonitorChannelDescription(): String = "Shizuku/Root 后台监听剪贴板取件类内容"
-
-    fun clipboardMonitorRunning(): NormalNotificationContent {
-        return NormalNotificationContent(
-            title = "剪贴板取件类识别运行中",
-            contentText = "复制取件码、取餐码、取票码、寄件码后将自动入库"
-        )
-    }
-
     fun voiceCaptureRunning(): NormalNotificationContent {
         return NormalNotificationContent(
             title = "正在录制随口记",

@@ -522,6 +522,9 @@ private fun ThemeModeSliderSettingItem(
         options = options,
         selectedIndex = (value - 1).coerceIn(options.indices),
         onSelectedIndexChange = { onValueChange(it + 1) },
+        titleTextStyle = cardTitleStyle,
+        summaryTextStyle = cardSubtitleStyle,
+        valueTextStyle = cardValueStyle,
     )
 }
 

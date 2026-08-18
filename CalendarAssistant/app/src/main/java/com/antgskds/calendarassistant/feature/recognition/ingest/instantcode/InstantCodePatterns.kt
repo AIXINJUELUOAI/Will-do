@@ -44,7 +44,7 @@ object InstantCodePatterns {
 
     val credentialCodePatterns: List<Pair<InstantCodeType, Pattern>> = listOf(
         InstantCodeType.PICKUP to Pattern.compile(
-            """(?i)(?:凭|请凭|使用|出示)\s*([A-Za-z0-9][A-Za-z0-9\s-]{1,18}[A-Za-z0-9])\s*(?:取件|取货|提货|签收|领取包裹)"""
+            """(?i)(?:凭|请凭|使用|出示)\s*([A-Za-z0-9][A-Za-z0-9\s-]{1,18}[A-Za-z0-9])(?=[^，。；;\n]{0,48}(?:取件|取货|提货|签收|领取|包裹))"""
         ),
         InstantCodeType.FOOD to Pattern.compile(
             """(?i)(?:凭|请凭|使用|出示)\s*([A-Za-z0-9][A-Za-z0-9\s-]{1,18}[A-Za-z0-9])\s*(?:取餐|取外卖|取餐品|到店自提)"""
@@ -75,7 +75,10 @@ object InstantCodePatterns {
         "医保", "社保", "缴费", "充值", "退款", "安全码", "授权码", "激活码", "积分", "理财产品"
     )
 
-    val nonCodeLabels = setOf("订单号", "运单号", "物流单号", "快递单号", "交易号", "流水号", "手机号", "电话")
+    val nonCodeLabels = setOf(
+        "订单号", "运单号", "运单尾号", "物流单号", "快递单号", "快递尾号", "包裹尾号",
+        "交易号", "流水号", "手机号", "电话"
+    )
 
     val foodKeywords = setOf(
         "美团", "饿了么", "盒马", "叮咚买菜", "肯德基", "KFC", "麦当劳", "星巴克", "瑞幸", "蜜雪冰城", "喜茶", "奈雪"

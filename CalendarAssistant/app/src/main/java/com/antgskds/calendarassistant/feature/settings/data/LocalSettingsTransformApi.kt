@@ -65,6 +65,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         developerOptionsUnlocked: Boolean?,
         developerOptionsEnabled: Boolean?,
         developerOptionsDisabledAtMillis: Long?,
+        developerSimulateRootEnabled: Boolean?,
         homeBottomItems: List<String>?,
         homeStartPageKey: String?,
         weatherLocationStabilityRequiredHits: Int?,
@@ -165,6 +166,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (developerOptionsUnlocked != null) updated = updated.copy(developerOptionsUnlocked = developerOptionsUnlocked)
         if (developerOptionsEnabled != null) updated = updated.copy(developerOptionsEnabled = developerOptionsEnabled)
         if (developerOptionsDisabledAtMillis != null) updated = updated.copy(developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis)
+        if (developerSimulateRootEnabled != null) updated = updated.copy(developerSimulateRootEnabled = developerSimulateRootEnabled)
         if (homeBottomItems != null) updated = updated.copy(homeBottomItems = homeBottomItems)
         if (homeStartPageKey != null) updated = updated.copy(homeStartPageKey = homeStartPageKey)
         if (weatherLocationStabilityRequiredHits != null) {

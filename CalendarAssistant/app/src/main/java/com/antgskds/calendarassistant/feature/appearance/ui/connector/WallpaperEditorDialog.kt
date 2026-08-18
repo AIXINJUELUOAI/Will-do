@@ -7,12 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -60,6 +62,9 @@ import com.antgskds.calendarassistant.feature.home.ui.render.material.component.
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveLayoutInfo
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
 import kotlin.math.roundToInt
@@ -111,6 +116,7 @@ internal fun WallpaperEditorDialog(
     val wallpaperBackdrop = rememberLayerBackdrop()
     val wallpaperBlurRadius = with(LocalDensity.current) { 28.dp.toPx() }
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
+    val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
 
     LaunchedEffect(previewPages, previewPageKey) {
         if (previewPageKey !in previewPages) {
@@ -131,12 +137,7 @@ internal fun WallpaperEditorDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .onSizeChanged { viewportSize = it }
-        ) {
+        val previewContent: @Composable BoxScope.() -> Unit = {
             AppWallpaperImage(
                 imageBitmap = imageBitmap,
                 scale = imageScale,
@@ -169,62 +170,153 @@ internal fun WallpaperEditorDialog(
                             appBackgroundImageOffsetX = imageOffsetX,
                             appBackgroundImageOffsetY = imageOffsetY
                         )
-                        WallpaperHomePreview(
-                            mainViewModel = mainViewModel,
-                            settings = previewSettings,
-                            previewPages = previewPages,
-                            selectedPageKey = previewPageKey
-                        )
-                        WallpaperGestureLayer(
-                            source = source,
-                            imageSize = IntSize(imageBitmap.width, imageBitmap.height),
-                            viewportSize = viewportSize,
-                            imageScale = imageScale,
-                            imageOffsetX = imageOffsetX,
-                            imageOffsetY = imageOffsetY,
-                            previewPages = previewPages,
-                            previewPageKey = previewPageKey,
-                            onTransform = { scale, offsetX, offsetY ->
-                                imageScale = scale
-                                imageOffsetX = offsetX
-                                imageOffsetY = offsetY
-                            },
-                            onCyclePage = {
-                                val currentIndex = previewPages.indexOf(previewPageKey).coerceAtLeast(0)
-                                if (previewPages.size > 1) {
-                                    previewPageKey = previewPages[(currentIndex + 1) % previewPages.size]
-                                    haptics.selection()
+                        CompositionLocalProvider(LocalAdaptiveLayoutInfo provides AdaptiveLayoutInfo()) {
+                            WallpaperHomePreview(
+                                mainViewModel = mainViewModel,
+                                settings = previewSettings,
+                                previewPages = previewPages,
+                                selectedPageKey = previewPageKey
+                            )
+                            WallpaperGestureLayer(
+                                source = source,
+                                imageSize = IntSize(imageBitmap.width, imageBitmap.height),
+                                viewportSize = viewportSize,
+                                imageScale = imageScale,
+                                imageOffsetX = imageOffsetX,
+                                imageOffsetY = imageOffsetY,
+                                previewPages = previewPages,
+                                previewPageKey = previewPageKey,
+                                onTransform = { scale, offsetX, offsetY ->
+                                    imageScale = scale
+                                    imageOffsetX = offsetX
+                                    imageOffsetY = offsetY
+                                },
+                                onCyclePage = {
+                                    val currentIndex = previewPages.indexOf(previewPageKey).coerceAtLeast(0)
+                                    if (previewPages.size > 1) {
+                                        previewPageKey = previewPages[(currentIndex + 1) % previewPages.size]
+                                        haptics.selection()
+                                    }
                                 }
-                            }
-                        )
-                        WallpaperEditorTopBar(
-                            saving = saving,
-                            onDismiss = onDismiss,
-                            onReset = {
-                                imageScale = MySettings.APP_BACKGROUND_IMAGE_SCALE_DEFAULT
-                                imageOffsetX = 0f
-                                imageOffsetY = 0f
-                            },
-                            onApply = {
-                                onApply(
-                                    WallpaperEditorResult(
-                                        scale = imageScale,
-                                        offsetX = imageOffsetX,
-                                        offsetY = imageOffsetY,
-                                        visibleLuminance = calculateVisibleLuminance(
-                                            bitmap = source.bitmap,
-                                            containerSize = viewportSize,
-                                            scale = imageScale,
-                                            offsetX = imageOffsetX,
-                                            offsetY = imageOffsetY
-                                        )
-                                    )
-                                )
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
+        }
+        val resetPreview = {
+            imageScale = MySettings.APP_BACKGROUND_IMAGE_SCALE_DEFAULT
+            imageOffsetX = 0f
+            imageOffsetY = 0f
+        }
+        val applyPreview = {
+            onApply(
+                WallpaperEditorResult(
+                    scale = imageScale,
+                    offsetX = imageOffsetX,
+                    offsetY = imageOffsetY,
+                    visibleLuminance = calculateVisibleLuminance(
+                        bitmap = source.bitmap,
+                        containerSize = viewportSize,
+                        scale = imageScale,
+                        offsetX = imageOffsetX,
+                        offsetY = imageOffsetY
+                    )
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            if (adaptiveLayoutInfo.isTabletop) {
+                AdaptiveTwoPaneLayout(
+                    primaryFraction = 0.5f,
+                    primary = {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight(0.94f)
+                                    .aspectRatio(9f / 19.5f)
+                                    .onSizeChanged { viewportSize = it },
+                                content = previewContent,
+                            )
+                        }
+                    },
+                    secondary = {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            WallpaperEditorTopBar(
+                                saving = saving,
+                                centered = true,
+                                onDismiss = onDismiss,
+                                onReset = resetPreview,
+                                onApply = applyPreview,
+                            )
+                        }
+                    },
+                )
+            } else {
+                Box(
+                    modifier = if (adaptiveLayoutInfo.useNavigationRail) {
+                        Modifier
+                            .align(Alignment.Center)
+                            .fillMaxHeight(0.94f)
+                            .aspectRatio(9f / 19.5f)
+                            .onSizeChanged { viewportSize = it }
+                    } else {
+                        Modifier
+                            .fillMaxSize()
+                            .onSizeChanged { viewportSize = it }
+                    },
+                    content = previewContent,
+                )
+                WallpaperEditorTopBar(
+                    saving = saving,
+                    centered = false,
+                    onDismiss = onDismiss,
+                    onReset = resetPreview,
+                    onApply = applyPreview,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.WallpaperEditorTopBar(
+    saving: Boolean,
+    centered: Boolean,
+    onDismiss: () -> Unit,
+    onReset: () -> Unit,
+    onApply: () -> Unit
+) {
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Row(
+        modifier = Modifier
+            .align(if (centered) Alignment.Center else Alignment.TopCenter)
+            .fillMaxWidth()
+            .padding(
+                top = if (centered) 24.dp else topInset + 10.dp,
+                bottom = if (centered) 24.dp else 0.dp,
+                start = 16.dp,
+                end = 16.dp,
+            )
+            .zIndex(6f),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalIconButton(onClick = onDismiss, enabled = !saving) {
+                Icon(Icons.Default.Close, contentDescription = "取消")
+            }
+            FilledTonalIconButton(onClick = onReset, enabled = !saving) {
+                Icon(Icons.Default.RestartAlt, contentDescription = "重置")
+            }
+        }
+        FilledTonalIconButton(onClick = onApply, enabled = !saving) {
+            Icon(Icons.Default.Check, contentDescription = "应用")
         }
     }
 }
@@ -241,6 +333,7 @@ private fun BoxScope.WallpaperHomePreview(
     HomePageRoute(
         viewModel = mainViewModel,
         currentPageKey = selectedPageKey,
+        pageOrder = previewPages,
         uiSize = settings.uiSize,
         courseFeatureEnabled = settings.courseFeatureEnabled,
         quickMemoCount = quickMemos.size,
@@ -318,36 +411,6 @@ private fun BoxScope.WallpaperGestureLayer(
     )
 }
 
-@Composable
-private fun BoxScope.WallpaperEditorTopBar(
-    saving: Boolean,
-    onDismiss: () -> Unit,
-    onReset: () -> Unit,
-    onApply: () -> Unit
-) {
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    Row(
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-            .padding(top = topInset + 10.dp, start = 16.dp, end = 16.dp)
-            .zIndex(6f),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalIconButton(onClick = onDismiss, enabled = !saving) {
-                Icon(Icons.Default.Close, contentDescription = "取消")
-            }
-            FilledTonalIconButton(onClick = onReset, enabled = !saving) {
-                Icon(Icons.Default.RestartAlt, contentDescription = "重置")
-            }
-        }
-        FilledTonalIconButton(onClick = onApply, enabled = !saving) {
-            Icon(Icons.Default.Check, contentDescription = "应用")
-        }
-    }
-}
 
 private fun normalizedPan(pan: Float, maxPan: Float): Float {
     if (maxPan <= 0f) return 0f

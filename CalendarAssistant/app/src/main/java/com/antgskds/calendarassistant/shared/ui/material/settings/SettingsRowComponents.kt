@@ -367,6 +367,7 @@ fun MaterialVolumeLongPressSettingItem(
     cardSubtitleStyle: TextStyle,
 ) {
     val normalizedAction = action.coerceIn(1, 3)
+    val sliderLabelStyle = settingsSliderLabelTextStyle()
     HapticValueChangeEffect(valueKey = normalizedAction)
     val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -404,9 +405,9 @@ fun MaterialVolumeLongPressSettingItem(
                         .padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "识屏", style = cardSubtitleStyle)
-                    Text(text = "悬浮窗", style = cardSubtitleStyle)
-                    Text(text = "随口记", style = cardSubtitleStyle)
+                    Text(text = "识屏", style = sliderLabelStyle)
+                    Text(text = "悬浮窗", style = sliderLabelStyle)
+                    Text(text = "随口记", style = sliderLabelStyle)
                 }
                 Slider(
                     value = normalizedAction.toFloat(),
@@ -454,6 +455,7 @@ fun MaterialAdvanceReminderSettingItem(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
 ) {
+    val sliderLabelStyle = settingsSliderLabelTextStyle()
     HapticValueChangeEffect(valueKey = minutes)
     val haptics = rememberAppHaptics()
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -494,9 +496,9 @@ fun MaterialAdvanceReminderSettingItem(
                         .padding(horizontal = 4.dp), // 与滑块轨道 padding 匹配
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "30分钟", style = cardSubtitleStyle)
-                    Text(text = "45分钟", style = cardSubtitleStyle)
-                    Text(text = "60分钟", style = cardSubtitleStyle)
+                    Text(text = "30分钟", style = sliderLabelStyle)
+                    Text(text = "45分钟", style = sliderLabelStyle)
+                    Text(text = "60分钟", style = sliderLabelStyle)
                 }
                 Slider(
                     value = minutes.toFloat(),

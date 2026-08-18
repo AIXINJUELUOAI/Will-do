@@ -104,5 +104,10 @@ object PipelineCatalog {
             Maturity.TRANSITION,
             "日程写入主链路 ScheduleFacade → ScheduleStoreGateway → StoreDispatcher → StoreRootNode 的分流节点",
         ),
+        PipelineEntry(
+            "Agent 数据库维护", Chain.SUPPORT, "shared/api/AgentDatabaseService",
+            Maturity.PIPELINE,
+            "开发者显式授权后，为官方 Agent 提供业务表查询、单行修改和按主键删除；禁止修改数据库结构",
+        ),
     )
 }

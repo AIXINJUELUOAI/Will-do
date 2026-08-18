@@ -5,7 +5,18 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -21,6 +32,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetai
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoScreen
 import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
 
 private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
 
@@ -30,6 +42,7 @@ fun QuickMemoPage(
     searchQuery: String = "",
     uiSize: Int = 2,
     extraBottomPadding: Dp = 0.dp,
+    twoPane: Boolean = false,
     onOpenDetail: (Long) -> Unit = {},
     onPendingDeleteChange: (QuickMemoEntity?) -> Unit = {},
     hapticEnabled: Boolean = true
@@ -38,6 +51,7 @@ fun QuickMemoPage(
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
     val playbackState by viewModel.audioPlaybackState.collectAsState()
     val capsuleUiState by viewModel.capsuleUiState.collectAsState()
+    val mainUiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val state = remember(quickMemos, suggestions, playbackState, capsuleUiState) {
         QuickMemoListUiState(
@@ -48,21 +62,72 @@ fun QuickMemoPage(
         )
     }
 
-    QuickMemoScreen(
-        state = state,
-        searchQuery = searchQuery,
-        uiSize = uiSize,
-        extraBottomPadding = extraBottomPadding,
-        hapticEnabled = hapticEnabled,
-        onAction = { action ->
-            handleQuickMemoAction(
-                action = action,
-                viewModel = viewModel,
-                context = context,
-                onOpenDetail = onOpenDetail,
-                onPendingDeleteChange = onPendingDeleteChange
-            )
+    var selectedMemoId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val memoIds = remember(quickMemos) { quickMemos.mapNotNull { it.id } }
+
+    LaunchedEffect(twoPane, memoIds) {
+        if (!twoPane) {
+            selectedMemoId = null
+        } else if (selectedMemoId !in memoIds) {
+            selectedMemoId = memoIds.firstOrNull()
         }
+    }
+
+    val listContent: @Composable () -> Unit = {
+        QuickMemoScreen(
+            state = state,
+            searchQuery = searchQuery,
+            uiSize = uiSize,
+            extraBottomPadding = extraBottomPadding,
+            selectedMemoId = selectedMemoId.takeIf { twoPane },
+            reserveFloatingBarSpace = !twoPane,
+            hapticEnabled = hapticEnabled,
+            onAction = { action ->
+                handleQuickMemoAction(
+                    action = action,
+                    viewModel = viewModel,
+                    context = context,
+                    onOpenDetail = { memoId ->
+                        if (twoPane) selectedMemoId = memoId else onOpenDetail(memoId)
+                    },
+                    onPendingDeleteChange = onPendingDeleteChange
+                )
+            }
+        )
+    }
+
+    if (!twoPane) {
+        listContent()
+        return
+    }
+
+    AdaptiveTwoPaneLayout(
+        primaryFraction = 0.44f,
+        primary = listContent,
+        secondary = {
+            val memoId = selectedMemoId
+            if (memoId == null) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Text(
+                        text = "选择一条随口记查看详情",
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                QuickMemoDetailPage(
+                    memoId = memoId,
+                    viewModel = viewModel,
+                    onBack = { selectedMemoId = null },
+                    uiSize = uiSize,
+                    hapticEnabled = hapticEnabled,
+                    backgroundMode = mainUiState.settings.appBackgroundImagePath.isNotBlank(),
+                    miuiBlurEnabled = mainUiState.settings.appBackgroundMiuiBlurTestEnabled,
+                    cardAlphaPercent = mainUiState.settings.appBackgroundCardAlphaPercent,
+                    embedded = true,
+                )
+            }
+        },
     )
 }
 
@@ -75,7 +140,8 @@ fun QuickMemoDetailPage(
     hapticEnabled: Boolean = true,
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
-    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT
+    cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
+    embedded: Boolean = false,
 ) {
     val quickMemos by viewModel.quickMemos.collectAsState()
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
@@ -105,6 +171,7 @@ fun QuickMemoDetailPage(
         backgroundMode = backgroundMode,
         miuiBlurEnabled = miuiBlurEnabled,
         cardAlphaPercent = cardAlphaPercent,
+        embedded = embedded,
         autoStopDurationMs = QuickMemoAutoStopPolicy.durationMillis(mainUiState.settings),
         onAction = { action ->
             handleQuickMemoAction(

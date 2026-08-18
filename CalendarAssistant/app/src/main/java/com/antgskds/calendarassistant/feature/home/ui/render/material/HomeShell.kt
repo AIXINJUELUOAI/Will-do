@@ -3,6 +3,7 @@ package com.antgskds.calendarassistant.feature.home.ui.render.material
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -27,25 +28,31 @@ fun MaterialHomeScreen(
         cardAlphaPercent = state.backgroundCardAlphaPercent,
     ) {
         Box(modifier = Modifier) {
-            BackHandler(enabled = state.isSidebarOpen) {
+            BackHandler(enabled = !state.useNavigationRail && state.isSidebarOpen) {
                 onAction(HomeShellUiAction.SetSidebarOpen(false))
             }
 
-            PushSlideLayout(
-                isOpen = state.isSidebarOpen,
-                onOpenChange = { isOpen ->
-                    onAction(HomeShellUiAction.SetSidebarOpen(isOpen))
-                },
-                enableGesture = state.sidebarGestureEnabled,
-                contentContainerColor = if (state.backgroundEnabled) {
-                    Color.Transparent
-                } else {
-                    MaterialTheme.colorScheme.background
-                },
-                sidebar = sidebar,
-                bottomBar = {},
-                content = content,
-            )
+            if (state.useNavigationRail) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    content()
+                }
+            } else {
+                PushSlideLayout(
+                    isOpen = state.isSidebarOpen,
+                    onOpenChange = { isOpen ->
+                        onAction(HomeShellUiAction.SetSidebarOpen(isOpen))
+                    },
+                    enableGesture = state.sidebarGestureEnabled,
+                    contentContainerColor = if (state.backgroundEnabled) {
+                        Color.Transparent
+                    } else {
+                        MaterialTheme.colorScheme.background
+                    },
+                    sidebar = sidebar,
+                    bottomBar = {},
+                    content = content,
+                )
+            }
 
             chrome()
             overlay()

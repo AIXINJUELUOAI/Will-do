@@ -111,6 +111,14 @@ class ScheduleFacade(
         calendarCenter.getEvents().filter { it.archivedAt == null && !isRetiredNoteTag(it.tag) }
     }
 
+    suspend fun getLatestArchivedEvents(): List<Event> = withContext(Dispatchers.IO) {
+        calendarCenter.getArchivedEvents().filter { it.archivedAt != null && !isRetiredNoteTag(it.tag) }
+    }
+
+    suspend fun getEventById(eventId: Long): Event? = withContext(Dispatchers.IO) {
+        calendarCenter.getEvent(eventId)?.takeUnless { isRetiredNoteTag(it.tag) }
+    }
+
     // ── CRUD ─────────────────────────────────────────────────────
 
     suspend fun addEvent(event: Event): Long = withContext(Dispatchers.IO) {
@@ -142,6 +150,21 @@ class ScheduleFacade(
         calendarCenter.deleteEvent(eventId)
         notificationBridge?.onEventDeleted(eventId)
         refreshEvents()
+    }
+
+    suspend fun setEventState(eventId: Long, occurrenceTs: Long?, state: Int): Long = withContext(Dispatchers.IO) {
+        val result = when (state) {
+            STATE_PENDING -> calendarCenter.markPending(eventId, occurrenceTs)
+            STATE_COMPLETED -> calendarCenter.completeEvent(eventId, occurrenceTs)
+            STATE_CHECKED_IN -> calendarCenter.checkInEvent(eventId, occurrenceTs)
+            else -> throw IllegalArgumentException("Unsupported event state: $state")
+        }
+        val changedId = when (result) {
+            is OperationResult.Success -> result.data
+            is OperationResult.Failure -> throw IllegalStateException(result.message ?: result.code.name)
+        }
+        refreshEvents()
+        changedId
     }
 
     /** 带延迟提交的删除 */

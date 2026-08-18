@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -24,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -210,6 +211,10 @@ fun CourseManagerScreen(
                 showImportMethodDialog = false
                 importCoursesLauncher.launch(arrayOf("*/*"))
             },
+            onDismissRequest = {
+                importMethodError = null
+                showImportMethodDialog = false
+            },
             modifier = Modifier.padding(bottom = bottomInset)
         )
 
@@ -268,50 +273,62 @@ fun MaterialCourseManagerScreen(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (courses.isEmpty()) {
-            Box(modifier = Modifier.align(Alignment.Center)) {
-                Text("暂无课程，点击右下角添加", color = MaterialTheme.colorScheme.secondary)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 144.dp + bottomInset),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(courses, key = { it.id }) { course ->
-                    CourseItem(
-                        course = course,
-                        onDelete = { onAction(CourseManagerUiAction.DeleteCourse(course)) },
-                        onClick = { courseToEdit = course; showEditDialog = true },
-                        uiSize = uiSize
-                    )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = 960.dp)
+                .fillMaxSize(),
+        ) {
+            if (courses.isEmpty()) {
+                Box(modifier = Modifier.align(Alignment.Center)) {
+                    Text("暂无课程，点击右下角添加", color = MaterialTheme.colorScheme.secondary)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 144.dp + bottomInset),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(courses, key = { it.id }) { course ->
+                        CourseItem(
+                            course = course,
+                            onDelete = { onAction(CourseManagerUiAction.DeleteCourse(course)) },
+                            onClick = { courseToEdit = course; showEditDialog = true },
+                            uiSize = uiSize
+                        )
+                    }
                 }
             }
-        }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 24.dp + bottomInset),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SmallFloatingActionButton(
-                onClick = { haptics.click(); onAction(CourseManagerUiAction.ImportCourses) },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 24.dp + bottomInset),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Download, contentDescription = "导入 WakeUp 课表")
-            }
-            FloatingActionButton(
-                onClick = { haptics.click(); courseToEdit = null; showEditDialog = true },
-                modifier = Modifier.size(72.dp),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加课程", modifier = Modifier.size(34.dp))
+                FloatingActionButton(
+                    onClick = { haptics.click(); onAction(CourseManagerUiAction.ImportCourses) },
+                    modifier = Modifier.size(72.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "导入 WakeUp 课表",
+                        modifier = Modifier.size(34.dp),
+                    )
+                }
+                FloatingActionButton(
+                    onClick = { haptics.click(); courseToEdit = null; showEditDialog = true },
+                    modifier = Modifier.size(72.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "添加课程", modifier = Modifier.size(34.dp))
+                }
             }
         }
     }

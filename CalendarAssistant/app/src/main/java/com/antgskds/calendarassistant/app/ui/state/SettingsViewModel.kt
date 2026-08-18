@@ -114,6 +114,20 @@ class SettingsViewModel(
         }
     }
 
+    fun updateAgentAccessOptions(
+        accessEnabled: Boolean? = null,
+        connectionManagementEnabled: Boolean? = null,
+    ) {
+        val current = settings.value
+        settingsOperationApi.updateSettings(
+            current.copy(
+                agentApiEnabled = accessEnabled ?: current.agentApiEnabled,
+                agentConnectionManagementEnabled = connectionManagementEnabled
+                    ?: current.agentConnectionManagementEnabled,
+            )
+        )
+    }
+
     // 更新学期开始日期
     fun updateSemesterStartDate(date: String) {
         viewModelScope.launch {
@@ -204,6 +218,7 @@ class SettingsViewModel(
         developerOptionsUnlocked: Boolean? = null,
         developerOptionsEnabled: Boolean? = null,
         developerOptionsDisabledAtMillis: Long? = null,
+        developerSimulateRootEnabled: Boolean? = null,
         homeBottomItems: List<String>? = null,
         homeStartPageKey: String? = null,
         weatherLocationStabilityRequiredHits: Int? = null,
@@ -266,6 +281,7 @@ class SettingsViewModel(
                 developerOptionsUnlocked = developerOptionsUnlocked,
                 developerOptionsEnabled = developerOptionsEnabled,
                 developerOptionsDisabledAtMillis = developerOptionsDisabledAtMillis,
+                developerSimulateRootEnabled = developerSimulateRootEnabled,
                 homeBottomItems = homeBottomItems,
                 homeStartPageKey = homeStartPageKey,
                 weatherLocationStabilityRequiredHits = weatherLocationStabilityRequiredHits,
@@ -435,12 +451,30 @@ class SettingsViewModel(
         warningLookaheadHours: Int,
         floatingWeatherForecastRange: Int
     ) {
+        val current = settings.value
+        val normalizedProvider = if (provider == "caiyun") "caiyun" else "qweather"
+        val previousQWeatherUrl = current.weatherQWeatherApiUrl.ifBlank {
+            current.weatherApiUrl.takeIf { current.weatherProvider != "caiyun" }.orEmpty()
+        }
+        val previousQWeatherKey = current.weatherQWeatherApiKey.ifBlank {
+            current.weatherApiKey.takeIf { current.weatherProvider != "caiyun" }.orEmpty()
+        }
+        val previousCaiyunUrl = current.weatherCaiyunApiUrl.ifBlank {
+            current.weatherApiUrl.takeIf { current.weatherProvider == "caiyun" }.orEmpty()
+        }
+        val previousCaiyunToken = current.weatherCaiyunToken.ifBlank {
+            current.weatherApiKey.takeIf { current.weatherProvider == "caiyun" }.orEmpty()
+        }
         settingsOperationApi.updateSettings(
-            settings.value.copy(
+            current.copy(
                 weatherEnabled = enabled,
-                weatherProvider = provider,
+                weatherProvider = normalizedProvider,
                 weatherApiUrl = apiUrl,
                 weatherApiKey = apiKey,
+                weatherQWeatherApiUrl = if (normalizedProvider == "qweather") apiUrl else previousQWeatherUrl,
+                weatherQWeatherApiKey = if (normalizedProvider == "qweather") apiKey else previousQWeatherKey,
+                weatherCaiyunApiUrl = if (normalizedProvider == "caiyun") apiUrl else previousCaiyunUrl,
+                weatherCaiyunToken = if (normalizedProvider == "caiyun") apiKey else previousCaiyunToken,
                 weatherCity = manualLocationName,
                 weatherLocationMode = locationMode,
                 weatherManualLocationId = manualLocationId,

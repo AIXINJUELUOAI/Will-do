@@ -137,7 +137,7 @@ fun WeatherSettingsPage(
         showCacheSection = showCacheSection,
         persistWeather = { draft ->
             viewModel.updateWeatherSettings(
-                enabled = draft.weatherEnabled, provider = WeatherApiAdapter.PROVIDER_QWEATHER,
+                enabled = draft.weatherEnabled, provider = draft.weatherProvider,
                 apiUrl = draft.weatherApiUrl, apiKey = draft.weatherApiKey,
                 refreshInterval = draft.weatherRefreshInterval, showInFloating = draft.showWeatherInFloating,
                 locationMode = draft.weatherLocationMode, manualLocationId = draft.weatherManualLocationId,
@@ -148,9 +148,6 @@ fun WeatherSettingsPage(
                 warningLookaheadHours = draft.weatherWarningLookaheadHours,
                 floatingWeatherForecastRange = draft.floatingWeatherForecastRange
             )
-            if (draft.weatherManualLocationId != settings.weatherManualLocationId || draft.weatherLocationMode != settings.weatherLocationMode) {
-                app.weatherOperationApi.clearCache()
-            }
             WeatherSyncWorker.syncForSettings(appContext, draft)
         },
         refreshWeather = { draft -> app.weatherOperationApi.forceRefresh(draft).map { Unit } }
@@ -182,17 +179,50 @@ fun MaterialWeatherSettingsScreen(
     val density = LocalDensity.current
     val bottomInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
 
-    var enabled by remember(settings) { mutableStateOf(settings.weatherEnabled) }
-    var apiUrl by remember(settings) {
-        mutableStateOf(
-            settings.weatherApiUrl.ifBlank {
-                WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_QWEATHER)
-            }
-        )
+    var enabled by remember(settings.weatherEnabled) { mutableStateOf(settings.weatherEnabled) }
+    var provider by remember(settings.weatherProvider) {
+        mutableStateOf(WeatherApiAdapter.normalizeProvider(settings.weatherProvider))
     }
-    var apiKey by remember(settings) { mutableStateOf(settings.weatherApiKey) }
-    var locationMode by remember(settings) { mutableStateOf(normalizeWeatherLocationMode(settings.weatherLocationMode)) }
-    var selectedLocation by remember(settings) {
+    var qWeatherDraftUrl by remember(settings.weatherQWeatherApiUrl, settings.weatherApiUrl, settings.weatherProvider) {
+        mutableStateOf(weatherProviderApiUrl(settings, WeatherApiAdapter.PROVIDER_QWEATHER))
+    }
+    var qWeatherDraftKey by remember(settings.weatherQWeatherApiKey, settings.weatherApiKey, settings.weatherProvider) {
+        mutableStateOf(weatherProviderApiKey(settings, WeatherApiAdapter.PROVIDER_QWEATHER))
+    }
+    var caiyunDraftUrl by remember(settings.weatherCaiyunApiUrl, settings.weatherApiUrl, settings.weatherProvider) {
+        mutableStateOf(weatherProviderApiUrl(settings, WeatherApiAdapter.PROVIDER_CAIYUN))
+    }
+    var caiyunDraftToken by remember(settings.weatherCaiyunToken, settings.weatherApiKey, settings.weatherProvider) {
+        mutableStateOf(weatherProviderApiKey(settings, WeatherApiAdapter.PROVIDER_CAIYUN))
+    }
+    var apiUrl by remember(
+        settings.weatherProvider,
+        settings.weatherApiUrl,
+        settings.weatherQWeatherApiUrl,
+        settings.weatherCaiyunApiUrl,
+    ) {
+        mutableStateOf(weatherProviderApiUrl(settings, WeatherApiAdapter.normalizeProvider(settings.weatherProvider)))
+    }
+    var apiKey by remember(
+        settings.weatherProvider,
+        settings.weatherApiKey,
+        settings.weatherQWeatherApiKey,
+        settings.weatherCaiyunToken,
+    ) {
+        mutableStateOf(weatherProviderApiKey(settings, WeatherApiAdapter.normalizeProvider(settings.weatherProvider)))
+    }
+    var locationMode by remember(settings.weatherLocationMode) {
+        mutableStateOf(normalizeWeatherLocationMode(settings.weatherLocationMode))
+    }
+    var selectedLocation by remember(
+        settings.weatherManualLocationId,
+        settings.weatherManualLocationName,
+        settings.weatherManualAdm1,
+        settings.weatherManualAdm2,
+        settings.weatherManualCountry,
+        settings.weatherManualLat,
+        settings.weatherManualLon,
+    ) {
         mutableStateOf(
             settings.weatherManualLocationId.takeIf { it.isNotBlank() }?.let {
                 WeatherCatalogLocation(
@@ -209,15 +239,22 @@ fun MaterialWeatherSettingsScreen(
             }
         )
     }
-    var refreshInterval by remember(settings) { mutableIntStateOf(WeatherRepository.normalizeRefreshIntervalMinutes(settings.weatherRefreshInterval)) }
-    var showInFloating by remember(settings) { mutableStateOf(settings.showWeatherInFloating) }
-    var floatingWeatherRange by remember(settings) { mutableIntStateOf(settings.floatingWeatherForecastRange.coerceIn(0, 2)) }
-    var warningEnabled by remember(settings) { mutableStateOf(settings.weatherWarningEnabled) }
-    var riskWarningEnabled by remember(settings) { mutableStateOf(settings.weatherRiskWarningEnabled) }
-    var warningLookaheadHours by remember(settings) { mutableIntStateOf(settings.weatherWarningLookaheadHours.coerceIn(1, 168)) }
+    var refreshInterval by remember(settings.weatherRefreshInterval) {
+        mutableIntStateOf(WeatherRepository.normalizeRefreshIntervalMinutes(settings.weatherRefreshInterval))
+    }
+    var showInFloating by remember(settings.showWeatherInFloating) { mutableStateOf(settings.showWeatherInFloating) }
+    var floatingWeatherRange by remember(settings.floatingWeatherForecastRange) {
+        mutableIntStateOf(settings.floatingWeatherForecastRange.coerceIn(0, 2))
+    }
+    var warningEnabled by remember(settings.weatherWarningEnabled) { mutableStateOf(settings.weatherWarningEnabled) }
+    var riskWarningEnabled by remember(settings.weatherRiskWarningEnabled) { mutableStateOf(settings.weatherRiskWarningEnabled) }
+    var warningLookaheadHours by remember(settings.weatherWarningLookaheadHours) {
+        mutableIntStateOf(settings.weatherWarningLookaheadHours.coerceIn(1, 168))
+    }
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermissionGranted(context)) }
     var actionLoading by remember { mutableStateOf(false) }
     var showLocationSheet by remember { mutableStateOf(false) }
+    var isProviderExpanded by remember { mutableStateOf(false) }
     var isLocationModeExpanded by remember { mutableStateOf(false) }
 
     fun showToast(message: String, type: ToastType) {
@@ -313,13 +350,11 @@ fun MaterialWeatherSettingsScreen(
     )
 
     fun normalizeDraft(forceEnable: Boolean = enabled): MySettings {
-        val normalizedProvider = WeatherApiAdapter.PROVIDER_QWEATHER
+        val normalizedProvider = WeatherApiAdapter.normalizeProvider(provider)
         val rawUrl = apiUrl.trim()
         val normalizedUrl = when {
             rawUrl.isBlank() -> WeatherApiAdapter.defaultUrl(normalizedProvider)
-            normalizedProvider == WeatherApiAdapter.PROVIDER_QWEATHER &&
-                !rawUrl.startsWith("https://") &&
-                !rawUrl.startsWith("http://") -> "https://$rawUrl"
+            !rawUrl.startsWith("https://") && !rawUrl.startsWith("http://") -> "https://$rawUrl"
             else -> rawUrl
         }
         return settings.copy(
@@ -347,7 +382,10 @@ fun MaterialWeatherSettingsScreen(
 
     fun validateDraft(draft: MySettings): Boolean {
         if (draft.weatherApiKey.isBlank()) {
-            showToast("请先填写 API Key", ToastType.ERROR)
+            showToast(
+                if (draft.weatherProvider == WeatherApiAdapter.PROVIDER_CAIYUN) "请先填写 Token" else "请先填写 API Key",
+                ToastType.ERROR
+            )
             return false
         }
         if (draft.weatherApiUrl.isBlank()) {
@@ -373,6 +411,25 @@ fun MaterialWeatherSettingsScreen(
             return false
         }
         return true
+    }
+
+    fun persistDisplaySettings(
+        nextRefreshInterval: Int = refreshInterval,
+        nextShowInFloating: Boolean = showInFloating,
+        nextFloatingWeatherRange: Int = floatingWeatherRange,
+        nextWarningEnabled: Boolean = warningEnabled,
+        nextRiskWarningEnabled: Boolean = riskWarningEnabled,
+        nextWarningLookaheadHours: Int = warningLookaheadHours,
+    ) {
+        val displayDraft = settings.copy(
+            weatherRefreshInterval = WeatherRepository.normalizeRefreshIntervalMinutes(nextRefreshInterval),
+            showWeatherInFloating = nextShowInFloating,
+            floatingWeatherForecastRange = nextFloatingWeatherRange.coerceIn(0, 2),
+            weatherWarningEnabled = nextWarningEnabled,
+            weatherRiskWarningEnabled = nextRiskWarningEnabled,
+            weatherWarningLookaheadHours = nextWarningLookaheadHours.coerceIn(1, 168),
+        )
+        scope.launch { persistWeather(displayDraft) }
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
@@ -427,9 +484,35 @@ fun MaterialWeatherSettingsScreen(
 
                     WeatherDivider()
 
-                    WeatherStaticValueItem(
+                    WeatherExpandableSelectionItem(
                         title = "服务提供商",
-                        value = "和风",
+                        currentValue = weatherProviderLabel(provider),
+                        isExpanded = isProviderExpanded,
+                        onToggle = { isProviderExpanded = !isProviderExpanded },
+                        options = listOf(
+                            WeatherApiAdapter.PROVIDER_QWEATHER to "和风天气",
+                            WeatherApiAdapter.PROVIDER_CAIYUN to "彩云天气"
+                        ),
+                        onOptionSelected = { value, _ ->
+                            isProviderExpanded = false
+                            if (provider != value) {
+                                if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) {
+                                    caiyunDraftUrl = apiUrl
+                                    caiyunDraftToken = apiKey
+                                } else {
+                                    qWeatherDraftUrl = apiUrl
+                                    qWeatherDraftKey = apiKey
+                                }
+                                provider = value
+                                if (value == WeatherApiAdapter.PROVIDER_CAIYUN) {
+                                    apiUrl = caiyunDraftUrl
+                                    apiKey = caiyunDraftToken
+                                } else {
+                                    apiUrl = qWeatherDraftUrl
+                                    apiKey = qWeatherDraftKey
+                                }
+                            }
+                        },
                         cardTitleStyle = cardTitleStyle,
                         cardValueStyle = cardValueStyle
                     )
@@ -437,10 +520,10 @@ fun MaterialWeatherSettingsScreen(
                     WeatherDivider()
 
                     WeatherTextInputItem(
-                        title = "API Key",
+                        title = if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) "Token" else "API Key",
                         value = apiKey,
                         onValueChange = { apiKey = it },
-                        placeholder = "点击输入 Key",
+                        placeholder = if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) "点击输入 Token" else "点击输入 Key",
                         cardTitleStyle = cardTitleStyle,
                         cardValueStyle = cardValueStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -452,7 +535,11 @@ fun MaterialWeatherSettingsScreen(
                         title = "API Host",
                         value = apiUrl,
                         onValueChange = { apiUrl = it },
-                        placeholder = "如 abcxyz.qweatherapi.com",
+                        placeholder = if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) {
+                            WeatherApiAdapter.defaultUrl(WeatherApiAdapter.PROVIDER_CAIYUN)
+                        } else {
+                            "如 abcxyz.qweatherapi.com"
+                        },
                         cardTitleStyle = cardTitleStyle,
                         cardValueStyle = cardValueStyle,
                         cardSubtitleStyle = cardSubtitleStyle
@@ -490,6 +577,64 @@ fun MaterialWeatherSettingsScreen(
                         cardValueStyle = cardValueStyle
                     )
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    val draft = normalizeDraft()
+                                    if (draft.weatherEnabled && !validateDraft(draft)) {
+                                        haptics.error()
+                                        return@launch
+                                    }
+
+                                    if (!draft.weatherEnabled) {
+                                        persistWeather(draft)
+                                        haptics.confirm()
+                                        showToast("天气配置已保存", ToastType.SUCCESS)
+                                        return@launch
+                                    }
+                                    actionLoading = true
+                                    try {
+                                        val result = try {
+                                            refreshWeather(draft)
+                                        } catch (error: CancellationException) {
+                                            throw error
+                                        } catch (error: Exception) {
+                                            Result.failure(error)
+                                        }
+                                        if (result.isSuccess) {
+                                            persistWeather(draft)
+                                            haptics.confirm()
+                                            showToast("天气连接成功", ToastType.SUCCESS)
+                                        } else {
+                                            haptics.error()
+                                            val message = weatherConnectionErrorMessage(result.exceptionOrNull())
+                                            showToast(
+                                                if (message.isBlank()) "连接失败，配置未保存" else "连接失败:$message（配置未保存）",
+                                                ToastType.ERROR
+                                            )
+                                        }
+                                    } finally {
+                                        actionLoading = false
+                                    }
+                                }
+                            },
+                            enabled = !actionLoading,
+                        ) {
+                            if (actionLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(if (actionLoading) "连接中" else "连接")
+                        }
+                    }
+
                 }
             }
 
@@ -515,12 +660,17 @@ fun MaterialWeatherSettingsScreen(
                             else -> 2
                         },
                         onSelectedIndexChange = {
-                            refreshInterval = when (it) {
+                            val nextValue = when (it) {
                                 0 -> 15
                                 1 -> 30
                                 else -> 60
                             }
+                            refreshInterval = nextValue
+                            persistDisplaySettings(nextRefreshInterval = nextValue)
                         },
+                        titleTextStyle = cardTitleStyle,
+                        summaryTextStyle = cardSubtitleStyle,
+                        valueTextStyle = cardValueStyle,
                     )
 
                     WeatherDivider()
@@ -529,14 +679,21 @@ fun MaterialWeatherSettingsScreen(
                         title = "悬浮窗显示天气",
                         subtitle = "在悬浮窗顶部显示天气摘要卡片",
                         checked = showInFloating,
-                        onCheckedChange = { showInFloating = it },
+                        onCheckedChange = {
+                            showInFloating = it
+                            persistDisplaySettings(nextShowInFloating = it)
+                        },
                         optionTitle = "悬浮窗天气范围",
                         optionSummary = floatingWeatherRangeLabel(floatingWeatherRange),
                         options = listOf("24小时", "3天", "5天"),
                         selectedIndex = floatingWeatherRange.coerceIn(0, 2),
-                        onSelectedIndexChange = { floatingWeatherRange = it },
+                        onSelectedIndexChange = {
+                            floatingWeatherRange = it
+                            persistDisplaySettings(nextFloatingWeatherRange = it)
+                        },
                         cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
+                        cardSubtitleStyle = cardSubtitleStyle,
+                        cardValueStyle = cardValueStyle,
                     )
 
                     WeatherDivider()
@@ -548,6 +705,7 @@ fun MaterialWeatherSettingsScreen(
                         onCheckedChange = { checked ->
                             requireNotificationWhenEnabling(checked) {
                                 warningEnabled = checked
+                                persistDisplaySettings(nextWarningEnabled = checked)
                             }
                         },
                         cardTitleStyle = cardTitleStyle,
@@ -556,17 +714,23 @@ fun MaterialWeatherSettingsScreen(
 
                     WeatherDivider()
 
-                    EditionOptionalCategoricalSettingItem(
+                    SwitchSettingItem(
                         title = "天气风险提醒",
                         subtitle = "根据未来${warningLookaheadHours}小时预报推断风险并提醒",
                         checked = riskWarningEnabled,
                         onCheckedChange = { checked ->
                             requireNotificationWhenEnabling(checked) {
                                 riskWarningEnabled = checked
+                                persistDisplaySettings(nextRiskWarningEnabled = checked)
                             }
                         },
-                        optionTitle = "风险扫描范围",
-                        optionSummary = "未来 ${warningLookaheadHours} 小时",
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                    )
+
+                    EditionCategoricalPreference(
+                        title = "风险扫描范围",
+                        summary = "未来 ${warningLookaheadHours} 小时",
                         options = listOf("12小时", "24小时", "48小时"),
                         selectedIndex = when (warningLookaheadHours) {
                             12 -> 0
@@ -574,70 +738,19 @@ fun MaterialWeatherSettingsScreen(
                             else -> 2
                         },
                         onSelectedIndexChange = {
-                            warningLookaheadHours = when (it) {
+                            val nextValue = when (it) {
                                 0 -> 12
                                 1 -> 24
                                 else -> 48
                             }
+                            warningLookaheadHours = nextValue
+                            persistDisplaySettings(nextWarningLookaheadHours = nextValue)
                         },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
+                        titleTextStyle = cardTitleStyle,
+                        summaryTextStyle = cardSubtitleStyle,
+                        valueTextStyle = cardValueStyle,
                     )
 
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            val draft = normalizeDraft()
-                            if (draft.weatherEnabled && !validateDraft(draft)) {
-                                haptics.error()
-                                return@launch
-                            }
-
-                            persistWeather(draft)
-                            haptics.confirm()
-                            showToast("天气配置已保存", ToastType.SUCCESS)
-                            if (!draft.weatherEnabled) return@launch
-                            actionLoading = true
-                            try {
-                                val result = try {
-                                    refreshWeather(draft)
-                                } catch (error: CancellationException) {
-                                    throw error
-                                } catch (error: Exception) {
-                                    Result.failure(error)
-                                }
-                                if (result.isSuccess) {
-                                    showToast("天气连接成功", ToastType.SUCCESS)
-                                } else {
-                                    haptics.error()
-                                    val message = result.exceptionOrNull()?.message?.replace("HTTP ", "").orEmpty().take(18)
-                                    showToast(
-                                        if (message.isBlank()) "连接失败，不影响已保存配置" else "连接失败:$message（不影响已保存配置）",
-                                        ToastType.ERROR
-                                    )
-                                }
-                            } finally {
-                                actionLoading = false
-                            }
-                        }
-                    },
-                    enabled = !actionLoading,
-                ) {
-                    if (actionLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text(if (actionLoading) "连接中" else "连接")
                 }
             }
 
@@ -708,29 +821,6 @@ private fun WeatherDivider() {
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )
-}
-
-@Composable
-private fun WeatherStaticValueItem(
-    title: String,
-    value: String,
-    cardTitleStyle: TextStyle,
-    cardValueStyle: TextStyle
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = title, style = cardTitleStyle)
-        Text(
-            text = value,
-            style = cardValueStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
 }
 
 @Composable
@@ -1058,7 +1148,7 @@ private fun WeatherTextInputItem(
     var fieldValue by remember(value) {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
     }
-    val isPasswordField = title == "API Key"
+    val isPasswordField = title == "API Key" || title == "Token"
     val visualTransformation = if (isPasswordField && !isFocused && value.isNotEmpty()) {
         PasswordVisualTransformation()
     } else {
@@ -1120,6 +1210,7 @@ private fun WeatherTextInputItem(
             }
         )
     }
+
 }
 
 private fun hasLocationPermissionGranted(context: Context): Boolean {
@@ -1138,6 +1229,57 @@ private fun locationModeLabel(mode: String): String {
     return when (normalizeWeatherLocationMode(mode)) {
         WeatherRepository.LOCATION_MODE_AUTO -> "自动定位"
         else -> "手动定位"
+    }
+}
+
+private fun weatherProviderLabel(provider: String): String {
+    return when (WeatherApiAdapter.normalizeProvider(provider)) {
+        WeatherApiAdapter.PROVIDER_CAIYUN -> "彩云天气"
+        else -> "和风天气"
+    }
+}
+
+private fun weatherProviderApiUrl(settings: MySettings, provider: String): String {
+    val normalizedProvider = WeatherApiAdapter.normalizeProvider(provider)
+    val saved = when (normalizedProvider) {
+        WeatherApiAdapter.PROVIDER_CAIYUN -> settings.weatherCaiyunApiUrl.ifBlank {
+            settings.weatherApiUrl.takeIf {
+                WeatherApiAdapter.normalizeProvider(settings.weatherProvider) == WeatherApiAdapter.PROVIDER_CAIYUN
+            }.orEmpty()
+        }
+        else -> settings.weatherQWeatherApiUrl.ifBlank {
+            settings.weatherApiUrl.takeIf {
+                WeatherApiAdapter.normalizeProvider(settings.weatherProvider) == WeatherApiAdapter.PROVIDER_QWEATHER
+            }.orEmpty()
+        }
+    }
+    return saved.ifBlank { WeatherApiAdapter.defaultUrl(normalizedProvider) }
+}
+
+private fun weatherProviderApiKey(settings: MySettings, provider: String): String {
+    val normalizedProvider = WeatherApiAdapter.normalizeProvider(provider)
+    return when (normalizedProvider) {
+        WeatherApiAdapter.PROVIDER_CAIYUN -> settings.weatherCaiyunToken.ifBlank {
+            settings.weatherApiKey.takeIf {
+                WeatherApiAdapter.normalizeProvider(settings.weatherProvider) == WeatherApiAdapter.PROVIDER_CAIYUN
+            }.orEmpty()
+        }
+        else -> settings.weatherQWeatherApiKey.ifBlank {
+            settings.weatherApiKey.takeIf {
+                WeatherApiAdapter.normalizeProvider(settings.weatherProvider) == WeatherApiAdapter.PROVIDER_QWEATHER
+            }.orEmpty()
+        }
+    }
+}
+
+private fun weatherConnectionErrorMessage(error: Throwable?): String {
+    val message = error?.message.orEmpty()
+    return when {
+        message == "Location unavailable" -> "无法获取位置，请授权定位或改用手动定位"
+        message == "Weather not configured" -> "天气配置不完整"
+        message.startsWith("HTTP ") -> "服务器返回 ${message.removePrefix("HTTP ")}"
+        message.startsWith("Caiyun error ") -> "彩云接口返回 ${message.removePrefix("Caiyun error ").take(18)}"
+        else -> message.take(24)
     }
 }
 

@@ -59,6 +59,7 @@ import com.antgskds.calendarassistant.feature.home.domain.visibleHomeBottomItems
 import com.antgskds.calendarassistant.feature.home.ui.render.editionHomeEntries
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarBottomSpacing
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarHeight
+import com.antgskds.calendarassistant.feature.home.ui.render.material.component.AdaptiveHomeNavigationRail
 import com.antgskds.calendarassistant.shared.util.CrashHandler
 import com.antgskds.calendarassistant.shared.util.DensityConfigManager
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
@@ -85,6 +86,8 @@ import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppB
 import com.antgskds.calendarassistant.app.ui.theme.material.background.shouldUseLightSystemBarsForAppBackground
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
+import com.antgskds.calendarassistant.shared.ui.adaptive.rememberAdaptiveLayoutInfo
 import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherDetailScreen
 import com.antgskds.calendarassistant.app.ui.theme.CalendarAssistantStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.ThemeColorScheme
@@ -298,6 +301,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val predictiveBackEnabled = settings.predictiveBackEnabled
+                val adaptiveLayoutInfo = rememberAdaptiveLayoutInfo(this@MainActivity)
                 val homeBottomItems = remember(settings.homeBottomItems, settings.voiceInputEnabled) {
                     editionHomeEntries(
                         visibleHomeBottomItems(
@@ -316,7 +320,10 @@ class MainActivity : ComponentActivity() {
                 var lastEventDialogNonce by rememberSaveable { mutableLongStateOf(0L) }
                 var openCourseRequestId by rememberSaveable { mutableLongStateOf(0L) }
                 val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                val floatingActionCardBottomPadding = if (currentBackStackEntry?.destination?.route == AppRoutes.Home) {
+                val floatingActionCardBottomPadding = if (
+                    currentBackStackEntry?.destination?.route == AppRoutes.Home &&
+                    !adaptiveLayoutInfo.useNavigationRail
+                ) {
                     IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset + 16.dp
                 } else {
                     bottomInset + 16.dp
@@ -485,6 +492,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 var appBackgroundRootSize by remember { mutableStateOf(IntSize.Zero) }
+                val currentRoute = currentBackStackEntry?.destination?.route
+                    ?: if (shouldShowInitialOnboarding) AppRoutes.OnboardingGuide else AppRoutes.Home
+                val showAdaptivePrimaryNavigation = adaptiveLayoutInfo.useNavigationRail &&
+                    currentRoute in setOf(
+                        AppRoutes.Home,
+                        AppRoutes.SettingsPattern,
+                        AppRoutes.NoteEditorPattern,
+                        AppRoutes.QuickMemoDetailPattern,
+                        AppRoutes.WeatherDetail,
+                    )
+                val adaptiveSettingsSelected = currentRoute == AppRoutes.SettingsPattern
+                val adaptiveSelectedPageKey = when (currentRoute) {
+                    AppRoutes.NoteEditorPattern, AppRoutes.QuickMemoDetailPattern -> HomeEntryKey.NOTE
+                    AppRoutes.WeatherDetail -> HomeEntryKey.TODAY
+                    else -> selectedHomePageKey
+                }
                 val appGlassBackdrop = rememberLayerBackdrop()
                 val appSceneBackdrop = rememberLayerBackdrop()
                 val useMiuiBlurMaterial = settings.appBackgroundMiuiBlurTestEnabled &&
@@ -501,7 +524,8 @@ class MainActivity : ComponentActivity() {
                     CompositionLocalProvider(
                         LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
                         LocalAppBackgroundRootSize provides appBackgroundRootSize,
-                        LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance
+                        LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance,
+                        LocalAdaptiveLayoutInfo provides adaptiveLayoutInfo,
                     ) {
                     // 最外层容器（包裹 NavHost 和所有弹窗）
                     Box(
@@ -534,11 +558,48 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                         )
-                        NavHost(
-                            modifier = Modifier.fillMaxSize(),
-                            navController = navController,
-                            startDestination = if (shouldShowInitialOnboarding) AppRoutes.OnboardingGuide else AppRoutes.Home
-                        ) {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            if (showAdaptivePrimaryNavigation) {
+                                AdaptiveHomeNavigationRail(
+                                    navItems = homeBottomItems,
+                                    selectedPageKey = adaptiveSelectedPageKey,
+                                    settingsSelected = adaptiveSettingsSelected,
+                                    backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
+                                    miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                                    onPageClick = { pageKey ->
+                                        selectedHomePageKey = if (pageKey in homeBottomItems) {
+                                            pageKey
+                                        } else {
+                                            homeStartPageKey
+                                        }
+                                        if (currentRoute != AppRoutes.Home) {
+                                            navController.navigate(AppRoutes.Home) {
+                                                launchSingleTop = true
+                                                popUpTo(AppRoutes.Home) { inclusive = false }
+                                            }
+                                        }
+                                    },
+                                    onSettingsClick = {
+                                        if (currentRoute != AppRoutes.SettingsPattern) {
+                                            navController.navigate(
+                                                AppRoutes.settings(SettingsDestination.Preference.name),
+                                            ) {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            ) {
+                            NavHost(
+                                modifier = Modifier.fillMaxSize(),
+                                navController = navController,
+                                startDestination = if (shouldShowInitialOnboarding) AppRoutes.OnboardingGuide else AppRoutes.Home
+                            ) {
                         composable(
                             route = AppRoutes.OnboardingGuide,
                             enterTransition = { navForwardEnterTransition() },
@@ -689,6 +750,8 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
+                }
                 }
 
                 LaunchedEffect(Unit) {

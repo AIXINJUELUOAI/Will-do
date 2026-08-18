@@ -79,6 +79,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -117,6 +118,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
@@ -167,6 +169,8 @@ fun MaterialQuickMemoScreen(
     searchQuery: String = "",
     uiSize: Int = 2,
     extraBottomPadding: Dp = 0.dp,
+    selectedMemoId: Long? = null,
+    reserveFloatingBarSpace: Boolean = true,
     hapticEnabled: Boolean = true,
     onAction: (QuickMemoUiAction) -> Unit
 ) {
@@ -175,7 +179,7 @@ fun MaterialQuickMemoScreen(
     val playbackState = state.playbackState
     val pinnedQuickMemoId = state.pinnedMemoId
     val metrics = quickMemoUiMetrics(uiSize)
-    val bottomSafePadding = 112.dp + extraBottomPadding
+    val bottomSafePadding = if (reserveFloatingBarSpace) 112.dp + extraBottomPadding else extraBottomPadding
     val listState = rememberLazyListState()
     val filteredMemos = remember(quickMemos, searchQuery) {
         quickMemos
@@ -254,6 +258,7 @@ fun MaterialQuickMemoScreen(
                     suggestions = memo.id?.let { suggestionsByMemo[it] }.orEmpty(),
                     playbackState = playbackState,
                     isPinned = memo.id == pinnedQuickMemoId,
+                    selected = memo.id == selectedMemoId,
                     onToggleTodo = {
                         memo.id?.let { onAction(QuickMemoUiAction.ToggleTodoCompletion(it)) }
                     },
@@ -296,11 +301,13 @@ fun MaterialQuickMemoDetailScreen(
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
     cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
+    embedded: Boolean = false,
     autoStopDurationMs: Long? = null,
     onAction: (QuickMemoUiAction) -> Unit
 ) {
     val memo = state.memo
     val haptics = rememberAppHaptics(hapticEnabled)
+    val useWideHeader = embedded || LocalAdaptiveLayoutInfo.current.useNavigationRail
 
     AppBackgroundStyleTheme(
         enabled = backgroundMode,
@@ -313,7 +320,24 @@ fun MaterialQuickMemoDetailScreen(
             containerColor = pageContainerColor,
             contentWindowInsets = WindowInsets(0),
             topBar = {
-                CenterAlignedTopAppBar(
+                if (useWideHeader) TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = pageContainerColor,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                    title = { Text("随口记详情") },
+                    navigationIcon = {
+                        if (!embedded) {
+                            EditionIconButton(onClick = { haptics.click(); onBack() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回",
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+                        }
+                    },
+                ) else CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = pageContainerColor,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -332,10 +356,16 @@ fun MaterialQuickMemoDetailScreen(
                 )
             }
         ) { innerPadding ->
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 760.dp)
+                    .fillMaxSize(),
                 color = pageContainerColor
             ) {
                 if (memo == null) {
@@ -412,6 +442,7 @@ fun MaterialQuickMemoDetailScreen(
                     autoStopDurationMs = autoStopDurationMs
                 )
             }
+            }
         }
     }
 }
@@ -423,6 +454,7 @@ internal fun QuickMemoListItem(
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
     isPinned: Boolean,
+    selected: Boolean = false,
     onToggleTodo: () -> Unit,
     onToggleTodoMode: () -> Unit,
     onTogglePinned: () -> Unit,
@@ -543,6 +575,10 @@ internal fun QuickMemoListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+                )
                 .pointerInput(memo.id, isCompleted, isPinned, isTodo) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -1322,7 +1358,7 @@ internal fun MaterialQuickMemoDetailBottomBar(
                     onClick = onVoiceClick,
                 )
             }
-        }
+            }
         }
         if (backgroundMode) {
             AppBackgroundGlassSurface(

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
@@ -101,38 +102,41 @@ fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
     val weatherData = state.weatherData
     val bottomInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        WeatherDetailCurrentCard(weatherData)
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 960.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            WeatherDetailCurrentCard(weatherData)
 
-        if (weatherData?.alerts?.isNotEmpty() == true || weatherData?.riskAlerts?.isNotEmpty() == true) {
-            SectionTitle("预警与风险")
-            WeatherWarningsCard(
-                alerts = weatherData?.alerts.orEmpty(),
-                risks = weatherData?.riskAlerts.orEmpty()
-            )
+            if (weatherData?.alerts?.isNotEmpty() == true || weatherData?.riskAlerts?.isNotEmpty() == true) {
+                SectionTitle("预警与风险")
+                WeatherWarningsCard(
+                    alerts = weatherData?.alerts.orEmpty(),
+                    risks = weatherData?.riskAlerts.orEmpty()
+                )
+            }
+
+            SectionTitle("未来24小时")
+            HourlyTemperatureChart(weatherData?.hourlyForecast.orEmpty())
+
+            SectionTitle("未来一周")
+            DailyForecastList(weatherData?.dailyForecast.orEmpty())
+
+            if (weatherData == null) {
+                Text(
+                    text = "暂无天气缓存，请先在天气设置页保存并刷新。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(bottomInset + 24.dp))
         }
-
-        SectionTitle("未来24小时")
-        HourlyTemperatureChart(weatherData?.hourlyForecast.orEmpty())
-
-        SectionTitle("未来一周")
-        DailyForecastList(weatherData?.dailyForecast.orEmpty())
-
-        if (weatherData == null) {
-            Text(
-                text = "暂无天气缓存，请先在天气设置页保存并刷新。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(bottomInset + 24.dp))
     }
 }
 

@@ -52,6 +52,8 @@ fun SettingsSidebar(
     isDarkMode: Boolean = false,
     glassMode: Boolean = false,
     hasAppUpdate: Boolean = false,
+    reserveFloatingBarSpace: Boolean = true,
+    selectedDestination: SettingsDestination? = null,
     onThemeToggle: (Boolean) -> Unit = {},
     onNavigate: (SettingsDestination) -> Unit = {}
 ) {
@@ -159,25 +161,30 @@ fun SettingsSidebar(
                 isDarkMode = isDarkMode,
                 glassMode = glassMode,
                 hasAppUpdate = hasAppUpdate,
+                selectedDestination = selectedDestination,
                 onThemeNavigate = { onNavigate(SettingsDestination.Theme) },
                 onAbout = { onNavigate(SettingsDestination.About) },
                 onAppUpdate = { onNavigate(SettingsDestination.AppUpdate) }
             )
 
             // 第二块：课表管理卡片
-            SidebarScheduleCard(glassMode, onNavigate)
+            SidebarScheduleCard(glassMode, selectedDestination, onNavigate)
 
             // 第三块：其他设置卡片
-            SidebarOtherSettingsCard(glassMode, onNavigate)
+            SidebarOtherSettingsCard(glassMode, selectedDestination, onNavigate)
 
             // 第四块：实验室卡片
-            SidebarLaboratoryCard(glassMode, onNavigate)
+            SidebarLaboratoryCard(glassMode, selectedDestination, onNavigate)
 
             // 第五块：数据管理卡片（日程归档、数据备份）
-            SidebarDataManagementCard(glassMode, onNavigate)
+            SidebarDataManagementCard(glassMode, selectedDestination, onNavigate)
 
             // 为浮动底栏预留空间，避免底部板块被遮挡
-            Spacer(modifier = Modifier.height(IntegratedFloatingBarVisualHeight + 16.dp))
+            if (reserveFloatingBarSpace) {
+                Spacer(modifier = Modifier.height(IntegratedFloatingBarVisualHeight + 16.dp))
+            } else {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }
@@ -188,6 +195,7 @@ private fun SidebarTopActionsCard(
     isDarkMode: Boolean,
     glassMode: Boolean,
     hasAppUpdate: Boolean,
+    selectedDestination: SettingsDestination?,
     onThemeNavigate: () -> Unit,
     onAbout: () -> Unit,
     onAppUpdate: () -> Unit
@@ -199,6 +207,7 @@ private fun SidebarTopActionsCard(
                 icon = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                 title = "主题设置",
                 subtitle = "深色模式与主题颜色",
+                selected = selectedDestination == SettingsDestination.Theme,
                 onClick = onThemeNavigate
             )
             // 关于软件
@@ -206,6 +215,7 @@ private fun SidebarTopActionsCard(
                 icon = Icons.Default.Info,
                 title = "关于软件",
                 subtitle = "版本信息与帮助",
+                selected = selectedDestination == SettingsDestination.About,
                 onClick = onAbout
             )
             // 软件更新
@@ -213,6 +223,7 @@ private fun SidebarTopActionsCard(
                 icon = Icons.Default.SystemUpdate,
                 title = "软件更新",
                 subtitle = "版本日志与下载",
+                selected = selectedDestination == SettingsDestination.AppUpdate,
                 onClick = onAppUpdate,
                 showBadge = hasAppUpdate
             )
@@ -244,13 +255,15 @@ private fun SidebarActionItem(
     subtitle: String,
     onClick: () -> Unit,
     showChevron: Boolean = true,
-    showBadge: Boolean = false
+    showBadge: Boolean = false,
+    selected: Boolean = false,
 ) {
     val haptics = rememberAppHaptics()
     val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(interactionSource = interactionSource, indication = null) {
                 haptics.click()
                 onClick()
@@ -297,7 +310,11 @@ private fun SidebarActionItem(
 
 // 第二块：课表管理卡片
 @Composable
-private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+private fun SidebarScheduleCard(
+    glassMode: Boolean,
+    selectedDestination: SettingsDestination?,
+    onNavigate: (SettingsDestination) -> Unit,
+) {
     SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 课表管理
@@ -305,6 +322,7 @@ private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestina
                 icon = Icons.Default.TableChart,
                 title = "课表管理",
                 subtitle = "管理课程信息",
+                selected = selectedDestination == SettingsDestination.CourseManage,
                 onClick = { onNavigate(SettingsDestination.CourseManage) }
             )
             // 作息表管理
@@ -312,6 +330,7 @@ private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestina
                 icon = Icons.Default.Schedule,
                 title = "作息表管理",
                 subtitle = "设置上课时间",
+                selected = selectedDestination == SettingsDestination.TimeTableManage,
                 onClick = { onNavigate(SettingsDestination.TimeTableManage) }
             )
             // 学期配置
@@ -319,6 +338,7 @@ private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestina
                 icon = Icons.Default.DateRange,
                 title = "学期配置",
                 subtitle = "设置学期时间",
+                selected = selectedDestination == SettingsDestination.SemesterConfig,
                 onClick = { onNavigate(SettingsDestination.SemesterConfig) }
             )
         }
@@ -327,7 +347,11 @@ private fun SidebarScheduleCard(glassMode: Boolean, onNavigate: (SettingsDestina
 
 // 第三块：其他设置卡片
 @Composable
-private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+private fun SidebarOtherSettingsCard(
+    glassMode: Boolean,
+    selectedDestination: SettingsDestination?,
+    onNavigate: (SettingsDestination) -> Unit,
+) {
     SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 模型与连接
@@ -335,12 +359,14 @@ private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDe
                 icon = Icons.Default.Android,
                 title = "模型与连接",
                 subtitle = "AI 模型与 WebDAV",
+                selected = selectedDestination == SettingsDestination.AI,
                 onClick = { onNavigate(SettingsDestination.AI) }
             )
             SidebarActionItem(
                 icon = Icons.Default.WbSunny,
                 title = "天气",
                 subtitle = "天气 API 与展示设置",
+                selected = selectedDestination == SettingsDestination.Weather,
                 onClick = { onNavigate(SettingsDestination.Weather) }
             )
             // 偏好设置
@@ -348,6 +374,7 @@ private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDe
                 icon = Icons.Default.Tune,
                 title = "偏好设置",
                 subtitle = "通知、显示选项",
+                selected = selectedDestination == SettingsDestination.Preference,
                 onClick = { onNavigate(SettingsDestination.Preference) }
             )
         }
@@ -356,7 +383,11 @@ private fun SidebarOtherSettingsCard(glassMode: Boolean, onNavigate: (SettingsDe
 
 // 第四块：实验室卡片
 @Composable
-private fun SidebarLaboratoryCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+private fun SidebarLaboratoryCard(
+    glassMode: Boolean,
+    selectedDestination: SettingsDestination?,
+    onNavigate: (SettingsDestination) -> Unit,
+) {
     SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 实验室
@@ -364,6 +395,7 @@ private fun SidebarLaboratoryCard(glassMode: Boolean, onNavigate: (SettingsDesti
                 icon = Icons.Default.Science,
                 title = "实验室",
                 subtitle = "实验性功能",
+                selected = selectedDestination == SettingsDestination.Laboratory,
                 onClick = { onNavigate(SettingsDestination.Laboratory) }
             )
         }
@@ -372,7 +404,11 @@ private fun SidebarLaboratoryCard(glassMode: Boolean, onNavigate: (SettingsDesti
 
 // 第五块：数据管理卡片
 @Composable
-private fun SidebarDataManagementCard(glassMode: Boolean, onNavigate: (SettingsDestination) -> Unit) {
+private fun SidebarDataManagementCard(
+    glassMode: Boolean,
+    selectedDestination: SettingsDestination?,
+    onNavigate: (SettingsDestination) -> Unit,
+) {
     SidebarGlassCard(glassMode = glassMode) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             // 日程归档
@@ -380,6 +416,7 @@ private fun SidebarDataManagementCard(glassMode: Boolean, onNavigate: (SettingsD
                 icon = Icons.Default.Archive,
                 title = "日程归档",
                 subtitle = "查看历史日程",
+                selected = selectedDestination == SettingsDestination.Archives,
                 onClick = { onNavigate(SettingsDestination.Archives) }
             )
             // 数据备份
@@ -387,6 +424,7 @@ private fun SidebarDataManagementCard(glassMode: Boolean, onNavigate: (SettingsD
                 icon = Icons.Default.Save,
                 title = "数据备份",
                 subtitle = "导入导出",
+                selected = selectedDestination == SettingsDestination.Backup,
                 onClick = { onNavigate(SettingsDestination.Backup) }
             )
         }

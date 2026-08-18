@@ -235,6 +235,10 @@ data class MySettings(
     val weatherEnabled: Boolean = false,
     val weatherApiUrl: String = "",
     val weatherApiKey: String = "",
+    val weatherQWeatherApiUrl: String = "",
+    val weatherQWeatherApiKey: String = "",
+    val weatherCaiyunApiUrl: String = "",
+    val weatherCaiyunToken: String = "",
     val weatherCity: String = "",
     val weatherLocationMode: String = "auto_fallback_manual",
     val weatherManualLocationId: String = "",
@@ -308,7 +312,13 @@ data class MySettings(
     val developerOptionsUnlocked: Boolean = false,
     val developerOptionsEnabled: Boolean = false,
     val developerOptionsDisabledAtMillis: Long = 0L,
-    val quickMemoPinnedFixedTitleEnabled: Boolean = false
+    val developerSimulateRootEnabled: Boolean = false,
+    val quickMemoPinnedFixedTitleEnabled: Boolean = false,
+
+    // Agent API
+    val agentApiEnabled: Boolean = false,
+    val agentConnectionManagementEnabled: Boolean = false,
+    val agentDatabaseOperationsEnabled: Boolean = false
 ) {
     companion object {
         const val QUICK_MEMO_AUTO_STOP_DEFAULT_SECONDS = 10

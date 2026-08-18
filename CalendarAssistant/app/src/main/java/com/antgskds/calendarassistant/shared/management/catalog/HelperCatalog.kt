@@ -55,6 +55,8 @@ object HelperCatalog {
         HelperEntry("课程事件映射", Chain.INGEST, "core/course/CourseEventMapper", "课程表数据 → Event"),
         HelperEntry("日程展示助手", Chain.SCHEDULE, "feature/schedule/domain/ScheduleDisplayHelper", "日程展示字段拼装"),
         HelperEntry("WebDAV V2 编解码", Chain.SYNC, "feature/cloudsync/data/SyncV2Codec", "状态压缩加密、资产加密、HMAC 内容寻址和稳定哈希"),
+        HelperEntry("Agent 协议编解码", Chain.SCHEDULE, "shared/api/AgentProtocolJson", "Agent API v2 请求、响应与业务 DTO 的 JSON 转换"),
+        HelperEntry("Agent 日志脱敏", Chain.SUPPORT, "feature/settings/diagnostics/application/DiagnosticLogRedactor", "导出给 Agent 前遮盖 API Key、密码、Token 和鉴权请求头"),
 
         // —— 通知 ——
         HelperEntry("日程实况展示支持", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/ScheduleLiveDisplaySupport", "日程胶囊展示字段裁剪/拼接"),

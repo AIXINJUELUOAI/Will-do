@@ -1809,29 +1809,22 @@ private fun QuickMemoRecordingDisplayPreference(
     cardTitleStyle: TextStyle,
     cardSubtitleStyle: TextStyle,
 ) {
-    val haptics = rememberAppHaptics()
     val normalizedMode = QuickMemoRecordingDisplayMode.normalize(mode)
-    EditionCategoricalPreference(
+    TwoOptionSettingItem(
         title = "录音展示",
-        summary = if (normalizedMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
+        subtitle = if (normalizedMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) {
             "所有入口录音时使用悬浮窗"
         } else {
             "所有入口录音时使用实况通知"
         },
-        options = listOf("实况通知", "悬浮窗"),
-        selectedIndex = if (normalizedMode == QuickMemoRecordingDisplayMode.FLOATING_WINDOW) 1 else 0,
-        onSelectedIndexChange = { index ->
-            haptics.selection()
-            onModeChange(
-                if (index == 1) {
-                    QuickMemoRecordingDisplayMode.FLOATING_WINDOW
-                } else {
-                    QuickMemoRecordingDisplayMode.LIVE_CAPSULE
-                }
-            )
-        },
-        titleTextStyle = cardTitleStyle,
-        summaryTextStyle = cardSubtitleStyle,
+        selectedValue = normalizedMode,
+        firstValue = QuickMemoRecordingDisplayMode.LIVE_CAPSULE,
+        firstLabel = "实况通知",
+        secondValue = QuickMemoRecordingDisplayMode.FLOATING_WINDOW,
+        secondLabel = "悬浮窗",
+        onValueSelected = onModeChange,
+        cardTitleStyle = cardTitleStyle,
+        cardSubtitleStyle = cardSubtitleStyle,
     )
 }
 
@@ -1984,16 +1977,38 @@ private fun TwoOptionSettingItem(
     cardSubtitleStyle: TextStyle
 ) {
     val haptics = rememberAppHaptics()
-    EditionCategoricalPreference(
-        title = title,
-        summary = subtitle,
-        options = listOf(firstLabel, secondLabel),
-        selectedIndex = if (selectedValue == secondValue) 1 else 0,
-        onSelectedIndexChange = {
-            haptics.selection()
-            onValueSelected(if (it == 1) secondValue else firstValue)
-        },
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = cardTitleStyle)
+            Text(subtitle, style = cardSubtitleStyle)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (selectedValue == firstValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
+                    Text(firstLabel)
+                }
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(firstValue) }) {
+                    Text(firstLabel)
+                }
+            }
+            if (selectedValue == secondValue) {
+                Button(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
+                    Text(secondLabel)
+                }
+            } else {
+                OutlinedButton(onClick = { haptics.selection(); onValueSelected(secondValue) }) {
+                    Text(secondLabel)
+                }
+            }
+        }
+    }
 }
 
 // ActionSettingItem 已抽至 SettingsRowComponents.kt
@@ -2178,5 +2193,8 @@ fun FloatingEventRangeSlider(
         onSelectedIndexChange = onEventRangeChange,
         titleTextStyle = cardTitleStyle,
         summaryTextStyle = cardSubtitleStyle,
+        showSelectedValue = false,
+        labelsAboveSlider = true,
+        sliderTopPadding = 12.dp,
     )
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -170,7 +171,11 @@ fun MaterialCourseEditDialog(
                 contentPadding = WindowInsets.navigationBars.asPaddingValues()
             ) {
             AppOverlayCard(
-                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .widthIn(max = 720.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 670.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
@@ -447,7 +452,11 @@ fun MaterialCourseSingleEditDialog(
             contentPadding = WindowInsets.navigationBars.asPaddingValues()
         ) {
             AppOverlayCard(
-                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 670.dp),
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .widthIn(max = 720.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 670.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {

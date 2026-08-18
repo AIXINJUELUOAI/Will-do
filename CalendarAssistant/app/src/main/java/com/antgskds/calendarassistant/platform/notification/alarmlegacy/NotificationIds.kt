@@ -7,7 +7,6 @@ package com.antgskds.calendarassistant.platform.notification.alarmlegacy
  * cleanup cannot accidentally remove an active capsule notification.
  */
 object NotificationIds {
-    const val CLIPBOARD_CODE_MONITOR = 0xC1A0D
     const val QUICK_MEMO_VOICE_CAPTURE = 0x51A11
     const val CREATED_EVENT_RESULT_GROUP = 0x51A12
     const val QUICK_MEMO_SUGGESTION_GROUP = 0x51A13

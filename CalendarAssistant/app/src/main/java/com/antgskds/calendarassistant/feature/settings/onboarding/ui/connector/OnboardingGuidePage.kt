@@ -21,6 +21,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,16 +34,34 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Accessibility
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.MarkEmailRead
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.RocketLaunch
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,6 +78,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,23 +102,30 @@ import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.P
 import com.antgskds.calendarassistant.feature.settings.preference.ui.connector.PreferenceSettingsPage
 import com.antgskds.calendarassistant.feature.recognition.ui.connector.AiSettingsPage
 import com.antgskds.calendarassistant.feature.weather.ui.connector.WeatherSettingsPage
-import com.antgskds.calendarassistant.platform.clipboard.ClipboardCodeMonitorService
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.platform.permission.PrivilegedPermissionController
+import com.antgskds.calendarassistant.platform.permission.PrivilegedPermissionKey
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
+import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.UniversalSnackbar
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
+import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.shared.ui.material.settings.ActionSettingItem
 import com.antgskds.calendarassistant.shared.ui.material.settings.SliderSettingItem
 import com.antgskds.calendarassistant.shared.ui.material.settings.SwitchSettingItem
 import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
 import com.antgskds.calendarassistant.shared.util.OsUtils
 import com.antgskds.calendarassistant.shared.util.PrivilegeManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val ONBOARDING_LOG_TAG = "OnboardingGuide"
+private const val ROOT_PROMPT_PREFS = "onboarding_root_prompt"
+private const val ROOT_PROMPT_SHOWN = "root_prompt_shown"
 
 @Composable
 fun OnboardingGuidePage(
@@ -115,7 +143,17 @@ fun OnboardingGuidePage(
     val permissionGate = rememberPermissionGate(snackbarHostState)
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     var page by remember { mutableIntStateOf(0) }
-    var permissionSnapshot by remember { mutableStateOf(readOnboardingPermissions(context)) }
+    val simulateRoot = settings.developerSimulateRootEnabled
+    var privilegedModeActive by remember(simulateRoot) {
+        mutableStateOf(simulateRoot || PrivilegeManager.privilegeType == PrivilegeManager.PrivilegeType.ROOT)
+    }
+    var permissionSnapshot by remember(simulateRoot) {
+        mutableStateOf(readOnboardingPermissions(context, simulateRoot))
+    }
+    var showRootConsent by remember { mutableStateOf(false) }
+    var rootRequesting by remember { mutableStateOf(false) }
+    var busyPermissionKey by remember { mutableStateOf<PrivilegedPermissionKey?>(null) }
+    var bulkPermissionBusy by remember { mutableStateOf(false) }
     val blockedFeatureWarnings = remember { mutableStateMapOf<FeatureKey, String>() }
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
     val steps = remember { buildOnboardingSteps() }
@@ -123,13 +161,14 @@ fun OnboardingGuidePage(
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) {
-        permissionSnapshot = readOnboardingPermissions(context)
+        permissionSnapshot = readOnboardingPermissions(context, simulateRoot)
         settingsViewModel.refreshSyncStatus()
         permissionGate.resumePending()
     }
 
     fun refreshPermissions() {
-        permissionSnapshot = readOnboardingPermissions(context)
+        privilegedModeActive = simulateRoot || PrivilegeManager.privilegeType == PrivilegeManager.PrivilegeType.ROOT
+        permissionSnapshot = readOnboardingPermissions(context, simulateRoot)
         settingsViewModel.refreshSyncStatus()
     }
 
@@ -140,6 +179,46 @@ fun OnboardingGuidePage(
             snackbarHostState.showSnackbar(message)
         }
         if (type == ToastType.ERROR) haptics.error() else haptics.confirm()
+    }
+
+    fun setPrivilegedPermission(key: PrivilegedPermissionKey, enabled: Boolean) {
+        if (!privilegedModeActive || busyPermissionKey != null || bulkPermissionBusy) return
+        scope.launch {
+            busyPermissionKey = key
+            val result = PrivilegedPermissionController.setEnabled(
+                context = context,
+                key = key,
+                enabled = enabled,
+                simulateRoot = simulateRoot,
+            )
+            refreshPermissions()
+            busyPermissionKey = null
+            if (result.success) {
+                toast(if (enabled) "权限已开启" else "权限已关闭")
+            } else {
+                toast(result.message.ifBlank { "权限变更失败" }, ToastType.ERROR)
+            }
+        }
+    }
+
+    fun enableAllPrivilegedPermissions() {
+        if (!privilegedModeActive || bulkPermissionBusy || busyPermissionKey != null) return
+        scope.launch {
+            bulkPermissionBusy = true
+            val results = PrivilegedPermissionController.enableAll(context, simulateRoot)
+            refreshPermissions()
+            bulkPermissionBusy = false
+            val successCount = results.count { it.success }
+            val failedCount = results.size - successCount
+            toast(
+                if (failedCount == 0) {
+                    "已开启全部可管理权限"
+                } else {
+                    "已开启 $successCount 项，$failedCount 项仍需手动确认"
+                },
+                if (failedCount == 0) ToastType.SUCCESS else ToastType.INFO,
+            )
+        }
     }
 
     fun openPermission(permissionKey: PermissionKey) {
@@ -218,7 +297,12 @@ fun OnboardingGuidePage(
                     openAppPermissionSettings(context)
                 }
             }
-            PermissionKey.SHIZUKU_ROOT -> Toast.makeText(context, "Shizuku/Root 属于高级能力，请在系统工具中单独配置", Toast.LENGTH_LONG).show()
+            PermissionKey.ROOT_ACCESS -> when {
+                simulateRoot -> toast("当前正在使用模拟 Root 权限")
+                PrivilegeManager.privilegeType == PrivilegeManager.PrivilegeType.ROOT -> toast("Root 权限已授权")
+                PrivilegeManager.hasRootBinary() -> showRootConsent = true
+                else -> toast("未检测到 Root 环境，相关权限仍可手动授予", ToastType.INFO)
+            }
         }
     }
 
@@ -310,17 +394,7 @@ fun OnboardingGuidePage(
             is LaboratoryUiAction.SetClipboardRecognition -> {
                 settingsViewModel.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
                 if (action.enabled) {
-                    PrivilegeManager.refreshPrivilege()
-                    toast(
-                        if (PrivilegeManager.hasPrivilege) {
-                            "已启用完整后台识别"
-                        } else {
-                            "未获取 Shizuku/Root 权限，仅在打开软件时识别"
-                        }
-                    )
-                    ClipboardCodeMonitorService.startIfNeeded(context)
-                } else {
-                    ClipboardCodeMonitorService.stop(context)
+                    toast("已开启，打开 WillDo 时将检查剪贴板并询问是否创建日程")
                 }
             }
             LaboratoryUiAction.OpenDeveloper -> Unit
@@ -344,17 +418,38 @@ fun OnboardingGuidePage(
         }
     }
 
-    fun skipCurrentConfig() {
+    fun skipOnboarding() {
         haptics.selection()
-        if (page < steps.lastIndex) {
-            page += 1
-        } else {
-            finishOnboarding()
-        }
+        finishOnboarding()
     }
 
     LaunchedEffect(Unit) {
         refreshPermissions()
+    }
+
+    LaunchedEffect(simulateRoot) {
+        PrivilegedPermissionController.clearSimulation()
+        if (simulateRoot) {
+            privilegedModeActive = true
+            refreshPermissions()
+        }
+    }
+
+    LaunchedEffect(currentStep, simulateRoot) {
+        if (simulateRoot) return@LaunchedEffect
+        if (currentStep != OnboardingStep.PERMISSIONS || privilegedModeActive) return@LaunchedEffect
+        val prefs = context.getSharedPreferences(ROOT_PROMPT_PREFS, Context.MODE_PRIVATE)
+        val rootAvailable = withContext(Dispatchers.IO) { PrivilegeManager.hasRootBinary() }
+        if (!rootAvailable) return@LaunchedEffect
+        if (PrivilegeManager.wasRootPreviouslyGranted(context)) {
+            rootRequesting = true
+            val granted = PrivilegeManager.requestRootAccess(context)
+            rootRequesting = false
+            privilegedModeActive = granted
+            refreshPermissions()
+        } else if (!prefs.getBoolean(ROOT_PROMPT_SHOWN, false)) {
+            showRootConsent = true
+        }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -373,7 +468,12 @@ fun OnboardingGuidePage(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = 960.dp)
+                .fillMaxSize(),
+        ) {
             OnboardingHeader(
                 page = page,
                 totalPages = steps.size,
@@ -392,7 +492,12 @@ fun OnboardingGuidePage(
                     ) {
                         PermissionStep(
                             snapshot = permissionSnapshot,
+                            privilegedModeActive = privilegedModeActive,
+                            busyPermissionKey = busyPermissionKey,
+                            bulkPermissionBusy = bulkPermissionBusy,
                             onOpenPermission = ::openPermission,
+                            onPermissionChange = ::setPrivilegedPermission,
+                            onEnableAll = ::enableAllPrivilegedPermissions,
                         )
                     }
                     OnboardingStep.SCHEDULE_REMINDER -> PreferenceSettingsPage(
@@ -476,7 +581,6 @@ fun OnboardingGuidePage(
             OnboardingActionRow(
                 page = page,
                 totalPages = steps.size,
-                currentStep = currentStep,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -485,7 +589,7 @@ fun OnboardingGuidePage(
                     haptics.selection()
                     page = (page - 1).coerceAtLeast(0)
                 },
-                onSkip = ::skipCurrentConfig,
+                onSkip = ::skipOnboarding,
                 onNextOrFinish = ::goNextOrFinish,
             )
         }
@@ -500,13 +604,46 @@ fun OnboardingGuidePage(
         )
 
     }
+
+    PredictiveFloatingActionCard(
+        visible = showRootConsent,
+        title = "使用 Root 管理权限",
+        content = "授权 Root 后，可在当前页面直接开启或关闭大部分系统权限。厂商专属权限仍需手动确认。",
+        confirmText = "申请 Root",
+        dismissText = "暂不使用",
+        isLoading = rootRequesting,
+        allowDismissWhileLoading = false,
+        predictiveBackEnabled = settings.predictiveBackEnabled,
+        onConfirm = {
+            if (rootRequesting) return@PredictiveFloatingActionCard
+            context.getSharedPreferences(ROOT_PROMPT_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(ROOT_PROMPT_SHOWN, true)
+                .apply()
+            rootRequesting = true
+            scope.launch {
+                val granted = PrivilegeManager.requestRootAccess(context)
+                rootRequesting = false
+                showRootConsent = false
+                privilegedModeActive = granted
+                refreshPermissions()
+                toast(if (granted) "Root 权限已授权" else "Root 权限未授予", if (granted) ToastType.SUCCESS else ToastType.ERROR)
+            }
+        },
+        onDismiss = {
+            context.getSharedPreferences(ROOT_PROMPT_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(ROOT_PROMPT_SHOWN, true)
+                .apply()
+            showRootConsent = false
+        },
+    )
 }
 
 @Composable
 private fun OnboardingActionRow(
     page: Int,
     totalPages: Int,
-    currentStep: OnboardingStep,
     modifier: Modifier = Modifier,
     onPrevious: () -> Unit,
     onSkip: () -> Unit,
@@ -517,12 +654,8 @@ private fun OnboardingActionRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (currentStep.isSkippableConfig) {
-            TextButton(onClick = onSkip) {
-                Text("跳过")
-            }
-        } else {
-            Spacer(Modifier.width(1.dp))
+        TextButton(onClick = onSkip) {
+            Text("跳过")
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -599,7 +732,12 @@ private fun OnboardingHeader(
 @Composable
 private fun PermissionStep(
     snapshot: PermissionSnapshot,
+    privilegedModeActive: Boolean,
+    busyPermissionKey: PrivilegedPermissionKey?,
+    bulkPermissionBusy: Boolean,
     onOpenPermission: (PermissionKey) -> Unit,
+    onPermissionChange: (PrivilegedPermissionKey, Boolean) -> Unit,
+    onEnableAll: () -> Unit,
 ) {
     val allItems = onboardingPermissionItems(snapshot)
     val requiredItems = allItems.filter { it.level == RequirementLevel.REQUIRED }
@@ -607,23 +745,61 @@ private fun PermissionStep(
     val optionalItems = allItems.filter { it.level == RequirementLevel.OPTIONAL }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (privilegedModeActive) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Root 权限管理",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                    )
+                    Text(
+                        text = "可直接管理的项目已切换为开关",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                EditionButton(
+                    onClick = onEnableAll,
+                    enabled = !bulkPermissionBusy && busyPermissionKey == null,
+                ) {
+                    Text(if (bulkPermissionBusy) "开启中" else "一键开启")
+                }
+            }
+        }
         PermissionSection(
             title = "必要权限",
             description = "建议首次使用前开启，否则核心功能可能无法正常工作。",
             items = requiredItems,
+            privilegedModeActive = privilegedModeActive,
+            busyPermissionKey = busyPermissionKey,
+            bulkPermissionBusy = bulkPermissionBusy,
             onOpenPermission = onOpenPermission,
+            onPermissionChange = onPermissionChange,
         )
         PermissionSection(
             title = "建议配置",
             description = "用于提升提醒准时性、后台稳定性和日程同步体验。",
             items = recommendedItems,
+            privilegedModeActive = privilegedModeActive,
+            busyPermissionKey = busyPermissionKey,
+            bulkPermissionBusy = bulkPermissionBusy,
             onOpenPermission = onOpenPermission,
+            onPermissionChange = onPermissionChange,
         )
         PermissionSection(
             title = "可选能力",
             description = "只在你需要对应功能时开启，之后也可以在设置中调整。",
             items = optionalItems,
+            privilegedModeActive = privilegedModeActive,
+            busyPermissionKey = busyPermissionKey,
+            bulkPermissionBusy = bulkPermissionBusy,
             onOpenPermission = onOpenPermission,
+            onPermissionChange = onPermissionChange,
         )
     }
 }
@@ -633,7 +809,11 @@ private fun PermissionSection(
     title: String,
     description: String,
     items: List<PermissionItem>,
+    privilegedModeActive: Boolean,
+    busyPermissionKey: PrivilegedPermissionKey?,
+    bulkPermissionBusy: Boolean,
     onOpenPermission: (PermissionKey) -> Unit,
+    onPermissionChange: (PrivilegedPermissionKey, Boolean) -> Unit,
 ) {
     if (items.isEmpty()) return
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
@@ -665,12 +845,13 @@ private fun PermissionSection(
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 items.forEachIndexed { index, item ->
-                    ActionSettingItem(
-                        title = item.title,
-                        subtitle = item.subtitle,
-                        value = permissionStatusText(item),
-                        enabled = true,
+                    PermissionSettingItem(
+                        item = item,
+                        privilegedModeActive = privilegedModeActive,
+                        busyPermissionKey = busyPermissionKey,
+                        bulkPermissionBusy = bulkPermissionBusy,
                         onClick = { onOpenPermission(item.key) },
+                        onPermissionChange = onPermissionChange,
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle,
@@ -678,6 +859,75 @@ private fun PermissionSection(
                     if (index != items.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PermissionSettingItem(
+    item: PermissionItem,
+    privilegedModeActive: Boolean,
+    busyPermissionKey: PrivilegedPermissionKey?,
+    bulkPermissionBusy: Boolean,
+    onClick: () -> Unit,
+    onPermissionChange: (PrivilegedPermissionKey, Boolean) -> Unit,
+    cardTitleStyle: androidx.compose.ui.text.TextStyle,
+    cardSubtitleStyle: androidx.compose.ui.text.TextStyle,
+    cardValueStyle: androidx.compose.ui.text.TextStyle,
+) {
+    val privilegedKey = privilegedPermissionKey(item.key)
+    val showSwitch = privilegedModeActive && privilegedKey != null
+    val granted = item.uiState == PermissionUiState.GRANTED ||
+        item.uiState == PermissionUiState.SYSTEM_ALLOWED
+    val accentColor = if (granted) permissionGrantedColor() else MaterialTheme.colorScheme.primary
+    val containerColor = if (granted) {
+        permissionGrantedColor().copy(alpha = 0.14f)
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (showSwitch) Modifier else Modifier.clickable(onClick = onClick))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = containerColor,
+            modifier = Modifier.size(34.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = getPermissionIcon(item.key),
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(text = item.title, style = cardTitleStyle)
+            Text(text = item.subtitle, style = cardSubtitleStyle)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        if (showSwitch && privilegedKey != null) {
+            EditionSwitch(
+                checked = granted,
+                onCheckedChange = { enabled -> onPermissionChange(privilegedKey, enabled) },
+                enabled = !bulkPermissionBusy && busyPermissionKey == null,
+            )
+        } else {
+            Text(
+                text = permissionStatusText(item),
+                style = cardValueStyle,
+                color = accentColor,
+            )
         }
     }
 }
@@ -864,6 +1114,9 @@ private fun FloatingQuickMemoConfigStep(
                 enabled = settings.isFloatingWindowEnabled,
                 titleTextStyle = cardTitleStyle,
                 summaryTextStyle = cardSubtitleStyle,
+                showSelectedValue = false,
+                labelsAboveSlider = true,
+                sliderTopPadding = 12.dp,
             )
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             SwitchSettingItem(
@@ -1165,6 +1418,7 @@ private fun WeatherConfigStep(
                     enabled = settings.weatherEnabled && settings.showWeatherInFloating,
                     titleTextStyle = cardTitleStyle,
                     summaryTextStyle = cardSubtitleStyle,
+                    valueTextStyle = cardValueStyle,
                 )
             }
         }
@@ -1360,6 +1614,40 @@ private fun permissionStatusText(item: PermissionItem): String = when (item.uiSt
     PermissionUiState.NEEDS_CONFIRMATION -> "去确认"
 }
 
+private fun privilegedPermissionKey(key: PermissionKey): PrivilegedPermissionKey? = when (key) {
+    PermissionKey.NOTIFICATION -> PrivilegedPermissionKey.NOTIFICATION
+    PermissionKey.OVERLAY -> PrivilegedPermissionKey.OVERLAY
+    PermissionKey.MICROPHONE -> PrivilegedPermissionKey.MICROPHONE
+    PermissionKey.ACCESSIBILITY -> PrivilegedPermissionKey.ACCESSIBILITY
+    PermissionKey.CALENDAR -> PrivilegedPermissionKey.CALENDAR
+    PermissionKey.EXACT_ALARM -> PrivilegedPermissionKey.EXACT_ALARM
+    PermissionKey.BATTERY -> PrivilegedPermissionKey.BATTERY
+    PermissionKey.LOCATION -> PrivilegedPermissionKey.LOCATION
+    PermissionKey.NOTIFICATION_LISTENER -> PrivilegedPermissionKey.NOTIFICATION_LISTENER
+    PermissionKey.SMS -> PrivilegedPermissionKey.SMS
+    PermissionKey.LIVE_NOTIFICATION,
+    PermissionKey.AUTOSTART,
+    PermissionKey.ROOT_ACCESS -> null
+}
+
+private fun getPermissionIcon(key: PermissionKey): ImageVector = when (key) {
+    PermissionKey.NOTIFICATION -> Icons.Rounded.Notifications
+    PermissionKey.LIVE_NOTIFICATION -> Icons.Rounded.Notifications
+    PermissionKey.OVERLAY -> Icons.Rounded.Layers
+    PermissionKey.MICROPHONE -> Icons.Rounded.Mic
+    PermissionKey.CALENDAR -> Icons.Rounded.CalendarToday
+    PermissionKey.EXACT_ALARM -> Icons.Rounded.Alarm
+    PermissionKey.BATTERY -> Icons.Rounded.BatterySaver
+    PermissionKey.AUTOSTART -> Icons.Rounded.RocketLaunch
+    PermissionKey.LOCATION -> Icons.Rounded.LocationOn
+    PermissionKey.ACCESSIBILITY -> Icons.Rounded.Accessibility
+    PermissionKey.NOTIFICATION_LISTENER -> Icons.Rounded.MarkEmailRead
+    PermissionKey.SMS -> Icons.Rounded.Sms
+    PermissionKey.ROOT_ACCESS -> Icons.Rounded.Terminal
+}
+
+private fun permissionGrantedColor(): Color = Color(0xFF2E7D32)
+
 private fun floatingEventRangeLabel(range: Int): String = when (range.coerceIn(0, 2)) {
     0 -> "全部日程"
     1 -> "今日日程"
@@ -1407,7 +1695,7 @@ private fun onboardingPermissionItems(snapshot: PermissionSnapshot): List<Permis
     PermissionItem(PermissionKey.LOCATION, "可选能力", "定位权限", "用于启用自动定位", RequirementLevel.OPTIONAL, snapshot.location, "去授权"),
     PermissionItem(PermissionKey.NOTIFICATION_LISTENER, "可选能力", "通知监听权限", "部分通知识别和系统通知读取依赖它", RequirementLevel.OPTIONAL, snapshot.notificationListener, "去授权"),
     PermissionItem(PermissionKey.SMS, "可选能力", "短信权限", "短信识别、取件码/验证码类识别依赖它；敏感权限默认不强推", RequirementLevel.OPTIONAL, snapshot.sms, "去授权"),
-    PermissionItem(PermissionKey.SHIZUKU_ROOT, "高级能力", "Shizuku/Root 状态", "高级后台识别能力；未配置时功能会降级", RequirementLevel.OPTIONAL, snapshot.shizukuRoot, "去授权"),
+    PermissionItem(PermissionKey.ROOT_ACCESS, "高级能力", "Root 权限", "Root 设备可在授权后直接管理本页支持的权限", RequirementLevel.OPTIONAL, snapshot.rootAccess, "去授权"),
 )
 
 private fun onboardingFeatureItems(settings: MySettings, syncEnabled: Boolean, snapshot: PermissionSnapshot): List<FeatureItem> = listOf(
@@ -1443,7 +1731,11 @@ private fun missingFeatureRequirement(featureKey: FeatureKey, snapshot: Permissi
 private fun liveNotificationRequirementMet(snapshot: PermissionSnapshot): Boolean =
     snapshot.notification && (OsUtils.isColorOsLike() || snapshot.liveNotification)
 
-private fun readOnboardingPermissions(context: Context): PermissionSnapshot {
+private fun readOnboardingPermissions(
+    context: Context,
+    simulateRoot: Boolean = false,
+): PermissionSnapshot {
+    PrivilegeManager.refreshPrivilege()
     val livePermissionGranted = if (OsUtils.isColorOsLike()) {
         false
     } else {
@@ -1462,26 +1754,29 @@ private fun readOnboardingPermissions(context: Context): PermissionSnapshot {
     Log.d(ONBOARDING_LOG_TAG, "SystemSwitch overlay=$overlayEnabled")
 
     val snapshot = PermissionSnapshot(
-        notification = areAppNotificationsEnabled(context),
+        notification = PrivilegedPermissionController.isEnabled(
+            context,
+            PrivilegedPermissionKey.NOTIFICATION,
+            simulateRoot,
+        ),
         liveNotification = livePermissionGranted,
         liveNotificationDescription = if (OsUtils.isColorOsLike()) {
             "系统未开放状态读取。请进入通知设置，确认“流体云显示实时活动”已开启，否则实况胶囊可能不显示。"
         } else {
             "部分系统需要进入应用通知设置确认"
         },
-        overlay = overlayEnabled,
-        microphone = hasPermission(context, Manifest.permission.RECORD_AUDIO),
-        calendar = hasPermission(context, Manifest.permission.READ_CALENDAR) &&
-            hasPermission(context, Manifest.permission.WRITE_CALENDAR) &&
-            canAccessCalendarProvider(context),
-        exactAlarm = canScheduleExactAlarms(context),
-        batteryOptimization = isIgnoringBatteryOptimizations(context),
+        overlay = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.OVERLAY, simulateRoot),
+        microphone = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.MICROPHONE, simulateRoot),
+        calendar = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.CALENDAR, simulateRoot) &&
+            (simulateRoot || canAccessCalendarProvider(context)),
+        exactAlarm = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.EXACT_ALARM, simulateRoot),
+        batteryOptimization = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.BATTERY, simulateRoot),
         autostart = false,
-        location = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) || hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION),
-        accessibility = isAccessibilityEnabled(context),
-        notificationListener = isNotificationListenerEnabled(context),
-        sms = hasPermission(context, Manifest.permission.READ_SMS) && hasPermission(context, Manifest.permission.RECEIVE_SMS),
-        shizukuRoot = false,
+        location = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.LOCATION, simulateRoot),
+        accessibility = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.ACCESSIBILITY, simulateRoot),
+        notificationListener = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.NOTIFICATION_LISTENER, simulateRoot),
+        sms = PrivilegedPermissionController.isEnabled(context, PrivilegedPermissionKey.SMS, simulateRoot),
+        rootAccess = simulateRoot || PrivilegeManager.privilegeType == PrivilegeManager.PrivilegeType.ROOT,
     )
     Log.d(
         ONBOARDING_LOG_TAG,
@@ -1505,7 +1800,7 @@ private fun readOnboardingPermissions(context: Context): PermissionSnapshot {
             append("accessibility=${snapshot.accessibility}, ")
             append("notificationListener=${snapshot.notificationListener}, ")
             append("sms=${snapshot.sms}, ")
-            append("shizukuRoot=${snapshot.shizukuRoot}")
+            append("rootAccess=${snapshot.rootAccess}")
         }
     )
     return snapshot
@@ -1707,7 +2002,6 @@ private fun buildOnboardingSteps(): List<OnboardingStep> = listOf(
 private enum class OnboardingStep(
     val title: String,
     val description: String,
-    val isSkippableConfig: Boolean = false,
 ) {
     PERMISSIONS(
         "配置基础权限",
@@ -1716,22 +2010,18 @@ private enum class OnboardingStep(
     SCHEDULE_REMINDER(
         "日程和提醒",
         "配置每日提醒、提前提醒、日历同步、实况通知和手环模式。",
-        isSkippableConfig = true,
     ),
     FLOATING_QUICK_MEMO(
         "悬浮窗和随口记",
         "配置日程悬浮、随口记、音量键快捷和相关入口。",
-        isSkippableConfig = true,
     ),
     MODEL(
         "模型与连接",
         "配置 AI 接口、多模态、本地语义等识别能力。",
-        isSkippableConfig = true,
     ),
     WEATHER(
         "天气配置",
         "配置天气服务、天气预警、定位和天气接口。",
-        isSkippableConfig = true,
     ),
 }
 
@@ -1748,7 +2038,7 @@ private enum class PermissionKey {
     ACCESSIBILITY,
     NOTIFICATION_LISTENER,
     SMS,
-    SHIZUKU_ROOT,
+    ROOT_ACCESS,
 }
 
 private enum class FeatureKey {
@@ -1784,7 +2074,7 @@ private data class PermissionSnapshot(
     val accessibility: Boolean,
     val notificationListener: Boolean,
     val sms: Boolean,
-    val shizukuRoot: Boolean,
+    val rootAccess: Boolean,
 )
 
 private data class PermissionItem(

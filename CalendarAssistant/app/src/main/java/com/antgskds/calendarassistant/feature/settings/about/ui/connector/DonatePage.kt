@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -239,6 +240,7 @@ fun MaterialDonateScreen(
                         painter = painterResource(id = donateQrImageRes(selectedCode)),
                         contentDescription = "Enlarged QR Code",
                         modifier = Modifier
+                            .widthIn(max = 480.dp)
                             .fillMaxWidth(0.75f)
                             .aspectRatio(1f),
                         contentScale = ContentScale.Fit

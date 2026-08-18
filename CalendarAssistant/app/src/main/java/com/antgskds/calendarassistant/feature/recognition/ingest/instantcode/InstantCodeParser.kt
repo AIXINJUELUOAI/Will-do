@@ -14,18 +14,13 @@ object InstantCodeParser {
         return buildDraft(candidate)
     }
 
-    fun parseClipboard(
-        text: String,
-        mode: InstantCodeParseMode
-    ): InstantCodeCandidate? {
+    fun parseClipboard(text: String): InstantCodeCandidate? {
         if (text.isBlank() || shouldIgnore(text, emptySet())) return null
-        hasNonCodeLabelNearCode(text)?.let { return null }
 
         findCandidate(text, InstantCodePatterns.directCodePatterns)?.let { return it }
         findCandidate(text, InstantCodePatterns.credentialCodePatterns)?.let { return it }
-        if (mode == InstantCodeParseMode.CLIPBOARD_CONFIRM) {
-            findCandidate(text, InstantCodePatterns.relaxedCodePatterns)?.let { return it }
-        }
+        hasNonCodeLabelNearCode(text)?.let { return null }
+        findCandidate(text, InstantCodePatterns.relaxedCodePatterns)?.let { return it }
         return null
     }
 
