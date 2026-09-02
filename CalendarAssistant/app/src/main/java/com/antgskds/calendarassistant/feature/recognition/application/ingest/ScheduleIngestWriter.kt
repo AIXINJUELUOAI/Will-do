@@ -32,7 +32,7 @@ class ScheduleIngestWriter(
             eventColorPaletteHex = settings.eventColorPaletteHex
         )
 
-        val shouldDeduplicate = sourceType != "sms" || settings.smsPickupDedupEnabled
+        val shouldDeduplicate = settings.scheduleIngestDedupEnabled
         if (shouldDeduplicate) {
             val incomingFingerprint = SmsPickupFingerprint.fromDraft(eventData)
                 ?: SmsPickupFingerprint.fromEvent(event)
@@ -76,7 +76,7 @@ class ScheduleIngestWriter(
                 forceInstantCodeTimeToNow = settings.forceInstantCodeTimeToNow,
                 eventColorPaletteHex = settings.eventColorPaletteHex
             )
-            val isDuplicate = knownEvents.any { existing ->
+            val isDuplicate = settings.scheduleIngestDedupEnabled && knownEvents.any { existing ->
                 val isExpired = existing.endDate.isBefore(LocalDate.now())
                 if (isExpired) return@any false
 

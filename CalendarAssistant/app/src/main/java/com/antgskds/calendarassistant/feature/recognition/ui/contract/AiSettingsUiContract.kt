@@ -14,5 +14,6 @@ sealed interface AiSettingsUiAction {
     data class SaveTextModel(val key: String, val name: String, val url: String) : AiSettingsUiAction
     data class SaveMultimodalModel(val key: String, val name: String, val url: String) : AiSettingsUiAction
     data class SetAgentAccess(val enabled: Boolean) : AiSettingsUiAction
+    data class SetThirdPartyAgentAccess(val enabled: Boolean) : AiSettingsUiAction
     data class SetAgentConnectionManagement(val enabled: Boolean) : AiSettingsUiAction
 }

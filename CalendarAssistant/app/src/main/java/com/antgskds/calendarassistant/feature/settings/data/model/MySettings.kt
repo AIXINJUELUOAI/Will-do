@@ -139,8 +139,8 @@ data class MySettings(
 
     // 短信自动解析取件码
     val isSmsMonitoringEnabled: Boolean = false,
-    // 【开发者】短信取件码入库去重；默认保持既有行为
-    val smsPickupDedupEnabled: Boolean = true,
+    // 【开发者】日程入库去重；默认保持既有行为
+    val scheduleIngestDedupEnabled: Boolean = true,
 
     // 【实验室】取件类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
     val forceInstantCodeTimeToNow: Boolean = false,
@@ -316,7 +316,8 @@ data class MySettings(
     val quickMemoPinnedFixedTitleEnabled: Boolean = false,
 
     // Agent API
-    val agentApiEnabled: Boolean = false,
+    val agentApiEnabled: Boolean = true,
+    val agentThirdPartyAccessEnabled: Boolean = false,
     val agentConnectionManagementEnabled: Boolean = false,
     val agentDatabaseOperationsEnabled: Boolean = false
 ) {

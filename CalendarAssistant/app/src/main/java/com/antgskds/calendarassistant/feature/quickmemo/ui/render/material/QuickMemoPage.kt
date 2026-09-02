@@ -575,7 +575,6 @@ internal fun QuickMemoListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .clip(RoundedCornerShape(16.dp))
                 .background(
                     if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
                 )
@@ -756,7 +755,7 @@ internal fun QuickMemoListItem(
                             }
                         }
                     }
-                    if (isTodo) {
+                    if (isTodo && memo.type != QuickMemoType.TEXT) {
                         Spacer(Modifier.width(12.dp))
                         QuickMemoTodoMark(done = isCompleted) {
                             haptics.confirm()

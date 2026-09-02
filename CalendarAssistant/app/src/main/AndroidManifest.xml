@@ -410,6 +410,15 @@
             android:grantUriPermissions="true"
             android:permission="com.antgskds.calendarassistant.permission.AGENT_API" />
 
+        <receiver
+            android:name=".shared.api.WillDoAgentReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.antgskds.calendarassistant.AGENT_CALL" />
+            </intent-filter>
+        </receiver>
+
         <!-- 事件动作接收器（取件码已取/延长） -->
         <receiver
             android:name=".platform.receiver.EventActionReceiver"

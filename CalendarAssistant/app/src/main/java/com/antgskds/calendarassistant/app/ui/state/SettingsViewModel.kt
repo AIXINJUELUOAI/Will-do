@@ -116,12 +116,15 @@ class SettingsViewModel(
 
     fun updateAgentAccessOptions(
         accessEnabled: Boolean? = null,
+        thirdPartyAccessEnabled: Boolean? = null,
         connectionManagementEnabled: Boolean? = null,
     ) {
         val current = settings.value
         settingsOperationApi.updateSettings(
             current.copy(
                 agentApiEnabled = accessEnabled ?: current.agentApiEnabled,
+                agentThirdPartyAccessEnabled = thirdPartyAccessEnabled
+                    ?: current.agentThirdPartyAccessEnabled,
                 agentConnectionManagementEnabled = connectionManagementEnabled
                     ?: current.agentConnectionManagementEnabled,
             )
@@ -417,9 +420,9 @@ class SettingsViewModel(
         onUpdated()
     }
 
-    fun setSmsPickupDedupEnabled(enabled: Boolean) = viewModelScope.launch {
+    fun setScheduleIngestDedupEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsOperationApi.updateSettings(
-            settings.value.copy(smsPickupDedupEnabled = enabled)
+            settings.value.copy(scheduleIngestDedupEnabled = enabled)
         )
     }
 
@@ -633,13 +636,6 @@ class SettingsViewModel(
 
     fun syncWebDavNow() {
         viewModelScope.launch(Dispatchers.IO) { webDavSyncV2Center.syncNow(force = true) }
-    }
-
-    fun updateWebDavRemotePathOverride(value: String) {
-        val normalized = value.trim().trim('/')
-        require(normalized.split('/').none { it == "." || it == ".." }) { "远端目录不能包含 . 或 .." }
-        webDavSyncV2Center.resetRemoteTracking()
-        settingsOperationApi.updateSettings(settings.value.copy(webDavRemotePathOverride = normalized))
     }
 
     fun updateAppBackgroundImageColorEnabled(enabled: Boolean, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
