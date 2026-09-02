@@ -115,7 +115,7 @@ fun DeveloperPage(
                     }
                 }
             }
-            is DeveloperUiAction.SetSmsPickupDedup -> settingsViewModel.setSmsPickupDedupEnabled(action.enabled)
+            is DeveloperUiAction.SetScheduleIngestDedup -> settingsViewModel.setScheduleIngestDedupEnabled(action.enabled)
             is DeveloperUiAction.SetLiveTemplateMode -> { settingsViewModel.updatePreference(liveNotificationTemplateMode = action.mode); app?.capsuleCenter?.forceRefresh() }
             is DeveloperUiAction.SetListReverse -> when (action.kind) {
                 DeveloperListKind.HOME -> settingsViewModel.updateListSortOrder(homeListReverseOrder = action.enabled)
@@ -130,13 +130,6 @@ fun DeveloperPage(
                 DeveloperDragField.DESCRIPTION -> settingsViewModel.updateFloatingDragTextOptions(includeDescription = action.enabled)
             }
             is DeveloperUiAction.SetDragHotZone -> settingsViewModel.updateFloatingDragHotZonePercent(action.percent)
-            is DeveloperUiAction.SetWebDavRemoteRoot -> runCatching {
-                settingsViewModel.updateWebDavRemotePathOverride(action.value)
-            }.onSuccess {
-                Toast.makeText(context, "WebDAV 测试目录已更新", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, it.message ?: "目录无效", Toast.LENGTH_SHORT).show()
-            }
             is DeveloperUiAction.ApplyUiScale -> settingsViewModel.updateUiScaleFactors(
                 small = action.small,
                 medium = action.medium,
@@ -151,6 +144,10 @@ fun DeveloperPage(
             DeveloperUiAction.OpenConfig -> onNavigateToConfig()
             DeveloperUiAction.OpenRegexRules -> onNavigateToRegexRules()
             DeveloperUiAction.OpenOnboardingGuide -> onNavigateToOnboardingGuide()
+            DeveloperUiAction.RemoveDonationMark -> {
+                settingsViewModel.updateHasDonated(false)
+                Toast.makeText(context, "已移除捐赠标记", Toast.LENGTH_SHORT).show()
+            }
         } },
         runDebugActions = { ids ->
             val target = app ?: return@MaterialDeveloperScreen DebugBatchResult(0, listOf("应用上下文不可用"))
@@ -194,9 +191,6 @@ fun MaterialDeveloperScreen(
     var pendingBatch by remember { mutableStateOf<DebugActionBatch?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
-    var webDavRemoteRoot by remember(settings.webDavRemotePathOverride) {
-        mutableStateOf(settings.webDavRemotePathOverride)
-    }
     var showLogExportSheet by remember { mutableStateOf(false) }
     var quickActionSheet by remember { mutableStateOf<QuickActionSheetSpec?>(null) }
     var scaleSmall by remember(settings.uiScaleSmall, settings.uiScaleMedium, settings.uiScaleLarge) {
@@ -471,36 +465,6 @@ fun MaterialDeveloperScreen(
                 )
             }
 
-            Text(text = "WebDAV 调试", style = sectionTitleStyle)
-            SettingsCard {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EditionTextField(
-                        value = webDavRemoteRoot,
-                        onValueChange = { webDavRemoteRoot = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("同步根目录覆盖") },
-                        singleLine = true,
-                    )
-                    Text(
-                        text = "实际目录：/${webDavRemoteRoot.trim().trim('/').ifBlank { "WillDo" }}/sync/v2",
-                        style = cardSubtitleStyle,
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        EditionOutlinedButton(
-                            onClick = {
-                                webDavRemoteRoot = ""
-                                onAction(DeveloperUiAction.SetWebDavRemoteRoot(""))
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("恢复默认") }
-                        EditionButton(
-                            onClick = { onAction(DeveloperUiAction.SetWebDavRemoteRoot(webDavRemoteRoot)) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("应用目录") }
-                    }
-                }
-            }
-
             Text(text = "页面缩放", style = sectionTitleStyle)
             SettingsCard {
                 UiScaleSliderRow(
@@ -555,7 +519,7 @@ fun MaterialDeveloperScreen(
             DeveloperOptionsCard(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 quickMemoPinnedFixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
-                smsPickupDedupEnabled = settings.smsPickupDedupEnabled,
+                scheduleIngestDedupEnabled = settings.scheduleIngestDedupEnabled,
                 onOpenLogExportSheet = { showLogExportSheet = true },
                 onQuickMemoPinnedFixedTitleChange = { enabled ->
                     onAction(DeveloperUiAction.SetQuickMemoPinnedFixedTitle(enabled))
@@ -565,9 +529,10 @@ fun MaterialDeveloperScreen(
                     onAction(DeveloperUiAction.SetLiveTemplateMode(mode))
                     Toast.makeText(context, "原生实况通知模板已设为 ${liveTemplateModeLabel(mode)}", Toast.LENGTH_SHORT).show()
                 },
-                onSmsPickupDedupChange = { enabled ->
-                    onAction(DeveloperUiAction.SetSmsPickupDedup(enabled))
-                }
+                onScheduleIngestDedupChange = { enabled ->
+                    onAction(DeveloperUiAction.SetScheduleIngestDedup(enabled))
+                },
+                onRemoveDonationMark = { onAction(DeveloperUiAction.RemoveDonationMark) }
             )
 
             Text(text = "快捷测试", style = sectionTitleStyle)
@@ -901,11 +866,12 @@ private fun DisabledDeveloperCard(
 private fun DeveloperOptionsCard(
     liveNotificationTemplateMode: String,
     quickMemoPinnedFixedTitleEnabled: Boolean,
-    smsPickupDedupEnabled: Boolean,
+    scheduleIngestDedupEnabled: Boolean,
     onOpenLogExportSheet: () -> Unit,
     onQuickMemoPinnedFixedTitleChange: (Boolean) -> Unit,
     onLiveNotificationTemplateModeChange: (String) -> Unit,
-    onSmsPickupDedupChange: (Boolean) -> Unit
+    onScheduleIngestDedupChange: (Boolean) -> Unit,
+    onRemoveDonationMark: () -> Unit
 ) {
     val haptics = rememberAppHaptics()
     val titleStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
@@ -980,12 +946,12 @@ private fun DeveloperOptionsCard(
         )
         RowDivider()
         SwitchSettingItem(
-            title = "短信取件码去重",
-            subtitle = "开启后相同取件码只入库一次；关闭后不检查已有短信取件日程。",
-            checked = smsPickupDedupEnabled,
+            title = "日程入库去重",
+            subtitle = "开启后相同日程只入库一次（短信取件码与识别结果统一去重）；关闭后不检查已有日程。",
+            checked = scheduleIngestDedupEnabled,
             onCheckedChange = { checked ->
                 haptics.selection()
-                onSmsPickupDedupChange(checked)
+                onScheduleIngestDedupChange(checked)
             },
             cardTitleStyle = titleStyle,
             cardSubtitleStyle = subtitleStyle
@@ -998,6 +964,18 @@ private fun DeveloperOptionsCard(
             icon = Icons.Default.ChevronRight,
             enabled = true,
             onClick = { haptics.confirm(); onOpenLogExportSheet() },
+            cardTitleStyle = titleStyle,
+            cardSubtitleStyle = subtitleStyle,
+            cardValueStyle = subtitleStyle
+        )
+        RowDivider()
+        ActionSettingItem(
+            title = "移除捐赠标记",
+            subtitle = "清除“感谢您的捐赠”标记，恢复未捐赠状态",
+            value = "",
+            icon = Icons.Default.ChevronRight,
+            enabled = true,
+            onClick = { haptics.confirm(); onRemoveDonationMark() },
             cardTitleStyle = titleStyle,
             cardSubtitleStyle = subtitleStyle,
             cardValueStyle = subtitleStyle

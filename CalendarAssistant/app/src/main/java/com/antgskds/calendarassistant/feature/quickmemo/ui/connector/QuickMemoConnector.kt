@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
 import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
@@ -163,6 +165,15 @@ fun QuickMemoDetailPage(
         )
     }
 
+    DisposableEffect(memoId) {
+        onDispose {
+            val latest = viewModel.quickMemos.value.firstOrNull { it.id == memoId }
+            if (latest != null && isBlankTextQuickMemo(latest)) {
+                viewModel.deleteQuickMemo(memoId)
+            }
+        }
+    }
+
     QuickMemoDetailScreen(
         state = state,
         onBack = onBack,
@@ -242,3 +253,9 @@ private fun activeTextQuickMemoId(state: CapsuleUiState): Long? {
         ?.removePrefix(TEXT_QUICK_MEMO_ID_PREFIX)
         ?.toLongOrNull()
 }
+
+private fun isBlankTextQuickMemo(memo: QuickMemoEntity): Boolean =
+    memo.type == QuickMemoType.TEXT &&
+        memo.bodyText.isBlank() &&
+        memo.imagePath.isNullOrBlank() &&
+        memo.audioPath.isNullOrBlank()

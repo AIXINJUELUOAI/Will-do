@@ -48,10 +48,13 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -73,6 +76,7 @@ class WillDoAgentProvider : ContentProvider() {
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         val rawRequest = extras?.getString(WillDoAgentContract.REQUEST_KEY).orEmpty()
+        val isThirdPartyTransport = extras?.getBoolean(WillDoAgentContract.THIRD_PARTY_TRANSPORT_KEY) == true
         val callingUid = Binder.getCallingUid()
         val caller = callingPackage ?: "uid:$callingUid"
         var requestId = "unknown"
@@ -103,7 +107,9 @@ class WillDoAgentProvider : ContentProvider() {
             }
 
             Log.i(TAG, "Agent call method=$method caller=$caller requestId=${request.requestId}")
-            val data = runBlocking(Dispatchers.IO) { dispatch(method, request.payload) }
+            val data = runBlocking(Dispatchers.IO) {
+                dispatch(method, request.payload, isThirdPartyTransport)
+            }
             AgentProtocolJson.encodeSuccess(request.requestId, data).also { encoded ->
                 if (method in MUTATING_METHODS) cacheResponse(cacheKey, method, rawRequest, encoded)
             }
@@ -120,8 +126,27 @@ class WillDoAgentProvider : ContentProvider() {
         return Bundle().withResponse(response)
     }
 
-    private suspend fun dispatch(method: String, payload: JsonObject): JsonElement = when (method) {
-        WillDoAgentContract.GET_CAPABILITIES -> capabilities()
+    private suspend fun dispatch(
+        method: String,
+        payload: JsonObject,
+        isThirdPartyTransport: Boolean
+    ): JsonElement {
+        if (
+            isThirdPartyTransport &&
+            (method !in THIRD_PARTY_METHODS || payload.requestsRestrictedFileAccess(method))
+        ) {
+            throw AgentTransportException("File and attachment operations require the official Agent")
+        }
+
+        return dispatchAllowed(method, payload, isThirdPartyTransport)
+    }
+
+    private suspend fun dispatchAllowed(
+        method: String,
+        payload: JsonObject,
+        isThirdPartyTransport: Boolean
+    ): JsonElement = when (method) {
+        WillDoAgentContract.GET_CAPABILITIES -> capabilities(isThirdPartyTransport)
 
         WillDoAgentContract.CREATE_EVENT -> idResult(
             service.createEvent(payload.decode("event", AgentEventDraft.serializer())).getOrThrow()
@@ -387,16 +412,45 @@ class WillDoAgentProvider : ContentProvider() {
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 
-    private fun capabilities(): JsonObject = buildJsonObject {
+    private fun capabilities(isThirdPartyTransport: Boolean): JsonObject = buildJsonObject {
         val access = service.accessState()
+        val methods = if (isThirdPartyTransport) THIRD_PARTY_METHODS else ALL_METHODS
         put("protocolVersion", WillDoAgentContract.PROTOCOL_VERSION)
         put("maxBatchSize", WillDoAgentContract.MAX_BATCH_SIZE)
         put("maxQueryLimit", WillDoAgentContract.MAX_QUERY_LIMIT)
-        put("supportsContentUriFiles", true)
+        put("supportsContentUriFiles", !isThirdPartyTransport)
         put("accessEnabled", access.accessEnabled)
+        put("thirdPartyAccessEnabled", access.thirdPartyAccessEnabled)
         put("connectionManagementEnabled", access.connectionManagementEnabled)
         put("databaseOperationsEnabled", access.databaseOperationsEnabled)
-        put("methods", buildJsonArray { ALL_METHODS.forEach { add(JsonPrimitive(it)) } })
+        put("methods", buildJsonArray { methods.forEach { add(JsonPrimitive(it)) } })
+    }
+
+    private fun JsonObject.requestsRestrictedFileAccess(method: String): Boolean = when (method) {
+        WillDoAgentContract.CREATE_EVENT,
+        WillDoAgentContract.UPDATE_EVENT,
+        WillDoAgentContract.EDIT_RECURRING_EVENT ->
+            (this["event"] as? JsonObject)?.requestsEventAttachmentAccess() == true
+
+        WillDoAgentContract.BATCH_CREATE_EVENTS ->
+            (this["events"] as? JsonArray)
+                ?.any { (it as? JsonObject)?.requestsEventAttachmentAccess() == true } == true
+
+        WillDoAgentContract.CREATE_QUICK_MEMO -> {
+            val memo = this["memo"] as? JsonObject
+            val type = (memo?.get("type") as? JsonPrimitive)?.contentOrNull
+            val media = memo?.get("media")
+            (type != null && !type.equals("TEXT", ignoreCase = true)) ||
+                (media != null && media !is JsonNull)
+        }
+
+        else -> false
+    }
+
+    private fun JsonObject.requestsEventAttachmentAccess(): Boolean {
+        val attachments = this["attachments"] as? JsonArray
+        val replaceAttachments = (this["replaceAttachments"] as? JsonPrimitive)?.booleanOrNull == true
+        return attachments?.isNotEmpty() == true || replaceAttachments
     }
 
     private suspend fun completed(block: suspend () -> Unit): JsonObject {
@@ -425,6 +479,7 @@ class WillDoAgentProvider : ContentProvider() {
     }
 
     private fun Throwable.toProtocolError(): AgentProtocolError = when (this) {
+        is AgentTransportException -> AgentProtocolError("UNSUPPORTED_TRANSPORT", message.orEmpty())
         is SecurityException -> AgentProtocolError("FORBIDDEN", message ?: "Permission denied")
         is NoSuchElementException, is FileNotFoundException ->
             AgentProtocolError("NOT_FOUND", message ?: "Data not found")
@@ -553,6 +608,21 @@ class WillDoAgentProvider : ContentProvider() {
             WillDoAgentContract.GET_SYSTEM_INFO
         )
 
+        val THIRD_PARTY_BLOCKED_METHODS = setOf(
+            WillDoAgentContract.ADD_EVENT_ATTACHMENT,
+            WillDoAgentContract.LIST_EVENT_ATTACHMENTS,
+            WillDoAgentContract.DELETE_EVENT_ATTACHMENT,
+            WillDoAgentContract.ATTACH_QUICK_MEMO_IMAGE,
+            WillDoAgentContract.REMOVE_QUICK_MEMO_IMAGE,
+            WillDoAgentContract.ATTACH_QUICK_MEMO_VOICE,
+            WillDoAgentContract.EXPORT_DIAGNOSTIC_LOGS,
+            WillDoAgentContract.EXPORT_BACKUP
+        )
+
+        val THIRD_PARTY_METHODS = ALL_METHODS.filterNot(THIRD_PARTY_BLOCKED_METHODS::contains)
+
         val responseCache = LinkedHashMap<String, CachedResponse>()
     }
 }
+
+private class AgentTransportException(message: String) : IllegalStateException(message)

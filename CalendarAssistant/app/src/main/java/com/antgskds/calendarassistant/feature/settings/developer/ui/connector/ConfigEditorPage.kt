@@ -42,6 +42,10 @@ import androidx.compose.material3.Switch
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiAction
 import com.antgskds.calendarassistant.feature.settings.developer.ui.contract.ConfigEditorUiState
+import android.widget.Toast
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
+import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 /**
  * 配置编辑页 —— 完全由 [ConfigCatalog] 驱动。
  *
@@ -64,6 +68,18 @@ fun ConfigEditorPage(uiSize: Int = 2) {
         onAction = { action ->
             when (action) {
                 is ConfigEditorUiAction.UpdateSettings -> app.settingsOperationApi.updateSettings(action.settings)
+                is ConfigEditorUiAction.UpdateWebDavRemoteRoot -> {
+                    val normalized = action.value.trim().trim('/')
+                    if (normalized.split('/').any { it == "." || it == ".." }) {
+                        Toast.makeText(context, "远端目录不能包含 . 或 ..", Toast.LENGTH_SHORT).show()
+                    } else {
+                        app.webDavSyncV2Center.resetRemoteTracking()
+                        app.settingsOperationApi.updateSettings(
+                            app.settingsQueryApi.settings.value.copy(webDavRemotePathOverride = normalized)
+                        )
+                        Toast.makeText(context, "WebDAV 测试目录已更新", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     )
@@ -143,6 +159,14 @@ fun MaterialConfigEditorScreen(
                     item = item,
                     currentSettings = settings,
                     onPick = { newSettings -> onAction(ConfigEditorUiAction.UpdateSettings(newSettings)) }
+                )
+            }
+            if (domain == ConfigDomain.SYNC) {
+                WebDavRootOverrideCard(
+                    currentValue = settings.webDavRemotePathOverride,
+                    onApply = { value ->
+                        onAction(ConfigEditorUiAction.UpdateWebDavRemoteRoot(value))
+                    }
                 )
             }
         }
@@ -235,6 +259,63 @@ private fun ConfigItemControl(
                         onCheckedChange = { checked -> onPick(item.set(currentSettings, if (checked) 1 else 0)) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WebDavRootOverrideCard(
+    currentValue: String,
+    onApply: (String) -> Unit
+) {
+    var root by remember(currentValue) { mutableStateOf(currentValue) }
+    AppCard(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "WebDAV 测试根目录覆盖",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "仅开发者使用；为空时固定使用 WillDo/sync/v2。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            EditionTextField(
+                value = root,
+                onValueChange = { root = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("同步根目录覆盖") },
+                singleLine = true,
+            )
+            Text(
+                text = "实际目录：/${root.trim().trim('/').ifBlank { "WillDo" }}/sync/v2",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                EditionOutlinedButton(
+                    onClick = {
+                        root = ""
+                        onApply("")
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("恢复默认") }
+                EditionButton(
+                    onClick = { onApply(root) },
+                    modifier = Modifier.weight(1f),
+                ) { Text("应用目录") }
             }
         }
     }

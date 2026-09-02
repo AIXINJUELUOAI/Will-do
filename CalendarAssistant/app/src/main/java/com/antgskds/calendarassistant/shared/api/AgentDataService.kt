@@ -106,6 +106,7 @@ class AgentDataService(
         val settings = settingsQueryApi.settings.value
         return AgentAccessState(
             accessEnabled = settings.agentApiEnabled,
+            thirdPartyAccessEnabled = settings.agentApiEnabled && settings.agentThirdPartyAccessEnabled,
             connectionManagementEnabled = settings.agentApiEnabled && settings.agentConnectionManagementEnabled,
             databaseOperationsEnabled = settings.agentApiEnabled && settings.agentDatabaseOperationsEnabled,
         )
@@ -1070,6 +1071,7 @@ class AgentDataService(
 
 data class AgentAccessState(
     val accessEnabled: Boolean,
+    val thirdPartyAccessEnabled: Boolean,
     val connectionManagementEnabled: Boolean,
     val databaseOperationsEnabled: Boolean,
 )

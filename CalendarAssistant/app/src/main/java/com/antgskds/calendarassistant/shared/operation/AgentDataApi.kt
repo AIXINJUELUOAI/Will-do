@@ -80,6 +80,7 @@ object WillDoAgentContract {
     const val PROTOCOL_VERSION = 2
     const val REQUEST_KEY = "request"
     const val RESPONSE_KEY = "response"
+    const val THIRD_PARTY_TRANSPORT_KEY = "thirdPartyTransport"
     const val MAX_BATCH_SIZE = 200
     const val MAX_QUERY_LIMIT = 200
     const val MAX_REQUEST_BYTES = 1_000_000
@@ -506,6 +507,7 @@ data class AgentCapabilities(
     val supportsContentUriFiles: Boolean,
     val methods: List<String>,
     val accessEnabled: Boolean = false,
+    val thirdPartyAccessEnabled: Boolean = false,
     val connectionManagementEnabled: Boolean = false,
     val databaseOperationsEnabled: Boolean = false,
 )

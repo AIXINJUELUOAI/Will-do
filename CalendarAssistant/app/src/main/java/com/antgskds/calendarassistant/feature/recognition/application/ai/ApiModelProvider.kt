@@ -52,7 +52,7 @@ sealed class ApiCallResult {
 
 sealed class ModelListResult {
     data class Success(val models: List<String>) : ModelListResult()
-    data class Failure(val message: String) : ModelListResult()
+    data class Failure(val message: String, val statusCode: Int? = null) : ModelListResult()
 }
 
 object ApiModelProvider {
@@ -564,30 +564,25 @@ object ApiModelProvider {
         }
         val rawBody = response.bodyAsText()
 
-        if (response.status.value !in 200..299) {
-            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        val status = response.status.value
+        if (status !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP $status）", statusCode = status)
         }
 
-        return try {
-            val root = JSONObject(rawBody)
-            val data = root.optJSONArray("data") ?: return ModelListResult.Failure("接口返回中无模型列表")
-            val models = mutableListOf<String>()
-            for (i in 0 until data.length()) {
-                val item = data.optJSONObject(i) ?: continue
-                val id = item.optString("id").trim()
-                if (id.isNotBlank()) {
-                    models += id
+        val models = runCatching {
+            val data = JSONObject(rawBody).optJSONArray("data") ?: return@runCatching emptyList()
+            buildList {
+                for (i in 0 until data.length()) {
+                    data.optJSONObject(i)
+                        ?.optString("id")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::add)
                 }
-            }
+            }.distinct().sorted()
+        }.getOrDefault(emptyList())
 
-            if (models.isEmpty()) {
-                ModelListResult.Failure("接口未返回可用模型")
-            } else {
-                ModelListResult.Success(models.distinct().sorted())
-            }
-        } catch (e: Exception) {
-            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
-        }
+        return ModelListResult.Success(models)
     }
 
     private suspend fun fetchGeminiModels(
@@ -602,43 +597,38 @@ object ApiModelProvider {
         }
         val rawBody = response.bodyAsText()
 
-        if (response.status.value !in 200..299) {
-            return ModelListResult.Failure("模型拉取失败（HTTP ${response.status.value}）")
+        val status = response.status.value
+        if (status !in 200..299) {
+            return ModelListResult.Failure("模型拉取失败（HTTP $status）", statusCode = status)
         }
 
-        return try {
-            val root = JSONObject(rawBody)
-            val data = root.optJSONArray("models") ?: return ModelListResult.Failure("接口返回中无模型列表")
-            val models = mutableListOf<String>()
-            for (i in 0 until data.length()) {
-                val item = data.optJSONObject(i) ?: continue
-                val methods = item.optJSONArray("supportedGenerationMethods")
-                val supportsGenerateContent = methods?.let { arr ->
-                    (0 until arr.length()).any { idx -> arr.optString(idx) == "generateContent" }
-                } ?: true
-                if (!supportsGenerateContent) continue
+        val models = runCatching {
+            val data = JSONObject(rawBody).optJSONArray("models") ?: return@runCatching emptyList()
+            buildList {
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val methods = item.optJSONArray("supportedGenerationMethods")
+                    val supportsGenerateContent = methods?.let { arr ->
+                        (0 until arr.length()).any { idx -> arr.optString(idx) == "generateContent" }
+                    } ?: true
+                    if (!supportsGenerateContent) continue
 
-                val rawName = item.optString("name").trim()
-                val cleaned = rawName.removePrefix("models/")
-                if (cleaned.isNotBlank()) {
-                    models += cleaned
+                    item.optString("name")
+                        .trim()
+                        .removePrefix("models/")
+                        .takeIf { it.isNotBlank() }
+                        ?.let(::add)
                 }
-            }
+            }.distinct().sorted()
+        }.getOrDefault(emptyList())
 
-            if (models.isEmpty()) {
-                ModelListResult.Failure("接口未返回可用模型")
-            } else {
-                ModelListResult.Success(models.distinct().sorted())
-            }
-        } catch (e: Exception) {
-            ModelListResult.Failure("模型列表解析失败：${e.message.orEmpty()}")
-        }
+        return ModelListResult.Success(models)
     }
 
     private fun normalizeOpenAiModelsUrl(baseUrl: String): String {
         val noQuery = baseUrl.trim().substringBefore("?").trimEnd('/')
         return when {
-            noQuery.endsWith("/v1/models") -> noQuery
+            noQuery.endsWith("/models", ignoreCase = true) -> noQuery
             noQuery.endsWith("/v1") -> "$noQuery/models"
             noQuery.endsWith("/chat/completions") -> {
                 noQuery.removeSuffix("/chat/completions") + "/models"

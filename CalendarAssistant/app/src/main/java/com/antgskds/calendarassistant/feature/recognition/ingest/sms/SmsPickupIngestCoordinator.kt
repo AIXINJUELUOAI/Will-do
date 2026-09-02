@@ -62,7 +62,7 @@ class SmsPickupIngestCoordinator(
 
     private suspend fun processCandidate(candidate: Candidate) {
         val now = System.currentTimeMillis()
-        val dedupEnabled = settingsQueryApi.settings.value.smsPickupDedupEnabled
+        val dedupEnabled = settingsQueryApi.settings.value.scheduleIngestDedupEnabled
         if (dedupEnabled) {
             cleanupTerminalFingerprints(now)
         } else {
