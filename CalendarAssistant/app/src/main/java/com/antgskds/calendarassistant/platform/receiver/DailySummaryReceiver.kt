@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.app.ActivityCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings

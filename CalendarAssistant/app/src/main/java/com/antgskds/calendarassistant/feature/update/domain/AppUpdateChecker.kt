@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.update.domain
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.feature.update.model.RemoteAppUpdateInfo
 import io.ktor.client.HttpClient

@@ -136,6 +136,39 @@ object WillDoDownloadLogNode {
         return appContext.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
     }
 
+    /** Removes runtime-log files created by the old public-downloads logger, including MediaStore-renamed copies. */
+    fun deletePublicAppLogCopies(context: Context): Int {
+        val appContext = context.applicationContext
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val directory = legacyPublicFile(APP_LOG_DIR, APP_LOG_FILE).parentFile ?: return 0
+            return directory.listFiles()
+                .orEmpty()
+                .filter { it.name.isPublicAppLogName() }
+                .count { runCatching { it.delete() }.getOrDefault(false) }
+        }
+
+        val resolver = appContext.contentResolver
+        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        val ids = mutableListOf<Long>()
+        resolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(relativePath(APP_LOG_DIR)),
+            null
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                if (cursor.getString(nameColumn).isPublicAppLogName()) ids += cursor.getLong(idColumn)
+            }
+        }
+        return ids.count { id ->
+            val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+            runCatching { resolver.delete(uri, null, null) > 0 }.getOrDefault(false)
+        }
+    }
+
     fun migrateLegacyLogs(context: Context): List<String> {
         val appContext = context.applicationContext
         val results = mutableListOf<String>()
@@ -242,4 +275,22 @@ object WillDoDownloadLogNode {
             else -> "text/plain"
         }
     }
+
+    /** 枚举旧自动日志，包括 MediaStore 为重名文件添加的序号；不读取 exports。 */
+    fun runtimeLogNames(context: Context): List<Pair<String, String>> = buildList {
+        for (category in listOf(APP_LOG_DIR, CRASH_DIR, AI_ENGINE_DIR)) {
+            context.contentResolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+                "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(relativePath(category)),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) add(category to cursor.getString(0))
+            }
+        }
+    }
+
+    private fun String.isPublicAppLogName(): Boolean =
+        matches(Regex("app(?:_log)?(?: \\(\\d+\\))?\\.(?:log|txt)", RegexOption.IGNORE_CASE))
 }

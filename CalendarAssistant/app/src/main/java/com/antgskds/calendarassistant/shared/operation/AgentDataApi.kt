@@ -32,8 +32,9 @@ interface AgentDataApi {
     suspend fun archiveEvent(id: Long, occurrenceTs: Long? = null): Result<Unit>
     suspend fun restoreEvent(id: Long): Result<Unit>
 
-    suspend fun addEventAttachment(eventId: Long, input: AgentFileInput): Result<AgentAttachmentInfo>
-    suspend fun listEventAttachments(eventId: Long): Result<List<AgentAttachmentInfo>>
+    // 重复母事件添加附件必须提供实例开始时间（秒）；返回的 eventId 是物化后的子事件 ID。
+    suspend fun addEventAttachment(eventId: Long, input: AgentFileInput, occurrenceTs: Long? = null): Result<AgentAttachmentInfo>
+    suspend fun listEventAttachments(eventId: Long, occurrenceTs: Long? = null): Result<List<AgentAttachmentInfo>>
     suspend fun deleteEventAttachment(attachmentId: Long): Result<Unit>
 
     suspend fun createCourse(draft: AgentCourseDraft): Result<String>
@@ -458,7 +459,16 @@ data class AgentQuickMemoDraft(
     val bodyText: String = "",
     val media: AgentFileInput? = null,
     val durationMs: Long = 0,
-    val asTodo: Boolean = false
+    val asTodo: Boolean = false,
+    val reminderAtMs: Long? = null,
+    val reminderRRule: String = "",
+    val reminders: List<AgentQuickMemoReminderDraft> = emptyList()
+)
+
+@Serializable
+data class AgentQuickMemoReminderDraft(
+    val triggerAtMs: Long,
+    val rrule: String = ""
 )
 
 @Serializable
@@ -472,7 +482,11 @@ data class AgentQuickMemoQuery(
 @Serializable
 data class AgentQuickMemoPatch(
     val bodyText: String? = null,
-    val todoState: String? = null
+    val todoState: String? = null,
+    val reminderAtMs: Long? = null,
+    val reminderRRule: String? = null,
+    val clearReminder: Boolean = false,
+    val replaceReminders: List<AgentQuickMemoReminderDraft>? = null
 )
 
 @Serializable
@@ -483,10 +497,20 @@ data class AgentQuickMemo(
     val createdAtMs: Long,
     val updatedAtMs: Long,
     val todoState: String,
+    val reminderAtMs: Long?,
+    val reminderRRule: String,
+    val reminders: List<AgentQuickMemoReminder>,
     val isPinned: Boolean,
     val audioDurationMs: Long,
     val audioContentUri: String?,
     val imageContentUri: String?
+)
+
+@Serializable
+data class AgentQuickMemoReminder(
+    val id: Long,
+    val triggerAtMs: Long,
+    val rrule: String
 )
 
 @Serializable

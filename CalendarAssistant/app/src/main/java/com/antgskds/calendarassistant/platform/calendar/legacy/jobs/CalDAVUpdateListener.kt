@@ -52,7 +52,7 @@ class CalDAVUpdateListener : JobService() {
                     // ✅ 同步完成后刷新内存中的事件列表，让 UI 能看到导入的事件
                     (applicationContext as? com.antgskds.calendarassistant.App)?.scheduleCenter?.refreshEvents()
                 } catch (e: Exception) {
-                    android.util.Log.e("CalDAVUpdate", "onSystemCalendarChanged failed", e)
+                    com.antgskds.calendarassistant.shared.util.AppLogger.e("CalDAVUpdate", "onSystemCalendarChanged failed", e)
                 } finally {
                     // 同步完成后再 reschedule + jobFinished
                     handler.post(worker)

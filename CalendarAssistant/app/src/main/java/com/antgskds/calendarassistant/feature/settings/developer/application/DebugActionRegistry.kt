@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.settings.developer.application
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.schedule.application.model.EventPatch

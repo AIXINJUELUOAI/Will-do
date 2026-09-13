@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.shared.util
 
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 
 object OsUtils {
     private const val TAG = "OsUtils"

@@ -56,6 +56,7 @@ class SettingsDataSource(context: Context) {
      * 保存设置（统一存为 JSON）
      */
     fun saveSettings(settings: MySettings) {
+        com.antgskds.calendarassistant.shared.util.AppLogger.setEnabled(settings.autoRecordLogs)
         try {
             val jsonString = json.encodeToString(settings)
             prefs.edit()

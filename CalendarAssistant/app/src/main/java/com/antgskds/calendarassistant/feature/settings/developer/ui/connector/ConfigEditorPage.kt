@@ -174,6 +174,7 @@ fun MaterialConfigEditorScreen(
 }
 
 private fun configDomainSubtitle(domain: ConfigDomain): String = when (domain) {
+    ConfigDomain.DIAGNOSTICS -> "自动日志记录与保留规则"
     ConfigDomain.APPEARANCE -> "主题色、壁纸和卡片显示配置"
     ConfigDomain.RECOGNITION -> "AI/正则识别模式与识别策略"
     ConfigDomain.WEATHER -> "天气风险阈值与显示配置"

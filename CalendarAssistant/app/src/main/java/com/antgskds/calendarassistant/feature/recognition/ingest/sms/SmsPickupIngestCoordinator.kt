@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.ingest.sms
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.recognition.ingest.pickup.SmsPickupFingerprint

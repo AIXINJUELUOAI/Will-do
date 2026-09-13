@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -58,6 +58,11 @@ class AndroidNormalNotificationPublisher(
 
         val channelId = payload.channelKey?.takeIf { it.isNotBlank() } ?: DEFAULT_CHANNEL_ID
         ensureChannel(channelId)
+        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!NotificationManagerCompat.from(appContext).areNotificationsEnabled() ||
+            manager.getNotificationChannel(channelId)?.importance == NotificationManager.IMPORTANCE_NONE) {
+            return NotificationResult.Failure(payload.key, NotificationFailureReason.PERMISSION_DENIED, "通知或通知渠道已关闭")
+        }
 
         val display = payload.display
         val title = display.primaryText.ifBlank { display.shortText }
@@ -75,9 +80,10 @@ class AndroidNormalNotificationPublisher(
             .setAutoCancel(payload.behavior.autoCancel)
             .setOnlyAlertOnce(payload.behavior.onlyAlertOnce)
             .setOngoing(payload.behavior.ongoing)
-            .setLocalOnly(isBraceletModeEnabled())
+            .setLocalOnly(isBraceletModeEnabled() && payload.tapTarget?.type != com.antgskds.calendarassistant.feature.notification.model.NotificationTapTargetType.QUICK_MEMO_DETAIL)
+        payload.category?.let(builder::setCategory)
         payload.behavior.timeoutAfterMillis?.let(builder::setTimeoutAfter)
-        if (expanded != null && expanded != contentText) {
+        if (expanded != null) {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
         }
         builder.setContentIntent(buildContentIntent(payload))
@@ -113,6 +119,11 @@ class AndroidNormalNotificationPublisher(
         val intent = Intent(appContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             payload.tapTarget?.payload?.forEach { (k, v) -> putExtra(k, v) }
+            if (payload.tapTarget?.type == com.antgskds.calendarassistant.feature.notification.model.NotificationTapTargetType.QUICK_MEMO_DETAIL) {
+                payload.tapTarget.payload["quickMemoId"]?.toLongOrNull()?.let { memoId ->
+                    putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, memoId)
+                }
+            }
         }
         return PendingIntent.getActivity(
             appContext,

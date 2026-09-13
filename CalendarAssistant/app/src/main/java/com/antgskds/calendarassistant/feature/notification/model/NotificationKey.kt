@@ -10,6 +10,7 @@ data class NotificationKey(
     }
 
     companion object {
+        fun quickMemoReminder(reminderId: Long): NotificationKey = NotificationKey("quick-memo:reminder:$reminderId")
         fun scheduleReminder(
             instanceKey: ScheduleInstanceKey,
             offsetMinutes: Int

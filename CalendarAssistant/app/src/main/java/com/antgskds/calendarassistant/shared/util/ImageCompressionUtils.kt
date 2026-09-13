@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.shared.util
 
 import android.graphics.Bitmap
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import java.io.ByteArrayOutputStream
 
 object ImageCompressionUtils {

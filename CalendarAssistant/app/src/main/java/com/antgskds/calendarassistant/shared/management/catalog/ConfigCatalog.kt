@@ -22,6 +22,7 @@ import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMod
 
 /** 配置分组（域）。落地页按出现的域分组；加新域时在此加一个值。 */
 enum class ConfigDomain(val label: String) {
+    DIAGNOSTICS("日志"),
     APPEARANCE("主题"),
     RECOGNITION("识别"),
     WEATHER("天气"),
@@ -83,8 +84,77 @@ class ConfigItem(
 )
 
 object ConfigCatalog {
+    // 未成功发布时一分钟后重试；胶囊持续时间复用默认日程时长。
+    const val QUICK_MEMO_REMINDER_RETRY_MS = 60_000L
+    // 重复计算的安全搜索上限及随口记闹钟提前到达时的重排容差。
+    const val REPEAT_OCCURRENCE_SEARCH_LIMIT = 100_000
+    const val QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS = 60_000L
+    // 自动日志按自然日滚动保留；限制每日文件体积，防止高频日志占满存储。
+    const val LOG_RETENTION_DAYS = 3L
+    const val LOG_MAX_BYTES = 4 * 1024 * 1024L
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.NOTIFICATION, ConfigKind.POLICY, "notification.quick_memo_retry_ms", "随口记提醒失败重试间隔", "发送失败保留记录，稍后重新尝试发布。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(60000, 60000), { QUICK_MEMO_REMINDER_RETRY_MS.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(
+            domain = ConfigDomain.NOTIFICATION,
+            kind = ConfigKind.POLICY,
+            key = "notification.repeat_occurrence_search_limit",
+            label = "重复实例搜索上限",
+            description = "限制计算下一次重复实例的推进次数，避免异常规则无限循环。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.IntInput(REPEAT_OCCURRENCE_SEARCH_LIMIT, REPEAT_OCCURRENCE_SEARCH_LIMIT),
+            get = { REPEAT_OCCURRENCE_SEARCH_LIMIT },
+            set = { s, _ -> s },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.NOTIFICATION,
+            kind = ConfigKind.POLICY,
+            key = "notification.quick_memo_early_tolerance_ms",
+            label = "随口记提醒提前容差",
+            description = "触发比目标时间提前超过此容差时重新排程，避免旧闹钟误发。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.IntInput(QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS.toInt(), QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS.toInt(), unitLabel = "毫秒"),
+            get = { QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS.toInt() },
+            set = { s, _ -> s },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.DIAGNOSTICS,
+            kind = ConfigKind.POLICY,
+            key = "diagnostics.retention_days",
+            label = "日志保留天数",
+            description = "保留今天及前两天，启动、写入和导出时清理更早的自动日志。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.IntInput(3, 3, unitLabel = "天"),
+            get = { LOG_RETENTION_DAYS.toInt() },
+            set = { s, _ -> s },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.DIAGNOSTICS,
+            kind = ConfigKind.POLICY,
+            key = "diagnostics.daily_max_bytes",
+            label = "单日日志容量上限",
+            description = "每天最多 4 MB，达到上限后停止当天追加，保留已有记录。",
+            exposure = ConfigExposure.SYSTEM_INTERNAL,
+            control = ConfigControl.IntInput(LOG_MAX_BYTES.toInt(), LOG_MAX_BYTES.toInt(), unitLabel = "字节"),
+            get = { LOG_MAX_BYTES.toInt() },
+            set = { s, _ -> s },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        ConfigItem(
+            domain = ConfigDomain.DIAGNOSTICS,
+            kind = ConfigKind.USER_SETTING,
+            key = "diagnostics.auto_record",
+            label = "自动记录日志",
+            description = "将运行、异常和卡顿日志写入私有目录，按天保留最近三天；关闭后仍可导出已有记录。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.Toggle,
+            get = { if (it.autoRecordLogs) 1 else 0 },
+            set = { s, v -> s.copy(autoRecordLogs = v != 0) },
+            agentAccess = AgentConfigAccess.READ_ONLY,
+        ),
         ConfigItem(
             domain = ConfigDomain.SYNC,
             kind = ConfigKind.USER_SETTING,

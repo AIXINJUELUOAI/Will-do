@@ -16,7 +16,7 @@ import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.cloudsync.data
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.room.withTransaction
 import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2AssetLinkEntity
 import com.antgskds.calendarassistant.feature.cloudsync.data.local.SyncV2BindingEntity
@@ -13,11 +13,13 @@ import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2AttachmentR
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2EntityType
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2EventPayload
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2QuickMemoPayload
+import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2QuickMemoReminderPayload
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2Record
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2RecordStatus
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2VersionPolicy
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2VersionRelation
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.schedule.data.attachment.EventAttachmentManager
 import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
 import com.antgskds.calendarassistant.feature.schedule.data.store.StoreDispatcher
@@ -44,6 +46,7 @@ class SyncV2LocalRepository(
         database.withTransaction {
             val events = eventsDao.getAllEventsForSync()
             val memos = quickMemoDao.getAllQuickMemos()
+            val remindersByMemo = quickMemoDao.getAllReminders().groupBy { it.quickMemoId }
             Log.d(
                 TAG,
                 "local scan start events=${events.size} quickMemos=${memos.size} " +
@@ -74,7 +77,12 @@ class SyncV2LocalRepository(
                 val binding = memoBindings[localId] ?: return@forEach
                 val refs = buildQuickMemoAttachmentRefs(binding.recordKey, memo, encryptionKey)
                 pruneAssetLinks(binding.recordKey, refs)
-                recordLocalPayload(binding, codec.encodePayload(memo.toPortable()), refs, deviceId)
+                recordLocalPayload(
+                    binding,
+                    codec.encodePayload(memo.toPortable(remindersByMemo[localId].orEmpty())),
+                    refs,
+                    deviceId
+                )
             }
 
             val liveIds = mapOf(
@@ -505,8 +513,35 @@ class SyncV2LocalRepository(
             todoState = payload.todoState,
             todoPendingUntil = payload.todoPendingUntil,
             todoCompletedAt = payload.todoCompletedAt,
+            reminderAt = null,
+            reminderRRule = "",
         )
         val localId = quickMemoDao.insertQuickMemo(memo)
+        quickMemoDao.deleteRemindersForMemo(localId)
+        val remoteReminders = payload.reminders.orEmpty().ifEmpty {
+            payload.reminderAt?.let { triggerAt ->
+                listOf(
+                    SyncV2QuickMemoReminderPayload(
+                        triggerAt = triggerAt,
+                        rrule = payload.reminderRRule.orEmpty(),
+                        createdAt = payload.updatedAt,
+                        updatedAt = payload.updatedAt
+                    )
+                )
+            }.orEmpty()
+        }
+        remoteReminders.filter { it.triggerAt > 0L }.forEach { reminder ->
+            val fallbackTimestamp = payload.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+            quickMemoDao.insertReminder(
+                QuickMemoReminderEntity(
+                    quickMemoId = localId,
+                    triggerAt = reminder.triggerAt,
+                    rrule = reminder.rrule.orEmpty(),
+                    createdAt = reminder.createdAt.takeIf { it > 0L } ?: fallbackTimestamp,
+                    updatedAt = reminder.updatedAt.takeIf { it > 0L } ?: fallbackTimestamp
+                )
+            )
+        }
         Log.i(
             TAG,
             "quick memo persisted sync=${selected.syncUuid.shortLogId()} previousLocalId=${existing?.id} " +
@@ -690,7 +725,7 @@ class SyncV2LocalRepository(
         codeQrPayload = codeQrPayload,
     )
 
-    private fun QuickMemoEntity.toPortable() = SyncV2QuickMemoPayload(
+    private fun QuickMemoEntity.toPortable(reminders: List<QuickMemoReminderEntity>) = SyncV2QuickMemoPayload(
         type = type,
         bodyText = bodyText,
         audioDurationMs = audioDurationMs,
@@ -702,6 +737,16 @@ class SyncV2LocalRepository(
         todoState = todoState,
         todoPendingUntil = todoPendingUntil,
         todoCompletedAt = todoCompletedAt,
+        reminderAt = reminders.firstOrNull()?.triggerAt,
+        reminderRRule = reminders.firstOrNull()?.rrule.orEmpty(),
+        reminders = reminders.map { reminder ->
+            SyncV2QuickMemoReminderPayload(
+                triggerAt = reminder.triggerAt,
+                rrule = reminder.rrule,
+                createdAt = reminder.createdAt,
+                updatedAt = reminder.updatedAt
+            )
+        },
     )
 
     private fun SyncV2AssetLinkEntity.toRef() = SyncV2AttachmentRef(

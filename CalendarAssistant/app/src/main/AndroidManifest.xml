@@ -272,6 +272,10 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".platform.receiver.QuickMemoReminderReceiver"
+            android:exported="false" />
+
         <!-- 4. 侧边栏唤起服务 -->
         <service
             android:name=".platform.floating.EdgeBarService"

@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.app.ui.state
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
@@ -36,6 +36,7 @@ import com.antgskds.calendarassistant.feature.note.domain.model.NoteDocument
 import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.data.transfer.NoteTransferManager
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.QuickMemoAudioPlayer
@@ -172,6 +173,7 @@ class MainViewModel(
     val archivedEvents = scheduleCenter.archivedEvents
     val notes: StateFlow<List<NoteEntity>> = noteCenter.notes
     val quickMemos: StateFlow<List<QuickMemoEntity>> = quickMemoCenter.quickMemos
+    val quickMemoReminders: StateFlow<List<QuickMemoReminderEntity>> = quickMemoCenter.quickMemoReminders
     val quickMemoSuggestions: StateFlow<List<QuickMemoSuggestionEntity>> = quickMemoCenter.suggestions
     val audioPlaybackState: StateFlow<AudioPlaybackState> = audioPlaybackCenter.playbackState
     val capsuleUiState: StateFlow<CapsuleUiState> = capsuleQueryApi.uiState
@@ -414,6 +416,29 @@ class MainViewModel(
 
     fun updateQuickMemoBody(memoId: Long, bodyText: String) = viewModelScope.launch {
         quickMemoCenter.updateBody(memoId, bodyText)
+    }
+
+    fun saveQuickMemoReminder(
+        memoId: Long,
+        reminderId: Long?,
+        reminderAt: Long?,
+        reminderRRule: String,
+        onResult: (Result<Unit>) -> Unit = {}
+    ) = viewModelScope.launch {
+        val result = runCatching {
+            val triggerAt = reminderAt ?: error("提醒时间不能为空")
+            if (quickMemoCenter.saveReminder(memoId, reminderId, triggerAt, reminderRRule) == null) {
+                error("提醒保存失败")
+            }
+        }
+        onResult(result)
+    }
+
+    fun deleteQuickMemoReminder(reminderId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
+        val result = runCatching {
+            if (!quickMemoCenter.deleteReminder(reminderId)) error("提醒不存在")
+        }
+        onResult(result)
     }
 
     fun attachImageToQuickMemo(memoId: Long, imagePath: String, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {

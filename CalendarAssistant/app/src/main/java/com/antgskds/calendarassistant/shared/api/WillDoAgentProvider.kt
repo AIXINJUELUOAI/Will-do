@@ -8,7 +8,7 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.shared.operation.AgentAttachmentInfo
 import com.antgskds.calendarassistant.shared.operation.AgentCourse
@@ -209,12 +209,13 @@ class WillDoAgentProvider : ContentProvider() {
         WillDoAgentContract.ADD_EVENT_ATTACHMENT -> encode(
             service.addEventAttachment(
                 payload.requiredLong("eventId"),
-                payload.decode("file", AgentFileInput.serializer())
+                payload.decode("file", AgentFileInput.serializer()),
+                payload.optionalLong("occurrenceTs")
             ).getOrThrow(),
             AgentAttachmentInfo.serializer()
         )
         WillDoAgentContract.LIST_EVENT_ATTACHMENTS -> encode(
-            service.listEventAttachments(payload.requiredLong("eventId")).getOrThrow(),
+            service.listEventAttachments(payload.requiredLong("eventId"), payload.optionalLong("occurrenceTs")).getOrThrow(),
             ListSerializer(AgentAttachmentInfo.serializer())
         )
         WillDoAgentContract.DELETE_EVENT_ATTACHMENT -> completed {
@@ -419,6 +420,7 @@ class WillDoAgentProvider : ContentProvider() {
         put("maxBatchSize", WillDoAgentContract.MAX_BATCH_SIZE)
         put("maxQueryLimit", WillDoAgentContract.MAX_QUERY_LIMIT)
         put("supportsContentUriFiles", !isThirdPartyTransport)
+        put("supportsOccurrenceAttachments", !isThirdPartyTransport)
         put("accessEnabled", access.accessEnabled)
         put("thirdPartyAccessEnabled", access.thirdPartyAccessEnabled)
         put("connectionManagementEnabled", access.connectionManagementEnabled)

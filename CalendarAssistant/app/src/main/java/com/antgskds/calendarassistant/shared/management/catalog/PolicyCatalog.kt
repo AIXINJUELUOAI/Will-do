@@ -51,6 +51,8 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("随口记胶囊持续时间", Chain.NOTIFICATION, "feature/capsule/domain/QuickMemoCapsuleDurationPolicy", Maturity.ACTIVE, "手动挂起和到期提醒共用默认日程时长；当天结束模式统一到本地 23:59"),
+        PolicyEntry("随口记提醒投递策略", Chain.NOTIFICATION, "feature/notification/policy/QuickMemoReminderDeliveryPolicy", Maturity.ACTIVE, "根据胶囊开关选择发布路由，只把 POSTED 视为本次提醒完成，READY 和失败保留重试"),
         PolicyEntry(
             "WebDAV 版本合并策略", Chain.SYNC, "feature/cloudsync/domain/SyncV2VersionPolicy",
             Maturity.ACTIVE,

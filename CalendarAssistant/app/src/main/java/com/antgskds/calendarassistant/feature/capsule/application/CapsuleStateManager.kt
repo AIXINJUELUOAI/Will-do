@@ -5,7 +5,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.ScheduleDisplayHel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.FLAG_ALL_DAY
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
@@ -55,7 +55,8 @@ class CapsuleStateManager(
     private val scheduleCenter: ScheduleFacade,
     private val settingsQueryApi: SettingsQueryApi,
     private val appScope: CoroutineScope,
-    private val context: Context
+    private val context: Context,
+    private val dispatcher: CapsuleDispatcher,
 ) {
     companion object {
         private const val TAG = "CapsuleStateManager"
@@ -147,7 +148,6 @@ class CapsuleStateManager(
     private var lastOcrUpdateAt = 0L
 
     // 通知发布站（胶囊「一条线」的发布分支）：CapsuleStateManager 只算状态，发布交给它。
-    private val dispatcher = CapsuleDispatcher(context, appScope, settingsQueryApi) { uiState.value }
 
     /**
      * 【修复问题3】强制刷新胶囊状态
@@ -202,17 +202,10 @@ class CapsuleStateManager(
     private fun modelLoadingTimeoutMs(): Long =
         settingsQueryApi.settings.value.modelLoadingTimeoutMs.toLong().coerceIn(1000L, 1_800_000L)
 
-    private fun quickMemoCapsuleTimeoutMs(): Long {
-        val durationMinutes = settingsQueryApi.settings.value.defaultEventDurationMinutes
-        if (durationMinutes == -1) {
-            val endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.of(23, 59))
-                .atZone(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-            return (endOfDay - System.currentTimeMillis()).coerceIn(60_000L, 24 * 60 * 60_000L)
-        }
-        return durationMinutes.toLong().coerceIn(1L, 24 * 60L) * 60_000L
-    }
+    private fun quickMemoCapsuleTimeoutMs(): Long =
+        com.antgskds.calendarassistant.feature.capsule.domain.QuickMemoCapsuleDurationPolicy.durationMillis(
+            settingsQueryApi.settings.value.defaultEventDurationMinutes
+        )
 
     fun showOcrResult(
         title: String,
@@ -698,6 +691,7 @@ class CapsuleStateManager(
             val endDateTime = LocalDateTime.of(event.endDate, LocalTime.parse(event.endTime, TIME_FORMATTER))
             val isExpired = now.isAfter(endDateTime)
             val display = CapsuleMessageComposer.composeSchedule(context, event, isExpired, settings.liveNotificationTemplateMode)
+                .copy(tapEventId = event.id?.toString())
 
             capsules.add(createCapsuleItem(
                 id = entry.id,

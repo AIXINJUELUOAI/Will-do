@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.core.service.image
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.work.CoroutineWorker
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager

@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.schedule.application
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.application.undo.UndoManager
 import com.antgskds.calendarassistant.feature.schedule.data.ScheduleStoreGateway
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
@@ -338,7 +338,7 @@ class ScheduleFacade(
             hint = "本次修改将脱离重复系列",
             overrideStartTS = occurrenceTs,
             overrideEndTS = occurrenceTs + duration
-        )
+        ).copy(eventId = null) // 虚拟实例尚无独立记录；附件须在确认修改范围后绑定。
     }
 
     private fun eventToEditDraft(

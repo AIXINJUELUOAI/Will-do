@@ -122,6 +122,7 @@ import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
@@ -384,10 +385,26 @@ fun MaterialQuickMemoDetailScreen(
 
                 QuickMemoDetailContent(
                     memo = memo,
+                    reminders = state.reminders,
                     suggestions = state.suggestions,
                     playbackState = state.playbackState,
                     onSaveBody = { body ->
                         memo.id?.let { onAction(QuickMemoUiAction.UpdateBody(it, body)) }
+                    },
+                    onSaveReminder = { reminderId, reminderAt, reminderRRule ->
+                        memo.id?.let {
+                            onAction(
+                                QuickMemoUiAction.SaveReminder(
+                                    memoId = it,
+                                    reminderId = reminderId,
+                                    reminderAt = reminderAt,
+                                    reminderRRule = reminderRRule
+                                )
+                            )
+                        }
+                    },
+                    onDeleteReminder = { reminderId ->
+                        onAction(QuickMemoUiAction.DeleteReminder(reminderId))
                     },
                     onAttachImage = { imagePath, onResult ->
                         val id = memo.id
@@ -771,9 +788,12 @@ internal fun QuickMemoListItem(
 @Composable
 internal fun QuickMemoDetailContent(
     memo: QuickMemoEntity,
+    reminders: List<QuickMemoReminderEntity>,
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
     onSaveBody: (String) -> Unit,
+    onSaveReminder: (Long?, Long?, String) -> Unit,
+    onDeleteReminder: (Long) -> Unit,
     onAttachImage: (String, (Result<Unit>) -> Unit) -> Unit,
     onRemoveImage: ((Result<Unit>) -> Unit) -> Unit,
     onAttachVoice: (String, Long, (Result<Unit>) -> Unit) -> Unit,
@@ -1095,6 +1115,15 @@ internal fun QuickMemoDetailContent(
                 color = detailSecondaryTextColor.copy(alpha = 0.6f)
             )
         }
+
+        Spacer(Modifier.height(24.dp))
+        QuickMemoReminderSection(
+            reminders = reminders,
+            onSaveReminder = onSaveReminder,
+            onDeleteReminder = onDeleteReminder,
+            uiSize = uiSize,
+            hapticEnabled = hapticEnabled
+        )
 
         if (suggestions.isNotEmpty()) {
             Spacer(Modifier.height(40.dp))

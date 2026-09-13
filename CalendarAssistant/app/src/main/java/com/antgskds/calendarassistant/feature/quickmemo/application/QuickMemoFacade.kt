@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.quickmemo.application
 
 import android.app.ActivityManager
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi
@@ -10,8 +10,9 @@ import com.antgskds.calendarassistant.shared.query.CapsuleQueryApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleType
 import com.antgskds.calendarassistant.feature.capsule.domain.model.CapsuleUiState
-import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoAnalysisStatus
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
 import com.antgskds.calendarassistant.feature.quickmemo.data.serialization.QuickMemoSuggestionCodec
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
@@ -25,6 +26,15 @@ import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.Spe
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import com.antgskds.calendarassistant.feature.recognition.application.RecognitionOrchestrator
 import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
+import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
+import com.antgskds.calendarassistant.platform.notification.alarm.QuickMemoReminderScheduler
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.schedule.domain.model.nextOccurrenceAfter
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +42,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.antgskds.calendarassistant.feature.notification.policy.QuickMemoReminderDeliveryPolicy
 import kotlinx.coroutines.withContext
 
 class QuickMemoFacade(
@@ -43,7 +56,8 @@ class QuickMemoFacade(
     private val appContext: Context? = null,
     private val notificationCenter: NotificationOrchestrator? = null,
     private val capsuleCommandApi: CapsuleCommandApi? = null,
-    private val capsuleQueryApi: CapsuleQueryApi? = null
+    private val capsuleQueryApi: CapsuleQueryApi? = null,
+    private val notificationApi: NotificationApi? = null,
 ) {
     companion object {
         private const val TAG = "QuickMemoFacade"
@@ -57,10 +71,16 @@ class QuickMemoFacade(
 
     private val _quickMemos = MutableStateFlow<List<QuickMemoEntity>>(emptyList())
     val quickMemos: StateFlow<List<QuickMemoEntity>> = _quickMemos.asStateFlow()
+    private val _quickMemoReminders = MutableStateFlow<List<QuickMemoReminderEntity>>(emptyList())
+    val quickMemoReminders: StateFlow<List<QuickMemoReminderEntity>> = _quickMemoReminders.asStateFlow()
     private val _suggestions = MutableStateFlow<List<QuickMemoSuggestionEntity>>(emptyList())
     val suggestions: StateFlow<List<QuickMemoSuggestionEntity>> = _suggestions.asStateFlow()
     private val activeTranscriptionIds = mutableSetOf<Long>()
     private val autoPinAfterTranscriptionIds = mutableSetOf<Long>()
+    private val reminderScheduler by lazy { appContext?.let(::QuickMemoReminderScheduler) }
+    private val reminderNotifications = notificationApi?.let(::QuickMemoReminderNotificationBridge)
+    private val reminderMutex = Mutex()
+    private var scheduledReminderIds: Set<Long> = emptySet()
 
     fun start() {
         appScope.launch(Dispatchers.IO) {
@@ -73,6 +93,12 @@ class QuickMemoFacade(
                         "voice=${list.count { it.type == QuickMemoType.VOICE }} " +
                         "image=${list.count { it.type == QuickMemoType.IMAGE }}",
                 )
+            }
+        }
+        appScope.launch(Dispatchers.IO) {
+            repository.reminders.collect { list ->
+                _quickMemoReminders.value = list
+                syncReminderSchedules(list)
             }
         }
         appScope.launch(Dispatchers.IO) {
@@ -90,12 +116,42 @@ class QuickMemoFacade(
                 Log.w(TAG, "reset stale processing voice memos: $resetCount")
             }
         }
+        appScope.launch(Dispatchers.IO) {
+            rescheduleReminders()
+        }
         // Do not auto-retry old voice transcriptions at startup: Sherpa JNI aborts are process-fatal.
         // Users can still retry explicitly from the quick memo UI after the app is open.
     }
 
+    private suspend fun syncReminderSchedules(reminders: List<QuickMemoReminderEntity>) = reminderMutex.withLock {
+        val active = mutableMapOf<Long, Pair<Long, Long>>()
+        reminders.forEach { item ->
+            val id = item.id ?: return@forEach
+            val current = repository.getReminder(id) ?: return@forEach
+            if (current.triggerAt <= System.currentTimeMillis()) {
+                Log.i(TAG, "reconcile overdue reminder=$id; attempting delivery before cleanup")
+                deliverReminderLocked(id)
+            }
+            val remaining = repository.getReminder(id) ?: return@forEach
+            val nextAt = if (remaining.triggerAt > System.currentTimeMillis()) remaining.triggerAt
+                else System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS
+            active[id] = remaining.quickMemoId to nextAt
+        }
+        (scheduledReminderIds - active.keys).forEach { reminderScheduler?.cancel(it) }
+        active.forEach { (id, target) -> reminderScheduler?.schedule(id, target.first, target.second) }
+        scheduledReminderIds = active.keys.toSet()
+    }
+
     suspend fun getQuickMemo(id: Long): QuickMemoEntity? = withContext(Dispatchers.IO) {
         repository.getQuickMemo(id)
+    }
+
+    suspend fun getAllReminders(): List<QuickMemoReminderEntity> = withContext(Dispatchers.IO) {
+        repository.getAllReminders()
+    }
+
+    suspend fun getRemindersForMemo(memoId: Long): List<QuickMemoReminderEntity> = withContext(Dispatchers.IO) {
+        repository.getRemindersForMemo(memoId)
     }
 
     suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false): Long = withContext(Dispatchers.IO) {
@@ -181,6 +237,133 @@ class QuickMemoFacade(
         true
     }
 
+    /** 只移除已发出的提醒胶囊，不触碰随口记、挂起状态和未来重复提醒。 */
+    suspend fun dismissReminderCapsule(reminderId: Long) {
+        notificationApi?.cancel(com.antgskds.calendarassistant.feature.notification.model.NotificationKey.quickMemoReminder(reminderId))
+    }
+
+    suspend fun setReminder(
+        id: Long,
+        reminderAt: Long?,
+        reminderRRule: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (repository.getQuickMemo(id) == null) return@withContext false
+        val existing = repository.getRemindersForMemo(id).firstOrNull()
+        if (reminderAt == null) {
+            repository.getRemindersForMemo(id).forEach { reminder ->
+                reminder.id?.let { reminderId ->
+                    reminderScheduler?.cancel(reminderId)
+                    repository.deleteReminder(reminderId)
+                }
+            }
+            return@withContext true
+        }
+        saveReminder(id, existing?.id, reminderAt, reminderRRule) != null
+    }
+
+    suspend fun saveReminder(
+        memoId: Long,
+        reminderId: Long?,
+        reminderAt: Long,
+        reminderRRule: String = ""
+    ): Long? = withContext(Dispatchers.IO) {
+        if (repository.getQuickMemo(memoId) == null) return@withContext null
+        val normalizedAt = reminderAt.takeIf { it > System.currentTimeMillis() } ?: return@withContext null
+        val normalizedRRule = normalizeReminderRRule(reminderRRule)
+        val now = System.currentTimeMillis()
+        val storedId = if (reminderId == null) {
+            repository.insertReminder(
+                QuickMemoReminderEntity(
+                    quickMemoId = memoId,
+                    triggerAt = normalizedAt,
+                    rrule = normalizedRRule,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+        } else {
+            val existing = repository.getReminder(reminderId)
+                ?.takeIf { it.quickMemoId == memoId }
+                ?: return@withContext null
+            repository.updateReminder(
+                existing.copy(triggerAt = normalizedAt, rrule = normalizedRRule, updatedAt = now)
+            )
+            reminderId
+        }
+        reminderScheduler?.schedule(storedId, memoId, normalizedAt)
+        storedId
+    }
+
+    suspend fun deleteReminder(reminderId: Long): Boolean = withContext(Dispatchers.IO) {
+        reminderScheduler?.cancel(reminderId)
+        repository.deleteReminder(reminderId)
+    }
+
+    suspend fun rescheduleReminders() = withContext(Dispatchers.IO) {
+        syncReminderSchedules(repository.getAllReminders())
+    }
+
+    suspend fun deliverReminder(reminderId: Long) = withContext(Dispatchers.IO) {
+        reminderMutex.withLock { deliverReminderLocked(reminderId) }
+    }
+
+    private suspend fun deliverReminderLocked(reminderId: Long) {
+        val reminder = repository.getReminder(reminderId) ?: run {
+            Log.i(TAG, "skip missing or completed reminder=$reminderId")
+            return
+        }
+        val memo = repository.getQuickMemo(reminder.quickMemoId) ?: return
+        if (reminder.triggerAt > System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS) {
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, reminder.triggerAt)
+            return
+        }
+        val publisher = checkNotNull(reminderNotifications) { "随口记提醒未配置 NotificationApi" }
+        val result = try {
+            publisher.publish(memo, reminderId)
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e(TAG, "Quick memo reminder publish exception reminder=$reminderId", error)
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS)
+            return
+        }
+        if (!QuickMemoReminderDeliveryPolicy.isDelivered(result)) {
+            Log.w(TAG, "Quick memo reminder not posted; retained for retry reminder=$reminderId result=$result")
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS)
+            return
+        }
+        Log.i(TAG, "Quick memo reminder posted reminder=$reminderId; completing occurrence")
+        val nextAt = resolveNextReminderAt(reminder, System.currentTimeMillis())
+        if (nextAt == null) {
+            repository.deleteReminder(reminderId)
+            reminderScheduler?.cancel(reminderId)
+        } else {
+            repository.updateReminder(
+                reminder.copy(triggerAt = nextAt, updatedAt = System.currentTimeMillis())
+            )
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, nextAt)
+        }
+    }
+
+    private fun resolveNextReminderAt(reminder: QuickMemoReminderEntity, afterMillis: Long): Long? {
+        val repeatSpec = parseSupportedReminderRepeat(reminder.rrule) ?: return null
+        val zone = ZoneId.systemDefault()
+        val anchor = Instant.ofEpochMilli(reminder.triggerAt).atZone(zone)
+        val after = Instant.ofEpochMilli(afterMillis).atZone(zone)
+        return repeatSpec.nextOccurrenceAfter(anchor, after)?.toInstant()?.toEpochMilli()
+    }
+
+    private fun normalizeReminderRRule(rrule: String): String {
+        return parseSupportedReminderRepeat(rrule)?.toRRule().orEmpty()
+    }
+
+    private fun parseSupportedReminderRepeat(rrule: String): RepeatSpec? {
+        val spec = RepeatSpec.fromRRule(rrule) ?: return null
+        if (spec.end is RepeatEnd.Count) return null
+        if (spec.frequency !in setOf(RepeatFrequency.DAILY, RepeatFrequency.WEEKLY)) return null
+        return spec
+    }
+
     suspend fun refreshActiveTextQuickMemoCapsule(): Boolean = withContext(Dispatchers.IO) {
         val id = activeTextQuickMemoId() ?: return@withContext false
         val memo = repository.getQuickMemo(id) ?: run {
@@ -211,11 +394,13 @@ class QuickMemoFacade(
 
     suspend fun deleteQuickMemo(id: Long) = withContext(Dispatchers.IO) {
         clearPinnedTextQuickMemo(id)
+        repository.getRemindersForMemo(id).mapNotNull { it.id }.forEach { reminderScheduler?.cancel(it) }
         repository.deleteQuickMemo(id)
     }
 
     suspend fun clearAllQuickMemos(): Int = withContext(Dispatchers.IO) {
         capsuleCommandApi?.clearTextQuickMemo()
+        repository.getAllReminders().mapNotNull { it.id }.forEach { reminderScheduler?.cancel(it) }
         repository.clearAllQuickMemos()
     }
 

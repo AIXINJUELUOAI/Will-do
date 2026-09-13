@@ -55,6 +55,9 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("随口记提醒生命周期", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "维护多个提醒的保存、删除、重排、触发及重复推进；发布经 NotificationApi"),
+        PipelineEntry("随口记提醒通知桥接", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoReminderNotificationBridge", Maturity.PIPELINE, "到期随口记经 NotificationApi 按胶囊开关分流，只有 POSTED 才完成本次提醒"),
+        PipelineEntry("随口记提醒闹钟调度", Chain.NOTIFICATION, "platform/notification/alarm/QuickMemoReminderScheduler", Maturity.PIPELINE, "统一安装及取消随口记闹钟，精确权限不可用时回退非精确调度"),
         // —— 识别 ——
         PipelineEntry(
             "识别主流程", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator",
@@ -95,7 +98,7 @@ object PipelineCatalog {
         PipelineEntry(
             "胶囊发布流程", Chain.NOTIFICATION, "platform/capsule/CapsuleDispatcher",
             Maturity.TRANSITION,
-            "CapsuleStateManager 只算状态，发布交 CapsuleDispatcher 分流原生/魅族/小米超级岛",
+            "CapsuleStateManager 只算状态；CapsuleDispatcher 合并独立到期提醒，经 PlatformPublisher 返回发布结果并分流原生/魅族/小米超级岛",
         ),
 
         // —— 日程主体 ——

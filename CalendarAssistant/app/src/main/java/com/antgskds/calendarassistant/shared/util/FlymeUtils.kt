@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 
 /**
  * 魅族 Flyme 系统适配工具

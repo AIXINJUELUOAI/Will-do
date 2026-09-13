@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.notification.model.NotificationFailureReason
 import com.antgskds.calendarassistant.feature.notification.model.NotificationKey
 import com.antgskds.calendarassistant.feature.notification.model.NotificationResult

@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.shared.util
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 
 object DataSanitizer {

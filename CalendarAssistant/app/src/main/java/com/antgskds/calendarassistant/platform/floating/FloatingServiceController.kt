@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.platform.floating
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.settings.data.model.QuickMemoRecordingDisplayMode
@@ -71,15 +71,36 @@ class FloatingServiceController(
     }
 
     fun startPickupQrCard(eventId: Long): Boolean {
+        return startEventMediaCard(eventId, emptyList())
+    }
+
+    fun startEventMediaCard(eventId: Long, imagePaths: List<String>): Boolean {
         if (eventId <= 0L || !canDrawOverlays()) return false
         return try {
             appContext.startService(Intent(appContext, FloatingScheduleService::class.java).apply {
                 action = FloatingScheduleService.ACTION_SHOW_PICKUP_QR_CARD
                 putExtra(FloatingScheduleService.EXTRA_PICKUP_EVENT_ID, eventId)
+                putStringArrayListExtra(FloatingScheduleService.EXTRA_MEDIA_IMAGE_PATHS, ArrayList(imagePaths))
             })
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Start pickup QR card failed", e)
+            Log.e(TAG, "Start event media card failed", e)
+            false
+        }
+    }
+
+    fun startQuickMemoMediaCard(memoId: Long, imagePath: String, bodyText: String): Boolean {
+        if (memoId <= 0L || imagePath.isBlank() || !canDrawOverlays()) return false
+        return try {
+            appContext.startService(Intent(appContext, FloatingScheduleService::class.java).apply {
+                action = FloatingScheduleService.ACTION_SHOW_QUICK_MEMO_MEDIA_CARD
+                putExtra(FloatingScheduleService.EXTRA_QUICK_MEMO_ID, memoId)
+                putExtra(FloatingScheduleService.EXTRA_MEDIA_IMAGE_PATH, imagePath)
+                putExtra(FloatingScheduleService.EXTRA_MEDIA_TITLE, bodyText)
+            })
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Start quick memo media card failed", e)
             false
         }
     }

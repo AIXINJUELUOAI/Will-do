@@ -3,6 +3,9 @@ package com.antgskds.calendarassistant.feature.schedule.domain
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem.ActionTarget
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.schedule.domain.model.advanceOccurrence
 import com.antgskds.calendarassistant.feature.schedule.domain.model.inferEventTagFromDescription
 import java.time.DayOfWeek
 import java.time.Instant
@@ -10,7 +13,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.TemporalAdjusters
 
 /**
  * 将数据库中的 Event 转换为 UI 展示用的 ScheduleDisplayItem。
@@ -195,35 +197,18 @@ object ScheduleDisplayHelper {
     }
 
     private fun advanceCursor(current: ZonedDateTime, rrule: RRule, original: ZonedDateTime): ZonedDateTime {
-        val interval = rrule.interval
-        return when (rrule.freq) {
-            "DAILY" -> current.plusDays(interval.toLong())
-            "WEEKLY" -> {
-                if (rrule.byDay.isEmpty()) {
-                    current.plusWeeks(interval.toLong())
-                } else {
-                    var next = current.plusDays(1)
-                    val weekEnd = current.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                        .plusWeeks(interval.toLong())
-                    while (next.isBefore(weekEnd) || next == weekEnd) {
-                        if (next.dayOfWeek in rrule.byDay) return next
-                        next = next.plusDays(1)
-                    }
-                    for (i in 0..6) {
-                        val c = weekEnd.plusDays(i.toLong())
-                        if (c.dayOfWeek in rrule.byDay) return c
-                    }
-                    current.plusWeeks(interval.toLong())
-                }
-            }
-            "MONTHLY" -> {
-                val next = current.plusMonths(interval.toLong())
-                try { next.withDayOfMonth(original.dayOfMonth) }
-                catch (_: Exception) { next.with(TemporalAdjusters.lastDayOfMonth()) }
-            }
-            "YEARLY" -> current.plusYears(interval.toLong())
-            else -> current.plusDays(1)
+        val frequency = when (rrule.freq) {
+            "DAILY" -> RepeatFrequency.DAILY
+            "WEEKLY" -> RepeatFrequency.WEEKLY
+            "MONTHLY" -> RepeatFrequency.MONTHLY
+            "YEARLY" -> RepeatFrequency.YEARLY
+            else -> return current.plusDays(1)
         }
+        return RepeatSpec(
+            frequency = frequency,
+            interval = rrule.interval,
+            byDays = rrule.byDay
+        ).advanceOccurrence(current, original)
     }
 
     private fun parseDays(raw: String): Set<DayOfWeek> =

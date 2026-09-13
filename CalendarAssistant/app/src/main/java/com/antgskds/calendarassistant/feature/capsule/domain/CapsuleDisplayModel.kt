@@ -16,6 +16,7 @@ data class CapsuleDisplayModel(
     val isCompact: Boolean = false,
     val tapOpensPickupList: Boolean = false,
     val tapEventId: String? = null,
+    val tapQuickMemoId: String? = null,
     val action: CapsuleActionSpec? = null,
     val actions: List<CapsuleActionSpec> = emptyList()
 ) {

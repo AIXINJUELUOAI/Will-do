@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.platform.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.shared.util.AccessibilityGuardian
 import com.antgskds.calendarassistant.feature.weather.domain.WeatherSyncWorker
@@ -25,8 +25,22 @@ class BootReceiver : BroadcastReceiver() {
             app.scheduleCenter.refreshAll()
             app.reminderCenter.reconcileAll()
             // Phase 2 修复：重启会清空 AlarmManager，从持久化 Registry 重排新通知链路的系统闹钟。
+            val pendingResult = goAsync()
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                app.notificationCenter.rescheduleAllAlarms()
+                try {
+                    try {
+                        app.notificationCenter.rescheduleAllAlarms()
+                    } catch (error: Throwable) {
+                        Log.e("BootReceiver", "Failed to restore notification alarms", error)
+                    }
+                    try {
+                        app.quickMemoCenter.rescheduleReminders()
+                    } catch (error: Throwable) {
+                        Log.e("BootReceiver", "Failed to restore quick memo reminders", error)
+                    }
+                } finally {
+                    pendingResult.finish()
+                }
             }
             app.widgetCenter.requestRefresh()
 

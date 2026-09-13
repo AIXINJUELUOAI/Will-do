@@ -146,15 +146,17 @@ fun QuickMemoDetailPage(
     embedded: Boolean = false,
 ) {
     val quickMemos by viewModel.quickMemos.collectAsState()
+    val reminders by viewModel.quickMemoReminders.collectAsState()
     val suggestions by viewModel.quickMemoSuggestions.collectAsState()
     val playbackState by viewModel.audioPlaybackState.collectAsState()
     val capsuleUiState by viewModel.capsuleUiState.collectAsState()
     val mainUiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val state = remember(memoId, quickMemos, suggestions, playbackState, capsuleUiState) {
+    val state = remember(memoId, quickMemos, reminders, suggestions, playbackState, capsuleUiState) {
         val memo = quickMemos.firstOrNull { it.id == memoId }
         QuickMemoDetailUiState(
             memo = memo,
+            reminders = reminders.filter { it.quickMemoId == memoId },
             suggestions = suggestions.filter {
                 it.quickMemoId == memoId &&
                     (it.status == QuickMemoSuggestionStatus.PENDING ||
@@ -212,6 +214,23 @@ private fun handleQuickMemoAction(
         is QuickMemoUiAction.RemoveTodo -> viewModel.removeQuickMemoTodo(action.memoId)
         is QuickMemoUiAction.ToggleAudio -> viewModel.toggleAudioPlayback(action.audioPath)
         is QuickMemoUiAction.UpdateBody -> viewModel.updateQuickMemoBody(action.memoId, action.body)
+        is QuickMemoUiAction.SaveReminder ->
+            viewModel.saveQuickMemoReminder(
+                action.memoId,
+                action.reminderId,
+                action.reminderAt,
+                action.reminderRRule
+            ) { result ->
+                result.onFailure { error ->
+                    Toast.makeText(context, error.message ?: "提醒设置失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        is QuickMemoUiAction.DeleteReminder ->
+            viewModel.deleteQuickMemoReminder(action.reminderId) { result ->
+                result.onFailure { error ->
+                    Toast.makeText(context, error.message ?: "提醒删除失败", Toast.LENGTH_SHORT).show()
+                }
+            }
         is QuickMemoUiAction.AttachImage ->
             viewModel.attachImageToQuickMemo(action.memoId, action.imagePath, action.onResult)
         is QuickMemoUiAction.RemoveImage ->

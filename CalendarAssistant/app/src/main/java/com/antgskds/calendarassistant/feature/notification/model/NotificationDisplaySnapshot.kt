@@ -20,6 +20,7 @@ data class NotificationTapTarget(
 )
 
 enum class NotificationTapTargetType {
+    QUICK_MEMO_DETAIL,
     APP_HOME,
     SCHEDULE_DETAIL,
     PICKUP_LIST,

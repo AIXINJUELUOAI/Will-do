@@ -22,14 +22,13 @@ class DiagnosticLogExporter(private val context: Context) {
     private val logcatTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
 
     suspend fun migrateLegacyLogs(): List<String> = withContext(Dispatchers.IO) {
-        val result = WillDoDownloadLogNode.migrateLegacyLogs(appContext)
+        val result = AppLogger.migrateLegacyLogs(appContext)
         AppLogger.i("DiagnosticLogExporter", "legacy log migration result=${result.joinToString()}")
         result
     }
 
     suspend fun exportLogBundle(minutes: Int? = null): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            migrateLegacyLogs()
             val timestamp = LocalDateTime.now().format(exportNameFormatter)
             val suffix = minutes?.let { "_${it}min" } ?: "_all"
             val fileName = "willdo_log_${timestamp}$suffix.txt"
@@ -48,6 +47,7 @@ class DiagnosticLogExporter(private val context: Context) {
             target.parentFile?.mkdirs()
             target.writeText(DiagnosticLogRedactor.redact(buildMergedLogText(minutes)), Charsets.UTF_8)
             AppLogger.i("DiagnosticLogExporter", "exported redacted Agent diagnostics minutes=$minutes")
+            Unit
         }
     }
 
@@ -62,21 +62,8 @@ class DiagnosticLogExporter(private val context: Context) {
         val sections = listOf(
             LogSection(
                 title = "APP",
-                category = WillDoDownloadLogNode.APP_LOG_DIR,
-                fileName = WillDoDownloadLogNode.APP_LOG_FILE,
+                content = AppLogger.readText(),
                 emptyMessage = "No app runtime log found."
-            ),
-            LogSection(
-                title = "CRASH",
-                category = WillDoDownloadLogNode.CRASH_DIR,
-                fileName = WillDoDownloadLogNode.CRASH_LOG_FILE,
-                emptyMessage = "No crash log found."
-            ),
-            LogSection(
-                title = "AI_ENGINE",
-                category = WillDoDownloadLogNode.AI_ENGINE_DIR,
-                fileName = WillDoDownloadLogNode.AI_ENGINE_LOG_FILE,
-                emptyMessage = "No local recognition log found."
             )
         )
         return buildString {
@@ -88,9 +75,8 @@ class DiagnosticLogExporter(private val context: Context) {
             appendLine("Notice: logs may contain recognized text, prompts, model responses, API responses, and runtime logcat lines.")
             appendLine()
             sections.forEach { section ->
-                appendLine("===== ${section.title} / ${section.fileName} =====")
-                val raw = WillDoDownloadLogNode.readText(appContext, section.category, section.fileName).orEmpty()
-                val filtered = filterLogByTime(raw, cutoff).trimEnd()
+                appendLine("===== ${section.title} =====")
+                val filtered = filterLogByTime(section.content, cutoff).trimEnd()
                 if (filtered.isBlank()) {
                     appendLine(section.emptyMessage)
                 } else {
@@ -334,8 +320,7 @@ class DiagnosticLogExporter(private val context: Context) {
 
     private data class LogSection(
         val title: String,
-        val category: String,
-        val fileName: String,
+        val content: String,
         val emptyMessage: String
     )
 

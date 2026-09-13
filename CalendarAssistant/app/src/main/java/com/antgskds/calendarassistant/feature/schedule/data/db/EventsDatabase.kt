@@ -24,6 +24,7 @@ import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.note.data.local.NotesDao
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoDao
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import java.util.concurrent.Executors
 
@@ -34,6 +35,7 @@ import java.util.concurrent.Executors
         EventAttachment::class,
         NoteEntity::class,
         QuickMemoEntity::class,
+        QuickMemoReminderEntity::class,
         QuickMemoSuggestionEntity::class,
         SyncV2BindingEntity::class,
         SyncV2RevisionEntity::class,
@@ -41,7 +43,7 @@ import java.util.concurrent.Executors
         SyncV2PeerEntity::class,
         SyncV2MetaEntity::class
     ],
-    version = 12,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -64,7 +66,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -295,6 +297,41 @@ abstract class EventsDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_v2_asset_links_local_attachment_id ON sync_v2_asset_links(local_attachment_id)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_peers (device_id TEXT NOT NULL PRIMARY KEY, etag TEXT NOT NULL, generation INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS sync_v2_meta (`key` TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+            }
+        }
+
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN reminder_at INTEGER DEFAULT NULL")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN reminder_rrule TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS quick_memo_reminders (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "quick_memo_id INTEGER NOT NULL, " +
+                        "trigger_at INTEGER NOT NULL, " +
+                        "rrule TEXT NOT NULL, " +
+                        "created_at INTEGER NOT NULL, " +
+                        "updated_at INTEGER NOT NULL, " +
+                        "FOREIGN KEY(quick_memo_id) REFERENCES quick_memos(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_reminders_quick_memo_id ON quick_memo_reminders(quick_memo_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memo_reminders_trigger_at ON quick_memo_reminders(trigger_at)")
+                db.execSQL(
+                    "INSERT INTO quick_memo_reminders (quick_memo_id, trigger_at, rrule, created_at, updated_at) " +
+                        "SELECT id, reminder_at, reminder_rrule, updated_at, updated_at FROM quick_memos " +
+                        "WHERE reminder_at IS NOT NULL"
+                )
+                db.execSQL("UPDATE quick_memos SET reminder_at = NULL, reminder_rrule = ''")
             }
         }
     }

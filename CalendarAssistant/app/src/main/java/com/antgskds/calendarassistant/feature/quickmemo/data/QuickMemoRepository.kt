@@ -1,9 +1,10 @@
 package com.antgskds.calendarassistant.feature.quickmemo.data
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoAnalysisStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoDao
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
@@ -20,9 +21,25 @@ class QuickMemoRepository(
     }
 
     val quickMemos: Flow<List<QuickMemoEntity>> = quickMemoDao.observeQuickMemos()
+    val reminders: Flow<List<QuickMemoReminderEntity>> = quickMemoDao.observeReminders()
     val suggestions: Flow<List<QuickMemoSuggestionEntity>> = quickMemoDao.observeSuggestions()
 
     suspend fun getQuickMemo(id: Long): QuickMemoEntity? = quickMemoDao.getQuickMemo(id)
+
+    suspend fun getReminder(id: Long): QuickMemoReminderEntity? = quickMemoDao.getReminder(id)
+
+    suspend fun getAllReminders(): List<QuickMemoReminderEntity> = quickMemoDao.getAllReminders()
+
+    suspend fun getRemindersForMemo(quickMemoId: Long): List<QuickMemoReminderEntity> =
+        quickMemoDao.getRemindersForMemo(quickMemoId)
+
+    suspend fun insertReminder(reminder: QuickMemoReminderEntity): Long = quickMemoDao.insertReminder(reminder)
+
+    suspend fun updateReminder(reminder: QuickMemoReminderEntity) = quickMemoDao.updateReminder(reminder)
+
+    suspend fun deleteReminder(id: Long): Boolean = quickMemoDao.deleteReminderById(id) > 0
+
+    suspend fun deleteRemindersForMemo(quickMemoId: Long): Int = quickMemoDao.deleteRemindersForMemo(quickMemoId)
 
     suspend fun getUnfinishedVoiceMemos(): List<QuickMemoEntity> = quickMemoDao.getUnfinishedVoiceMemos()
 
@@ -99,6 +116,8 @@ class QuickMemoRepository(
             )
         )
     }
+
+    suspend fun getAllQuickMemos(): List<QuickMemoEntity> = quickMemoDao.getAllQuickMemos()
 
     suspend fun attachImage(id: Long, imagePath: String) {
         val memo = quickMemoDao.getQuickMemo(id) ?: return

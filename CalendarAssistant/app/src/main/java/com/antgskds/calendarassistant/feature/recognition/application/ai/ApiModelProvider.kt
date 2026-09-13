@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import android.util.Base64
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.recognition.application.ai.model.ModelRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
@@ -95,7 +95,8 @@ object ApiModelProvider {
             val shouldAttemptReasoning = shouldAttemptReasoning(disableThinking, baseUrl, modelName)
             val requestBody = request.copy(
                 model = modelName,
-                reasoningEffort = if (shouldAttemptReasoning) "low" else null
+                reasoningEffort = if (shouldAttemptReasoning) "low" else null,
+                thinking = if (disableThinking && isDeepSeekEndpoint(baseUrl)) mapOf("type" to "disabled") else null
             )
 
             val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
@@ -172,7 +173,8 @@ object ApiModelProvider {
                 modelName = modelName,
                 prompt = prompt,
                 dataUrl = dataUrl,
-                reasoningEffort = if (shouldAttemptReasoning) "low" else null
+                reasoningEffort = if (shouldAttemptReasoning) "low" else null,
+                disableDeepSeekThinking = disableThinking && isDeepSeekEndpoint(baseUrl)
             )
             Log.d(
                 "DEBUG_HTTP_VISION",
@@ -517,11 +519,17 @@ object ApiModelProvider {
         return "${baseUrl}|${modelName}"
     }
 
-    private fun buildVisionRequestBody(
+    internal fun isDeepSeekEndpoint(baseUrl: String): Boolean {
+        return runCatching { java.net.URI(baseUrl.trim()).host }
+            .getOrNull()?.equals("api.deepseek.com", ignoreCase = true) == true
+    }
+
+    internal fun buildVisionRequestBody(
         modelName: String,
         prompt: String,
         dataUrl: String,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        disableDeepSeekThinking: Boolean = false
     ): JsonObject {
         return buildJsonObject {
             put("model", modelName)
@@ -547,6 +555,9 @@ object ApiModelProvider {
                 })
             }
             put("temperature", 0.1)
+            if (disableDeepSeekThinking) {
+                putJsonObject("thinking") { put("type", "disabled") }
+            }
             if (!reasoningEffort.isNullOrBlank()) {
                 put("reasoning_effort", reasoningEffort)
             }

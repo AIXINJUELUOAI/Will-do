@@ -420,6 +420,10 @@ class SettingsViewModel(
         onUpdated()
     }
 
+    fun setAutoRecordLogs(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(settings.value.copy(autoRecordLogs = enabled))
+    }
+
     fun setScheduleIngestDedupEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsOperationApi.updateSettings(
             settings.value.copy(scheduleIngestDedupEnabled = enabled)
