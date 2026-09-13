@@ -147,12 +147,12 @@ class SystemCalendarSyncManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun insertCalDAVEvent(event: Event): Event {
         if (!hasCalendarPermission()) {
-            android.util.Log.w("CalDAVSync", "insertCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
+            com.antgskds.calendarassistant.shared.util.AppLogger.w("CalDAVSync", "insertCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
             return event
         }
         val calendarId = resolveCalendarId(event)
         if (calendarId == 0) {
-            android.util.Log.w(
+            com.antgskds.calendarassistant.shared.util.AppLogger.w(
                 "CalDAVSync",
                 "insertCalDAVEvent skipped calendarId=0 localId=${event.id} title=${event.title} " +
                     "syncedIds=${config.caldavSyncedCalendarIds} lastUsed=${config.lastUsedCaldavCalendarId} source=${event.source}"
@@ -160,7 +160,7 @@ class SystemCalendarSyncManager(private val context: Context) {
             return event
         }
 
-        android.util.Log.i(
+        com.antgskds.calendarassistant.shared.util.AppLogger.i(
             "CalDAVSync",
             "insertCalDAVEvent start localId=${event.id} title=${event.title} calendarId=$calendarId " +
                 "recurring=${event.rrule.isNotBlank()} source=${event.source} importId=${event.importId}"
@@ -169,7 +169,7 @@ class SystemCalendarSyncManager(private val context: Context) {
         val values = buildEventContentValues(event, calendarId)
         val newUri = appContext.contentResolver.insert(Events.CONTENT_URI, values)
         if (newUri == null) {
-            android.util.Log.w(
+            com.antgskds.calendarassistant.shared.util.AppLogger.w(
                 "CalDAVSync",
                 "insertCalDAVEvent failed-null-uri localId=${event.id} title=${event.title} calendarId=$calendarId rrule=${event.rrule}"
             )
@@ -177,7 +177,7 @@ class SystemCalendarSyncManager(private val context: Context) {
         }
         val eventRemoteId = newUri.lastPathSegment?.toLongOrNull()
         if (eventRemoteId == null || eventRemoteId == 0L) {
-            android.util.Log.w("CalDAVSync", "insertCalDAVEvent: bad remoteId=$eventRemoteId, uri=$newUri, title=${event.title}, rrule=${event.rrule}, " +
+            com.antgskds.calendarassistant.shared.util.AppLogger.w("CalDAVSync", "insertCalDAVEvent: bad remoteId=$eventRemoteId, uri=$newUri, title=${event.title}, rrule=${event.rrule}, " +
                 "dtstart=${values.getAsLong("dtstart")}, dtend=${values.getAsLong("dtend")}, duration=${values.getAsString("duration")}")
             return event
         }
@@ -187,7 +187,7 @@ class SystemCalendarSyncManager(private val context: Context) {
         val synced = event.copy(importId = importId, source = source)
         synced.id?.let { db.eventsDao().updateEventImportIdAndSource(importId, source, it) }
 
-        android.util.Log.i(
+        com.antgskds.calendarassistant.shared.util.AppLogger.i(
             "CalDAVSync",
             "insertCalDAVEvent success localId=${event.id} remoteId=$eventRemoteId importId=$importId source=$source"
         )
@@ -200,18 +200,18 @@ class SystemCalendarSyncManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun updateCalDAVEvent(event: Event): Event {
         if (!hasCalendarPermission()) {
-            android.util.Log.w("CalDAVSync", "updateCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
+            com.antgskds.calendarassistant.shared.util.AppLogger.w("CalDAVSync", "updateCalDAVEvent skipped no-calendar-permission localId=${event.id} title=${event.title}")
             return event
         }
         val eventRemoteId = event.getCalDAVEventId()
         if (eventRemoteId == 0L) {
-            android.util.Log.i("CalDAVSync", "updateCalDAVEvent no-remote-id fallback-insert localId=${event.id} title=${event.title}")
+            com.antgskds.calendarassistant.shared.util.AppLogger.i("CalDAVSync", "updateCalDAVEvent no-remote-id fallback-insert localId=${event.id} title=${event.title}")
             return insertCalDAVEvent(event)
         }
 
         val calendarId = resolveCalendarId(event)
         if (calendarId == 0) {
-            android.util.Log.w(
+            com.antgskds.calendarassistant.shared.util.AppLogger.w(
                 "CalDAVSync",
                 "updateCalDAVEvent skipped calendarId=0 localId=${event.id} remoteId=$eventRemoteId title=${event.title} " +
                     "syncedIds=${config.caldavSyncedCalendarIds} lastUsed=${config.lastUsedCaldavCalendarId} source=${event.source}"
@@ -219,7 +219,7 @@ class SystemCalendarSyncManager(private val context: Context) {
             return event
         }
 
-        android.util.Log.i(
+        com.antgskds.calendarassistant.shared.util.AppLogger.i(
             "CalDAVSync",
             "updateCalDAVEvent start localId=${event.id} remoteId=$eventRemoteId title=${event.title} calendarId=$calendarId recurring=${event.rrule.isNotBlank()}"
         )
@@ -227,7 +227,7 @@ class SystemCalendarSyncManager(private val context: Context) {
         val values = buildEventContentValues(event, calendarId)
         val uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventRemoteId)
         val rows = appContext.contentResolver.update(uri, values, null, null)
-        android.util.Log.i(
+        com.antgskds.calendarassistant.shared.util.AppLogger.i(
             "CalDAVSync",
             "updateCalDAVEvent finish localId=${event.id} remoteId=$eventRemoteId rows=$rows"
         )
@@ -528,7 +528,7 @@ class SystemCalendarSyncManager(private val context: Context) {
                         tag = inferEventTagFromDescription(event.description, matchedUnbound.tag),
                         lastUpdated = System.currentTimeMillis()
                     )
-                    android.util.Log.i(
+                    com.antgskds.calendarassistant.shared.util.AppLogger.i(
                         "CalDAVSync",
                         "fetchCalDAVCalendarEvents bound duplicate localId=${matchedUnbound.id} importId=$importId title=$title"
                     )
@@ -550,7 +550,7 @@ class SystemCalendarSyncManager(private val context: Context) {
             }
             val protectedCount = existing.size - idsToDelete.size
             if (protectedCount > 0) {
-                android.util.Log.i(
+                com.antgskds.calendarassistant.shared.util.AppLogger.i(
                     "CalDAVSync",
                     "fetchCalDAVCalendarEvents protected missing local bindings source=$source count=$protectedCount"
                 )

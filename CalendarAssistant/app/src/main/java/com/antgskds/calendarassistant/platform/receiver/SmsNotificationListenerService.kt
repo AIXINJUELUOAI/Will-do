@@ -8,7 +8,7 @@ import android.os.Bundle
 import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.app.NotificationManagerCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.ingest.sms.SmsPickupSource

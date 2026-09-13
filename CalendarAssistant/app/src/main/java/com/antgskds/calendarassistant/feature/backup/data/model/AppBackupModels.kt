@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.backup.data.model
 
-import kotlinx.serialization.Serializable
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import kotlinx.serialization.Serializable
 
 @Serializable
 data class AppBackupOptions(
@@ -59,7 +59,18 @@ data class AppBackupQuickMemoDto(
     val sortRank: Long = 0L,
     val todoState: String = "NONE",
     val todoPendingUntil: Long? = null,
-    val todoCompletedAt: Long? = null
+    val todoCompletedAt: Long? = null,
+    val reminderAt: Long? = null,
+    val reminderRRule: String = "",
+    val reminders: List<AppBackupQuickMemoReminderDto> = emptyList()
+)
+
+@Serializable
+data class AppBackupQuickMemoReminderDto(
+    val triggerAt: Long = 0L,
+    val rrule: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
 
 @Serializable

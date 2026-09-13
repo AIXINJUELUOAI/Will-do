@@ -6,7 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.shared.util.CrashHandler
 import com.antgskds.calendarassistant.shared.util.AnrMonitor
@@ -164,7 +164,8 @@ class App : Application() {
             appContext = applicationContext,
             notificationCenter = notificationCenter,
             capsuleCommandApi = capsuleCommandApi,
-            capsuleQueryApi = capsuleQueryApi
+            capsuleQueryApi = capsuleQueryApi,
+            notificationApi = notificationCenter,
         )
     }
 
@@ -364,8 +365,15 @@ class App : Application() {
             scheduleCenter = scheduleCenter,
             settingsQueryApi = settingsQueryApi,
             appScope = appScope,
-            context = applicationContext
+            context = applicationContext,
+            dispatcher = capsuleDispatcher,
         )
+    }
+
+    val capsuleDispatcher: com.antgskds.calendarassistant.platform.capsule.CapsuleDispatcher by lazy {
+        com.antgskds.calendarassistant.platform.capsule.CapsuleDispatcher(
+            applicationContext, appScope, settingsQueryApi
+        ) { capsuleStateManager.uiState.value }
     }
 
     val capsuleCommandApi: CapsuleCommandApi by lazy { CapsuleStateManagerCommandApi(capsuleStateManager) }
@@ -405,7 +413,8 @@ class App : Application() {
             registryStore = notificationRegistryStore,
             systemAlarmGateway = systemAlarmGateway,
             platformPublisher = notificationPublisher,
-            liveCapsuleEnabledProvider = { settingsQueryApi.settings.value.isLiveCapsuleEnabled }
+            liveCapsuleEnabledProvider = { settingsQueryApi.settings.value.isLiveCapsuleEnabled },
+            livePublisherProvider = { capsuleDispatcher },
         )
     }
 
@@ -482,6 +491,7 @@ class App : Application() {
         super.onCreate()
         instance = this
 
+        AppLogger.init(this)
         val processName = currentProcessName().orEmpty()
         if (processName != packageName) {
             Log.i(TAG, "secondary app process started early: $processName, skipping main init")
@@ -490,7 +500,6 @@ class App : Application() {
 
         com.antgskds.calendarassistant.shared.util.PrivilegeManager.initCheck(this)
 
-        AppLogger.init(this)
         AppLogger.i(TAG, "main app process started")
         CrashHandler.init(this)
         AnrMonitor.start(this)

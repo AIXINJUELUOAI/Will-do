@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.feature.recognition.ingest.clipboard
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.SystemClock
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeCandidate
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeParser
 import com.antgskds.calendarassistant.shared.operation.IngestCommandApi

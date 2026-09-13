@@ -12,6 +12,7 @@ import com.antgskds.calendarassistant.feature.backup.application.BackupCoordinat
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTodoState
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoType
 import com.antgskds.calendarassistant.feature.schedule.application.ScheduleFacade
@@ -27,6 +28,9 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.Attendee
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventAttachment
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RecurringMode
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavConnectionCoordinator
 import com.antgskds.calendarassistant.feature.cloudsync.application.WebDavSyncV2Coordinator
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionInput
@@ -62,6 +66,8 @@ import com.antgskds.calendarassistant.shared.operation.AgentAttendee
 import com.antgskds.calendarassistant.shared.operation.AgentCourse
 import com.antgskds.calendarassistant.shared.operation.AgentCourseDraft
 import com.antgskds.calendarassistant.shared.operation.AgentDataApi
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.antgskds.calendarassistant.shared.operation.AgentEvent
 import com.antgskds.calendarassistant.shared.operation.AgentEventDraft
 import com.antgskds.calendarassistant.shared.operation.AgentEventQuery
@@ -71,6 +77,8 @@ import com.antgskds.calendarassistant.shared.operation.AgentQuickMemo
 import com.antgskds.calendarassistant.shared.operation.AgentQuickMemoDraft
 import com.antgskds.calendarassistant.shared.operation.AgentQuickMemoPatch
 import com.antgskds.calendarassistant.shared.operation.AgentQuickMemoQuery
+import com.antgskds.calendarassistant.shared.operation.AgentQuickMemoReminder
+import com.antgskds.calendarassistant.shared.operation.AgentQuickMemoReminderDraft
 import com.antgskds.calendarassistant.shared.operation.AgentRecurringMode
 import com.antgskds.calendarassistant.shared.operation.AgentSystemInfo
 import com.antgskds.calendarassistant.shared.operation.WillDoAgentContract
@@ -101,6 +109,7 @@ class AgentDataService(
     private val diagnosticLogExporter: DiagnosticLogExporter,
     private val backupCoordinator: BackupCoordinator,
 ) : AgentDataApi {
+    private val attachmentMutationMutex = Mutex()
 
     fun accessState(): AgentAccessState {
         val settings = settingsQueryApi.settings.value
@@ -245,16 +254,41 @@ class AgentDataService(
 
     override suspend fun addEventAttachment(
         eventId: Long,
-        input: AgentFileInput
+        input: AgentFileInput,
+        occurrenceTs: Long?
     ): Result<AgentAttachmentInfo> = withPermissionCheck {
-        requireNotNull(scheduleFacade.getEventById(eventId)) { "Event $eventId not found" }
         validateContentUri(input.contentUri)
-        eventAttachmentManager.addManualAttachment(eventId, Uri.parse(input.contentUri)).toAgentAttachment()
+        attachmentMutationMutex.withLock {
+            val events = scheduleFacade.getLatestActiveEvents() + scheduleFacade.getLatestArchivedEvents()
+            val target = AgentEventQueryResolver.resolveAttachmentTarget(events, eventId, occurrenceTs)
+            require(!target.isRecurring || occurrenceTs != null) {
+                "Recurring attachments require occurrenceTs; use editRecurringEvent mode=ALL for series attachments"
+            }
+            val existingId = target.id
+            if (existingId != null) {
+                eventAttachmentManager.addManualAttachment(existingId, Uri.parse(input.contentUri)).toAgentAttachment()
+            } else {
+                // 先读取文件，避免无效 URI 导致重复系列被无意义地拆出实例。
+                val pendingKey = "pending:${java.util.UUID.randomUUID()}"
+                val pending = eventAttachmentManager.addPendingManualAttachment(pendingKey, Uri.parse(input.contentUri))
+                try {
+                    val childId = scheduleFacade.editRecurringEvent(
+                        eventId, target, RecurringMode.THIS, requireNotNull(occurrenceTs)
+                    ) ?: error("Could not materialize occurrence $eventId:$occurrenceTs")
+                    eventAttachmentManager.bindPendingAttachments(childId, pendingKey)
+                    eventAttachmentManager.getAttachmentsByIds(listOf(requireNotNull(pending.id))).first().toAgentAttachment()
+                } catch (error: Throwable) {
+                    eventAttachmentManager.deleteAttachment(pending)
+                    throw error
+                }
+            }
+        }
     }
 
-    override suspend fun listEventAttachments(eventId: Long): Result<List<AgentAttachmentInfo>> = withPermissionCheck {
-        requireNotNull(scheduleFacade.getEventById(eventId)) { "Event $eventId not found" }
-        eventAttachmentManager.getAttachments(eventId).map { it.toAgentAttachment() }
+    override suspend fun listEventAttachments(eventId: Long, occurrenceTs: Long?): Result<List<AgentAttachmentInfo>> = withPermissionCheck {
+        val events = scheduleFacade.getLatestActiveEvents() + scheduleFacade.getLatestArchivedEvents()
+        val target = AgentEventQueryResolver.resolveAttachmentTarget(events, eventId, occurrenceTs)
+        target.id?.let { eventAttachmentManager.getAttachments(it) }.orEmpty().map { it.toAgentAttachment() }
     }
 
     override suspend fun deleteEventAttachment(attachmentId: Long): Result<Unit> = withPermissionCheck {
@@ -306,7 +340,15 @@ class AgentDataService(
     }
 
     override suspend fun createQuickMemo(draft: AgentQuickMemoDraft): Result<Long> = withPermissionCheck {
-        when (draft.type.uppercase()) {
+        draft.reminderAtMs?.let { reminderAt ->
+            require(reminderAt > System.currentTimeMillis()) { "reminderAtMs must be in the future" }
+        }
+        require(draft.reminderAtMs != null || draft.reminderRRule.isBlank()) {
+            "reminderRRule requires reminderAtMs"
+        }
+        validateQuickMemoReminderRRule(draft.reminderRRule)
+        validateQuickMemoReminderDrafts(draft.reminders)
+        val memoId = when (draft.type.uppercase()) {
             QuickMemoType.TEXT -> quickMemoFacade.createTextMemo(draft.bodyText, draft.asTodo)
             QuickMemoType.IMAGE -> {
                 val input = requireNotNull(draft.media) { "Image memo requires media.contentUri" }
@@ -323,26 +365,40 @@ class AgentDataService(
             }
             else -> throw IllegalArgumentException("Unsupported quick memo type: ${draft.type}")
         }
+        val requestedReminders = buildList {
+            draft.reminderAtMs?.let { add(AgentQuickMemoReminderDraft(it, draft.reminderRRule)) }
+            addAll(draft.reminders)
+        }.distinctBy { it.triggerAtMs to it.rrule }
+        requestedReminders.forEach { reminder ->
+            check(quickMemoFacade.saveReminder(memoId, null, reminder.triggerAtMs, reminder.rrule) != null) {
+                "Unable to set quick memo reminder"
+            }
+        }
+        memoId
     }
 
     override suspend fun getQuickMemo(id: Long): Result<AgentQuickMemo> = withPermissionCheck {
         val memo = quickMemoFacade.getQuickMemo(id) ?: throw NoSuchElementException("Quick memo $id not found")
-        memo.toAgentQuickMemo()
+        memo.toAgentQuickMemo(quickMemoFacade.getRemindersForMemo(id))
     }
 
     override suspend fun queryQuickMemos(query: AgentQuickMemoQuery): Result<List<AgentQuickMemo>> = withPermissionCheck {
         val needle = query.text?.trim()?.takeIf { it.isNotEmpty() }
-        quickMemoFacade.quickMemos.first().asSequence()
+        val memos = quickMemoFacade.quickMemos.first().asSequence()
             .filter { query.type == null || it.type.equals(query.type, ignoreCase = true) }
             .filter { query.todoState == null || it.todoState.equals(query.todoState, ignoreCase = true) }
             .filter { needle == null || it.bodyText.contains(needle, ignoreCase = true) }
             .take(query.limit.coerceIn(1, WillDoAgentContract.MAX_QUERY_LIMIT))
-            .map { it.toAgentQuickMemo() }
             .toList()
+        val remindersByMemo = quickMemoFacade.getAllReminders().groupBy { it.quickMemoId }
+        memos.map { memo ->
+            memo.toAgentQuickMemo(memo.id?.let(remindersByMemo::get).orEmpty())
+        }
     }
 
     override suspend fun updateQuickMemo(id: Long, patch: AgentQuickMemoPatch): Result<Unit> = withPermissionCheck {
         requireNotNull(quickMemoFacade.getQuickMemo(id)) { "Quick memo $id not found" }
+        val existingReminders = quickMemoFacade.getRemindersForMemo(id)
         patch.bodyText?.let { quickMemoFacade.updateBody(id, it) }
         patch.todoState?.let { state ->
             when (state.uppercase()) {
@@ -353,6 +409,39 @@ class AgentDataService(
                     if (current?.todoState != QuickMemoTodoState.COMPLETED) quickMemoFacade.toggleTodoCompletion(id)
                 }
                 else -> throw IllegalArgumentException("Unsupported todoState: $state")
+            }
+        }
+        when {
+            patch.replaceReminders != null -> {
+                validateQuickMemoReminderDrafts(patch.replaceReminders)
+                existingReminders
+                    .mapNotNull { it.id }
+                    .forEach { quickMemoFacade.deleteReminder(it) }
+                patch.replaceReminders.distinctBy { it.triggerAtMs to it.rrule }.forEach { reminder ->
+                    check(quickMemoFacade.saveReminder(id, null, reminder.triggerAtMs, reminder.rrule) != null) {
+                        "Unable to set quick memo reminder"
+                    }
+                }
+            }
+            patch.clearReminder -> check(quickMemoFacade.setReminder(id, null)) {
+                "Unable to clear quick memo reminders"
+            }
+            patch.reminderAtMs != null -> {
+                require(patch.reminderAtMs > System.currentTimeMillis()) { "reminderAtMs must be in the future" }
+                val reminderRRule = patch.reminderRRule ?: existingReminders.firstOrNull()?.rrule.orEmpty()
+                validateQuickMemoReminderRRule(reminderRRule)
+                check(quickMemoFacade.setReminder(id, patch.reminderAtMs, reminderRRule)) {
+                    "Unable to set quick memo reminder"
+                }
+            }
+            patch.reminderRRule != null -> {
+                val reminderAt = requireNotNull(existingReminders.firstOrNull()?.triggerAt) {
+                    "reminderRRule requires an existing reminder"
+                }
+                validateQuickMemoReminderRRule(patch.reminderRRule)
+                check(quickMemoFacade.setReminder(id, reminderAt, patch.reminderRRule)) {
+                    "Unable to set quick memo reminder"
+                }
             }
         }
     }
@@ -863,7 +952,7 @@ class AgentDataService(
             }
             throw error
         }
-        oldAttachments.forEach(eventAttachmentManager::deleteAttachment)
+        if (replaceAttachments) oldAttachments.forEach(eventAttachmentManager::deleteAttachment)
     }
 
     private suspend fun createCourseInternal(draft: AgentCourseDraft): String {
@@ -985,8 +1074,11 @@ class AgentDataService(
         contentUri = "${WillDoAgentContract.BASE_URI}/event_attachments/${id ?: 0L}"
     )
 
-    private fun QuickMemoEntity.toAgentQuickMemo(): AgentQuickMemo {
+    private fun QuickMemoEntity.toAgentQuickMemo(
+        reminders: List<QuickMemoReminderEntity>
+    ): AgentQuickMemo {
         val memoId = id ?: 0L
+        val sortedReminders = reminders.sortedWith(compareBy({ it.triggerAt }, { it.id }))
         return AgentQuickMemo(
             id = memoId,
             type = type,
@@ -994,6 +1086,15 @@ class AgentDataService(
             createdAtMs = createdAt,
             updatedAtMs = updatedAt,
             todoState = todoState,
+            reminderAtMs = sortedReminders.firstOrNull()?.triggerAt,
+            reminderRRule = sortedReminders.firstOrNull()?.rrule.orEmpty(),
+            reminders = sortedReminders.map { reminder ->
+                AgentQuickMemoReminder(
+                    id = reminder.id ?: 0L,
+                    triggerAtMs = reminder.triggerAt,
+                    rrule = reminder.rrule
+                )
+            },
             isPinned = quickMemoFacade.isQuickMemoPinned(memoId),
             audioDurationMs = audioDurationMs,
             audioContentUri = audioPath?.takeIf { it.isNotBlank() }
@@ -1001,6 +1102,24 @@ class AgentDataService(
             imageContentUri = imagePath?.takeIf { it.isNotBlank() }
                 ?.let { "${WillDoAgentContract.BASE_URI}/quick_memos/$memoId/image" }
         )
+    }
+
+    private fun validateQuickMemoReminderRRule(rrule: String) {
+        if (rrule.isBlank()) return
+        val spec = requireNotNull(RepeatSpec.fromRRule(rrule)) { "Invalid reminderRRule" }
+        require(spec.frequency in setOf(RepeatFrequency.DAILY, RepeatFrequency.WEEKLY)) {
+            "reminderRRule supports DAILY and WEEKLY only"
+        }
+        require(spec.end !is RepeatEnd.Count) { "reminderRRule COUNT is not supported" }
+    }
+
+    private fun validateQuickMemoReminderDrafts(reminders: List<AgentQuickMemoReminderDraft>) {
+        reminders.forEach { reminder ->
+            require(reminder.triggerAtMs > System.currentTimeMillis()) {
+                "reminder triggerAtMs must be in the future"
+            }
+            validateQuickMemoReminderRRule(reminder.rrule)
+        }
     }
 
     private fun draftToCourse(draft: AgentCourseDraft): Course = Course(

@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat

@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.shared.util.ImageCompressionUtils
 import com.antgskds.calendarassistant.shared.util.LayoutAnalyzer
 import com.antgskds.calendarassistant.shared.util.OcrElement

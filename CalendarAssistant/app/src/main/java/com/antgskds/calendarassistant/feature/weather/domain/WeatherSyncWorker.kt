@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy

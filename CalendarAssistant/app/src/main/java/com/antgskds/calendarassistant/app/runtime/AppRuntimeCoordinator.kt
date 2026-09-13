@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.app.runtime
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController
 import com.antgskds.calendarassistant.shared.query.NetworkSpeedProbeQueryApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi

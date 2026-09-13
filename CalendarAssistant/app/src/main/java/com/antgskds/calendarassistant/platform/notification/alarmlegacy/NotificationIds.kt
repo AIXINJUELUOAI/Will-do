@@ -25,6 +25,7 @@ object NotificationIds {
     private const val CREATED_EVENT_RESULT_NAMESPACE = "created-event-result"
     private const val VOICE_TRANSCRIPTION_NAMESPACE = "voice-transcription"
     private const val TEXT_QUICK_MEMO_NAMESPACE = "text-quick-memo"
+    private const val QUICK_MEMO_REMINDER_NAMESPACE = "quick-memo-reminder"
     private const val BRACELET_NOTIFICATION_NAMESPACE = "bracelet-notification"
 
     private const val LEGACY_PICKUP_INITIAL_OFFSET = 1_000_000
@@ -46,6 +47,8 @@ object NotificationIds {
     fun quickMemoVoiceTranscription(memoId: Long): Int = stableId(VOICE_TRANSCRIPTION_NAMESPACE, memoId.toString())
 
     fun quickMemoText(memoId: Long): Int = stableId(TEXT_QUICK_MEMO_NAMESPACE, memoId.toString())
+
+    fun quickMemoReminder(reminderId: Long): Int = stableId(QUICK_MEMO_REMINDER_NAMESPACE, reminderId.toString())
 
     fun quickMemoSuggestion(suggestionId: Long): Int = stableId(QUICK_MEMO_SUGGESTION_NAMESPACE, suggestionId.toString())
 

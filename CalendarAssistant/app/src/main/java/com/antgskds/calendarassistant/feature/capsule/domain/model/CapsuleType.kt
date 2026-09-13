@@ -22,4 +22,5 @@ object CapsuleType {
     const val VOICE_TRANSCRIPTION = 9
     const val TEXT_QUICK_MEMO = 10
     const val QUICK_MEMO_RECORDING = 11
+    const val QUICK_MEMO_REMINDER = 12
 }

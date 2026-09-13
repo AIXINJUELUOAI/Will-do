@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.Icon
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.core.service.pickup.PickupQrHandleActivity
@@ -165,7 +165,8 @@ object MiuiIslandManager {
             CapsuleType.OCR_RESULT,
             CapsuleType.MODEL_LOADING,
             CapsuleType.QUICK_MEMO_RECORDING,
-            CapsuleType.TEXT_QUICK_MEMO -> true
+            CapsuleType.TEXT_QUICK_MEMO,
+            CapsuleType.QUICK_MEMO_REMINDER -> true
             else -> false
         }
     }
@@ -252,10 +253,13 @@ object MiuiIslandManager {
         item: CapsuleUiState.Active.CapsuleItem
     ): PendingIntent {
         val tapEventId = item.display.tapEventId?.toLongOrNull()
-        val tapIntent = Intent(context, if (tapEventId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
+        val tapQuickMemoId = item.display.tapQuickMemoId?.toLongOrNull()
+        val tapIntent = Intent(context, if (tapEventId != null || tapQuickMemoId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (tapEventId != null) {
                 putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (tapQuickMemoId != null) {
+                putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, tapQuickMemoId)
             } else if (item.type == CapsuleType.WEATHER_ALERT) {
                 putExtra(WidgetActions.EXTRA_WIDGET_ACTION, WidgetActions.ACTION_OPEN_WEATHER)
             } else if (item.display.tapOpensPickupList) {
@@ -305,6 +309,7 @@ object MiuiIslandManager {
             CapsuleType.WEATHER_ALERT -> "天气提醒"
             CapsuleType.VOICE_TRANSCRIPTION -> "语音转写"
             CapsuleType.TEXT_QUICK_MEMO -> "随口记"
+            CapsuleType.QUICK_MEMO_REMINDER -> "随口记提醒"
             CapsuleType.QUICK_MEMO_RECORDING -> "录音中"
             CapsuleType.OCR_PROGRESS,
             CapsuleType.NETWORK_SPEED -> "进行中"

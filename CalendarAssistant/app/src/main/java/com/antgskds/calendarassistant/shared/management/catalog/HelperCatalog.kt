@@ -44,6 +44,7 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("重复实例时间计算", Chain.SCHEDULE, "feature/schedule/domain/model/RepeatOccurrenceCalculator", "共用重复规则推进和下一次时间计算，供日程展示及随口记提醒使用"),
         // —— 识别 ——
         HelperEntry("AI 失败映射", Chain.RECOGNITION, "core/ai/AiFailureMapper", "AI 调用失败原因 → 内部失败类型"),
         HelperEntry("识别失败文案映射", Chain.RECOGNITION, "core/ai/RecognitionFailureMessageMapper", "识别失败类型 → 用户可读提示"),

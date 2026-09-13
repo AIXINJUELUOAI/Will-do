@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.cloudsync.data
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavConnectionConfig
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavCredentials
 import com.antgskds.calendarassistant.feature.cloudsync.domain.WebDavRemoteStore

@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.CALDAV

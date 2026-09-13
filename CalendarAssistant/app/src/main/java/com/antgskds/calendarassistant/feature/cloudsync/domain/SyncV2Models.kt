@@ -103,6 +103,16 @@ data class SyncV2QuickMemoPayload(
     val todoState: String,
     val todoPendingUntil: Long?,
     val todoCompletedAt: Long?,
+    val reminderAt: Long? = null,
+    val reminderRRule: String? = "",
+    val reminders: List<SyncV2QuickMemoReminderPayload>? = emptyList(),
+)
+
+data class SyncV2QuickMemoReminderPayload(
+    val triggerAt: Long,
+    val rrule: String? = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
 )
 
 enum class SyncV2RunPhase {

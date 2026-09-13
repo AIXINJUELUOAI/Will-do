@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.backup.data
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.backup.data.model.SyncData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -15,7 +15,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.CalendarContract
 import android.provider.Settings
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult

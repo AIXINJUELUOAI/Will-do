@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.notification.data.local
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.notification.model.NotificationAction
 import com.antgskds.calendarassistant.feature.notification.model.NotificationBehavior
 import com.antgskds.calendarassistant.feature.notification.model.NotificationDisplaySnapshot

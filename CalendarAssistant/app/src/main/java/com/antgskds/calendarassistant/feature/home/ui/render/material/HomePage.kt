@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.home.ui.render.material
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import android.widget.Toast
 import android.provider.Settings
 import androidx.activity.compose.BackHandler

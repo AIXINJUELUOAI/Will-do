@@ -753,10 +753,10 @@ fun HomeScreen(
                 pendingAddDialog = false
                 showAddEventDialog = false
                 editDraft = null
-                if (editContext is EditContext.NewEvent || editContext == null) {
-                    val pendingKey = dialogAttachments.firstOrNull { it.eventId == null }?.eventKey.orEmpty()
-                    if (pendingKey.isNotBlank()) scope.launch { mainViewModel.deletePendingAttachments(pendingKey) }
-                }
+                dialogAttachments.filter { it.eventId == null && it.eventKey.isNotBlank() }
+                    .map { it.eventKey }.distinct().forEach { pendingKey ->
+                        scope.launch { mainViewModel.deletePendingAttachments(pendingKey) }
+                    }
                 dialogAttachments = emptyList()
                 editContext = null
                 recurringEditCommitSession = null

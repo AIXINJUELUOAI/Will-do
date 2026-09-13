@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.cloudsync.data.SyncV2AssetCoordinator
 import com.antgskds.calendarassistant.feature.cloudsync.data.SyncV2Codec
 import com.antgskds.calendarassistant.feature.cloudsync.data.SyncV2DeviceIdentityStore

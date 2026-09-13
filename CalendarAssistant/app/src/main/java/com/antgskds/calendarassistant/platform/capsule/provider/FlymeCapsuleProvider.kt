@@ -102,6 +102,10 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             addAction(builder, context, item.id, action, index)
         }
 
+        if (item.type == CapsuleType.QUICK_MEMO_REMINDER) {
+            builder.setCategory(Notification.CATEGORY_REMINDER)
+                .setTimeoutAfter((item.endMillis - System.currentTimeMillis()).coerceAtLeast(1L))
+        }
         return builder.build()
     }
 
@@ -111,10 +115,13 @@ class FlymeCapsuleProvider : ICapsuleProvider {
         tapOpensPickupList: Boolean
     ): PendingIntent {
         val tapEventId = item.display.tapEventId?.toLongOrNull()
-        val tapIntent = Intent(context, if (tapEventId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
+        val tapQuickMemoId = item.display.tapQuickMemoId?.toLongOrNull()
+        val tapIntent = Intent(context, if (tapEventId != null || tapQuickMemoId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (tapEventId != null) {
                 putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)
+            } else if (tapQuickMemoId != null) {
+                putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, tapQuickMemoId)
             } else if (item.type == CapsuleType.WEATHER_ALERT) {
                 putExtra(WidgetActions.EXTRA_WIDGET_ACTION, WidgetActions.ACTION_OPEN_WEATHER)
             } else if (tapOpensPickupList) {

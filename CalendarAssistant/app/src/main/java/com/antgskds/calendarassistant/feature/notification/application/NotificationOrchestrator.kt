@@ -10,7 +10,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.core.app.NotificationCompat
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
@@ -64,7 +64,8 @@ class NotificationOrchestrator(
     private val registryStore: NotificationRegistryStore,
     private val systemAlarmGateway: SystemAlarmGateway? = null,
     private val platformPublisher: PlatformPublisher? = null,
-    private val liveCapsuleEnabledProvider: () -> Boolean = { false }
+    private val liveCapsuleEnabledProvider: () -> Boolean = { false },
+    private val livePublisherProvider: () -> PlatformPublisher? = { null },
 ) : NotificationApi {
     companion object {
         private const val TAG = "NotifyOrchestrator"
@@ -121,6 +122,7 @@ class NotificationOrchestrator(
         val previous = registryStore.get(key)
         if (previous != null) {
             registryStore.delete(key)
+            if (previous.route == NotificationRoute.LIVE) livePublisherProvider()?.cancel(key)
         }
         systemAlarmGateway?.cancel(key)
         previous?.notificationId?.let { notificationId ->
@@ -135,6 +137,7 @@ class NotificationOrchestrator(
         if (distinctKeys.isEmpty()) return
 
         val removed = registryStore.deleteAll(distinctKeys)
+        removed.filter { it.route == NotificationRoute.LIVE }.forEach { livePublisherProvider()?.cancel(it.key) }
         distinctKeys.forEach { key -> systemAlarmGateway?.cancel(key) }
         removed.mapNotNull { it.notificationId }
             .flatMap { notificationId -> listOf(notificationId, braceletMirrorNotificationId(notificationId)) }
@@ -190,14 +193,22 @@ class NotificationOrchestrator(
     private suspend fun publishOrSuppress(key: NotificationKey): NotificationResult {
         val liveCapsuleEnabled = liveCapsuleEnabledProvider()
         val braceletModeEnabled = isBraceletModeEnabled()
-        if (liveCapsuleEnabled && !braceletModeEnabled) {
-            Log.d("WillDoNotify", "fire key=${key.value} -> SUPPRESSED_CAPSULE")
-            return markSnapshotReady(key, cancelAlarm = true)
-        }
         val snapshot = registryStore.get(key)
         if (snapshot == null) {
             Log.d("WillDoNotify", "fire key=${key.value} -> NOT_FOUND")
             return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
+        }
+        if (snapshot.kind == com.antgskds.calendarassistant.feature.notification.model.NotificationKind.QUICK_MEMO_REMINDER) {
+            val route = com.antgskds.calendarassistant.feature.notification.policy.QuickMemoReminderDeliveryPolicy.route(liveCapsuleEnabled)
+            Log.i("WillDoNotify", "quick memo dispatch key=${key.value} route=$route")
+            val result = publishSnapshot(snapshot.copy(route = route))
+            Log.i("WillDoNotify", "quick memo dispatch result key=${key.value} result=$result")
+            return result
+        }
+        // 其余提醒沿用现有胶囊与手环门控；随口记已在上方完成真实分流发布。
+        if (liveCapsuleEnabled && !braceletModeEnabled) {
+            Log.d("WillDoNotify", "fire key=${key.value} -> SUPPRESSED_CAPSULE")
+            return markSnapshotReady(key, cancelAlarm = true)
         }
         val endMillis = snapshot.metadata["endTS"]?.toLongOrNull()?.times(1000L)
         if (endMillis != null && endMillis <= System.currentTimeMillis()) {
@@ -261,14 +272,14 @@ class NotificationOrchestrator(
         markPosted: Boolean = true,
         notificationIdOverride: Int? = null
     ): NotificationResult {
-        val publisher = platformPublisher ?: return NotificationResult.Failure(
+        val publisher = (if (snapshot.route == NotificationRoute.LIVE) livePublisherProvider() else platformPublisher) ?: return NotificationResult.Failure(
             snapshot.key, NotificationFailureReason.PUBLISH_FAILED, "PlatformPublisher 未装配"
         )
         val payload = PlatformNotificationPayload(
             key = snapshot.key,
             notificationId = notificationIdOverride ?: snapshot.notificationId ?: snapshot.key.value.hashCode(),
             smallIconResId = snapshot.smallIconResId,
-            route = NotificationRoute.NORMAL,
+            route = snapshot.route,
             display = snapshot.display,
             behavior = snapshot.behavior,
             tapTarget = snapshot.tapTarget,

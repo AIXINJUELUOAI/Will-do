@@ -4,7 +4,7 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.feature.recognition.application.ai.convertDraftToEvent
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleStateManager
@@ -34,6 +34,8 @@ class EventActionReceiver : BroadcastReceiver() {
         const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
         const val ACTION_CREATE_QUICK_MEMO_SUGGESTION = "com.antgskds.calendarassistant.action.CREATE_QUICK_MEMO_SUGGESTION"
         const val ACTION_CLEAR_TEXT_QUICK_MEMO = "com.antgskds.calendarassistant.action.CLEAR_TEXT_QUICK_MEMO"
+        const val ACTION_CLEAR_QUICK_MEMO_REMINDER = "com.antgskds.calendarassistant.action.CLEAR_QUICK_MEMO_REMINDER"
+        const val EXTRA_QUICK_MEMO_REMINDER_ID = "quick_memo_reminder_id"
         const val ACTION_STOP_QUICK_MEMO_RECORDING = "com.antgskds.calendarassistant.action.STOP_QUICK_MEMO_RECORDING"
         const val ACTION_CANCEL_RECOGNITION = "com.antgskds.calendarassistant.action.CANCEL_RECOGNITION"
         const val ACTION_DEBUG_PRIMARY = "com.antgskds.calendarassistant.action.DEBUG_PRIMARY"
@@ -52,6 +54,20 @@ class EventActionReceiver : BroadcastReceiver() {
         Log.d(TAG, "receive action=${intent.action} eventId=${intent.getStringExtra(EXTRA_EVENT_ID)}")
 
         when (intent.action) {
+            ACTION_CLEAR_QUICK_MEMO_REMINDER -> {
+                val reminderId = intent.getLongExtra(EXTRA_QUICK_MEMO_REMINDER_ID, -1L).takeIf { it > 0L } ?: return
+                val pendingResult = goAsync()
+                scope.launch {
+                    try {
+                        app.quickMemoCenter.dismissReminderCapsule(reminderId)
+                        Log.i(TAG, "reminder capsule dismissed reminder=$reminderId")
+                    } catch (error: Exception) {
+                        Log.e(TAG, "reminder capsule dismiss failed reminder=$reminderId", error)
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
             ACTION_DEBUG_PRIMARY, ACTION_DEBUG_SECONDARY -> {
                 Log.d(TAG, "debug notification action clicked action=${intent.action}")
             }

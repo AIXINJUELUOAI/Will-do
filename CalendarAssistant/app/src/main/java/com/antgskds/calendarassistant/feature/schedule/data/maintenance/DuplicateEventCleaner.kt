@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.data.maintenance
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.CALDAV
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.SOURCE_SIMPLE_CALENDAR

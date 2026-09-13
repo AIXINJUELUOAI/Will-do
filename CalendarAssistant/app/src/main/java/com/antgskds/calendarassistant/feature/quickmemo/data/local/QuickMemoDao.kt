@@ -14,6 +14,9 @@ interface QuickMemoDao {
     @Query("SELECT * FROM quick_memos ORDER BY sort_rank ASC, updated_at DESC")
     fun observeQuickMemos(): Flow<List<QuickMemoEntity>>
 
+    @Query("SELECT * FROM quick_memo_reminders ORDER BY trigger_at ASC, id ASC")
+    fun observeReminders(): Flow<List<QuickMemoReminderEntity>>
+
     @Query("SELECT * FROM quick_memo_suggestions ORDER BY created_at DESC")
     fun observeSuggestions(): Flow<List<QuickMemoSuggestionEntity>>
 
@@ -22,6 +25,27 @@ interface QuickMemoDao {
 
     @Query("SELECT * FROM quick_memos ORDER BY created_at ASC")
     suspend fun getAllQuickMemos(): List<QuickMemoEntity>
+
+    @Query("SELECT * FROM quick_memo_reminders ORDER BY trigger_at ASC, id ASC")
+    suspend fun getAllReminders(): List<QuickMemoReminderEntity>
+
+    @Query("SELECT * FROM quick_memo_reminders WHERE quick_memo_id = :quickMemoId ORDER BY trigger_at ASC, id ASC")
+    suspend fun getRemindersForMemo(quickMemoId: Long): List<QuickMemoReminderEntity>
+
+    @Query("SELECT * FROM quick_memo_reminders WHERE id = :id LIMIT 1")
+    suspend fun getReminder(id: Long): QuickMemoReminderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReminder(reminder: QuickMemoReminderEntity): Long
+
+    @Update
+    suspend fun updateReminder(reminder: QuickMemoReminderEntity)
+
+    @Query("DELETE FROM quick_memo_reminders WHERE id = :id")
+    suspend fun deleteReminderById(id: Long): Int
+
+    @Query("DELETE FROM quick_memo_reminders WHERE quick_memo_id = :quickMemoId")
+    suspend fun deleteRemindersForMemo(quickMemoId: Long): Int
 
     @Query("SELECT * FROM quick_memos WHERE type = 'VOICE' AND transcription_status IN ('PENDING', 'PROCESSING') ORDER BY created_at ASC")
     suspend fun getUnfinishedVoiceMemos(): List<QuickMemoEntity>

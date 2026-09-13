@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.quickmemo.data.asr
 
 import android.content.Context
 import android.os.Debug
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.SpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import com.k2fsa.sherpa.onnx.FeatureConfig

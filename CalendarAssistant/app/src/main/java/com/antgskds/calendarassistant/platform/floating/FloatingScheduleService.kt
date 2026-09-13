@@ -25,7 +25,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.content.pm.ServiceInfo
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import android.view.DragEvent
 import android.view.Gravity
 import android.view.KeyEvent
@@ -83,7 +83,8 @@ import com.antgskds.calendarassistant.feature.schedule.presentation.model.Schedu
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingInputMode
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingDragTextOptions
-import com.antgskds.calendarassistant.platform.floating.ui.connector.PickupQrFloatingCardRoute
+import com.antgskds.calendarassistant.platform.floating.ui.connector.EventMediaFloatingCardRoute
+import com.antgskds.calendarassistant.platform.floating.ui.connector.QuickMemoMediaFloatingCardRoute
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.normal.SystemNormalDisplay
 import com.antgskds.calendarassistant.platform.floating.ui.connector.FloatingScheduleRoute
@@ -118,6 +119,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val ACTION_START_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.START_VOICE_CAPTURE"
         const val ACTION_STOP_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.STOP_VOICE_CAPTURE"
         const val ACTION_SHOW_PICKUP_QR_CARD = "com.antgskds.calendarassistant.floating.action.SHOW_PICKUP_QR_CARD"
+        const val ACTION_SHOW_QUICK_MEMO_MEDIA_CARD = "com.antgskds.calendarassistant.floating.action.SHOW_QUICK_MEMO_MEDIA_CARD"
         const val ACTION_VOICE_CAPTURE_RECORDING = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_RECORDING"
         const val ACTION_VOICE_CAPTURE_COMPLETED = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_COMPLETED"
         const val ACTION_VOICE_CAPTURE_TOO_SHORT = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_TOO_SHORT"
@@ -132,6 +134,10 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val EXTRA_VOICE_DURATION_MS = "extra_voice_duration_ms"
         const val EXTRA_VOICE_ERROR_MESSAGE = "extra_voice_error_message"
         const val EXTRA_PICKUP_EVENT_ID = "extra_pickup_event_id"
+        const val EXTRA_QUICK_MEMO_ID = "extra_quick_memo_id"
+        const val EXTRA_MEDIA_IMAGE_PATH = "extra_media_image_path"
+        const val EXTRA_MEDIA_IMAGE_PATHS = "extra_media_image_paths"
+        const val EXTRA_MEDIA_TITLE = "extra_media_title"
 
         @Volatile var isShowing: Boolean = false
             private set
@@ -156,7 +162,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private val voiceCaptureState = MutableStateFlow(QuickMemoVoiceCaptureState())
     private val recentVoiceMemoId = MutableStateFlow<Long?>(null)
     private val requestedInputMode = MutableStateFlow(FloatingInputMode.SCHEDULE to 0L)
-    private val pickupQrEventId = MutableStateFlow<Long?>(null)
+    private val mediaRequest = MutableStateFlow<FloatingMediaRequest?>(null)
     private val audioRecorder by lazy { QuickMemoAudioRecorder(applicationContext) }
     private var voiceConfirmJob: Job? = null
     private var recentVoiceMemoJob: Job? = null
@@ -170,6 +176,14 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private var plainTextDragRestoreSourceAction: (() -> Unit)? = null
     private var voiceStopRequested: Boolean = false
     private var voiceForegroundActive: Boolean = false
+    private var mediaFallbackInProgress: Boolean = false
+
+    private data class FloatingMediaRequest(
+        val eventId: Long? = null,
+        val quickMemoId: Long? = null,
+        val imagePaths: List<String> = emptyList(),
+        val title: String = ""
+    )
 
     private val app by lazy { applicationContext as App }
     private val scheduleCenter: ScheduleFacade by lazy { app.scheduleCenter }
@@ -363,12 +377,12 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val currentVoiceCaptureState by voiceCaptureState.collectAsState()
                 val currentRecentVoiceMemoId by recentVoiceMemoId.collectAsState()
                 val currentRequestedInputMode by requestedInputMode.collectAsState()
-                val currentPickupQrEventId by pickupQrEventId.collectAsState()
+                val currentMediaRequest by mediaRequest.collectAsState()
                 val audioPlaybackState by audioPlaybackCenter.playbackState.collectAsState()
                 val undoPending by scheduleCenter.undoManager.currentPending.collectAsState()
                 val pendingItemStates by scheduleCenter.pendingItemStates.collectAsState()
-                val pickupQrEvent = currentPickupQrEventId?.let { eventId ->
-                    events.firstOrNull { it.id == eventId && it.codeQrPayload.isNotBlank() }
+                val mediaEvent = currentMediaRequest?.eventId?.let { eventId ->
+                    events.firstOrNull { it.id == eventId }
                 }
 
                 // 根据悬浮窗日程范围设置过滤事件
@@ -398,18 +412,30 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     themeColorScheme = themeColorSchemeEnum,
                     customThemeColorHex = settings.customThemeColorHex
                 ) {
+                    val activeMediaRequest = currentMediaRequest
+                    val activeQuickMemoId = activeMediaRequest?.quickMemoId
                     val floatingContent: @androidx.compose.runtime.Composable () -> Unit = {
-                        if (pickupQrEvent != null) {
-                            PickupQrFloatingCardRoute(
-                                event = pickupQrEvent,
+                        if (mediaEvent != null && activeMediaRequest != null) {
+                            EventMediaFloatingCardRoute(
+                                event = mediaEvent,
+                                imagePaths = activeMediaRequest.imagePaths,
                                 onClose = { requestClose() },
                                 onComplete = {
-                                    val eventId = pickupQrEvent.id
+                                    val eventId = mediaEvent.id
                                     if (eventId != null) {
                                         scheduleCenter.completeItem(ScheduleDisplayItem.ActionTarget.Single(eventId))
                                     }
                                     requestClose()
-                                }
+                                },
+                                onMediaUnavailable = { openMediaSourceInApp(activeMediaRequest) }
+                            )
+                        } else if (activeMediaRequest != null && activeQuickMemoId != null) {
+                            QuickMemoMediaFloatingCardRoute(
+                                memoId = activeQuickMemoId,
+                                bodyText = activeMediaRequest.title,
+                                imagePath = activeMediaRequest.imagePaths.firstOrNull().orEmpty(),
+                                onClose = { requestClose() },
+                                onMediaUnavailable = { openMediaSourceInApp(activeMediaRequest) }
                             )
                         } else FloatingScheduleRoute(
                         scheduleItems = scheduleItems,
@@ -1497,6 +1523,18 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         )
     }
 
+    private fun openMediaSourceInApp(request: FloatingMediaRequest) {
+        if (mediaFallbackInProgress) return
+        mediaFallbackInProgress = true
+        Toast.makeText(applicationContext, "图片无法打开", Toast.LENGTH_SHORT).show()
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            request.eventId?.let { putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, it) }
+            request.quickMemoId?.let { putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, it) }
+        })
+        finishClose()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         sendBroadcast(Intent(ACTION_FLOATING_SHOWN))
         applyRequestedInputMode(intent)
@@ -1511,13 +1549,31 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             ACTION_SHOW_PICKUP_QR_CARD -> {
                 val eventId = intent.getLongExtra(EXTRA_PICKUP_EVENT_ID, -1L).takeIf { it > 0L }
                 if (eventId == null) return START_NOT_STICKY
-                pickupQrEventId.value = eventId
+                mediaFallbackInProgress = false
+                mediaRequest.value = FloatingMediaRequest(
+                    eventId = eventId,
+                    imagePaths = intent.getStringArrayListExtra(EXTRA_MEDIA_IMAGE_PATHS).orEmpty()
+                )
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                showFloatingWindow()
+                return START_NOT_STICKY
+            }
+            ACTION_SHOW_QUICK_MEMO_MEDIA_CARD -> {
+                val memoId = intent.getLongExtra(EXTRA_QUICK_MEMO_ID, -1L).takeIf { it > 0L }
+                val imagePath = intent.getStringExtra(EXTRA_MEDIA_IMAGE_PATH)?.takeIf { it.isNotBlank() }
+                if (memoId == null || imagePath == null) return START_NOT_STICKY
+                mediaFallbackInProgress = false
+                mediaRequest.value = FloatingMediaRequest(
+                    quickMemoId = memoId,
+                    imagePaths = listOf(imagePath),
+                    title = intent.getStringExtra(EXTRA_MEDIA_TITLE).orEmpty()
+                )
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 showFloatingWindow()
                 return START_NOT_STICKY
             }
             ACTION_IMAGE_PICKED -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 showFloatingWindow()
                 val uriStr = intent.getStringExtra(EXTRA_IMAGE_URI)
                 if (uriStr.isNullOrBlank()) {
@@ -1528,24 +1584,24 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 return START_NOT_STICKY
             }
             ACTION_IMAGE_PICK_CANCELLED -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 showFloatingWindow()
                 finishPendingImagePick()
                 return START_NOT_STICKY
             }
             ACTION_PREPARE_VOICE_CAPTURE -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 detachFloatingWindowForVoice()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_RECORDING -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceRecording()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_COMPLETED -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceCompleted(
                     path = intent.getStringExtra(EXTRA_VOICE_AUDIO_PATH),
@@ -1554,32 +1610,32 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_TOO_SHORT -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceTooShort()
                 return START_NOT_STICKY
             }
             ACTION_VOICE_CAPTURE_ERROR -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 handleExternalVoiceError(intent.getStringExtra(EXTRA_VOICE_ERROR_MESSAGE).orEmpty())
                 return START_NOT_STICKY
             }
             ACTION_START_VOICE_CAPTURE -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 startVoiceCapture()
                 return START_NOT_STICKY
             }
             ACTION_STOP_VOICE_CAPTURE -> {
-                pickupQrEventId.value = null
+                mediaRequest.value = null
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 stopVoiceCapture()
                 return START_NOT_STICKY
             }
         }
 
-        pickupQrEventId.value = null
+        mediaRequest.value = null
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         showFloatingWindow()
         return START_NOT_STICKY

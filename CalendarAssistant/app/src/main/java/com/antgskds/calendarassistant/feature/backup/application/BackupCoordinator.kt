@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.backup.application
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AiPrompts
 import com.antgskds.calendarassistant.feature.schedule.data.attachment.EventAttachmentManager
@@ -17,6 +17,7 @@ import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupImportR
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupManifest
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupQuickMemoDto
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupQuickMemoReminderDto
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupQuickMemoSuggestionDto
 import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import com.antgskds.calendarassistant.feature.backup.data.model.ImportResult
@@ -24,6 +25,7 @@ import com.antgskds.calendarassistant.feature.backup.courseimport.CourseImportPa
 import com.antgskds.calendarassistant.feature.backup.courseimport.ImportMode
 import com.antgskds.calendarassistant.feature.backup.courseimport.ParsedCourseImport
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
 import io.ktor.client.HttpClient
@@ -426,9 +428,11 @@ class BackupCoordinator(
     ): QuickMemoBackupData {
         val memos = db.quickMemoDao().getAllQuickMemos()
         if (memos.isEmpty()) return QuickMemoBackupData()
+        val remindersByMemo = db.quickMemoDao().getAllReminders().groupBy { it.quickMemoId }
         val memoKeys = memos.associate { memo -> (memo.id ?: 0L) to quickMemoBackupKey(memo) }
         val memoDtos = memos.map { memo ->
             val backupKey = quickMemoBackupKey(memo)
+            val reminders = memo.id?.let(remindersByMemo::get).orEmpty()
             AppBackupQuickMemoDto(
                 backupKey = backupKey,
                 type = memo.type,
@@ -443,7 +447,17 @@ class BackupCoordinator(
                 sortRank = memo.sortRank,
                 todoState = memo.todoState,
                 todoPendingUntil = memo.todoPendingUntil,
-                todoCompletedAt = memo.todoCompletedAt
+                todoCompletedAt = memo.todoCompletedAt,
+                reminderAt = reminders.firstOrNull()?.triggerAt,
+                reminderRRule = reminders.firstOrNull()?.rrule.orEmpty(),
+                reminders = reminders.map { reminder ->
+                    AppBackupQuickMemoReminderDto(
+                        triggerAt = reminder.triggerAt,
+                        rrule = reminder.rrule,
+                        createdAt = reminder.createdAt,
+                        updatedAt = reminder.updatedAt
+                    )
+                }
             )
         }
         val suggestionDtos = db.quickMemoDao().getAllSuggestions().mapNotNull { suggestion ->
@@ -512,6 +526,28 @@ class BackupCoordinator(
         val audioTempDir = tempDir?.let { File(it, QUICK_MEMO_AUDIO_IMPORT_DIR) }
         val imageTempDir = tempDir?.let { File(it, QUICK_MEMO_IMAGE_IMPORT_DIR) }
         var imported = 0
+        suspend fun importReminders(memoId: Long, dto: AppBackupQuickMemoDto) {
+            val source = dto.reminders.ifEmpty {
+                dto.reminderAt?.let { triggerAt ->
+                    listOf(AppBackupQuickMemoReminderDto(triggerAt = triggerAt, rrule = dto.reminderRRule))
+                }.orEmpty()
+            }
+            val existingKeys = dao.getRemindersForMemo(memoId)
+                .map { it.triggerAt to it.rrule }
+                .toMutableSet()
+            source.filter { it.triggerAt > 0L }.forEach { reminder ->
+                if (!existingKeys.add(reminder.triggerAt to reminder.rrule)) return@forEach
+                dao.insertReminder(
+                    QuickMemoReminderEntity(
+                        quickMemoId = memoId,
+                        triggerAt = reminder.triggerAt,
+                        rrule = reminder.rrule,
+                        createdAt = reminder.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                        updatedAt = reminder.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                    )
+                )
+            }
+        }
         Log.i(
             TAG,
             "Import quick memos start memos=${memos.size}, suggestions=${suggestions.size}, " +
@@ -525,7 +561,10 @@ class BackupCoordinator(
             val duplicateKey = quickMemoDuplicateKey(dto)
             val existingMemo = existingByKey[duplicateKey]
             if (existingMemo != null) {
-                existingMemo.id?.let { importedMemoIds[dto.backupKey] = it }
+                existingMemo.id?.let {
+                    importedMemoIds[dto.backupKey] = it
+                    importReminders(it, dto)
+                }
                 repairExistingQuickMemoFiles(existingMemo, dto, audioTempDir, imageTempDir)
                 return@forEach
             }
@@ -548,6 +587,7 @@ class BackupCoordinator(
                     todoCompletedAt = dto.todoCompletedAt
                 )
             )
+            importReminders(memoId, dto)
             importedMemoIds[dto.backupKey] = memoId
             existingByKey[duplicateKey] = dao.getQuickMemo(memoId) ?: return@forEach
             imported++

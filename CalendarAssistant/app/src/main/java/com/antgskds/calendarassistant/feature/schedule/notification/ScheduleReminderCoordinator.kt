@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.feature.schedule.notification
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_PENDING
 import com.antgskds.calendarassistant.feature.capsule.application.CapsuleController

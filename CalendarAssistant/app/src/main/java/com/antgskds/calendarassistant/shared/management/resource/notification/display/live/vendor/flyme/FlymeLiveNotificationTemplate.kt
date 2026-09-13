@@ -98,6 +98,7 @@ object FlymeLiveNotificationTemplate {
             CapsuleType.MODEL_LOADING -> R.drawable.ic_model_loading
             CapsuleType.VOICE_TRANSCRIPTION -> R.drawable.ic_stat_quickmemo
             CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_quickmemo
+            CapsuleType.QUICK_MEMO_REMINDER -> R.drawable.ic_stat_quickmemo
             CapsuleType.QUICK_MEMO_RECORDING -> R.drawable.ic_stat_recording
             CapsuleType.WEATHER_ALERT -> WeatherAlertIconMapper.iconRes(eventType)
             else -> {

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.application.rule
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.capsule.domain.icon.RuleIconSource
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider

@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

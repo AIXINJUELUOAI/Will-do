@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.localmodel
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.BuildConfig
 import com.antgskds.calendarassistant.shared.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi

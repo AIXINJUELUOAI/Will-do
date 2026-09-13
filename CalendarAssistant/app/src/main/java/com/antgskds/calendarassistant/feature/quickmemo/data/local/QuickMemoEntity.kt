@@ -83,13 +83,47 @@ data class QuickMemoEntity(
     @ColumnInfo(name = "todo_pending_until")
     val todoPendingUntil: Long? = null,
     @ColumnInfo(name = "todo_completed_at")
-    val todoCompletedAt: Long? = null
+    val todoCompletedAt: Long? = null,
+    @ColumnInfo(name = "reminder_at")
+    val reminderAt: Long? = null,
+    @ColumnInfo(name = "reminder_rrule")
+    val reminderRRule: String = ""
 ) {
     val isVoice: Boolean get() = type == QuickMemoType.VOICE
     val isImage: Boolean get() = type == QuickMemoType.IMAGE
     val isTodo: Boolean get() = todoState == QuickMemoTodoState.ACTIVE || todoState == QuickMemoTodoState.COMPLETED
     val isTodoCompleted: Boolean get() = todoState == QuickMemoTodoState.COMPLETED
 }
+
+@Entity(
+    tableName = "quick_memo_reminders",
+    foreignKeys = [
+        ForeignKey(
+            entity = QuickMemoEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["quick_memo_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["quick_memo_id"]),
+        Index(value = ["trigger_at"])
+    ]
+)
+data class QuickMemoReminderEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long? = null,
+    @ColumnInfo(name = "quick_memo_id")
+    val quickMemoId: Long,
+    @ColumnInfo(name = "trigger_at")
+    val triggerAt: Long,
+    @ColumnInfo(name = "rrule")
+    val rrule: String = "",
+    @ColumnInfo(name = "created_at")
+    val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "updated_at")
+    val updatedAt: Long = System.currentTimeMillis()
+)
 
 @Entity(
     tableName = "quick_memo_suggestions",

@@ -310,6 +310,7 @@ data class MySettings(
 
     // 开发者选项
     val developerOptionsUnlocked: Boolean = false,
+    val autoRecordLogs: Boolean = true,
     val developerOptionsEnabled: Boolean = false,
     val developerOptionsDisabledAtMillis: Long = 0L,
     val developerSimulateRootEnabled: Boolean = false,

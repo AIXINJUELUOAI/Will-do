@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.shared.api
 
 import android.content.Context
 import android.database.Cursor
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteStatement

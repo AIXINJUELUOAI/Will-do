@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.app.Activity
+import androidx.compose.ui.zIndex
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -105,6 +106,7 @@ fun DeveloperPage(
         uiSize = uiSize,
         onAction = { action -> when (action) {
             is DeveloperUiAction.SetEnabled -> settingsViewModel.setDeveloperOptionsEnabled(action.enabled)
+            is DeveloperUiAction.SetAutoRecordLogs -> settingsViewModel.setAutoRecordLogs(action.enabled)
             is DeveloperUiAction.SetSimulateRoot -> settingsViewModel.updatePreference(
                 developerSimulateRootEnabled = action.enabled,
             )
@@ -184,6 +186,7 @@ fun MaterialDeveloperScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val logSnackbar = remember { androidx.compose.material3.SnackbarHostState() }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val settings = state.settings
 
@@ -366,15 +369,38 @@ fun MaterialDeveloperScreen(
 
     fun exportLogs(minutes: Int?) {
         exportLogs(minutes) { result ->
-            val message = result.fold(
-                onSuccess = { path -> "日志包已导出到 $path" },
-                onFailure = { error -> "日志导出失败: ${error.message ?: "未知错误"}" }
-            )
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            scope.launch {
+                result.fold(
+                    onSuccess = { path ->
+                        val action = logSnackbar.showSnackbar(
+                            message = "日志已导出到 $path",
+                            actionLabel = "去查看",
+                            withDismissAction = true,
+                            duration = androidx.compose.material3.SnackbarDuration.Long,
+                        )
+                        if (action == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            val folder = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(android.net.Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FWillDo%2Fexports"), "vnd.android.document/directory")
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            runCatching { context.startActivity(folder) }.recoverCatching {
+                                context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS))
+                            }.onFailure {
+                                Toast.makeText(context, "请在文件管理器中打开 Download/WillDo/exports", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    onFailure = { error -> logSnackbar.showSnackbar("日志导出失败: ${error.message ?: "未知错误"}") }
+                )
+            }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.material3.SnackbarHost(
+            hostState = logSnackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset).zIndex(1f)
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -516,6 +542,16 @@ fun MaterialDeveloperScreen(
             }
 
             Text(text = "通知与日志", style = sectionTitleStyle)
+            SettingsCard {
+                SwitchSettingItem(
+                    title = "自动记录日志",
+                    subtitle = "关闭后停止自动记录日志文件",
+                    checked = settings.autoRecordLogs,
+                    onCheckedChange = { onAction(DeveloperUiAction.SetAutoRecordLogs(it)) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+            }
             DeveloperOptionsCard(
                 liveNotificationTemplateMode = settings.liveNotificationTemplateMode,
                 quickMemoPinnedFixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,

@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.weather.domain
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.location.AndroidLocationProvider
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherAlertData

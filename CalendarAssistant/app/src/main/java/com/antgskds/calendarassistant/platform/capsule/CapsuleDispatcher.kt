@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.platform.capsule
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.shared.util.FlymeUtils
 import com.antgskds.calendarassistant.shared.util.OsUtils
@@ -21,6 +21,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import com.antgskds.calendarassistant.feature.notification.api.ports.PlatformPublisher
+import com.antgskds.calendarassistant.feature.notification.model.*
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
+import com.antgskds.calendarassistant.feature.capsule.domain.QuickMemoCapsuleDurationPolicy
+import com.antgskds.calendarassistant.feature.capsule.presentation.CapsuleMessageComposer
+import com.antgskds.calendarassistant.platform.receiver.EventActionReceiver
 
 /**
  * 胶囊发布站 —— 胶囊「一条线」里的发布分支。
@@ -39,7 +45,82 @@ class CapsuleDispatcher(
     private val appScope: CoroutineScope,
     private val settingsQueryApi: SettingsQueryApi,
     private val uiStateProvider: () -> CapsuleUiState
-) {
+) : PlatformPublisher {
+    private val reminderCapsules = linkedMapOf<String, CapsuleUiState.Active.CapsuleItem>()
+    private val reminderExpiryJobs = mutableMapOf<String, Job>()
+    private var baseState: CapsuleUiState = CapsuleUiState.None
+
+    override suspend fun publish(payload: PlatformNotificationPayload): NotificationResult = synchronized(this) {
+        if (!settingsQueryApi.settings.value.isLiveCapsuleEnabled) {
+            return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.PUBLISH_FAILED, "胶囊开关已关闭，等待重试重新选择路由")
+        }
+        if (!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.PERMISSION_DENIED, "通知权限未开启")
+        }
+        if (!isMiuiIslandMode(settingsQueryApi.settings.value) &&
+            notificationManager.getNotificationChannel(com.antgskds.calendarassistant.App.CHANNEL_ID_LIVE)?.importance == NotificationManager.IMPORTANCE_NONE) {
+            return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.PERMISSION_DENIED, "实况通知渠道已关闭")
+        }
+        val now = System.currentTimeMillis()
+        val settings = settingsQueryApi.settings.value
+        val duration = QuickMemoCapsuleDurationPolicy.durationMillis(settings.defaultEventDurationMinutes)
+        val memoId = payload.tapTarget?.payload?.get("quickMemoId")?.toLongOrNull()
+            ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少随口记 ID")
+        val reminderId = payload.key.value.removePrefix("quick-memo:reminder:").toLongOrNull()
+            ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少提醒 ID")
+        val display = CapsuleMessageComposer.composeTextQuickMemo(
+            title = payload.display.secondaryText.orEmpty().ifBlank { "随口记提醒" },
+            memoId = memoId,
+            fixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
+            removeAction = CapsuleActionSpec(
+                label = "移除",
+                receiverAction = EventActionReceiver.ACTION_CLEAR_QUICK_MEMO_REMINDER,
+                extraLongKey = EventActionReceiver.EXTRA_QUICK_MEMO_REMINDER_ID,
+                extraLongValue = reminderId,
+            ),
+        )
+        val item = CapsuleUiState.Active.CapsuleItem(
+            id = payload.key.value,
+            notifId = payload.notificationId,
+            type = CapsuleType.QUICK_MEMO_REMINDER,
+            eventType = "quick_memo_reminder",
+            title = display.primaryText,
+            content = payload.display.secondaryText.orEmpty(),
+            description = payload.display.expandedText.orEmpty(),
+            color = android.graphics.Color.parseColor("#7C4DFF"),
+            startMillis = now,
+            endMillis = now + duration,
+            display = display,
+        )
+        try {
+            reminderCapsules[payload.key.value] = item
+            dispatch(baseState)
+            check(reminderCapsules[payload.key.value] === item) { "胶囊开关在发布期间变更" }
+            reminderExpiryJobs.remove(payload.key.value)?.cancel()
+            reminderExpiryJobs[payload.key.value] = appScope.launch {
+                kotlinx.coroutines.delay(duration)
+                synchronized(this@CapsuleDispatcher) {
+                    reminderCapsules.remove(payload.key.value)
+                    reminderExpiryJobs.remove(payload.key.value)
+                    runCatching { dispatch(baseState) }
+                        .onFailure { Log.e(TAG, "expire reminder capsule failed key=${payload.key.value}", it) }
+                }
+            }
+            Log.i(TAG, "published reminder capsule key=${payload.key.value} id=${payload.notificationId}")
+            NotificationResult.Success(payload.key, NotificationState.POSTED)
+        } catch (error: Exception) {
+            reminderCapsules.remove(payload.key.value)
+            Log.e(TAG, "publish reminder capsule failed key=${payload.key.value}", error)
+            NotificationResult.Failure(payload.key, NotificationFailureReason.PUBLISH_FAILED, error.message, error)
+        }
+    }
+
+    override suspend fun cancel(key: NotificationKey): NotificationResult = synchronized(this) {
+        reminderCapsules.remove(key.value)
+        reminderExpiryJobs.remove(key.value)?.cancel()
+        dispatch(baseState)
+        NotificationResult.Success(key, NotificationState.CANCELLED)
+    }
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val provider: ICapsuleProvider =
@@ -49,16 +130,25 @@ class CapsuleDispatcher(
     private var isAggregateMode = false
 
     /** 胶囊状态变化时的总分发入口：决定厂商通道并发布/取消。 */
+    @Synchronized
     fun dispatch(state: CapsuleUiState) {
+        baseState = state
         val settings = settingsQueryApi.settings.value
+        if (!settings.isLiveCapsuleEnabled) {
+            reminderCapsules.clear()
+            reminderExpiryJobs.values.forEach { it.cancel() }
+            reminderExpiryJobs.clear()
+        }
+        val combined = (state as? CapsuleUiState.Active)?.capsules.orEmpty() + reminderCapsules.values
+        val effectiveState = if (combined.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(combined)
         val useMiuiIsland = isMiuiIslandMode(settings)
-        when (state) {
+        when (effectiveState) {
             is CapsuleUiState.Active -> {
                 if (useMiuiIsland) {
-                    MiuiIslandManager.update(context, state.capsules)
+                    MiuiIslandManager.update(context, effectiveState.capsules)
                     cancelAllCapsuleNotifications()
                 } else {
-                    updateCapsules(state.capsules)
+                    updateCapsules(effectiveState.capsules)
                 }
             }
             is CapsuleUiState.None -> {
@@ -127,7 +217,8 @@ class CapsuleDispatcher(
                 if (channelMatch) {
                     val state = uiStateProvider()
                     if (state is CapsuleUiState.Active) {
-                        val stillValid = state.capsules.any { it.notifId == notificationId }
+                        val stillValid = state.capsules.any { it.notifId == notificationId } ||
+                            synchronized(this) { reminderCapsules.values.any { it.notifId == notificationId } }
                         if (!stillValid) {
                             notificationManager.cancel(notificationId)
                             activeNotifIds.remove(notificationId)

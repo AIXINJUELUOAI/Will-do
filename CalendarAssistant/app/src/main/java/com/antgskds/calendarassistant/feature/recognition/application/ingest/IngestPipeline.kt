@@ -1,6 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ingest
 
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.shared.event.DomainEventBus
 import com.antgskds.calendarassistant.shared.event.DomainEventType
 import com.antgskds.calendarassistant.shared.event.EventIdentity

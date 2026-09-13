@@ -3,7 +3,7 @@ package com.antgskds.calendarassistant.shared.util
 import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

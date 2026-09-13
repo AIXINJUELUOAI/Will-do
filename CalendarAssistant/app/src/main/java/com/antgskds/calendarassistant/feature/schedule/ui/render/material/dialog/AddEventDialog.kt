@@ -242,15 +242,9 @@ fun MaterialAddEventDialog(
         ?: LocalDateTime.now().withSecond(0).withNano(0)
     val initialEnd = editDraft?.let { LocalDateTime.of(it.endDate, it.endTime) }
         ?: initialStart.plusHours(1)
-    val initialStartEpoch = initialStart.atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
-    val initialEndEpoch = initialEnd.atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
     val pendingAttachmentKey = remember(draftKey) {
-        EventAttachmentManager.eventKey(
-            title = editDraft?.title ?: "",
-            startTS = initialStartEpoch,
-            endTS = initialEndEpoch,
-            timeZone = java.time.ZoneId.systemDefault().id
-        )
+        // 暂存键不能与真实事件指纹重合，否则读取母事件时会提前认领首个实例的附件。
+        "pending:${java.util.UUID.randomUUID()}"
     }
     val initialAutoDurationMinutes = remember(draftKey) {
         Duration.between(initialStart, initialEnd).toMinutes().coerceAtLeast(1L)

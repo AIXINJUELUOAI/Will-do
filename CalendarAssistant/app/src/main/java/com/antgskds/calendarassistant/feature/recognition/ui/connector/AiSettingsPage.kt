@@ -260,6 +260,10 @@ fun MaterialAiSettingsScreen(
 
     fun setActiveName(value: String) {
         if (isMultimodalEnabled) mmModelName = value else textModelName = value
+        // 模板地址随模型更新（Gemini 的路径包含模型名），不重置已连接状态。
+        providerPresets[activeProvider]?.let { preset ->
+            setActiveUrl(preset.endpointBuilder(value.trim()))
+        }
     }
 
     fun setActiveKey(value: String) {
@@ -281,7 +285,7 @@ fun MaterialAiSettingsScreen(
     fun applyProviderPreset(provider: String) {
         setActiveProvider(provider)
         setActiveName("")
-        setActiveUrl("")
+        setActiveUrl(providerPresets[provider]?.endpointBuilder?.invoke("").orEmpty())
         setActiveConnected(false)
         setActiveModelFetchFailed(false)
         setActiveCustomModels(emptyList())
@@ -318,14 +322,21 @@ fun MaterialAiSettingsScreen(
         actionLoading = true
         when (val result = fetchModels(activeModelKey.trim(), modelsUrl.trim())) {
             is ModelListResult.Success -> {
+                val preferVision = isMultimodalEnabled && activeProvider == PROVIDER_DEEPSEEK
+                val models = if (preferVision) {
+                    result.models.sortedBy { if (it.contains("vision", ignoreCase = true)) 0 else 1 }
+                } else result.models
                 setActiveConnected(true)
-                setActiveModelFetchFailed(result.models.isEmpty())
-                setActiveCustomModels(result.models)
-                if (result.models.isEmpty()) {
+                setActiveModelFetchFailed(models.isEmpty())
+                setActiveCustomModels(models)
+                if (models.isEmpty()) {
                     showToast("连接成功，但无法获取模型列表，请手动输入模型", ToastType.INFO)
                 } else {
-                    if (activeModelName !in result.models) {
-                        setActiveName("")
+                    if (activeModelName !in models ||
+                        (preferVision && !activeModelName.contains("vision", ignoreCase = true))) {
+                        setActiveName(if (preferVision) models.firstOrNull {
+                            it.contains("vision", ignoreCase = true)
+                        }.orEmpty() else "")
                     }
                     isModelExpanded = true
                     showToast("连接成功")
@@ -469,6 +480,12 @@ fun MaterialAiSettingsScreen(
                 text = "当前模式：$modeLabel（在偏好设置中切换）",
                 style = cardSubtitleStyle
             )
+            if (isMultimodalEnabled && activeProvider == PROVIDER_DEEPSEEK) {
+                Text(
+                    text = "图片识别请选择 deepseek-v4-flash-vision-exp 等视觉模型，文本模型不支持图片。",
+                    style = cardSubtitleStyle
+                )
+            }
 
             AiConfigForm(
                 selectedProvider = activeProvider,

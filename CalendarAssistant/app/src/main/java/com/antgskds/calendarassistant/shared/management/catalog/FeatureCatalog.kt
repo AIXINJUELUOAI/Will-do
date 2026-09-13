@@ -66,6 +66,8 @@ object FeatureCatalog {
         FeatureEntry("课程表", Chain.SCHEDULE, "core/course", "课程并入事件模型、课表设置"),
         FeatureEntry("快捷备忘", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "语音/文字快捷备忘"),
         FeatureEntry("图片随口记", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "系统图片/分享图片保存为随口记素材"),
+        FeatureEntry("随口记多提醒", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", "维护单条随口记的多个提醒及重复规则，统一调用通知入口"),
+        FeatureEntry("悬浮媒体查看", Chain.SUPPORT, "platform/floating/ui/connector/FloatingMediaCardConnector", "从胶囊查看日程二维码、图片附件或随口记图片，失败时返回详情"),
         FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "便签编辑与存储"),
         FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记数据"),
 

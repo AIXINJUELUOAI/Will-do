@@ -31,7 +31,13 @@ class EventAttachmentManager(context: Context) {
         val event = db.eventsDao().getEventOrTaskWithId(eventId)
         val eventKey = event?.let { eventKey(it.title, it.startTS, it.endTS, it.getTimeZoneString()) }.orEmpty()
         val byId = db.eventAttachmentsDao().getAttachmentsForEvent(eventId)
-        val byKey = if (eventKey.isNotBlank()) db.eventAttachmentsDao().getAttachmentsForEventKey(eventKey) else emptyList()
+        val byKey = if (eventKey.isNotBlank()) {
+            db.eventAttachmentsDao().getAttachmentsForEventKey(eventKey).filter { attachment ->
+                // 首个重复实例可与母事件拥有相同指纹，但不能夺取仍属于其他真实事件的附件。
+                attachment.eventId == null || attachment.eventId == eventId ||
+                    db.eventsDao().getEventOrTaskWithId(attachment.eventId) == null
+            }
+        } else emptyList()
         val merged = (byId + byKey).distinctBy { it.id ?: it.localPath.hashCode().toLong() }
         val toRepair = merged.mapNotNull { attachment ->
             val id = attachment.id ?: return@mapNotNull null
@@ -165,8 +171,7 @@ class EventAttachmentManager(context: Context) {
     fun deleteAttachmentsForEvent(eventId: Long) {
         val attachments = getAttachments(eventId)
         db.eventAttachmentsDao().deleteAttachmentsForEvent(eventId)
-        val eventKey = eventKey(eventId)
-        if (eventKey.isNotBlank()) db.eventAttachmentsDao().deleteAttachmentsForEventKey(eventKey)
+        // getAttachments 已修复可认领的旧记录；仅按归属删除，避免删掉同指纹的其他实例附件。
         attachments.forEach { cleanupFileIfUnused(it.localPath) }
     }
 

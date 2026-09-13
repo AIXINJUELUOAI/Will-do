@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.notification.model
 
 enum class NotificationKind {
+    QUICK_MEMO_REMINDER,
     SCHEDULE_REMINDER,
     RECOGNITION_STATUS,
     WEATHER_ALERT,

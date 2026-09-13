@@ -1,7 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.data.store
 
 import android.content.Context
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.FLAG_TASK_COMPLETED
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_CHECKED_IN
 import com.antgskds.calendarassistant.feature.schedule.domain.calendar.STATE_COMPLETED
@@ -103,7 +103,7 @@ class StoreRootNode(context: Context) {
         // 防护：负数 id 是虚拟展开实例的合成 id，不应进入数据库
         val eventId = event.id
         if (eventId != null && eventId < 0) {
-            android.util.Log.w("StoreRootNode", "Blocked updateEvent with synthetic id=$eventId, title=${event.title}")
+            com.antgskds.calendarassistant.shared.util.AppLogger.w("StoreRootNode", "Blocked updateEvent with synthetic id=$eventId, title=${event.title}")
             return
         }
 
@@ -134,7 +134,7 @@ class StoreRootNode(context: Context) {
 
     fun deleteEvent(id: Long, deleteFromSystem: Boolean = true) {
         if (id < 0) {
-            android.util.Log.w("StoreRootNode", "Blocked deleteEvent with synthetic id=$id")
+            com.antgskds.calendarassistant.shared.util.AppLogger.w("StoreRootNode", "Blocked deleteEvent with synthetic id=$id")
             return
         }
         val event = localNode.getEvent(id)

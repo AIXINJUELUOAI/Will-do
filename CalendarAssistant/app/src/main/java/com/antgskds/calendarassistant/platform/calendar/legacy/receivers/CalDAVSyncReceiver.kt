@@ -21,7 +21,7 @@ class CalDAVSyncReceiver : BroadcastReceiver() {
                 // ✅ 同步完成后刷新内存中的事件列表，让 UI 能看到导入的事件
                 (context.applicationContext as? com.antgskds.calendarassistant.App)?.scheduleCenter?.refreshEvents()
             } catch (e: Exception) {
-                android.util.Log.e("CalDAVSync", "onScheduledSyncTick failed", e)
+                com.antgskds.calendarassistant.shared.util.AppLogger.e("CalDAVSync", "onScheduledSyncTick failed", e)
             } finally {
                 pendingResult.finish() // 通知系统工作完成
             }

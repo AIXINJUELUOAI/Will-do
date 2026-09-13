@@ -40,15 +40,17 @@ object CapsuleMessageComposer {
     fun composeTextQuickMemo(
         title: String,
         memoId: Long,
-        fixedTitleEnabled: Boolean = false
+        fixedTitleEnabled: Boolean = false,
+        removeAction: CapsuleActionSpec = CapsuleActionSpec(
+            label = "移除",
+            receiverAction = EventActionReceiver.ACTION_CLEAR_TEXT_QUICK_MEMO,
+            extraLongKey = EventActionReceiver.EXTRA_QUICK_MEMO_ID,
+            extraLongValue = memoId,
+        ),
     ): CapsuleDisplayModel {
         return SystemLiveDisplay.textQuickMemo(title, fixedTitleEnabled).copy(
-            action = CapsuleActionSpec(
-                label = "移除",
-                receiverAction = EventActionReceiver.ACTION_CLEAR_TEXT_QUICK_MEMO,
-                extraLongKey = EventActionReceiver.EXTRA_QUICK_MEMO_ID,
-                extraLongValue = memoId
-            )
+            tapQuickMemoId = memoId.toString(),
+            action = removeAction,
         )
     }
 

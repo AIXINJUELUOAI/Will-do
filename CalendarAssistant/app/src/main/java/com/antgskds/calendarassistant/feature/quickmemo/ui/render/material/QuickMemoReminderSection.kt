@@ -1,0 +1,571 @@
+package com.antgskds.calendarassistant.feature.quickmemo.ui.render.material
+
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoReminderEntity
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
+import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
+import com.antgskds.calendarassistant.feature.schedule.domain.model.shortCn
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
+import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePicker
+import com.antgskds.calendarassistant.shared.ui.material.component.WheelTimePicker
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val reminderSummaryFormatter = DateTimeFormatter.ofPattern("M月d日 EEEE HH:mm")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun QuickMemoReminderSection(
+    reminders: List<QuickMemoReminderEntity>,
+    onSaveReminder: (Long?, Long?, String) -> Unit,
+    onDeleteReminder: (Long) -> Unit,
+    uiSize: Int,
+    hapticEnabled: Boolean
+) {
+    var showSheet by remember { mutableStateOf(false) }
+    var editingReminder by remember { mutableStateOf<QuickMemoReminderEntity?>(null) }
+    val haptics = rememberAppHaptics(hapticEnabled)
+    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
+    val primaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryTextColor = if (usesWallpaperText) {
+        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = if (uiSize <= 1) 8.dp else 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .height(if (uiSize <= 1) 44.dp else 52.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "提醒",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryTextColor
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (reminders.isEmpty()) "未设置提醒" else "已设置 ${reminders.size} 个提醒",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = secondaryTextColor
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Surface(
+                onClick = {
+                    haptics.click()
+                    editingReminder = null
+                    showSheet = true
+                },
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = "添加",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        reminders.sortedWith(compareBy<QuickMemoReminderEntity> { it.triggerAt }.thenBy { it.id }).forEach { reminder ->
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                onClick = {
+                    haptics.click()
+                    editingReminder = reminder
+                    showSheet = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = formatReminderTime(reminder.triggerAt),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = primaryTextColor
+                        )
+                        Text(
+                            text = RepeatSpec.fromRRule(reminder.rrule)?.summary() ?: "不重复",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = secondaryTextColor
+                        )
+                    }
+                    Text(
+                        text = "›",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = secondaryTextColor
+                    )
+                }
+            }
+        }
+    }
+
+    if (showSheet) {
+        QuickMemoReminderSheet(
+            reminder = editingReminder,
+            onDismiss = { showSheet = false },
+            onSave = { reminderId, value, rrule ->
+                onSaveReminder(reminderId, value, rrule)
+                showSheet = false
+            },
+            onDelete = { reminderId ->
+                onDeleteReminder(reminderId)
+                showSheet = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickMemoReminderSheet(
+    reminder: QuickMemoReminderEntity?,
+    onDismiss: () -> Unit,
+    onSave: (Long?, Long, String) -> Unit,
+    onDelete: (Long) -> Unit
+) {
+    val context = LocalContext.current
+    val haptics = rememberAppHaptics()
+    val initial = remember(reminder?.id, reminder?.triggerAt) {
+        reminder?.triggerAt
+            ?.takeIf { it > System.currentTimeMillis() }
+            ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() }
+            ?: LocalDateTime.now().plusHours(1).withSecond(0).withNano(0)
+    }
+    var selectedDate by remember(reminder?.id) { mutableStateOf(initial.toLocalDate()) }
+    var selectedHour by remember(reminder?.id) { mutableIntStateOf(initial.hour) }
+    var selectedMinute by remember(reminder?.id) { mutableIntStateOf(initial.minute) }
+    var selectedRepeatSpec by remember(reminder?.id, reminder?.rrule) {
+        mutableStateOf(RepeatSpec.fromRRule(reminder?.rrule.orEmpty()))
+    }
+    var expandedSection by remember(reminder?.id) { mutableStateOf<ReminderEditorSection?>(null) }
+
+    AppModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = if (reminder == null) "添加提醒" else "编辑提醒",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+            )
+            AppCard(
+                modifier = Modifier.animateContentSize(),
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                ReminderSettingRow(
+                    label = "日期",
+                    value = "${selectedDate.year}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日",
+                    expanded = expandedSection == ReminderEditorSection.DATE,
+                    onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.DATE) }
+                )
+                AnimatedVisibility(visible = expandedSection == ReminderEditorSection.DATE) {
+                    WheelDatePicker(initialDate = selectedDate) { selectedDate = it }
+                }
+                ReminderDivider()
+                ReminderSettingRow(
+                    label = "时间",
+                    value = String.format("%02d:%02d", selectedHour, selectedMinute),
+                    expanded = expandedSection == ReminderEditorSection.TIME,
+                    onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.TIME) }
+                )
+                AnimatedVisibility(visible = expandedSection == ReminderEditorSection.TIME) {
+                    WheelTimePicker(
+                        initialHour = selectedHour,
+                        initialMinute = selectedMinute
+                    ) { hour, minute ->
+                        selectedHour = hour
+                        selectedMinute = minute
+                    }
+                }
+                ReminderDivider()
+                ReminderSettingRow(
+                    label = "重复",
+                    value = selectedRepeatSpec?.summary() ?: "不重复",
+                    expanded = expandedSection == ReminderEditorSection.REPEAT,
+                    onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.REPEAT) }
+                )
+                AnimatedVisibility(visible = expandedSection == ReminderEditorSection.REPEAT) {
+                    InlineRepeatPicker(
+                        currentSpec = selectedRepeatSpec,
+                        startDate = selectedDate,
+                        onChange = { selectedRepeatSpec = it }
+                    )
+                }
+            }
+            Button(
+                onClick = {
+                    val value = selectedDate
+                        .atTime(selectedHour, selectedMinute)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                    if (value <= System.currentTimeMillis()) {
+                        haptics.warning()
+                        Toast.makeText(context, "请选择未来时间", Toast.LENGTH_SHORT).show()
+                    } else {
+                        haptics.confirm()
+                        onSave(reminder?.id, value, selectedRepeatSpec?.toRRule().orEmpty())
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("保存")
+            }
+            reminder?.id?.let { reminderId ->
+                Button(
+                    onClick = {
+                        haptics.warning()
+                        onDelete(reminderId)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("删除此提醒")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReminderSettingRow(
+    label: String,
+    value: String,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = value,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (expanded) "⌃" else "⌄",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReminderDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
+}
+
+@Composable
+private fun InlineRepeatPicker(
+    currentSpec: RepeatSpec?,
+    startDate: LocalDate,
+    onChange: (RepeatSpec?) -> Unit
+) {
+    var untilDate by remember(currentSpec, startDate) {
+        mutableStateOf((currentSpec?.end as? RepeatEnd.Until)?.date ?: startDate.plusMonths(1))
+    }
+    var showUntilPicker by remember(currentSpec) {
+        mutableStateOf(currentSpec?.end is RepeatEnd.Until)
+    }
+    val choice = repeatChoice(currentSpec)
+    val customSpec = currentSpec.takeIf { choice == RepeatChoice.CUSTOM }
+        ?: RepeatSpec(
+            frequency = RepeatFrequency.WEEKLY,
+            byDays = setOf(startDate.dayOfWeek)
+        )
+
+    Column(
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RepeatChoiceButton(
+                label = "不重复",
+                selected = choice == RepeatChoice.NONE,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(null) }
+            )
+            RepeatChoiceButton(
+                label = "每天",
+                selected = choice == RepeatChoice.DAILY,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(RepeatSpec.daily()) }
+            )
+            RepeatChoiceButton(
+                label = "每周",
+                selected = choice == RepeatChoice.WEEKLY,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(RepeatSpec.weekly()) }
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RepeatChoiceButton(
+                label = "工作日",
+                selected = choice == RepeatChoice.WEEKDAYS,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(RepeatSpec.weekdays()) }
+            )
+            RepeatChoiceButton(
+                label = "自定义",
+                selected = choice == RepeatChoice.CUSTOM,
+                modifier = Modifier.weight(2f),
+                onClick = { onChange(customSpec) }
+            )
+        }
+
+        AnimatedVisibility(visible = choice == RepeatChoice.CUSTOM) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    DayOfWeek.entries.forEach { day ->
+                        val selected = day in customSpec.byDays
+                        Surface(
+                            onClick = {
+                                val nextDays = if (selected) customSpec.byDays - day else customSpec.byDays + day
+                                onChange(customSpec.copy(byDays = nextDays.ifEmpty { setOf(startDate.dayOfWeek) }))
+                            },
+                            modifier = Modifier.size(38.dp),
+                            shape = CircleShape,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            },
+                            contentColor = if (selected) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(day.shortCn().removePrefix("周"))
+                            }
+                        }
+                    }
+                }
+                RepeatEndRow(
+                    label = "永不结束",
+                    selected = customSpec.end is RepeatEnd.Never,
+                    onClick = {
+                        showUntilPicker = false
+                        onChange(customSpec.copy(end = RepeatEnd.Never))
+                    }
+                )
+                RepeatEndRow(
+                    label = "截止日期 ${untilDate.year}年${untilDate.monthValue}月${untilDate.dayOfMonth}日",
+                    selected = customSpec.end is RepeatEnd.Until,
+                    onClick = {
+                        showUntilPicker = true
+                        onChange(customSpec.copy(end = RepeatEnd.Until(untilDate)))
+                    }
+                )
+                AnimatedVisibility(visible = showUntilPicker && customSpec.end is RepeatEnd.Until) {
+                    WheelDatePicker(initialDate = untilDate) { date ->
+                        untilDate = date
+                        onChange(customSpec.copy(end = RepeatEnd.Until(date)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepeatChoiceButton(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+@Composable
+private fun RepeatEndRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(onClick = onClick, color = Color.Transparent) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+private fun repeatChoice(spec: RepeatSpec?): RepeatChoice = when {
+    spec == null -> RepeatChoice.NONE
+    spec.toRRule() == RepeatSpec.daily().toRRule() -> RepeatChoice.DAILY
+    spec.toRRule() == RepeatSpec.weekly().toRRule() -> RepeatChoice.WEEKLY
+    spec.toRRule() == RepeatSpec.weekdays().toRRule() -> RepeatChoice.WEEKDAYS
+    else -> RepeatChoice.CUSTOM
+}
+
+private fun ReminderEditorSection?.toggle(target: ReminderEditorSection): ReminderEditorSection? =
+    if (this == target) null else target
+
+private fun formatReminderTime(reminderAt: Long): String {
+    val time = Instant.ofEpochMilli(reminderAt).atZone(ZoneId.systemDefault()).toLocalDateTime()
+    val today = LocalDate.now()
+    return when (time.toLocalDate()) {
+        today -> "今天 ${time.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        today.plusDays(1) -> "明天 ${time.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        else -> time.format(reminderSummaryFormatter)
+    }
+}
+
+private enum class ReminderEditorSection {
+    DATE,
+    TIME,
+    REPEAT
+}
+
+private enum class RepeatChoice {
+    NONE,
+    DAILY,
+    WEEKLY,
+    WEEKDAYS,
+    CUSTOM
+}

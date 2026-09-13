@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.recognition.ingest.instantcode
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode

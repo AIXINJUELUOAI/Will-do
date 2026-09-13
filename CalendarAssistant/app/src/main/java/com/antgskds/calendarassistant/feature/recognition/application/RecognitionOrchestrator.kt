@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.feature.recognition.application
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isTextRecognitionConfigReady

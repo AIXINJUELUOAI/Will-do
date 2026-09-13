@@ -2,7 +2,7 @@ package com.antgskds.calendarassistant.shared.util
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,10 +71,7 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
     private val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
 
     override fun uncaughtException(thread: Thread, exception: Throwable) {
-        Log.e(TAG, "捕获到未处理异常", exception)
-
         try {
-            AppLogger.e(TAG, "uncaught exception in thread=${thread.name}", exception)
             val crashLog = buildCrashLog(exception)
             ExceptionLogStore.append(context, TAG, crashLog)
             markCrashed(context)

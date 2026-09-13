@@ -11,6 +11,24 @@ import java.time.ZoneId
 internal object AgentEventQueryResolver {
     private const val OPEN_RANGE_DAYS = 3650L
 
+    /** 无独立记录的有效实例返回 id=null；查询附件时不能因此创建数据库记录。 */
+    fun resolveAttachmentTarget(events: List<Event>, eventId: Long, occurrenceTs: Long?): Event {
+        val event = events.firstOrNull { it.id == eventId }
+            ?: throw NoSuchElementException("Event $eventId not found")
+        if (occurrenceTs == null) return event
+        require(occurrenceTs > 0L) { "occurrenceTs must be an epoch timestamp in seconds" }
+        if (!event.isRecurring) {
+            require(event.startTS == occurrenceTs) { "occurrenceTs does not match event $eventId" }
+            return event
+        }
+        events.firstOrNull { it.parentId == eventId && it.startTS == occurrenceTs }?.let { return it }
+        val occurrence = resolve(events.filter { it.id == eventId || it.parentId == eventId }, AgentEventQuery(startTs = occurrenceTs, endTs = occurrenceTs,
+            limit = WillDoAgentContract.MAX_QUERY_LIMIT)).firstOrNull {
+            it.id == eventId && it.startTS == occurrenceTs && it.archivedAt == null
+        } ?: throw NoSuchElementException("Occurrence $eventId:$occurrenceTs not found; use the child eventId for edited instances")
+        return occurrence.copy(id = null)
+    }
+
     fun resolve(
         events: List<Event>,
         query: AgentEventQuery,
