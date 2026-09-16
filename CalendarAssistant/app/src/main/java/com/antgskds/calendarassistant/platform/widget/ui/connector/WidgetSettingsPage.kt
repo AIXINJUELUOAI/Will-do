@@ -1,5 +1,9 @@
 package com.antgskds.calendarassistant.platform.widget.ui.connector
 
+import com.antgskds.calendarassistant.shared.ui.material.settings.AppSettingsDivider
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSegmentedControl
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
@@ -14,20 +18,16 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -119,7 +119,7 @@ fun MaterialWidgetSettingsScreen(state: WidgetSettingsUiState, uiSize: Int = 2, 
     var selectedType by remember { mutableStateOf(WidgetType.SCHEDULE) }
     var selectedSize by remember { mutableStateOf(WidgetPreviewSize.FourByTwo) }
     val selectedAppearance = state.appearances.getValue(selectedType)
-    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+    val bottomPadding = LocalAppPageBottomPadding.current + 24.dp
 
     val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.ExtraBold,
@@ -147,19 +147,17 @@ fun MaterialWidgetSettingsScreen(state: WidgetSettingsUiState, uiSize: Int = 2, 
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                WidgetTypeSelector(
-                    selectedType = selectedType,
-                    onSelected = {
-                        haptics.selection()
-                        selectedType = it
-                    }
+                AppSegmentedControl(
+                    options = WidgetType.entries,
+                    selectedOption = selectedType,
+                    label = ::widgetTypeShortLabel,
+                    onSelected = { selectedType = it },
                 )
-                WidgetPreviewSizeSelector(
-                    selectedSize = selectedSize,
-                    onSelected = {
-                        haptics.selection()
-                        selectedSize = it
-                    }
+                AppSegmentedControl(
+                    options = WidgetPreviewSize.entries,
+                    selectedOption = selectedSize,
+                    label = { it.label },
+                    onSelected = { selectedSize = it },
                 )
                 BoxWithConstraints(
                     modifier = Modifier
@@ -205,15 +203,10 @@ fun MaterialWidgetSettingsScreen(state: WidgetSettingsUiState, uiSize: Int = 2, 
                     widgetType = selectedType,
                     selectedMode = selectedAppearance.themeMode,
                     onSelected = { mode ->
-                        haptics.selection()
                         onAction(WidgetSettingsUiAction.UpdateAppearance(selectedType, selectedAppearance.copy(themeMode = mode)))
                     }
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                AppSettingsDivider()
                 WidgetAlphaSetting(
                     widgetType = selectedType,
                     alpha = selectedAppearance.backgroundAlpha,
@@ -284,74 +277,6 @@ private fun DiagonalStripePreviewBackground(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun WidgetTypeSelector(
-    selectedType: WidgetType,
-    onSelected: (WidgetType) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        WidgetType.entries.forEach { type ->
-            val selected = selectedType == type
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { onSelected(type) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = widgetTypeShortLabel(type),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun WidgetPreviewSizeSelector(
-    selectedSize: WidgetPreviewSize,
-    onSelected: (WidgetPreviewSize) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        WidgetPreviewSize.entries.forEach { size ->
-            val selected = selectedSize == size
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { onSelected(size) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = size.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun WidgetThemeModeSetting(
     widgetType: WidgetType,
     selectedMode: Int,
@@ -367,37 +292,18 @@ private fun WidgetThemeModeSetting(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf(
-                WidgetThemeMode.FOLLOW_APP to "跟随软件",
-                WidgetThemeMode.LIGHT to "浅色",
-                WidgetThemeMode.DARK to "深色"
-            ).forEach { (mode, label) ->
-                val selected = selectedMode == mode
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .clickable { onSelected(mode) }
-                        .padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        AppSegmentedControl(
+            options = listOf(WidgetThemeMode.FOLLOW_APP, WidgetThemeMode.LIGHT, WidgetThemeMode.DARK),
+            selectedOption = selectedMode,
+            label = { mode ->
+                when (mode) {
+                    WidgetThemeMode.LIGHT -> "浅色"
+                    WidgetThemeMode.DARK -> "深色"
+                    else -> "跟随软件"
                 }
-            }
-        }
+            },
+            onSelected = onSelected,
+        )
     }
 }
 

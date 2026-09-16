@@ -5,24 +5,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +34,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.antgskds.calendarassistant.shared.management.catalog.PageCatalog
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBarBackButton
 import com.antgskds.calendarassistant.feature.settings.shell.ui.render.material.component.SettingsSidebar
 import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.feature.settings.shell.ui.contract.SettingsDetailUiAction
@@ -258,40 +254,31 @@ private fun MaterialSettingsPage(
     content: @Composable () -> Unit,
 ) {
     val haptics = rememberAppHaptics(state.hapticEnabled)
-    val useWideHeader = LocalAdaptiveLayoutInfo.current.useNavigationRail
     val pageContainerColor = if (state.pageHasAppBackground) {
         Color.Transparent
     } else {
         MaterialTheme.colorScheme.background
     }
+    val scrollWholePage = destination == SettingsDestination.About || destination == SettingsDestination.AppUpdate
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showClearCoursesConfirm by rememberSaveable(route) { mutableStateOf(false) }
     var showClearArchivesConfirm by rememberSaveable(route) { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
+        AppPageScaffold(
             containerColor = pageContainerColor,
-            contentWindowInsets = WindowInsets(0),
+            scrollState = if (scrollWholePage) rememberScrollState() else null,
+            edgeToEdgeContent = !scrollWholePage,
             topBar = {
                 val navigationContent: @Composable () -> Unit = {
-                    IconButton(
-                        onClick = {
-                            haptics.click()
-                            onBack()
+                    AppTopBarBackButton(
+                        onClick = { haptics.click(); onBack() },
+                        iconSize = when (state.uiSize) {
+                            1 -> 24.dp
+                            2 -> 28.dp
+                            else -> 32.dp
                         },
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier.size(
-                                when (state.uiSize) {
-                                    1 -> 24.dp
-                                    2 -> 28.dp
-                                    else -> 32.dp
-                                },
-                            ),
-                        )
-                    }
+                    )
                 }
                 val actionsContent: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                     if (destination == SettingsDestination.CourseManage && state.courseCount > 0) {
@@ -318,44 +305,15 @@ private fun MaterialSettingsPage(
                         }
                     }
                 }
-                if (useWideHeader) TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = pageContainerColor,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                        actionIconContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                    title = { Text(title) },
-                    navigationIcon = navigationContent,
-                    actions = actionsContent,
-                ) else CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = pageContainerColor,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                        actionIconContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                    title = { Text(title) },
+                AppTopBar(
+                    title = title,
+                    containerColor = pageContainerColor,
                     navigationIcon = navigationContent,
                     actions = actionsContent,
                 )
             },
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.TopCenter,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 960.dp)
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                ) {
-                    content()
-                }
-            }
+        ) {
+            content()
         }
 
         PredictiveFloatingActionCard(

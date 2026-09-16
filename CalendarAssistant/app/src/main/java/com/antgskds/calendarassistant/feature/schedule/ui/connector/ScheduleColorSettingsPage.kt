@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
-import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -22,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +37,8 @@ import com.antgskds.calendarassistant.feature.settings.data.model.normalizeEvent
 import com.antgskds.calendarassistant.feature.settings.data.model.sanitizeEventColorPaletteHex
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetActionRole
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
@@ -76,7 +78,7 @@ fun MaterialScheduleColorScreen(
     onAction: (ScheduleColorUiAction) -> Unit
 ) {
     val colors = state.colors
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
     val haptics = rememberAppHaptics(state.hapticEnabled)
     val context = LocalContext.current
 
@@ -196,30 +198,25 @@ fun MaterialScheduleColorScreen(
 
         // ================== 添加颜色 BottomSheet ==================
         if (showAddColorSheet) {
-            AppModalBottomSheet(
-                onDismissRequest = { showAddColorSheet = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ) {
-                AddColorEditorSheet(
-                    onConfirm = { newHex ->
-                        val normalized = normalizeEventColorHex(newHex)
-                        when {
-                            normalized == null -> {
-                                Toast.makeText(context, "无效的颜色代码", Toast.LENGTH_SHORT).show()
-                            }
-                            normalized in colors -> {
-                                Toast.makeText(context, "这个颜色已在色盘中", Toast.LENGTH_SHORT).show()
-                            }
-                            else -> {
-                                haptics.confirm()
-                                onAction(ScheduleColorUiAction.UpdatePalette(colors + normalized))
-                                showAddColorSheet = false
-                            }
+            AddColorEditorSheet(
+                onConfirm = { newHex ->
+                    val normalized = normalizeEventColorHex(newHex)
+                    when {
+                        normalized == null -> {
+                            Toast.makeText(context, "无效的颜色代码", Toast.LENGTH_SHORT).show()
                         }
-                    },
-                    onCancel = { showAddColorSheet = false }
-                )
-            }
+                        normalized in colors -> {
+                            Toast.makeText(context, "这个颜色已在色盘中", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> {
+                            haptics.confirm()
+                            onAction(ScheduleColorUiAction.UpdatePalette(colors + normalized))
+                            showAddColorSheet = false
+                        }
+                    }
+                },
+                onCancel = { showAddColorSheet = false }
+            )
         }
     }
 }
@@ -337,6 +334,7 @@ private fun ColorCircleItem(
 /**
  * 底部弹窗内的颜色编辑器 (复刻主题页的 RGB + Hex)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddColorEditorSheet(
     onConfirm: (String) -> Unit,
@@ -355,23 +353,20 @@ private fun AddColorEditorSheet(
         hexInput = newHex
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp)
+    AppModalBottomSheet(
+        title = "新增自定义颜色",
+        onDismissRequest = onCancel,
+        actions = listOf(
+            AppSheetAction(text = "取消", onClick = onCancel, role = AppSheetActionRole.Secondary),
+            AppSheetAction(text = "确认添加", onClick = { onConfirm(currentHex) }),
+        ),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("新增自定义颜色", style = MaterialTheme.typography.titleLarge)
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(color)
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(color)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
             )
         }
@@ -393,17 +388,6 @@ private fun AddColorEditorSheet(
             }
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onCancel) {
-                Text("取消")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            EditionButton(onClick = { onConfirm(currentHex) }) {
-                Text("确认添加")
-            }
-        }
     }
 }
 

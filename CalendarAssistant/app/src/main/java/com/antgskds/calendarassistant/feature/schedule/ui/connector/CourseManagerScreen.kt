@@ -1,5 +1,10 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButton
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButtonDefaults
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+
 import android.content.ClipboardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,10 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -21,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -76,7 +77,7 @@ fun CourseManagerScreen(
     val maxNodes = remember(uiState.settings.timeTableJson) {
         TimeTableLayoutUtils.nodeCountFromJson(uiState.settings.timeTableJson)
     }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
 
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
     var showImportMethodDialog by remember { mutableStateOf(false) }
@@ -270,7 +271,7 @@ fun MaterialCourseManagerScreen(
 
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -307,9 +308,8 @@ fun MaterialCourseManagerScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FloatingActionButton(
+                AppFloatingActionButton(
                     onClick = { haptics.click(); onAction(CourseManagerUiAction.ImportCourses) },
-                    modifier = Modifier.size(72.dp),
                     shape = CircleShape,
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -317,17 +317,16 @@ fun MaterialCourseManagerScreen(
                     Icon(
                         Icons.Default.Download,
                         contentDescription = "导入 WakeUp 课表",
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(AppFloatingActionButtonDefaults.IconSize),
                     )
                 }
-                FloatingActionButton(
+                AppFloatingActionButton(
                     onClick = { haptics.click(); courseToEdit = null; showEditDialog = true },
-                    modifier = Modifier.size(72.dp),
                     shape = CircleShape,
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "添加课程", modifier = Modifier.size(34.dp))
+                    Icon(Icons.Default.Add, contentDescription = "添加课程", modifier = Modifier.size(AppFloatingActionButtonDefaults.IconSize))
                 }
             }
         }

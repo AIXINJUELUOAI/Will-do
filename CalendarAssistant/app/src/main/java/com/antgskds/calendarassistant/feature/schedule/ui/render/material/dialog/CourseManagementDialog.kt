@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSwipeReveal
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,14 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -78,13 +75,11 @@ import com.antgskds.calendarassistant.shared.ui.material.dialog.DialogEdgeToEdge
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
 import com.antgskds.calendarassistant.shared.ui.motion.PredictiveBottomDialogHost
 import com.antgskds.calendarassistant.app.ui.theme.material.getRandomEventColor
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.appWindowBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberAppWindowBackdrop
 
 @Composable
 fun MaterialCourseEditDialog(
@@ -140,7 +135,7 @@ fun MaterialCourseEditDialog(
     }
 
     val glassSettings = LocalAppGlassSettings.current
-    val childDialogBackdrop = rememberLayerBackdrop()
+    val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
     androidx.compose.runtime.CompositionLocalProvider(
         LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
     ) {
@@ -158,7 +153,7 @@ fun MaterialCourseEditDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
+                .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
         ) {
             androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
             PredictiveBottomDialogHost(
@@ -403,7 +398,7 @@ fun MaterialCourseSingleEditDialog(
     var showNodeRangePicker by remember { mutableStateOf(false) }
     val isChildDialogVisible = showDatePicker || showNodeRangePicker
     val glassSettings = LocalAppGlassSettings.current
-    val childDialogBackdrop = rememberLayerBackdrop()
+    val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
 
     androidx.compose.runtime.CompositionLocalProvider(
         LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
@@ -439,7 +434,7 @@ fun MaterialCourseSingleEditDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
+                .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
         ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
         PredictiveBottomDialogHost(
@@ -573,78 +568,28 @@ private fun SwipeableCourseItem(
 ) {
     val actionButtonSize = when (uiSize) { 1 -> 48.dp; 2 -> 52.dp; else -> 56.dp }
     val actionMenuWidth = when (uiSize) { 1 -> 130.dp; 2 -> 140.dp; else -> 150.dp }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
-    val offsetX = remember { androidx.compose.animation.core.Animatable(0f) }
-    val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics()
-    var thresholdHapticPlayed by remember { mutableStateOf(false) }
-    val revealedActionWidth = with(density) {
-        (-offsetX.value).coerceIn(0f, actionMenuWidthPx).toDp()
-    }
-
-    LaunchedEffect(isRevealed) {
-        if (isRevealed) offsetX.animateTo(-actionMenuWidthPx) else offsetX.animateTo(0f)
-    }
-
-    LaunchedEffect(isRevealed) {
-        if (!isRevealed) thresholdHapticPlayed = false
-    }
-
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-        Box(
-            modifier = Modifier
-                .width(revealedActionWidth)
-                .fillMaxHeight()
-                .clipToBounds(),
-            contentAlignment = Alignment.CenterEnd
-        ) {
+    AppSwipeReveal(
+        isRevealed = isRevealed,
+        actionWidth = actionMenuWidth,
+        onRevealedChange = { if (it) onExpand() else onCollapse() },
+        actions = { close ->
             Row(
                 modifier = Modifier
                     .width(actionMenuWidth)
-                    .fillMaxHeight()
                     .padding(end = 16.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) { onCollapse(); onClick() }
+                SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize) { close(); onClick() }
                 Spacer(Modifier.width(12.dp))
-                SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) { onCollapse(); onDelete() }
+                SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize) { close(); onDelete() }
             }
-        }
-
+        },
+    ) { swipeModifier, _, close ->
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            scope.launch {
-                                if (offsetX.value < -actionMenuWidthPx / 2) {
-                                    if (!isRevealed) haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                    offsetX.animateTo(-actionMenuWidthPx); onExpand()
-                                } else {
-                                    offsetX.animateTo(0f); onCollapse()
-                                }
-                            }
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            scope.launch {
-                                val newOffset = (offsetX.value + dragAmount).coerceIn(-actionMenuWidthPx, 0f)
-                                if (!thresholdHapticPlayed && newOffset < -actionMenuWidthPx / 2) {
-                                    haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                } else if (newOffset >= -actionMenuWidthPx / 2) {
-                                    thresholdHapticPlayed = false
-                                }
-                                offsetX.snapTo(newOffset)
-                            }
-                        }
-                    )
-                }
-                .clickable { haptics.click(); if (isRevealed) onCollapse() else onClick() },
+            modifier = swipeModifier
+                .clickable { haptics.click(); if (isRevealed) close() else onClick() },
             color = Color.Transparent,
             shadowElevation = 0.dp
         ) {

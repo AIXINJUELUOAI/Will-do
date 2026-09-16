@@ -115,7 +115,7 @@ fun EditionFloatingActionButton(
     contentColor: Color,
     content: @Composable () -> Unit,
 ) {
-    androidx.compose.material3.FloatingActionButton(
+    com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButton(
         onClick = onClick,
         modifier = modifier,
         shape = shape,

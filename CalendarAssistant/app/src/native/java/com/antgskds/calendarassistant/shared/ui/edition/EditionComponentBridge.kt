@@ -75,29 +75,21 @@ fun EditionAlertDialogSurface(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditionModalBottomSheet(
+    title: String,
     onDismissRequest: () -> Unit,
     modifier: Modifier,
     sheetState: SheetState?,
+    subtitle: String? = null,
+    actions: List<com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction> = emptyList(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (sheetState != null) {
-        ModalBottomSheet(
-            onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            sheetState = sheetState,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            tonalElevation = 1.dp,
-            content = content,
-        )
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            tonalElevation = 1.dp,
-            content = content,
-        )
-    }
+    com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet(
+        title = title,
+        subtitle = subtitle,
+        actions = actions,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        sheetState = sheetState,
+        content = content,
+    )
 }

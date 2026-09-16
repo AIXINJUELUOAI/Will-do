@@ -63,8 +63,8 @@ import com.antgskds.calendarassistant.shared.ui.motion.PredictiveBottomDialogHos
 import com.antgskds.calendarassistant.app.ui.theme.material.resolveEventColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.appWindowBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberAppWindowBackdrop
 import java.io.File
 import java.time.Duration
 import java.time.LocalDate
@@ -350,7 +350,7 @@ fun MaterialAddEventDialog(
     if (!visible) return
 
     val glassSettings = LocalAppGlassSettings.current
-    val childDialogBackdrop = rememberLayerBackdrop()
+    val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
     CompositionLocalProvider(
         LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
     ) {
@@ -367,7 +367,7 @@ fun MaterialAddEventDialog(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (glassSettings.active) Modifier.layerBackdrop(childDialogBackdrop) else Modifier)
+                    .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
             ) {
                 CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
                     PredictiveBottomDialogHost(

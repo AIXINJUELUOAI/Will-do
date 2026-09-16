@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventAttachmentsDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventTypesDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventsDao
@@ -30,6 +31,7 @@ import java.util.concurrent.Executors
 
 @Database(
     entities = [
+        AccountingEntry::class,
         Event::class,
         EventType::class,
         EventAttachment::class,
@@ -43,7 +45,7 @@ import java.util.concurrent.Executors
         SyncV2PeerEntity::class,
         SyncV2MetaEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -66,7 +68,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_17, MIGRATION_16_17).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -85,6 +87,26 @@ abstract class EventsDatabase : RoomDatabase() {
                 )
                 database.eventTypesDao().insertOrUpdate(defaultType)
             }
+        }
+
+        // 正式版 15 没有记账表；只补齐测试版 16 的结构，不改任何已有业务表。
+        internal val MIGRATION_15_17 = object : Migration(15, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS accounting_entries (
+                    id TEXT NOT NULL PRIMARY KEY, amountMinor INTEGER NOT NULL, direction TEXT NOT NULL,
+                    currency TEXT NOT NULL, merchant TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL,
+                    occurredAt INTEGER NOT NULL, zoneId TEXT NOT NULL, source TEXT NOT NULL, channel TEXT NOT NULL,
+                    transactionId TEXT NOT NULL, status TEXT NOT NULL, ruleId TEXT NOT NULL, dedupKey TEXT,
+                    refundOf TEXT, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, deletedAt INTEGER
+                )""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_accounting_entries_occurredAt ON accounting_entries(occurredAt)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_accounting_entries_dedupKey ON accounting_entries(dedupKey)")
+            }
+        }
+
+        // 记账测试版 16 已有相同表结构；由 Room 校验结构并更新版本/identity hash，保留全部数据。
+        internal val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) = Unit
         }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {

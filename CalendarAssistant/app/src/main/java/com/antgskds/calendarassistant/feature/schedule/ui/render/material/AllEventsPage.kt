@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material
 
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -151,7 +153,7 @@ private fun AllEventsListPane(
             modifier = Modifier.fillMaxSize()
         ) {
             // 过滤后的本地数据用于显示
-            val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val bottomInset = LocalAppPageBottomPadding.current
             val floatingBarOffset = if (reserveFloatingBarSpace) {
                 IntegratedFloatingBarHeight + IntegratedFloatingBarBottomSpacing + bottomInset
             } else {

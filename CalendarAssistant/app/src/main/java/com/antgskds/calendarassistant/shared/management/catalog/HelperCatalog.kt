@@ -70,9 +70,21 @@ object HelperCatalog {
         HelperEntry("天气图标映射", Chain.WEATHER, "feature/weather/domain/WeatherIconMapper", "天气代码 → 图标"),
 
         // —— 横切支撑 ——
+        HelperEntry("公共设置分隔线", Chain.SUPPORT, "shared/ui/material/settings/AppSettingsDivider", "设置卡片内统一 16 dp 水平缩进、0.5 dp 线宽与主题分隔色；开发者相关页面暂不迁移"),
+        HelperEntry("公共列表侧滑容器", Chain.SUPPORT, "shared/ui/material/component/AppSwipeReveal", "日程、课程和随口记共用单向拖动、动作区裁切、取消回弹与阈值触感，保留业务内容和既有展开参数"),
+        HelperEntry("公共设置行", Chain.SUPPORT, "shared/ui/material/settings/SettingsRowComponents", "设置开关、点击项及滑块等统一展示入口；实验室四项开关复用 SwitchSettingItem"),
+        HelperEntry("统一页面顶部栏", Chain.SUPPORT, "shared/ui/material/component/AppTopBar", "标题固定居中，左右操作可选；统一顶部安全区及返回按钮，供页面骨架组合使用"),
+        HelperEntry("统一页面骨架", Chain.SUPPORT, "shared/ui/material/component/AppPageScaffold", "统一背景、系统栏安全区、键盘避让和内容限宽；支持整页滚动及列表自行滚动，供设置、首页、天气、随口记、便签和小组件配置使用"),
+        HelperEntry("页面内容安全留白", Chain.SUPPORT, "shared/ui/material/component/AppPageInsets", "骨架向自行滚动的内容提供底部留白，供列表 contentPadding 和浮动操作避让使用，业务无需自行读取导航栏高度"),
         HelperEntry("背景模式样式支持", Chain.SUPPORT, "app/ui/theme/material/background/SettingsBackgroundStyleSupport", "背景壁纸模式下的页面颜色映射"),
         HelperEntry("应用公共 UI 组件", Chain.SUPPORT, "shared/ui/material/component/AppUiComponents", "Material 默认路径下的卡片、弹窗和底部弹层外壳"),
-        HelperEntry("应用玻璃表面占位", Chain.SUPPORT, "shared/ui/material/component/AppGlassSurface", "统一表面组件的磨砂后端占位，当前运行态默认禁用"),
+        HelperEntry("应用玻璃表面", Chain.SUPPORT, "shared/ui/material/component/AppGlassSurface", "统一页面与弹层磨砂材质、裁切和无采样源时的背景回退"),
+        HelperEntry("跨窗口玻璃背景", Chain.SUPPORT, "shared/ui/material/component/AppWindowBackdrop", "使用屏幕坐标对齐弹层与背景，嵌套弹层合成父场景，避免局部采样导致透明缺口"),
+        HelperEntry("公共底部弹层", Chain.SUPPORT, "shared/ui/material/component/AppModalBottomSheet", "统一 Sheet 标题、正文滚动、高度上限与 0 至 3 个操作；SheetMaterialSurface 按外壳坐标绘制背景，隔离预测性返回的正文压缩，统一处理底部安全区"),
+        HelperEntry("公共锚点菜单", Chain.SUPPORT, "shared/ui/material/component/AppDropdownMenu", "AppMenuItem 定义菜单项；独立 Popup 隔离背景采样，统一定位、选中态、材质及返回和外部点击关闭，供今日视图切换与宽屏更多操作复用"),
+        HelperEntry("公共分段切换", Chain.SUPPORT, "shared/ui/material/component/AppSegmentedControl", "主题色选中项与颜色动画、等宽布局、公共背景材质和单次选择触感，统一主题模式、小组件设置及默认启动页切换"),
+        HelperEntry("公共滚轮选择器", Chain.SUPPORT, "shared/ui/material/component/AppWheelPicker", "日期、时间及单列选择共用滚轮和弹窗入口，保留 175 dp 高度与 35 dp 行高"),
+        HelperEntry("公共悬浮按钮", Chain.SUPPORT, "shared/ui/material/component/AppFloatingActionButton", "统一悬浮操作的表面材质与点击入口，保留 72 dp 尺寸、34 dp 图标及页面操作语义"),
         HelperEntry("小组件渲染支持", Chain.SUPPORT, "platform/widget/WidgetRenderingSupport", "桌面小组件 RemoteViews 渲染辅助"),
     )
 }

@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
@@ -13,16 +14,14 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 
 data class AppGlassSettings(
     val enabled: Boolean = false,
     val blurRadiusDp: Int = 25,
-    val backdrop: LayerBackdrop? = null,
-    val overlayBackdrop: LayerBackdrop? = null,
+    val backdrop: Backdrop? = null,
+    val overlayBackdrop: Backdrop? = null,
     val darkTheme: Boolean = false
 ) {
     val active: Boolean
@@ -51,13 +50,13 @@ fun AppGlassSurface(
 ) {
     val settings = LocalAppGlassSettings.current
     if (!settings.active) {
-        Box(modifier = modifier.background(fallbackColor, shape)) {
+        Box(modifier = modifier.clip(shape).background(fallbackColor)) {
             content()
         }
         return
     }
 
-    Box(modifier = modifier.appMiuiBlurMaterial(shape)) {
+    Box(modifier = modifier.clip(shape).background(fallbackColor).appMiuiBlurMaterial(shape)) {
         content()
     }
 }
@@ -76,15 +75,17 @@ fun AppOverlayGlassSurface(
     val settings = LocalAppGlassSettings.current
     val parentBackdrop = settings.overlayBackdrop
     if (!settings.overlayActive || parentBackdrop == null) {
-        Box(modifier = modifier.background(fallbackColor, shape)) {
+        Box(modifier = modifier.clip(shape).background(fallbackColor)) {
             content()
         }
         return
     }
 
-    val childBackdrop = rememberLayerBackdrop()
+    val childBackdrop = rememberAppWindowBackdrop(parent = parentBackdrop)
     val glassModifier = modifier
-        .layerBackdrop(childBackdrop)
+        .clip(shape)
+        .appWindowBackdrop(childBackdrop)
+        .background(fallbackColor)
         .appMiuiBlurMaterial(shape = shape, backdrop = parentBackdrop)
 
     AppGlassSettingsProvider(settings.copy(overlayBackdrop = childBackdrop)) {
@@ -109,7 +110,7 @@ fun Modifier.appMiuiOverlayBlurMaterial(shape: Shape): Modifier {
 @Composable
 private fun Modifier.appMiuiBlurMaterial(
     shape: Shape,
-    backdrop: LayerBackdrop?
+    backdrop: Backdrop?
 ): Modifier {
     val settings = LocalAppGlassSettings.current
     if (!settings.enabled || backdrop == null) return this

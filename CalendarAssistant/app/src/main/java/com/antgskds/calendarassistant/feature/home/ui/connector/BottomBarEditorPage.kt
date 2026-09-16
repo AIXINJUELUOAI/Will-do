@@ -1,7 +1,9 @@
 package com.antgskds.calendarassistant.feature.home.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSegmentedControl
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,15 +13,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,7 +30,6 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +45,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
@@ -408,45 +405,14 @@ fun MaterialBottomBarEditorScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        .padding(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    activeItems.forEach { key ->
-                        val isSelected = key == startPage
-                        val bgColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
-                            label = "segment_bg"
-                        )
-                        val textColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            label = "segment_text"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(bgColor)
-                                .clickable { haptics.selection(); onAction(BottomBarEditorUiAction.SaveConfig(activeItems, key)) }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = homeEntryLabel(key),
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal),
-                                color = textColor,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
+                AppSegmentedControl(
+                    options = activeItems,
+                    selectedOption = startPage,
+                    label = ::homeEntryLabel,
+                    onSelected = { key ->
+                        onAction(BottomBarEditorUiAction.SaveConfig(activeItems, key))
+                    },
+                )
 
                 Text(
                     text = "打开 App 时默认展示的页面",
@@ -456,7 +422,7 @@ fun MaterialBottomBarEditorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
     }
     }
 }

@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
@@ -27,15 +29,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -483,97 +481,100 @@ fun OnboardingGuidePage(
             )
 
             Box(modifier = Modifier.weight(1f)) {
-                when (currentStep) {
-                    OnboardingStep.PERMISSIONS -> Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        PermissionStep(
-                            snapshot = permissionSnapshot,
-                            privilegedModeActive = privilegedModeActive,
-                            busyPermissionKey = busyPermissionKey,
-                            bulkPermissionBusy = bulkPermissionBusy,
-                            onOpenPermission = ::openPermission,
-                            onPermissionChange = ::setPrivilegedPermission,
-                            onEnableAll = ::enableAllPrivilegedPermissions,
+                // 底部引导操作行已留出安全区，嵌入的设置内容不重复预留。
+                androidx.compose.runtime.CompositionLocalProvider(LocalAppPageBottomPadding provides 0.dp) {
+                    when (currentStep) {
+                        OnboardingStep.PERMISSIONS -> Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            PermissionStep(
+                                snapshot = permissionSnapshot,
+                                privilegedModeActive = privilegedModeActive,
+                                busyPermissionKey = busyPermissionKey,
+                                bulkPermissionBusy = bulkPermissionBusy,
+                                onOpenPermission = ::openPermission,
+                                onPermissionChange = ::setPrivilegedPermission,
+                                onEnableAll = ::enableAllPrivilegedPermissions,
+                            )
+                        }
+                        OnboardingStep.SCHEDULE_REMINDER -> PreferenceSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            visibleSections = setOf(
+                                PreferenceSection.OPERATION,
+                                PreferenceSection.NOTIFICATION,
+                                PreferenceSection.SCHEDULE,
+                            ),
+                            itemVisibility = PreferenceItemVisibility(
+                                showHapticFeedback = false,
+                                showNetworkSpeedCapsule = false,
+                                showAutoArchive = false,
+                                showScheduleColors = false,
+                            ),
+                            footerContent = {
+                                LaboratorySettingsContent(
+                                    state = LaboratoryUiState(settings),
+                                    onAction = ::handleLaboratoryAction,
+                                    showDeveloperEntry = false,
+                                    itemVisibility = LaboratoryItemVisibility(
+                                        showForceInstantCodeTime = false,
+                                        showPredictiveBack = false,
+                                    ),
+                                    onBraceletModeChange = { enabled ->
+                                        if (enabled) {
+                                            permissionGate.require(
+                                                permissionName = "通知权限",
+                                                isGranted = { areAppNotificationsEnabled(context) },
+                                                requestPermission = ::requestNotificationPermission,
+                                                onGranted = { settingsViewModel.updatePreference(braceletModeEnabled = true) },
+                                            )
+                                        } else {
+                                            settingsViewModel.updatePreference(braceletModeEnabled = false)
+                                        }
+                                    },
+                                )
+                            },
+                            onNavigateToScheduleColors = {
+                                toast("可在完成引导后进入日程颜色设置")
+                            },
+                        )
+                        OnboardingStep.FLOATING_QUICK_MEMO -> PreferenceSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            visibleSections = setOf(
+                                PreferenceSection.DISPLAY,
+                                PreferenceSection.QUICK_MEMO,
+                            ),
+                            itemVisibility = PreferenceItemVisibility(
+                                showUiSize = false,
+                                showTomorrowEvents = false,
+                                showBottomBarEditor = false,
+                                showWidgetSettings = false,
+                            ),
+                            onNavigateToBottomBarEditor = {
+                                toast("可在完成引导后进入底栏编辑")
+                            },
+                            onNavigateToWidgetSettings = {
+                                toast("可在完成引导后进入桌面小组件设置")
+                            },
+                        )
+                        OnboardingStep.MODEL -> AiSettingsPage(
+                            viewModel = settingsViewModel,
+                            mainViewModel = mainViewModel,
+                            uiSize = uiSize,
+                        )
+                        OnboardingStep.WEATHER -> WeatherSettingsPage(
+                            viewModel = settingsViewModel,
+                            uiSize = uiSize,
+                            showCacheSection = false,
+                            onOpenWeatherDetail = {
+                                toast("完成天气配置后，可从设置页查看天气详情")
+                            },
                         )
                     }
-                    OnboardingStep.SCHEDULE_REMINDER -> PreferenceSettingsPage(
-                        viewModel = settingsViewModel,
-                        uiSize = uiSize,
-                        visibleSections = setOf(
-                            PreferenceSection.OPERATION,
-                            PreferenceSection.NOTIFICATION,
-                            PreferenceSection.SCHEDULE,
-                        ),
-                        itemVisibility = PreferenceItemVisibility(
-                            showHapticFeedback = false,
-                            showNetworkSpeedCapsule = false,
-                            showAutoArchive = false,
-                            showScheduleColors = false,
-                        ),
-                        footerContent = {
-                            LaboratorySettingsContent(
-                                state = LaboratoryUiState(settings),
-                                onAction = ::handleLaboratoryAction,
-                                showDeveloperEntry = false,
-                                itemVisibility = LaboratoryItemVisibility(
-                                    showForceInstantCodeTime = false,
-                                    showPredictiveBack = false,
-                                ),
-                                onBraceletModeChange = { enabled ->
-                                    if (enabled) {
-                                        permissionGate.require(
-                                            permissionName = "通知权限",
-                                            isGranted = { areAppNotificationsEnabled(context) },
-                                            requestPermission = ::requestNotificationPermission,
-                                            onGranted = { settingsViewModel.updatePreference(braceletModeEnabled = true) },
-                                        )
-                                    } else {
-                                        settingsViewModel.updatePreference(braceletModeEnabled = false)
-                                    }
-                                },
-                            )
-                        },
-                        onNavigateToScheduleColors = {
-                            toast("可在完成引导后进入日程颜色设置")
-                        },
-                    )
-                    OnboardingStep.FLOATING_QUICK_MEMO -> PreferenceSettingsPage(
-                        viewModel = settingsViewModel,
-                        uiSize = uiSize,
-                        visibleSections = setOf(
-                            PreferenceSection.DISPLAY,
-                            PreferenceSection.QUICK_MEMO,
-                        ),
-                        itemVisibility = PreferenceItemVisibility(
-                            showUiSize = false,
-                            showTomorrowEvents = false,
-                            showBottomBarEditor = false,
-                            showWidgetSettings = false,
-                        ),
-                        onNavigateToBottomBarEditor = {
-                            toast("可在完成引导后进入底栏编辑")
-                        },
-                        onNavigateToWidgetSettings = {
-                            toast("可在完成引导后进入桌面小组件设置")
-                        },
-                    )
-                    OnboardingStep.MODEL -> AiSettingsPage(
-                        viewModel = settingsViewModel,
-                        mainViewModel = mainViewModel,
-                        uiSize = uiSize,
-                    )
-                    OnboardingStep.WEATHER -> WeatherSettingsPage(
-                        viewModel = settingsViewModel,
-                        uiSize = uiSize,
-                        showCacheSection = false,
-                        onOpenWeatherDetail = {
-                            toast("完成天气配置后，可从设置页查看天气详情")
-                        },
-                    )
                 }
             }
 
@@ -584,7 +585,7 @@ fun OnboardingGuidePage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+                    .padding(bottom = LocalAppPageBottomPadding.current),
                 onPrevious = {
                     haptics.selection()
                     page = (page - 1).coerceAtLeast(0)
@@ -599,7 +600,7 @@ fun OnboardingGuidePage(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+                .padding(bottom = LocalAppPageBottomPadding.current),
             snackbar = { data -> UniversalSnackbar(data = data, type = currentToastType) }
         )
 
@@ -688,7 +689,7 @@ private fun OnboardingHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 10.dp, bottom = 12.dp),
+            .padding(top = 10.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(

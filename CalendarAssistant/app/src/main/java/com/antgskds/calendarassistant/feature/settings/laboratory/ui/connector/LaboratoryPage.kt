@@ -1,5 +1,8 @@
 package com.antgskds.calendarassistant.feature.settings.laboratory.ui.connector
 
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+import androidx.compose.foundation.layout.height
+
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.Manifest
 import android.app.NotificationManager
@@ -14,12 +17,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,7 +45,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
-import com.antgskds.calendarassistant.shared.ui.edition.EditionSwitch
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
@@ -174,7 +173,7 @@ fun MaterialLaboratoryScreen(
                 },
             )
 
-            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+            Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
         }
         SnackbarHost(
             hostState = snackbarHostState,
@@ -288,44 +287,21 @@ private fun LaboratorySwitchCard(
         shape = RoundedCornerShape(16.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        LaboratorySwitchRow(
-            title = title,
-            subtitle = subtitle,
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
-    }
-}
-
-@Composable
-private fun LaboratorySwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val haptics = rememberAppHaptics()
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(Modifier.padding(vertical = 8.dp)) {
+            SwitchSettingItem(
+                title = title,
+                subtitle = subtitle,
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+                cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
-        EditionSwitch(
-            checked = checked,
-            onCheckedChange = { haptics.selection(); onCheckedChange(it) }
-        )
     }
 }
 

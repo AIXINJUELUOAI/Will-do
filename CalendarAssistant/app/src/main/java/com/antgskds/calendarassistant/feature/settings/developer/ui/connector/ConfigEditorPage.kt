@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.connector
 
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -109,6 +111,7 @@ fun MaterialConfigEditorScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(bottom = LocalAppPageBottomPadding.current)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

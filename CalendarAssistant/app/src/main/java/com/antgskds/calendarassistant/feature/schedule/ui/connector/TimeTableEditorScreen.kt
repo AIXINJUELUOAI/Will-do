@@ -1,5 +1,9 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
-import com.antgskds.calendarassistant.shared.ui.edition.EditionFloatingActionButton
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButton
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButtonDefaults
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,12 +13,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,7 +27,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -117,8 +117,8 @@ fun MaterialTimeTableEditorScreen(
 
     val resolvedConfig = state.resolvedConfig
 
-    val fabSize = 72.dp
-    val fabIconSize = 34.dp
+    val fabSize = AppFloatingActionButtonDefaults.Size
+    val fabIconSize = AppFloatingActionButtonDefaults.IconSize
     val sectionHeaderStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary
@@ -211,7 +211,7 @@ fun MaterialTimeTableEditorScreen(
         }
     }
 
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
 
     androidx.compose.runtime.CompositionLocalProvider(LocalAppHapticsEnabled provides state.hapticEnabled) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -361,7 +361,7 @@ fun MaterialTimeTableEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            EditionFloatingActionButton(
+            AppFloatingActionButton(
                 onClick = { haptics.click(); showLayoutConfigDialog = true },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -375,7 +375,7 @@ fun MaterialTimeTableEditorScreen(
                 )
             }
 
-            EditionFloatingActionButton(
+            AppFloatingActionButton(
                 onClick = {
                     if (!isChronologicalTimeTable(generatedNodes)) {
                         haptics.error()
