@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.weather.ui.connector
-import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOptionalCategoricalSettingItem
 
@@ -25,18 +26,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -51,7 +48,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -60,18 +56,16 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -80,7 +74,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
@@ -105,6 +98,7 @@ import com.antgskds.calendarassistant.feature.weather.domain.WeatherSyncWorker
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
 import com.antgskds.calendarassistant.shared.ui.material.component.UniversalSnackbar
@@ -176,8 +170,7 @@ fun MaterialWeatherSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val permissionGate = rememberPermissionGate(snackbarHostState)
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
-    val density = LocalDensity.current
-    val bottomInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val bottomInset = LocalAppPageBottomPadding.current
 
     var enabled by remember(settings.weatherEnabled) { mutableStateOf(settings.weatherEnabled) }
     var provider by remember(settings.weatherProvider) {
@@ -482,7 +475,7 @@ fun MaterialWeatherSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     WeatherExpandableSelectionItem(
                         title = "服务提供商",
@@ -517,7 +510,7 @@ fun MaterialWeatherSettingsScreen(
                         cardValueStyle = cardValueStyle
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     WeatherTextInputItem(
                         title = if (provider == WeatherApiAdapter.PROVIDER_CAIYUN) "Token" else "API Key",
@@ -529,7 +522,7 @@ fun MaterialWeatherSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     WeatherTextInputItem(
                         title = "API Host",
@@ -545,7 +538,7 @@ fun MaterialWeatherSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     WeatherExpandableSelectionItem(
                         title = "位置来源",
@@ -673,7 +666,7 @@ fun MaterialWeatherSettingsScreen(
                         valueTextStyle = cardValueStyle,
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     EditionOptionalCategoricalSettingItem(
                         title = "悬浮窗显示天气",
@@ -696,7 +689,7 @@ fun MaterialWeatherSettingsScreen(
                         cardValueStyle = cardValueStyle,
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     SwitchSettingItem(
                         title = "官方天气预警",
@@ -712,7 +705,7 @@ fun MaterialWeatherSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    WeatherDivider()
+                    AppSettingsDivider()
 
                     SwitchSettingItem(
                         title = "天气风险提醒",
@@ -786,7 +779,6 @@ fun MaterialWeatherSettingsScreen(
                 WeatherDetailEntryCard(onClick = onOpenWeatherDetail)
             }
 
-            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
 
         SnackbarHost(
@@ -806,21 +798,11 @@ fun MaterialWeatherSettingsScreen(
                     selectedLocation = location
                     showLocationSheet = false
                     locationMode = WeatherRepository.LOCATION_MODE_MANUAL
-                },
-                cardSubtitleStyle = cardSubtitleStyle
+                }
             )
         }
     }
     }
-}
-
-@Composable
-private fun WeatherDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    )
 }
 
 @Composable
@@ -907,10 +889,8 @@ private fun WeatherLocationPickerSheet(
     provinces: List<WeatherCatalogProvince>,
     initialLocation: WeatherCatalogLocation?,
     onDismiss: () -> Unit,
-    onConfirm: (WeatherCatalogLocation) -> Unit,
-    cardSubtitleStyle: TextStyle
+    onConfirm: (WeatherCatalogLocation) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptics = rememberAppHaptics()
     var selectedProvince by remember(provinces, initialLocation) {
         mutableStateOf(
@@ -930,30 +910,21 @@ private fun WeatherLocationPickerSheet(
     var selectedTab by remember { mutableIntStateOf(0) }
 
     AppModalBottomSheet(
+        title = "选择天气位置",
+        subtitle = buildString {
+            append(selectedProvince?.name ?: "省份")
+            selectedCity?.name?.let { append(" / ").append(it) }
+            selectedLocation?.name?.let { append(" / ").append(it) }
+        },
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        scrollState = null,
+        actions = listOf(AppSheetAction(
+            text = "保存",
+            enabled = selectedLocation != null,
+            onClick = { haptics.confirm(); selectedLocation?.let(onConfirm) },
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "选择天气位置",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-                text = buildString {
-                    append(selectedProvince?.name ?: "省份")
-                    selectedCity?.name?.let { append(" / ").append(it) }
-                    selectedLocation?.name?.let { append(" / ").append(it) }
-                },
-                style = cardSubtitleStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             TabRow(selectedTabIndex = selectedTab) {
                 listOf("省份", "城市", "区县").forEachIndexed { index, title ->
                     Tab(
@@ -995,14 +966,6 @@ private fun WeatherLocationPickerSheet(
                     subtitle = { location -> manualLocationLabel(location) },
                     onSelected = { location -> selectedLocation = location }
                 )
-            }
-
-            EditionButton(
-                onClick = { haptics.confirm(); selectedLocation?.let(onConfirm) },
-                enabled = selectedLocation != null,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("保存")
             }
         }
     }

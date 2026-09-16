@@ -1,4 +1,11 @@
 package com.antgskds.calendarassistant.feature.quickmemo.ui.render.material
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSwipeReveal
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBarBackButton
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
@@ -11,7 +18,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -26,14 +32,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -59,7 +59,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -70,17 +69,12 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +87,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -109,16 +102,13 @@ import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
@@ -154,7 +144,6 @@ import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.ln
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -308,7 +297,6 @@ fun MaterialQuickMemoDetailScreen(
 ) {
     val memo = state.memo
     val haptics = rememberAppHaptics(hapticEnabled)
-    val useWideHeader = embedded || LocalAdaptiveLayoutInfo.current.useNavigationRail
 
     AppBackgroundStyleTheme(
         enabled = backgroundMode,
@@ -316,51 +304,25 @@ fun MaterialQuickMemoDetailScreen(
         cardAlphaPercent = cardAlphaPercent
     ) {
         val pageContainerColor = if (backgroundMode) Color.Transparent else MaterialTheme.colorScheme.background
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
+        AppPageScaffold(
             containerColor = pageContainerColor,
-            contentWindowInsets = WindowInsets(0),
+            contentMaxWidth = 760.dp,
+            edgeToEdgeContent = true,
             topBar = {
-                if (useWideHeader) TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = pageContainerColor,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                    title = { Text("随口记详情") },
+                AppTopBar(
+                    title = "随口记详情",
+                    containerColor = pageContainerColor,
                     navigationIcon = {
                         if (!embedded) {
-                            EditionIconButton(onClick = { haptics.click(); onBack() }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "返回",
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
+                            AppTopBarBackButton(onClick = { haptics.click(); onBack() })
                         }
                     },
-                ) else CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = pageContainerColor,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground
-                    ),
-                    title = { Text("随口记详情") },
-                    navigationIcon = {
-                        EditionIconButton(onClick = { haptics.click(); onBack() }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
                 )
             }
-        ) { innerPadding ->
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.TopCenter,
             ) {
             Surface(
@@ -485,8 +447,6 @@ internal fun QuickMemoListItem(
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
     val metrics = quickMemoUiMetrics(uiSize)
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
     val isTodo = memo.todoState == QuickMemoTodoState.ACTIVE || memo.todoState == QuickMemoTodoState.COMPLETED
     val isCompleted = memo.todoState == QuickMemoTodoState.COMPLETED
     val isVoice = memo.type == QuickMemoType.VOICE
@@ -513,7 +473,7 @@ internal fun QuickMemoListItem(
             else -> "空白随口记"
         }
     }
-    val offsetX = remember(memo.id) { Animatable(0f) }
+    var isRevealed by remember(memo.id) { mutableStateOf(false) }
     val actionButtonSize = when (uiSize) {
         1 -> 48.dp
         2 -> 52.dp
@@ -524,113 +484,72 @@ internal fun QuickMemoListItem(
         2 -> 185.dp
         else -> 200.dp
     }
-    val actionWidthPx = with(density) { actionMenuWidth.toPx() }
-    val revealedActionWidth = with(density) { (-offsetX.value).coerceIn(0f, actionWidthPx).toDp() }
-    val revealProgress = (-offsetX.value / actionWidthPx).coerceIn(0f, 1f)
-    val voicePlayButtonAlpha = (1f - revealProgress * 1.35f).coerceIn(0f, 1f)
-    val swipeSpec = spring<Float>(dampingRatio = 0.82f, stiffness = 620f)
-    var thresholdHapticPlayed by remember(memo.id) { mutableStateOf(false) }
-
-    Box(
-        modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.CenterEnd
-    ) {
-        if (offsetX.value < -1f) {
-            Box(
+    AppSwipeReveal(
+        isRevealed = isRevealed,
+        actionWidth = actionMenuWidth,
+        onRevealedChange = { isRevealed = it },
+        modifier = modifier,
+        identity = memo.id,
+        revealThreshold = 0.28f,
+        hapticThreshold = 0.5f,
+        dragOverflowPx = 32f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 620f),
+        hapticEnabled = hapticEnabled,
+        actions = { close ->
+            Row(
                 modifier = Modifier
-                    .width(revealedActionWidth)
-                    .fillMaxHeight()
-                    .clipToBounds(),
-                contentAlignment = Alignment.CenterEnd
+                    .width(actionMenuWidth)
+                    .padding(end = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .width(actionMenuWidth)
-                        .fillMaxHeight()
-                        .padding(end = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    QuickMemoSwipeActionIcon(
-                        icon = Icons.Rounded.NotificationsActive,
-                        contentDescription = if (isPinned) "取消实况挂起" else "挂到实况",
-                        backgroundColor = MaterialTheme.colorScheme.primary,
-                        size = actionButtonSize,
-                        onClick = {
-                            haptics.confirm()
-                            onTogglePinned()
-                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
-                        }
-                    )
-                    QuickMemoSwipeActionIcon(
-                        icon = if (isTodo) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
-                        contentDescription = if (isTodo) "转普通" else "转待办",
-                        backgroundColor = warmLine,
-                        size = actionButtonSize,
-                        onClick = {
-                            haptics.confirm()
-                            onToggleTodoMode()
-                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
-                        }
-                    )
-                    QuickMemoSwipeActionIcon(
-                        icon = Icons.Rounded.Delete,
-                        contentDescription = "删除",
-                        backgroundColor = MaterialTheme.colorScheme.error,
-                        size = actionButtonSize,
-                        onClick = {
-                            haptics.longPress()
-                            onDelete()
-                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
-                        }
-                    )
-                }
+                QuickMemoSwipeActionIcon(
+                    icon = Icons.Rounded.NotificationsActive,
+                    contentDescription = if (isPinned) "取消实况挂起" else "挂到实况",
+                    backgroundColor = MaterialTheme.colorScheme.primary,
+                    size = actionButtonSize,
+                    onClick = {
+                        haptics.confirm()
+                        onTogglePinned()
+                        close()
+                    }
+                )
+                QuickMemoSwipeActionIcon(
+                    icon = if (isTodo) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
+                    contentDescription = if (isTodo) "转普通" else "转待办",
+                    backgroundColor = warmLine,
+                    size = actionButtonSize,
+                    onClick = {
+                        haptics.confirm()
+                        onToggleTodoMode()
+                        close()
+                    }
+                )
+                QuickMemoSwipeActionIcon(
+                    icon = Icons.Rounded.Delete,
+                    contentDescription = "删除",
+                    backgroundColor = MaterialTheme.colorScheme.error,
+                    size = actionButtonSize,
+                    onClick = {
+                        haptics.longPress()
+                        onDelete()
+                        close()
+                    }
+                )
             }
-        }
-
+        },
+    ) { swipeModifier, revealProgress, close ->
+        val voicePlayButtonAlpha = (1f - revealProgress * 1.35f).coerceIn(0f, 1f)
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+            modifier = swipeModifier
                 .background(
                     if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
                 )
-                .pointerInput(memo.id, isCompleted, isPinned, isTodo) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            scope.launch {
-                                if (-offsetX.value >= actionWidthPx * 0.28f) {
-                                    if (!thresholdHapticPlayed) haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                    offsetX.animateTo(-actionWidthPx, swipeSpec)
-                                } else {
-                                    thresholdHapticPlayed = false
-                                    offsetX.animateTo(0f, swipeSpec)
-                                }
-                            }
-                        },
-                        onDragCancel = { scope.launch { thresholdHapticPlayed = false; offsetX.animateTo(0f, swipeSpec) } },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            scope.launch {
-                                val next = (offsetX.value + dragAmount).coerceIn(-actionWidthPx - 32f, 0f)
-                                if (!thresholdHapticPlayed && -next >= actionWidthPx * 0.5f) {
-                                    haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                } else if (-next < actionWidthPx * 0.28f) {
-                                    thresholdHapticPlayed = false
-                                }
-                                offsetX.snapTo(next)
-                            }
-                        }
-                    )
-                }
                 .combinedClickable(
                     onClick = {
                         haptics.click()
-                        if (offsetX.value < -1f) {
-                            scope.launch { offsetX.animateTo(0f, swipeSpec) }
-                            thresholdHapticPlayed = false
+                        if (revealProgress > 0f) {
+                            close()
                         } else {
                             onOpenDetail()
                         }
@@ -1143,7 +1062,7 @@ internal fun QuickMemoDetailContent(
         }
 
         Spacer(Modifier.height(112.dp))
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
     }
 
         com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailActionBar(
@@ -1293,8 +1212,7 @@ internal fun MaterialQuickMemoDetailBottomBar(
 
     Surface(
         modifier = modifier
-            .navigationBarsPadding()
-            .imePadding()
+            .padding(bottom = LocalAppPageBottomPadding.current)
             .padding(horizontal = 16.dp)
             .padding(bottom = IntegratedFloatingBarShadowPadding)
             .height(barHeight),

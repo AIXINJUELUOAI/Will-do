@@ -1,11 +1,10 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material.component
 
-import androidx.compose.animation.core.Animatable
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSwipeReveal
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,14 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
@@ -36,10 +31,8 @@ import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEvent
 import com.antgskds.calendarassistant.shared.util.stripSourceImageMarkers
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
-import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.LocalTime
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -76,8 +69,6 @@ fun SwipeableEventItem(
         2 -> when (actionButtonCount) { 1 -> 86.dp; 2 -> 140.dp; else -> 185.dp }
         else -> when (actionButtonCount) { 1 -> 94.dp; 2 -> 150.dp; else -> 200.dp }
     }
-    val density = LocalDensity.current
-    val actionMenuWidthPx = with(density) { actionMenuWidth.toPx() }
     val haptics = rememberAppHaptics(hapticEnabled)
     val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
     val primaryTextColor = if (usesWallpaperText) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface
@@ -87,13 +78,6 @@ fun SwipeableEventItem(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    val offsetX = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-    var thresholdHapticPlayed by remember { mutableStateOf(false) }
-    val revealedActionWidth = with(density) {
-        (-offsetX.value).coerceIn(0f, actionMenuWidthPx).toDp()
-    }
-
     val isExpired = remember(item.endTS, timeRefreshToken) {
         try {
             val endDateTime = LocalDateTime.of(item.endDate, item.endLocalTime)
@@ -101,104 +85,59 @@ fun SwipeableEventItem(
         } catch (_: Exception) { false }
     }
 
-    LaunchedEffect(isRevealed) {
-        if (isRevealed) offsetX.animateTo(-actionMenuWidthPx)
-        else offsetX.animateTo(0f)
-    }
-
-    LaunchedEffect(isRevealed) {
-        if (!isRevealed) thresholdHapticPlayed = false
-    }
-
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.CenterEnd
-    ) {
-        // --- 背景层：操作菜单 ---
-        Box(
-            modifier = Modifier
-                .width(revealedActionWidth)
-                .fillMaxHeight()
-                .clipToBounds(),
-            contentAlignment = Alignment.CenterEnd
-        ) {
+    AppSwipeReveal(
+        isRevealed = isRevealed,
+        actionWidth = actionMenuWidth,
+        onRevealedChange = { if (it) onExpand() else onCollapse() },
+        hapticEnabled = hapticEnabled,
+        actions = { close ->
             Row(
                 modifier = Modifier
                     .width(actionMenuWidth)
-                    .fillMaxHeight()
                     .padding(end = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (isArchivePage) {
                     SwipeActionIcon(Icons.Outlined.Restore, Color(0xFF4CAF50), actionButtonSize, hapticEnabled) {
-                        onCollapse(); onRestore()
+                        close(); onRestore()
                     }
                     SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize, hapticEnabled) {
-                        onCollapse(); onDelete()
+                        close(); onDelete()
                     }
                 } else {
                     // ✅ 所有日程（含重复）统一显示：编辑 / 重要 / 归档(或删除)
                     SwipeActionIcon(Icons.Outlined.Edit, Color(0xFF4CAF50), actionButtonSize, hapticEnabled) {
-                        onCollapse(); onEdit()
+                        close(); onEdit()
                     }
                     SwipeActionIcon(Icons.Outlined.StarOutline, Color(0xFFFFC107), actionButtonSize, hapticEnabled) {
-                        onCollapse(); onImportant()
+                        close(); onImportant()
                     }
                     if (item.tag == "__removed_course__") {
                         SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize, hapticEnabled) {
-                            onCollapse(); onDelete()
+                            close(); onDelete()
                         }
                     } else {
                         SwipeActionIcon(Icons.Outlined.Archive, Color(0xFF2196F3), actionButtonSize, hapticEnabled) {
-                            onCollapse(); onArchive()
+                            close(); onArchive()
                         }
                     }
                 }
             }
-        }
-
+        },
+    ) { swipeModifier, _, close ->
         // --- 前景层：日程卡片 ---
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            scope.launch {
-                                if (offsetX.value < -actionMenuWidthPx / 2) {
-                                    if (!isRevealed) haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                    offsetX.animateTo(-actionMenuWidthPx); onExpand()
-                                } else {
-                                    offsetX.animateTo(0f); onCollapse()
-                                }
-                            }
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            scope.launch {
-                                val newOffset = (offsetX.value + dragAmount).coerceIn(-actionMenuWidthPx, 0f)
-                                if (!thresholdHapticPlayed && newOffset < -actionMenuWidthPx / 2) {
-                                    haptics.threshold()
-                                    thresholdHapticPlayed = true
-                                } else if (newOffset >= -actionMenuWidthPx / 2) {
-                                    thresholdHapticPlayed = false
-                                }
-                                offsetX.snapTo(newOffset)
-                            }
-                        }
-                    )
-                }
+            modifier = swipeModifier
                 .combinedClickable(
                     onClick = {
                         haptics.click()
-                        if (isRevealed) onCollapse() else onClick?.invoke() ?: onEdit()
+                        if (isRevealed) close() else onClick?.invoke() ?: onEdit()
                     },
                     onLongClick = onLongPress?.let { callback ->
                         {
                             haptics.longPress()
-                            onCollapse()
+                            close()
                             callback()
                         }
                     }

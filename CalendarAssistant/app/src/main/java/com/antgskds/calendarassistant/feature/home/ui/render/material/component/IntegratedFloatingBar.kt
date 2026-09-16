@@ -1,5 +1,8 @@
 package com.antgskds.calendarassistant.feature.home.ui.render.material.component
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionSurface
+import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingActionButtonDefaults
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,7 +11,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +30,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +51,6 @@ import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
-import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundGlassSurface
 import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 
 // 统一高度设定为 68dp
@@ -134,7 +133,7 @@ fun IntegratedFloatingBar(
     val navElevation = if (backgroundMode) 0.dp else 6.dp
     val fabElevation = if (backgroundMode) 0.dp else 6.dp
     val navHeight = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
-    val fabSize = IntegratedFloatingBarHeight + IntegratedFloatingBarExtraHeight
+    val fabSize = AppFloatingActionButtonDefaults.Size
     val navItemWidth = 72.dp
     val normalizedNavItems = navItems.distinct().filter {
         it == HomeEntryKey.TODAY || it == HomeEntryKey.ALL || it == HomeEntryKey.NOTE
@@ -184,36 +183,6 @@ fun IntegratedFloatingBar(
     }
     val currentTabClick = { onPageClick(effectiveSelectedKey) }
 
-    @Composable
-    fun FloatingContainer(
-        modifier: Modifier,
-        shape: androidx.compose.ui.graphics.Shape,
-        containerColor: Color,
-        elevation: Dp,
-        content: @Composable () -> Unit
-    ) {
-        if (backgroundMode) {
-            AppBackgroundGlassSurface(
-                enabled = true,
-                miuiBlurEnabled = miuiBlurEnabled,
-                modifier = modifier,
-                shape = shape,
-                surfaceColor = containerColor,
-            ) {
-                content()
-            }
-        } else {
-            Card(
-                shape = shape,
-                colors = CardDefaults.cardColors(containerColor = containerColor),
-                elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-                modifier = modifier
-            ) {
-                content()
-            }
-        }
-    }
-
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -227,7 +196,7 @@ fun IntegratedFloatingBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            FloatingContainer(
+            AppFloatingActionSurface(
                 modifier = Modifier
                     .height(navHeight)
                     .width(navWidth),
@@ -291,7 +260,7 @@ fun IntegratedFloatingBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            FloatingContainer(
+            AppFloatingActionSurface(
                 modifier = Modifier
                     .height(fabSize)
                     .width(actionWidth),
@@ -338,7 +307,7 @@ fun IntegratedFloatingBar(
                                 contentDescription = "Toggle",
                                 tint = fabIcon,
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(AppFloatingActionButtonDefaults.IconSize)
                                     .rotate(rotation)
                             )
                         }

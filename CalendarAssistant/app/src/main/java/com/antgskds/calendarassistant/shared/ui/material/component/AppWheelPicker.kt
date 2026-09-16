@@ -1,0 +1,176 @@
+package com.antgskds.calendarassistant.shared.ui.material.component
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.YearMonth
+// 【关键修复】引用新位置的 NotificationScheduler
+import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
+import com.antgskds.calendarassistant.shared.ui.interaction.HapticValueChangeEffect
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+
+// --- 2. Wheel Pickers ---
+
+@Composable
+fun WheelPicker(items: List<String>, initialIndex: Int, modifier: Modifier = Modifier, onSelectionChanged: (Int) -> Unit) {
+    val listState = rememberPagerState(initialPage = initialIndex) { items.size }
+    HapticValueChangeEffect(valueKey = listState.currentPage, feedback = { click() })
+    LaunchedEffect(listState.currentPage) { onSelectionChanged(listState.currentPage) }
+    Box(modifier.height(175.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(horizontal=4.dp).height(35.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f), RoundedCornerShape(12.dp)))
+        VerticalPager(state = listState, contentPadding = PaddingValues(vertical = 70.dp), modifier = Modifier.fillMaxSize()) { page ->
+            val pageOffset = (listState.currentPage - page) + listState.currentPageOffsetFraction
+            val alpha = (1f - (Math.abs(pageOffset) * 0.6f)).coerceAtLeast(0.2f)
+            Box(Modifier.height(35.dp), contentAlignment = Alignment.Center) {
+                Text(text = items[page], style = MaterialTheme.typography.bodyLarge, fontWeight = if (Math.abs(pageOffset) < 0.5) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth().alpha(alpha))
+            }
+        }
+    }
+}
+
+@Composable
+fun CenteredDialogTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+@Composable
+fun WheelDatePickerDialog(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    title: String = "选择日期",
+    onConfirm: (LocalDate) -> Unit
+) {
+    var selectedDate by remember { mutableStateOf(initialDate) }
+    val haptics = rememberAppHaptics()
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { CenteredDialogTitle(title) },
+        text = { WheelDatePicker(initialDate, { selectedDate = it }) },
+        confirmButton = { TextButton(onClick = { haptics.confirm(); onConfirm(selectedDate) }) { Text("确定") } },
+        dismissButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}
+
+@Composable
+fun WheelDatePicker(initialDate: LocalDate, onDateChanged: (LocalDate) -> Unit) {
+    val years = (2020..2035).toList(); val months = (1..12).toList()
+    var sY by remember { mutableIntStateOf(initialDate.year) }
+    var sM by remember { mutableIntStateOf(initialDate.monthValue) }
+    var sD by remember { mutableIntStateOf(initialDate.dayOfMonth) }
+    val daysInMonth = remember(sY, sM) { YearMonth.of(sY, sM).lengthOfMonth() }
+    LaunchedEffect(daysInMonth) { if (sD > daysInMonth) sD = daysInMonth; onDateChanged(LocalDate.of(sY, sM, sD)) }
+    LaunchedEffect(sY, sM, sD) { if (sD <= daysInMonth) onDateChanged(LocalDate.of(sY, sM, sD)) }
+    Row(Modifier.fillMaxWidth().padding(horizontal=8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        WheelPicker(years.map{"${it}年"}, years.indexOf(sY).coerceAtLeast(0), Modifier.weight(1.3f)) { sY = years[it] }
+        WheelPicker(months.map{String.format("%02d月",it)}, months.indexOf(sM).coerceAtLeast(0), Modifier.weight(1f)) { sM = months[it] }
+        WheelPicker((1..daysInMonth).map{String.format("%02d日",it)}, (sD-1).coerceIn(0,daysInMonth-1), Modifier.weight(1f)) { sD = it+1 }
+    }
+}
+
+@Composable
+fun WheelTimePickerDialog(
+    initialTime: String,
+    onDismiss: () -> Unit,
+    title: String = "选择时间",
+    onConfirm: (String) -> Unit
+) {
+    val parts = initialTime.split(":")
+    val h = parts.getOrElse(0) { "09" }.toIntOrNull() ?: 9
+    val m = parts.getOrElse(1) { "00" }.toIntOrNull() ?: 0
+    var sH by remember { mutableIntStateOf(h) }
+    var sM by remember { mutableIntStateOf(m) }
+    val haptics = rememberAppHaptics()
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { CenteredDialogTitle(title) },
+        text = { WheelTimePicker(h, m, { hh, mm -> sH = hh; sM = mm }) },
+        confirmButton = { TextButton(onClick = { haptics.confirm(); onConfirm(String.format("%02d:%02d", sH, sM)) }) { Text("确定") } },
+        dismissButton = { TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}
+
+@Composable
+fun WheelTimePicker(initialHour: Int, initialMinute: Int, onTimeChanged: (Int, Int) -> Unit) {
+    val hours = (0..23).toList(); val minutes = (0..59).toList()
+    var cH by remember { mutableIntStateOf(initialHour) }; var cM by remember { mutableIntStateOf(initialMinute) }
+    LaunchedEffect(cH, cM) { onTimeChanged(cH, cM) }
+    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+        WheelPicker(hours.map{String.format("%02d",it)}, initialHour, Modifier.weight(1f)) { cH = hours[it] }
+        Text(":", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterVertically))
+        WheelPicker(minutes.map{String.format("%02d",it)}, initialMinute, Modifier.weight(1f)) { cM = minutes[it] }
+    }
+}
+
+@Composable
+fun WheelReminderPickerDialog(
+    initialMinutes: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+    availableOptions: List<Pair<Int, String>>? = null  // 可选的自定义选项（用于过滤）
+) {
+    // 如果提供了自定义选项则使用，否则使用默认选项
+    val options = availableOptions ?: NotificationScheduler.REMINDER_OPTIONS
+    val defaultIndex = options.indexOfFirst { it.first == initialMinutes }.takeIf { it != -1 }
+        ?: options.indexOfFirst { it.first == 30 }.takeIf { it != -1 } ?: 0
+
+    var selectedIndex by remember { mutableIntStateOf(defaultIndex) }
+    val haptics = rememberAppHaptics()
+
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { CenteredDialogTitle("添加提醒") },
+        text = {
+            if (options.isEmpty()) {
+                Text("当前设置下无需额外添加提醒", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                WheelPicker(
+                    items = options.map { it.second },
+                    initialIndex = defaultIndex,
+                    onSelectionChanged = { selectedIndex = it }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (options.isNotEmpty()) {
+                        haptics.confirm()
+                        onConfirm(options[selectedIndex].first)
+                    }
+                    onDismiss()
+                },
+                enabled = options.isNotEmpty()
+            ) { Text("确定") }
+        },
+        dismissButton = {
+            TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}

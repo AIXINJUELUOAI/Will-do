@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.quickmemo.ui.render.material
 
+
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -11,27 +12,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +46,8 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatSpec
 import com.antgskds.calendarassistant.feature.schedule.domain.model.shortCn
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetActionRole
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePicker
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelTimePicker
@@ -214,22 +213,36 @@ private fun QuickMemoReminderSheet(
     var expandedSection by remember(reminder?.id) { mutableStateOf<ReminderEditorSection?>(null) }
 
     AppModalBottomSheet(
+        title = if (reminder == null) "添加提醒" else "编辑提醒",
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        actions = buildList {
+            reminder?.id?.let { reminderId ->
+                add(AppSheetAction(
+                    text = "删除此提醒",
+                    role = AppSheetActionRole.Destructive,
+                    onClick = { haptics.warning(); onDelete(reminderId) },
+                ))
+            }
+            add(AppSheetAction(
+                text = "保存",
+                onClick = {
+                    val value = selectedDate
+                        .atTime(selectedHour, selectedMinute)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                    if (value <= System.currentTimeMillis()) {
+                        haptics.warning()
+                        Toast.makeText(context, "请选择未来时间", Toast.LENGTH_SHORT).show()
+                    } else {
+                        haptics.confirm()
+                        onSave(reminder?.id, value, selectedRepeatSpec?.toRRule().orEmpty())
+                    }
+                },
+            ))
+        },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = if (reminder == null) "添加提醒" else "编辑提醒",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
-            )
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AppCard(
                 modifier = Modifier.animateContentSize(),
                 shape = RoundedCornerShape(20.dp),
@@ -275,46 +288,7 @@ private fun QuickMemoReminderSheet(
                     )
                 }
             }
-            Button(
-                onClick = {
-                    val value = selectedDate
-                        .atTime(selectedHour, selectedMinute)
-                        .atZone(ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
-                    if (value <= System.currentTimeMillis()) {
-                        haptics.warning()
-                        Toast.makeText(context, "请选择未来时间", Toast.LENGTH_SHORT).show()
-                    } else {
-                        haptics.confirm()
-                        onSave(reminder?.id, value, selectedRepeatSpec?.toRRule().orEmpty())
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("保存")
-            }
-            reminder?.id?.let { reminderId ->
-                Button(
-                    onClick = {
-                        haptics.warning()
-                        onDelete(reminderId)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text("删除此提醒")
-                }
-            }
+
         }
     }
 }

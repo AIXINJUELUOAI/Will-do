@@ -1,5 +1,8 @@
 package com.antgskds.calendarassistant.feature.home.ui.render.material
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
+
 import android.content.Context
 import android.content.Intent
 import com.antgskds.calendarassistant.shared.util.AppLogger as Log
@@ -45,10 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -56,8 +56,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
@@ -85,6 +83,8 @@ import com.antgskds.calendarassistant.feature.weather.domain.WeatherIconMapper
 import com.antgskds.calendarassistant.feature.home.domain.HomeEntryKey
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
+import com.antgskds.calendarassistant.shared.ui.material.component.AppDropdownMenu
+import com.antgskds.calendarassistant.shared.ui.material.component.AppMenuItem
 import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayGlassSurface
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
@@ -117,8 +117,8 @@ import java.time.temporal.TemporalAdjusters
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.appWindowBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberAppWindowBackdrop
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -185,7 +185,7 @@ fun MaterialHomePage(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     val appGlassSettings = LocalAppGlassSettings.current
-    val homeSceneBackdrop = rememberLayerBackdrop()
+    val homeSceneBackdrop = rememberAppWindowBackdrop(parent = LocalAppGlassSettings.current.overlayBackdrop)
     val homeSceneBlurActive = calendarMenuBackgroundMode &&
         state.settings.appBackgroundMiuiBlurTestEnabled &&
         appGlassSettings.active
@@ -202,8 +202,6 @@ fun MaterialHomePage(
     var calendarViewName by rememberSaveable { mutableStateOf(HomeCalendarViewMode.TODAY.name) }
     var isCalendarViewMenuExpanded by remember { mutableStateOf(false) }
     var isWideActionMenuExpanded by remember { mutableStateOf(false) }
-    var calendarViewMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
-    var homePageRootBounds by remember { mutableStateOf<Rect?>(null) }
     val calendarViewMode = HomeCalendarViewMode.valueOf(calendarViewName)
 
     val isTodayPage = currentPageKey == HomeEntryKey.TODAY
@@ -217,14 +215,6 @@ fun MaterialHomePage(
 
     LaunchedEffect(isTodayPage) {
         if (!isTodayPage) isCalendarViewMenuExpanded = false
-    }
-
-    BackHandler(enabled = isCalendarViewMenuExpanded) {
-        isCalendarViewMenuExpanded = false
-    }
-
-    BackHandler(enabled = isWideActionMenuExpanded) {
-        isWideActionMenuExpanded = false
     }
 
     var isImageImporting by remember { mutableStateOf(false) }
@@ -498,9 +488,6 @@ fun MaterialHomePage(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .onGloballyPositioned { coordinates ->
-                homePageRootBounds = coordinates.boundsInRoot()
-            }
             .nestedScroll(nestedScrollConnection)
     ) {
         // === 背景层：课程表视图 ===
@@ -556,10 +543,9 @@ fun MaterialHomePage(
                 .fillMaxSize()
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .graphicsLayer { alpha = 1f - progress }
-                .pointerInput(isActionExpanded, isSearchMode, isCalendarViewMenuExpanded) {
+                .pointerInput(isActionExpanded, isSearchMode) {
                     detectTapGestures(onTap = {
                         when {
-                            isCalendarViewMenuExpanded -> isCalendarViewMenuExpanded = false
                             isActionExpanded -> onActionExpandedChange(false)
                             isSearchMode -> {
                                 isSearchMode = false
@@ -580,10 +566,10 @@ fun MaterialHomePage(
             val searchBarHeight = 64.dp
             val searchBarOffset = searchBarHeight + 12.dp
 
-            Scaffold(
+            AppPageScaffold(
                 modifier = Modifier.then(
                     if (homeSceneBlurActive) {
-                        Modifier.layerBackdrop(homeSceneBackdrop)
+                        Modifier.appWindowBackdrop(homeSceneBackdrop)
                     } else {
                         Modifier
                     }
@@ -593,90 +579,73 @@ fun MaterialHomePage(
                 } else {
                     MaterialTheme.colorScheme.background
                 },
-                contentWindowInsets = WindowInsets(0),
+                edgeToEdgeContent = true,
+                avoidKeyboard = false,
+                contentMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
                 topBar = {
                     val actions: @Composable RowScope.() -> Unit = {
-                        HomeTopBarActions(
-                            isTodayPage = isTodayPage,
-                            isNotePage = isNotePage,
-                            isLegacyNoteMode = isLegacyNoteMode,
-                            isWideNavigation = isWideNavigation,
-                            quickMemoCount = quickMemoCount,
-                            topBarIconSize = topBarIconSize,
-                            calendarViewMode = calendarViewMode,
-                            isWideActionMenuExpanded = isWideActionMenuExpanded,
-                            onWideActionMenuExpandedChange = { isWideActionMenuExpanded = it },
-                            onCycleCalendarMode = {
-                                haptics.selection()
-                                calendarViewName = calendarViewMode.next().name
-                            },
-                            onOpenCalendarModeMenu = {
-                                haptics.longPress()
-                                isCalendarViewMenuExpanded = true
-                            },
-                            onCalendarAnchorPositioned = { bounds ->
-                                val rootBounds = homePageRootBounds
-                                calendarViewMenuAnchorBounds = if (rootBounds == null) {
-                                    bounds
-                                } else {
-                                    Rect(
-                                        left = bounds.left - rootBounds.left,
-                                        top = bounds.top - rootBounds.top,
-                                        right = bounds.right - rootBounds.left,
-                                        bottom = bounds.bottom - rootBounds.top,
-                                    )
-                                }
-                            },
-                            onCreate = {
-                                haptics.click()
-                                onAddEventClick()
-                            },
-                            onSearch = {
-                                haptics.click()
-                                isWideActionMenuExpanded = false
-                                isSearchMode = true
-                            },
-                            onImage = {
-                                haptics.click()
-                                isWideActionMenuExpanded = false
-                                if (!isImageImporting) imagePickerLauncher.launch("image/*")
-                            },
-                            onClearQuickMemos = {
-                                haptics.click()
-                                isWideActionMenuExpanded = false
-                                onRequestClearQuickMemos()
-                            },
-                        )
+                        AppGlassSettingsProvider(homeOverlayGlassSettings) {
+                            HomeTopBarActions(
+                                isTodayPage = isTodayPage,
+                                isNotePage = isNotePage,
+                                isLegacyNoteMode = isLegacyNoteMode,
+                                isWideNavigation = isWideNavigation,
+                                quickMemoCount = quickMemoCount,
+                                topBarIconSize = topBarIconSize,
+                                calendarViewMode = calendarViewMode,
+                                isWideActionMenuExpanded = isWideActionMenuExpanded,
+                                onWideActionMenuExpandedChange = { isWideActionMenuExpanded = it },
+                                onCycleCalendarMode = {
+                                    haptics.selection()
+                                    calendarViewName = calendarViewMode.next().name
+                                },
+                                onOpenCalendarModeMenu = {
+                                    haptics.longPress()
+                                    isCalendarViewMenuExpanded = true
+                                },
+                                isCalendarViewMenuExpanded = isCalendarViewMenuExpanded,
+                                onDismissCalendarModeMenu = { isCalendarViewMenuExpanded = false },
+                                onSelectCalendarMode = { mode ->
+                                    haptics.selection()
+                                    calendarViewName = mode.name
+                                },
+                                menuContainerColor = calendarMenuContainerColor,
+                                menuSelectionColor = calendarMenuSelectionColor,
+                                menuContentColor = calendarMenuContentColor,
+                                onCreate = {
+                                    haptics.click()
+                                    onAddEventClick()
+                                },
+                                onSearch = {
+                                    haptics.click()
+                                    isWideActionMenuExpanded = false
+                                    isSearchMode = true
+                                },
+                                onImage = {
+                                    haptics.click()
+                                    isWideActionMenuExpanded = false
+                                    if (!isImageImporting) imagePickerLauncher.launch("image/*")
+                                },
+                                onClearQuickMemos = {
+                                    haptics.click()
+                                    isWideActionMenuExpanded = false
+                                    onRequestClearQuickMemos()
+                                },
+                            )
+                        }
                     }
-                    if (isWideNavigation) {
-                        TopAppBar(
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = Color.Transparent,
-                                titleContentColor = MaterialTheme.colorScheme.onBackground,
-                                actionIconContentColor = MaterialTheme.colorScheme.onBackground,
-                            ),
-                            title = { Text(homePageTitle) },
-                            actions = actions,
-                        )
-                    } else {
-                        CenterAlignedTopAppBar(
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                /*设置为background后会导致深浅模式切换时topbar不同步;此注释严禁删除
-                                containerColor = MaterialTheme.colorScheme.background,*/
-                                containerColor = Color.Transparent,
-                                titleContentColor = MaterialTheme.colorScheme.onBackground,
-                                navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                            ),
-                            title = { Text(homePageTitle) },
-                            actions = actions,
-                        )
-                    }
+                    /*设置为background后会导致深浅模式切换时topbar不同步;此注释严禁删除
+                    containerColor = MaterialTheme.colorScheme.background,*/
+                    AppTopBar(
+                        title = homePageTitle,
+                        containerColor = Color.Transparent,
+                        actions = actions,
+                    )
                 },
-            ) { innerPadding ->
+            ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
                 ) {
                     val contentBottomPadding = if (showSearchBar) {
                         floatingBarContentPadding + searchBarOffset
@@ -834,50 +803,6 @@ fun MaterialHomePage(
                     containerColor = calendarMenuContainerColor,
                     iconSize = topBarIconSize
                 )
-            }
-
-            AppGlassSettingsProvider(homeOverlayGlassSettings) {
-
-                calendarViewMenuAnchorBounds?.let { anchorBounds ->
-                    val density = LocalDensity.current
-                    val menuWidth = 208.dp
-                    val menuWidthPx = with(density) { menuWidth.roundToPx() }
-                    val menuInsetPx = with(density) { 8.dp.roundToPx() }
-                    val menuGapPx = with(density) { 4.dp.roundToPx() }
-                    val menuX = (anchorBounds.right.roundToInt() - menuWidthPx)
-                        .coerceAtLeast(menuInsetPx)
-                    val menuY = anchorBounds.bottom.roundToInt() + menuGapPx
-
-                    AnimatedVisibility(
-                        visible = isCalendarViewMenuExpanded,
-                        modifier = Modifier
-                            .offset { IntOffset(menuX, menuY) }
-                            .zIndex(2f),
-                        enter = fadeIn(tween(180)) + scaleIn(
-                            animationSpec = tween(220),
-                            initialScale = 0.86f,
-                            transformOrigin = TransformOrigin(1f, 0f)
-                        ),
-                        exit = fadeOut(tween(140)) + scaleOut(
-                            animationSpec = tween(180),
-                            targetScale = 0.9f,
-                            transformOrigin = TransformOrigin(1f, 0f)
-                        )
-                    ) {
-                        HomeCalendarViewMenu(
-                            modifier = Modifier.width(menuWidth),
-                            currentMode = calendarViewMode,
-                            containerColor = calendarMenuContainerColor,
-                            selectionColor = calendarMenuSelectionColor,
-                            contentColor = calendarMenuContentColor,
-                            onSelectMode = { mode ->
-                                haptics.selection()
-                                calendarViewName = mode.name
-                                isCalendarViewMenuExpanded = false
-                            }
-                        )
-                    }
-                }
             }
 
         }
@@ -1162,29 +1087,50 @@ private fun RowScope.HomeTopBarActions(
     onWideActionMenuExpandedChange: (Boolean) -> Unit,
     onCycleCalendarMode: () -> Unit,
     onOpenCalendarModeMenu: () -> Unit,
-    onCalendarAnchorPositioned: (Rect) -> Unit,
+    isCalendarViewMenuExpanded: Boolean,
+    onDismissCalendarModeMenu: () -> Unit,
+    onSelectCalendarMode: (HomeCalendarViewMode) -> Unit,
+    menuContainerColor: Color,
+    menuSelectionColor: Color,
+    menuContentColor: Color,
     onCreate: () -> Unit,
     onSearch: () -> Unit,
     onImage: () -> Unit,
     onClearQuickMemos: () -> Unit,
 ) {
     if (isTodayPage) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .onGloballyPositioned { coordinates ->
-                    onCalendarAnchorPositioned(coordinates.boundsInRoot())
-                }
-                .combinedClickable(
+        Box {
+            Box(
+                modifier = Modifier.size(48.dp).combinedClickable(
                     onClick = onCycleCalendarMode,
                     onLongClick = onOpenCalendarModeMenu,
                 ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.SwapHoriz,
-                contentDescription = calendarViewMode.nextContentDescription,
-                modifier = Modifier.size(28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SwapHoriz,
+                    contentDescription = calendarViewMode.nextContentDescription,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            AppDropdownMenu(
+                expanded = isCalendarViewMenuExpanded,
+                onDismissRequest = onDismissCalendarModeMenu,
+                containerColor = menuContainerColor,
+                selectionColor = menuSelectionColor,
+                contentColor = menuContentColor,
+                items = HomeCalendarViewMode.entries.map { mode ->
+                    AppMenuItem(
+                        text = mode.menuLabel,
+                        selected = mode == calendarViewMode,
+                        icon = when (mode) {
+                            HomeCalendarViewMode.TODAY -> Icons.Outlined.CalendarViewDay
+                            HomeCalendarViewMode.WEEK -> Icons.Outlined.CalendarViewWeek
+                            HomeCalendarViewMode.MONTH -> Icons.Outlined.CalendarViewMonth
+                        },
+                        onClick = { onSelectCalendarMode(mode) },
+                    )
+                },
             )
         }
     }
@@ -1205,30 +1151,20 @@ private fun RowScope.HomeTopBarActions(
                     modifier = Modifier.size(topBarIconSize),
                 )
             }
-            DropdownMenu(
+            AppDropdownMenu(
                 expanded = isWideActionMenuExpanded,
                 onDismissRequest = { onWideActionMenuExpandedChange(false) },
-                shape = RoundedCornerShape(16.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ) {
-                DropdownMenuItem(
-                    text = { Text("搜索") },
-                    onClick = onSearch,
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                )
-                DropdownMenuItem(
-                    text = { Text("上传图片识别") },
-                    onClick = onImage,
-                    leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
-                )
-                if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
-                    DropdownMenuItem(
-                        text = { Text("清空随口记") },
-                        onClick = onClearQuickMemos,
-                        leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null) },
-                    )
-                }
-            }
+                containerColor = menuContainerColor,
+                selectionColor = menuSelectionColor,
+                contentColor = menuContentColor,
+                items = buildList {
+                    add(AppMenuItem("搜索", onSearch, Icons.Default.Search))
+                    add(AppMenuItem("上传图片识别", onImage, Icons.Default.Image))
+                    if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
+                        add(AppMenuItem("清空随口记", onClearQuickMemos, Icons.Default.DeleteSweep, destructive = true))
+                    }
+                },
+            )
         }
     } else if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
         IconButton(onClick = onClearQuickMemos) {
@@ -1384,77 +1320,6 @@ private fun HomeSearchBar(
                         )
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeCalendarViewMenu(
-    currentMode: HomeCalendarViewMode,
-    containerColor: Color,
-    selectionColor: Color,
-    contentColor: Color,
-    onSelectMode: (HomeCalendarViewMode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(24.dp)
-    AppOverlayGlassSurface(
-        modifier = modifier
-            .shadow(elevation = 8.dp, shape = shape, clip = false)
-            .clip(shape),
-        shape = shape,
-        fallbackColor = containerColor
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            HomeCalendarViewMode.entries.forEach { mode ->
-                val selected = mode == currentMode
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = when (mode) {
-                                    HomeCalendarViewMode.TODAY -> Icons.Outlined.CalendarViewDay
-                                    HomeCalendarViewMode.WEEK -> Icons.Outlined.CalendarViewWeek
-                                    HomeCalendarViewMode.MONTH -> Icons.Outlined.CalendarViewMonth
-                                },
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = mode.menuLabel,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    letterSpacing = 0.sp
-                                ),
-                                maxLines = 1
-                            )
-                        }
-                    },
-                    onClick = { onSelectMode(mode) },
-                    modifier = Modifier
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (selected) selectionColor else Color.Transparent),
-                    trailingIcon = {
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "当前视图",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    colors = MenuDefaults.itemColors(
-                        textColor = contentColor,
-                        trailingIconColor = contentColor
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
-                )
             }
         }
     }

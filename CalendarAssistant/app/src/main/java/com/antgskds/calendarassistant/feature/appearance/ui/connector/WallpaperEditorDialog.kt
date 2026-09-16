@@ -68,8 +68,8 @@ import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettingsProvider
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.appWindowBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberAppWindowBackdrop
 
 internal data class WallpaperEditorSource(
     val bitmap: Bitmap,
@@ -113,7 +113,7 @@ internal fun WallpaperEditorDialog(
     var previewPageKey by remember(source) {
         mutableStateOf(sanitizeHomeStartPageKey(settings.homeStartPageKey, previewPages))
     }
-    val wallpaperBackdrop = rememberLayerBackdrop()
+    val wallpaperBackdrop = rememberAppWindowBackdrop()
     val wallpaperBlurRadius = with(LocalDensity.current) { 28.dp.toPx() }
     val haptics = rememberAppHaptics(settings.hapticFeedbackEnabled)
     val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
@@ -146,7 +146,7 @@ internal fun WallpaperEditorDialog(
                 blurRadiusPx = if (settings.appBackgroundWallpaperBlurEnabled) wallpaperBlurRadius else 0f,
                 modifier = Modifier
                     .fillMaxSize()
-                    .layerBackdrop(wallpaperBackdrop)
+                    .appWindowBackdrop(wallpaperBackdrop)
             )
 
             AppGlassSettingsProvider(

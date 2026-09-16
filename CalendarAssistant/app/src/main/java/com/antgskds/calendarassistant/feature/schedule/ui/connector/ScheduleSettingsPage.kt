@@ -1,5 +1,8 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.connector
 
+import com.antgskds.calendarassistant.shared.ui.material.settings.AppSettingsDivider
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -125,11 +128,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                AppSettingsDivider()
                 SettingItem(
                     title = "当前周次",
                     value = "第 $currentWeek 周",
@@ -139,11 +138,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                AppSettingsDivider()
                 SettingItem(
                     title = "学期总周数",
                     value = "${state.totalWeeks} 周",
@@ -175,11 +170,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
                     cardValueStyle = cardValueStyle,
                     cardSubtitleStyle = cardSubtitleStyle
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                AppSettingsDivider()
                 SettingItem(
                     title = "作息时间设置",
                     value = "设置每日节次时间段",
@@ -193,7 +184,7 @@ val sectionTitleStyle = MaterialTheme.typography.titleMedium.copy(
             }
         }
 
-        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
     }
 
     if (showDatePicker) {

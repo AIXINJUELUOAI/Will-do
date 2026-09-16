@@ -72,6 +72,7 @@ object FeatureCatalog {
         FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记数据"),
 
         // —— 横切支撑 ——
+        FeatureEntry("记账表兼容（功能暂停）", Chain.SUPPORT, "feature/accounting/data/AccountingEntry", "仅保留 Room 表结构，兼容记账测试版数据库升级；不接入记账页面、录入、识别或同步业务"),
         FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),
         FeatureEntry("天气", Chain.SUPPORT, "core/weather", "天气预警/风险，位置选择"),
         FeatureEntry("背景自定义", Chain.SUPPORT, "feature/appearance/domain/AppBackgroundImageStore", "用户图片背景导入、私有存储与背景取色"),

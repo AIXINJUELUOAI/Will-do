@@ -1,4 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.settings.AppSettingsDivider
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -14,13 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -451,7 +450,7 @@ fun MaterialAiSettingsScreen(
         setActiveCustomModels(emptyList())
     }
 
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
     val modeLabel = if (isMultimodalEnabled) "多模态AI" else "文本AI"
 
     Box(
@@ -550,7 +549,7 @@ fun MaterialAiSettingsScreen(
                         exit = shrinkVertically() + fadeOut(),
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            MyDivider()
+                            AppSettingsDivider()
                             SwitchSettingItem(
                                 title = "允许第三方 Agent 访问",
                                 subtitle = "允许第三方 Agent 访问、操作 WillDo 数据",
@@ -561,7 +560,7 @@ fun MaterialAiSettingsScreen(
                                 cardTitleStyle = cardTitleStyle,
                                 cardSubtitleStyle = cardSubtitleStyle,
                             )
-                            MyDivider()
+                            AppSettingsDivider()
                             SwitchSettingItem(
                                 title = "允许 Agent 管理连接配置",
                                 subtitle = "允许 Agent 管理模型、天气、WebDAV 连接",
@@ -718,7 +717,7 @@ private fun WebDavConfigForm(
                 showValueAsNumber = true,
                 valueUnit = " 秒",
             )
-            MyDivider()
+            AppSettingsDivider()
             TextInputItem(
                 title = "服务器地址",
                 value = baseUrl,
@@ -728,7 +727,7 @@ private fun WebDavConfigForm(
                 cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle,
             )
-            MyDivider()
+            AppSettingsDivider()
             TextInputItem(
                 title = "用户名",
                 value = username,
@@ -738,7 +737,7 @@ private fun WebDavConfigForm(
                 cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle,
             )
-            MyDivider()
+            AppSettingsDivider()
             TextInputItem(
                 title = "WebDAV 密码",
                 value = password,
@@ -750,7 +749,7 @@ private fun WebDavConfigForm(
                 cardValueStyle = cardValueStyle,
                 cardSubtitleStyle = cardSubtitleStyle,
             )
-            MyDivider()
+            AppSettingsDivider()
             TextInputItem(
                 title = "同步密码",
                 value = syncPassphrase,
@@ -837,7 +836,7 @@ private fun AiConfigForm(
                 cardValueStyle = cardValueStyle
             )
 
-            MyDivider()
+            AppSettingsDivider()
 
             TextInputItem(
                 title = "API 地址",
@@ -850,7 +849,7 @@ private fun AiConfigForm(
                 cardSubtitleStyle = cardSubtitleStyle
             )
 
-            MyDivider()
+            AppSettingsDivider()
 
             TextInputItem(
                 title = "API Key",
@@ -862,7 +861,7 @@ private fun AiConfigForm(
                 cardSubtitleStyle = cardSubtitleStyle
             )
 
-            MyDivider()
+            AppSettingsDivider()
 
             if (manualModel) {
                 TextInputItem(
@@ -909,15 +908,6 @@ private fun AiConfigForm(
             }
         }
     }
-}
-
-@Composable
-private fun MyDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    )
 }
 
 @Composable

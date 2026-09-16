@@ -1,8 +1,9 @@
 package com.antgskds.calendarassistant.feature.settings.developer.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
-import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 
 import com.antgskds.calendarassistant.shared.ui.material.settings.*
 import android.app.Activity
@@ -13,12 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,23 +23,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +48,7 @@ import com.antgskds.calendarassistant.feature.settings.data.model.LiveNotificati
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.shared.ui.edition.EditionSlider
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
@@ -187,7 +181,7 @@ fun MaterialDeveloperScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val logSnackbar = remember { androidx.compose.material3.SnackbarHostState() }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
     val settings = state.settings
 
     var pendingDangerous by remember { mutableStateOf<DeveloperActionUi?>(null) }
@@ -405,6 +399,7 @@ fun MaterialDeveloperScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .padding(bottom = bottomInset)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -1025,7 +1020,6 @@ private fun LogExportSheet(
     onDismiss: () -> Unit,
     onExport: (Int?) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedMinutes by remember { mutableStateOf<Int?>(15) }
     val haptics = rememberAppHaptics()
     val options = remember {
@@ -1039,25 +1033,17 @@ private fun LogExportSheet(
     }
 
     AppModalBottomSheet(
+        title = "日志导出",
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        actions = listOf(AppSheetAction(
+            text = "导出", onClick = { haptics.confirm(); onExport(selectedMinutes) },
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "日志导出",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 text = "勾选要导出的日志范围。日志可能包含识别文本、Prompt、模型响应和接口返回；有 Shizuku/Root 时 logcat 更完整。",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             options.forEach { option ->
                 LogExportOptionRow(
@@ -1068,12 +1054,6 @@ private fun LogExportSheet(
                         selectedMinutes = option.minutes
                     }
                 )
-            }
-            EditionButton(
-                onClick = { haptics.confirm(); onExport(selectedMinutes) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("导出")
             }
         }
     }
@@ -1136,7 +1116,6 @@ private fun DebugActionSelectSheet(
     onDismiss: () -> Unit,
     onRun: (List<DeveloperActionUi>) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptics = rememberAppHaptics()
     var selectedIds by remember(spec) {
         mutableStateOf(if (spec.defaultSelected) spec.actions.map { it.id }.toSet() else emptySet())
@@ -1146,54 +1125,28 @@ private fun DebugActionSelectSheet(
     }
 
     AppModalBottomSheet(
+        title = spec.title,
+        subtitle = spec.description,
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        actions = listOf(AppSheetAction(
+            text = spec.confirmText,
+            enabled = selectedActions.isNotEmpty(),
+            onClick = { haptics.confirm(); onRun(selectedActions) },
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = spec.title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = spec.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                spec.actions.forEach { action ->
-                    DebugActionOptionRow(
-                        action = action,
-                        selected = action.id in selectedIds,
-                        onSelect = {
-                            haptics.selection()
-                            selectedIds = if (action.id in selectedIds) {
-                                selectedIds - action.id
-                            } else {
-                                selectedIds + action.id
-                            }
-                        }
-                    )
+        spec.actions.forEach { action ->
+            DebugActionOptionRow(
+                action = action,
+                selected = action.id in selectedIds,
+                onSelect = {
+                    haptics.selection()
+                    selectedIds = if (action.id in selectedIds) {
+                        selectedIds - action.id
+                    } else {
+                        selectedIds + action.id
+                    }
                 }
-            }
-            EditionButton(
-                onClick = { haptics.confirm(); onRun(selectedActions) },
-                enabled = selectedActions.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(spec.confirmText)
-            }
+            )
         }
     }
 }

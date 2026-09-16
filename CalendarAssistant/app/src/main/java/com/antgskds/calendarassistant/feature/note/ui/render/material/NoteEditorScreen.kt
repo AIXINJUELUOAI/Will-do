@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.note.ui.render.material
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,7 +39,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -46,7 +47,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -69,16 +69,12 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -373,17 +369,9 @@ fun MaterialNoteEditorScreen(
             .fillMaxSize()
             .background(pageContainerColor)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-                .align(Alignment.TopCenter)
-                .background(pageContainerColor)
-        )
-        Scaffold(
+        AppPageScaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = pageContainerColor,
-            contentWindowInsets = WindowInsets(0),
             topBar = {
                 com.antgskds.calendarassistant.feature.note.ui.render.NoteEditorTopBar(
                     title = if (noteId == null) "新建便签" else "编辑便签",
@@ -404,12 +392,10 @@ fun MaterialNoteEditorScreen(
                     },
                 )
             }
-        ) { innerPadding ->
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .imePadding(),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(

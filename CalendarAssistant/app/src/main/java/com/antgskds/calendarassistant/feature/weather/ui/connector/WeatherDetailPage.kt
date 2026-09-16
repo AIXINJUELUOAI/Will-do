@@ -1,4 +1,10 @@
 package com.antgskds.calendarassistant.feature.weather.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBarBackButton
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
@@ -11,12 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,17 +35,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,7 +55,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,7 +97,7 @@ fun WeatherDetailPage(uiSize: Int = 2) {
 @Composable
 fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
     val weatherData = state.weatherData
-    val bottomInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val bottomInset = LocalAppPageBottomPadding.current
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -179,34 +176,20 @@ fun MaterialWeatherDetailScreen(
         miuiBlurEnabled = state.miuiBlurEnabled,
         cardAlphaPercent = state.cardAlphaPercent
     ) {
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
+    AppPageScaffold(
+        edgeToEdgeContent = true,
+        containerColor = pageContainerColor,
         topBar = {
-            TopAppBar(
-                title = { Text("天气详情") },
+            AppTopBar(
+                title = "天气详情",
+                containerColor = pageContainerColor,
                 navigationIcon = {
-                    EditionIconButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
+                    AppTopBarBackButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) })
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = pageContainerColor
-                )
             )
         },
-        contentWindowInsets = WindowInsets(0),
-        containerColor = pageContainerColor
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            MaterialWeatherDetailPage(state = state, uiSize = uiSize)
-        }
+    ) {
+        MaterialWeatherDetailPage(state = state, uiSize = uiSize)
     }
     }
 }

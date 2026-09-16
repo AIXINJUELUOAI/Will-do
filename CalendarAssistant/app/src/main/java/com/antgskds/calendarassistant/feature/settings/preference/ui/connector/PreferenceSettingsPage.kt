@@ -1,4 +1,7 @@
 package com.antgskds.calendarassistant.feature.settings.preference.ui.connector
+
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
@@ -21,7 +24,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +36,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
@@ -48,6 +49,7 @@ import com.antgskds.calendarassistant.platform.floating.EdgeBarService
 import com.antgskds.calendarassistant.platform.floating.FloatingBallService
 import com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService
 import com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSettingsCard
 import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
@@ -148,7 +150,7 @@ fun MaterialPreferenceSettingsScreen(
     val permissionGate = rememberPermissionGate(snackbarHostState)
     val scope = rememberCoroutineScope()
     var currentToastType by remember { mutableStateOf(ToastType.INFO) }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
     var showSourceCalendarSheet by remember { mutableStateOf(false) }
     var showEventDurationPicker by remember { mutableStateOf(false) }
     var showRecognitionModePicker by remember { mutableStateOf(false) }
@@ -405,11 +407,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardValueStyle = cardValueStyle,
                         showValueAsNumber = false // 显示文字：小/中/大
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                 }
                 if (itemVisibility.showTomorrowEvents) {
                     SwitchSettingItem(
@@ -420,11 +418,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                 }
                 if (itemVisibility.showBottomBarEditor) {
                     ActionSettingItem(
@@ -438,11 +432,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                 }
                 if (itemVisibility.showWidgetSettings) {
                     ActionSettingItem(
@@ -456,11 +446,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle,
                         cardValueStyle = cardValueStyle,
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                 }
                     SwitchSettingItem(
                         title = "悬浮日程",
@@ -520,11 +506,7 @@ fun MaterialPreferenceSettingsScreen(
                             cardSubtitleStyle = cardSubtitleStyle
                         )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
                     }
 
                         SideChoiceSettingItem(
@@ -540,11 +522,7 @@ fun MaterialPreferenceSettingsScreen(
                             cardSubtitleStyle = cardSubtitleStyle
                         )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                         SwitchSettingItem(
                             title = "侧边栏入口",
@@ -580,11 +558,7 @@ fun MaterialPreferenceSettingsScreen(
                             exit = shrinkVertically() + fadeOut()
                         ) {
                             Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                                 SideChoiceSettingItem(
                                     title = "侧边栏位置",
                                     subtitle = if (settings.edgeBarSide == "LEFT") {
@@ -598,11 +572,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardSubtitleStyle = cardSubtitleStyle
                         )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                                 FloatingGestureActionSettingItem(
                                     title = "单击动作",
@@ -619,11 +589,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                                 FloatingGestureActionSettingItem(
                                     title = "双击动作",
@@ -640,11 +606,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                                 FloatingGestureActionSettingItem(
                                     title = "长按动作",
@@ -661,11 +623,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                                 SliderSettingItem(
                                     title = "纵向位置",
@@ -756,11 +714,7 @@ fun MaterialPreferenceSettingsScreen(
                             }
                         }
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                         SwitchSettingItem(
                             title = "悬浮球入口",
@@ -796,11 +750,7 @@ fun MaterialPreferenceSettingsScreen(
                             exit = shrinkVertically() + fadeOut()
                         ) {
                             Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                                 FloatingGestureActionSettingItem(
                                     title = "单击动作",
                                     currentAction = settings.floatingBallSingleTapAction,
@@ -816,11 +766,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                                 FloatingGestureActionSettingItem(
                                     title = "双击动作",
                                     currentAction = settings.floatingBallDoubleTapAction,
@@ -836,11 +782,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                                 FloatingGestureActionSettingItem(
                                     title = "长按动作",
                                     currentAction = settings.floatingBallLongPressAction,
@@ -856,11 +798,7 @@ fun MaterialPreferenceSettingsScreen(
                                     cardValueStyle = cardValueStyle
                                 )
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                                 SliderSettingItem(
                                     title = "尺寸",
                                     subtitle = "悬浮球直径",
@@ -1005,11 +943,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                 }
                     VolumeLongPressSettingItem(
                         title = "长按音量+",
@@ -1090,11 +1024,7 @@ fun MaterialPreferenceSettingsScreen(
                         exit = shrinkVertically() + fadeOut()
                     ) {
                             Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                             DailySummaryTimeSettingItem(
                                 title = "今日提醒时间",
                                 subtitle = "推送今日日程汇总",
@@ -1104,11 +1034,7 @@ fun MaterialPreferenceSettingsScreen(
                                 cardSubtitleStyle = cardSubtitleStyle,
                                 cardValueStyle = cardValueStyle
                             )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
                             DailySummaryTimeSettingItem(
                                 title = "明日预告时间",
                                 subtitle = "推送明日日程预告",
@@ -1120,11 +1046,7 @@ fun MaterialPreferenceSettingsScreen(
                             )
                         }
                     }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                     SwitchSettingItem(
                         title = "实况通知",
                         subtitle = "日程开始时显示实况通知",
@@ -1145,11 +1067,7 @@ fun MaterialPreferenceSettingsScreen(
                         exit = shrinkVertically() + fadeOut()
                     ) {
                         Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                             SwitchSettingItem(
                                 title = "取件码聚合（Beta）",
                                 subtitle = "当同时存在多个取件码时合并显示为一个实况通知",
@@ -1163,11 +1081,7 @@ fun MaterialPreferenceSettingsScreen(
                         }
                         }
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        AppSettingsDivider()
 
                     AdvanceReminderSettingItem(
                         title = "日程提前提醒",
@@ -1195,11 +1109,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
 
                     val transitAutoCheckInOptions = MySettings.TRANSIT_AUTO_CHECK_IN_MINUTE_OPTIONS
                     val transitAutoCheckInMinutes = MySettings.normalizeTransitAutoCheckInMinutes(
@@ -1237,11 +1147,7 @@ fun MaterialPreferenceSettingsScreen(
                     )
 
                 if (itemVisibility.showNetworkSpeedCapsule) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
 
                     SwitchSettingItem(
                         title = "网速胶囊",
@@ -1292,11 +1198,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardValueStyle = cardValueStyle
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
 
                     SwitchSettingItem(
                         title = "使用多模态AI",
@@ -1310,11 +1212,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardSubtitleStyle = cardSubtitleStyle
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                     SwitchSettingItem(
                         title = "关闭思考",
                         subtitle = "仅适配 OpenAI",
@@ -1362,11 +1260,7 @@ fun MaterialPreferenceSettingsScreen(
                         exit = shrinkVertically() + fadeOut()
                         ) {
                             Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
 
                             ActionSettingItem(
                                 title = "同步来源日历",
@@ -1390,11 +1284,7 @@ fun MaterialPreferenceSettingsScreen(
                                 cardValueStyle = cardValueStyle
                             )
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
 
                             SliderSettingItem(
                                 title = "兜底同步频率",
@@ -1416,11 +1306,7 @@ fun MaterialPreferenceSettingsScreen(
                     }
 
                 if (itemVisibility.showAutoArchive) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                     SwitchSettingItem(
                         title = "自动归档",
                         subtitle = "日程过期后立即自动归档",
@@ -1433,11 +1319,7 @@ fun MaterialPreferenceSettingsScreen(
                     )
                 }
 
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
+                                AppSettingsDivider()
                     EventDurationSettingItem(
                         title = "日程默认持续时间",
                         subtitle = "所有识别日程都按该时长生成结束时间",
@@ -1448,11 +1330,7 @@ fun MaterialPreferenceSettingsScreen(
                         cardValueStyle = cardValueStyle
                     )
                 if (itemVisibility.showScheduleColors) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
+                    AppSettingsDivider()
                     ActionSettingItem(
                         title = "日程颜色",
                         subtitle = "自定义新建和识别日程使用的色盘",
@@ -1489,11 +1367,7 @@ fun MaterialPreferenceSettingsScreen(
                         exit = shrinkVertically() + fadeOut()
                     ) {
                         Column {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                            AppSettingsDivider()
 
                             ActionSettingItem(
                                 title = "学期配置",
@@ -1507,11 +1381,7 @@ fun MaterialPreferenceSettingsScreen(
                                 cardValueStyle = cardValueStyle
                             )
 
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                            AppSettingsDivider()
 
                             ActionSettingItem(
                                 title = "管理所有课程",
@@ -1525,11 +1395,7 @@ fun MaterialPreferenceSettingsScreen(
                                 cardValueStyle = cardValueStyle
                             )
 
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                            AppSettingsDivider()
 
                             ActionSettingItem(
                                 title = "作息时间设置",
@@ -1708,7 +1574,7 @@ private fun QuickMemoPreferenceCard(
             exit = shrinkVertically() + fadeOut()
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 SwitchSettingItem(
                     title = "悬浮窗长按随口记",
                     subtitle = "呼出悬浮窗后，再次长按音量+开始随口记录音",
@@ -1718,7 +1584,7 @@ private fun QuickMemoPreferenceCard(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
 
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 QuickMemoRecordingDisplayPreference(
                     mode = settings.quickMemoRecordingDisplayMode,
                     onModeChange = onRecordingDisplayModeChange,
@@ -1726,7 +1592,7 @@ private fun QuickMemoPreferenceCard(
                     cardSubtitleStyle = cardSubtitleStyle,
                 )
 
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 val normalizedSeconds = MySettings.normalizeQuickMemoAutoStopSeconds(
                     settings.quickMemoAutoStopSeconds
                 )
@@ -1752,7 +1618,7 @@ private fun QuickMemoPreferenceCard(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
 
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 SwitchSettingItem(
                     title = "文本随口记同步挂起",
                     subtitle = "随口记文本保存后，同步挂起到实况通知",
@@ -1762,7 +1628,7 @@ private fun QuickMemoPreferenceCard(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
 
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 SwitchSettingItem(
                     title = "语音随口记同步挂起",
                     subtitle = "随口记语音转写后，同步挂起到实况通知",
@@ -1772,7 +1638,7 @@ private fun QuickMemoPreferenceCard(
                     cardSubtitleStyle = cardSubtitleStyle
                 )
 
-                QuickMemoPreferenceDivider()
+                AppSettingsDivider()
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1825,15 +1691,6 @@ private fun QuickMemoRecordingDisplayPreference(
         onValueSelected = onModeChange,
         cardTitleStyle = cardTitleStyle,
         cardSubtitleStyle = cardSubtitleStyle,
-    )
-}
-
-@Composable
-private fun QuickMemoPreferenceDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )
 }
 
@@ -2032,24 +1889,16 @@ private fun SourceCalendarPickerSheet(
     }
 
     AppModalBottomSheet(
+        title = "同步来源日历",
+        subtitle = "将日程同步到系统日历",
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        actions = listOf(AppSheetAction(
+            text = "保存",
+            enabled = calendars.isNotEmpty() && selectedIds.isNotEmpty(),
+            onClick = { haptics.confirm(); onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp)
-        ) {
-            Text("同步来源日历", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "将日程同步到系统日历",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
+        Column(Modifier.fillMaxWidth()) {
             if (calendars.isEmpty()) {
                 Text(
                     text = "当前没有可读取的系统日历。",
@@ -2109,14 +1958,7 @@ private fun SourceCalendarPickerSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            EditionButton(
-                onClick = { haptics.confirm(); onConfirm(calendars.filter { selectedIds.contains(it.id) }.map { it.id }) },
-                enabled = calendars.isNotEmpty() && selectedIds.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("保存")
-            }
+
         }
     }
 }

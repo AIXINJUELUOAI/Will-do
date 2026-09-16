@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
+
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -96,8 +98,8 @@ import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.platform.widget.WidgetActions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.appWindowBackdrop
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberAppWindowBackdrop
 import kotlin.math.roundToInt
 
 private data class PendingWidgetLaunchAction(
@@ -508,8 +510,8 @@ class MainActivity : ComponentActivity() {
                     AppRoutes.WeatherDetail -> HomeEntryKey.TODAY
                     else -> selectedHomePageKey
                 }
-                val appGlassBackdrop = rememberLayerBackdrop()
-                val appSceneBackdrop = rememberLayerBackdrop()
+                val appGlassBackdrop = rememberAppWindowBackdrop()
+                val appSceneBackdrop = rememberAppWindowBackdrop()
                 val useMiuiBlurMaterial = settings.appBackgroundMiuiBlurTestEnabled &&
                     appBackgroundBitmap != null
 
@@ -535,7 +537,7 @@ class MainActivity : ComponentActivity() {
                             .onSizeChanged { appBackgroundRootSize = it }
                             .then(
                                 if (useMiuiBlurMaterial) {
-                                    Modifier.layerBackdrop(appSceneBackdrop)
+                                    Modifier.appWindowBackdrop(appSceneBackdrop)
                                 } else {
                                     Modifier
                                 }
@@ -552,7 +554,7 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .then(
                                     if (useMiuiBlurMaterial) {
-                                        Modifier.layerBackdrop(appGlassBackdrop)
+                                        Modifier.appWindowBackdrop(appGlassBackdrop)
                                     } else {
                                         Modifier
                                     }
@@ -607,18 +609,20 @@ class MainActivity : ComponentActivity() {
                             popEnterTransition = { null },
                             popExitTransition = { navBackwardExitTransition() }
                         ) {
-                            OnboardingGuidePage(
-                                settingsViewModel = settingsViewModel,
-                                mainViewModel = mainViewModel,
-                                uiSize = settings.uiSize,
-                                onFinish = {
-                                    markOnboardingCompleted()
-                                    navController.navigate(AppRoutes.Home) {
-                                        launchSingleTop = true
-                                        popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
+                            AppPageScaffold(edgeToEdgeContent = true) {
+                                OnboardingGuidePage(
+                                    settingsViewModel = settingsViewModel,
+                                    mainViewModel = mainViewModel,
+                                    uiSize = settings.uiSize,
+                                    onFinish = {
+                                        markOnboardingCompleted()
+                                        navController.navigate(AppRoutes.Home) {
+                                            launchSingleTop = true
+                                            popUpTo(AppRoutes.OnboardingGuide) { inclusive = true }
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
 
                         composable(

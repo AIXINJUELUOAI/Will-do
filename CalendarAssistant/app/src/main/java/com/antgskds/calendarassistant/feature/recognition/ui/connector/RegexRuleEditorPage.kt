@@ -1,4 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionTextField
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
@@ -106,6 +108,7 @@ fun MaterialRegexRuleEditorScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(bottom = LocalAppPageBottomPadding.current)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

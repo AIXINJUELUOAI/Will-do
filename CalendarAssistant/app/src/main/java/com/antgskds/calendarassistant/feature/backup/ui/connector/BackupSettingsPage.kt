@@ -1,7 +1,8 @@
 package com.antgskds.calendarassistant.feature.backup.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
 import com.antgskds.calendarassistant.shared.ui.edition.EditionRadioButton
-import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
 
 import android.content.ClipboardManager
@@ -10,9 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Upload
@@ -31,6 +30,7 @@ import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupImportR
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupOptions
 import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSheetAction
 import com.antgskds.calendarassistant.shared.ui.material.component.AppModalBottomSheet
 import com.antgskds.calendarassistant.shared.ui.material.component.PredictiveFloatingActionCard
 import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
@@ -61,7 +61,7 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
     val snackbarHostState = remember { SnackbarHostState() }
     val currentSettings by controller.settings.collectAsState()
     val haptics = rememberAppHaptics(currentSettings.hapticFeedbackEnabled)
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = LocalAppPageBottomPadding.current
 
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
     var showImportMethodDialog by remember { mutableStateOf(false) }
@@ -513,103 +513,76 @@ internal fun CourseImportConfirmSheet(
 ) {
     val haptics = rememberAppHaptics()
     AppModalBottomSheet(
+        title = "导入外部课表",
+        subtitle = "确认导入内容，并选择是否同步课表设置。",
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        actions = listOf(AppSheetAction(
+            text = "导入", onClick = onConfirm, enabled = parsed.courses.isNotEmpty(),
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp)
-        ) {
-            Text("导入外部课表", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "确认导入内容，并选择是否同步课表设置。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ImportSummaryCard(parsed, cardValueStyle)
 
-            Column(
+            if (currentSemesterStartDate.isNotBlank() && parsed.semesterStartDate != null &&
+                currentSemesterStartDate != parsed.semesterStartDate
+            ) {
+                AppCard(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("当前 App 开学日期：$currentSemesterStartDate", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("导入来源开学日期：${parsed.semesterStartDate}", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+
+            Text(
+                text = "同步设置",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .clickable(enabled = parsed.canImportSettings) { haptics.selection(); onImportSettingsChange(!importSettings) }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                ImportSummaryCard(parsed, cardValueStyle)
-
-                if (currentSemesterStartDate.isNotBlank() && parsed.semesterStartDate != null &&
-                    currentSemesterStartDate != parsed.semesterStartDate
-                ) {
-                    AppCard(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("当前 App 开学日期：$currentSemesterStartDate", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("导入来源开学日期：${parsed.semesterStartDate}", style = cardValueStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                }
-
-                Text(
-                    text = "同步设置",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp)
+                EditionCheckbox(
+                    checked = importSettings && parsed.canImportSettings,
+                    enabled = parsed.canImportSettings,
+                    onCheckedChange = { haptics.selection(); onImportSettingsChange(it) }
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = parsed.canImportSettings) { haptics.selection(); onImportSettingsChange(!importSettings) }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    EditionCheckbox(
-                        checked = importSettings && parsed.canImportSettings,
-                        enabled = parsed.canImportSettings,
-                        onCheckedChange = { haptics.selection(); onImportSettingsChange(it) }
-                    )
-                    Column(Modifier.padding(start = 12.dp)) {
-                        Text("同步课表设置", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            if (parsed.canImportSettings) "同步已检测到的开学日期、总周数和每节课时间" else "未检测到可同步的课表设置",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Text(
-                    text = "导入方式",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                ImportOptionRadio(importMode, MaterialTheme.typography.bodyLarge, onModeChange)
-
-                if (importMode == ImportMode.OVERWRITE) {
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text("同步课表设置", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "覆盖模式会清空当前所有课程，仅保留本次导入内容。",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        if (parsed.canImportSettings) "同步已检测到的开学日期、总周数和每节课时间" else "未检测到可同步的课表设置",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                HorizontalDivider()
-                CoursePreviewSection(parsed.courses, cardValueStyle, cardSubtitleStyle)
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            EditionButton(
-                onClick = onConfirm,
-                enabled = parsed.courses.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("导入")
+            Text(
+                text = "导入方式",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            ImportOptionRadio(importMode, MaterialTheme.typography.bodyLarge, onModeChange)
+
+            if (importMode == ImportMode.OVERWRITE) {
+                Text(
+                    "覆盖模式会清空当前所有课程，仅保留本次导入内容。",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
+
+            HorizontalDivider()
+            CoursePreviewSection(parsed.courses, cardValueStyle, cardSubtitleStyle)
         }
     }
 }
@@ -748,60 +721,48 @@ private fun BackupOptionsSheet(
     }
 
     AppModalBottomSheet(
+        title = title,
+        subtitle = description,
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        actions = listOf(AppSheetAction(
+            text = confirmText,
+            onClick = { onConfirm(normalizedOptions) },
+            enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings ||
+                normalizedOptions.includePrompts || normalizedOptions.includeQuickMemos,
+        )),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(16.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                BackupOptionRow(
-                    title = "日程数据",
-                    subtitle = eventSubtitle,
-                    checked = normalizedOptions.includeEvents,
-                    onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeEvents = it, includeAttachments = it)) }
-                )
-                BackupOptionRow(
-                    title = "设置数据",
-                    subtitle = "包含模型、天气、主题等完整设置",
-                    checked = normalizedOptions.includeSettings,
-                    onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeSettings = it)) }
-                )
-                BackupOptionRow(
-                    title = "随口记",
-                    subtitle = "包含随口记文本、状态、录音和图片",
-                    checked = normalizedOptions.includeQuickMemos,
-                    onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeQuickMemos = it)) }
-                )
-                BackupOptionRow(
-                    title = "提示词",
-                    subtitle = "当前本地提示词配置",
-                    checked = normalizedOptions.includePrompts,
-                    onCheckedChange = { onOptionsChange(normalizedOptions.copy(includePrompts = it)) }
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                "设置备份会包含 API Key 等私密配置，请妥善保存备份文件。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            BackupOptionRow(
+                title = "日程数据",
+                subtitle = eventSubtitle,
+                checked = normalizedOptions.includeEvents,
+                onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeEvents = it, includeAttachments = it)) }
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            EditionButton(
-                onClick = { onConfirm(normalizedOptions) },
-                enabled = normalizedOptions.includeEvents || normalizedOptions.includeSettings || normalizedOptions.includePrompts || normalizedOptions.includeQuickMemos,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(confirmText)
-            }
+            BackupOptionRow(
+                title = "设置数据",
+                subtitle = "包含模型、天气、主题等完整设置",
+                checked = normalizedOptions.includeSettings,
+                onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeSettings = it)) }
+            )
+            BackupOptionRow(
+                title = "随口记",
+                subtitle = "包含随口记文本、状态、录音和图片",
+                checked = normalizedOptions.includeQuickMemos,
+                onCheckedChange = { onOptionsChange(normalizedOptions.copy(includeQuickMemos = it)) }
+            )
+            BackupOptionRow(
+                title = "提示词",
+                subtitle = "当前本地提示词配置",
+                checked = normalizedOptions.includePrompts,
+                onCheckedChange = { onOptionsChange(normalizedOptions.copy(includePrompts = it)) }
+            )
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "设置备份会包含 API Key 等私密配置，请妥善保存备份文件。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

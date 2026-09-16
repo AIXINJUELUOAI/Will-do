@@ -1,4 +1,7 @@
 package com.antgskds.calendarassistant.feature.appearance.ui.connector
+
+import com.antgskds.calendarassistant.shared.ui.material.component.AppSegmentedControl
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
 import android.os.Build
@@ -167,10 +170,11 @@ fun MaterialThemeSettingsScreen(
     var isHexFocused by remember { mutableStateOf(false) }
     var showBackgroundActions by remember { mutableStateOf(false) }
     val backgroundActionScope = rememberCoroutineScope()
-    val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navigationBottomPadding = LocalAppPageBottomPadding.current
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val bottomPadding = when {
-        imeBottomPadding > 0.dp -> imeBottomPadding + 96.dp
+        // 键盘高度由 AppPageScaffold 避让，这里只留输入区的滚动余量。
+        imeBottomPadding > 0.dp -> 96.dp
         isHexFocused -> 320.dp
         else -> navigationBottomPadding + 32.dp
     }
@@ -266,14 +270,15 @@ fun MaterialThemeSettingsScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                ThemeColorModeSwitch(
-                    customSelected = isCustomTheme,
-                    onPresetClick = {
-                        if (isCustomTheme) onAction(ThemeSettingsUiAction.UpdateColorScheme(ThemeColorScheme.DEFAULT.name))
+                AppSegmentedControl(
+                    options = listOf(false, true),
+                    selectedOption = isCustomTheme,
+                    label = { custom -> if (custom) "自定义" else "预设" },
+                    onSelected = { custom ->
+                        onAction(ThemeSettingsUiAction.UpdateColorScheme(
+                            if (custom) ThemeColorScheme.CUSTOM.name else ThemeColorScheme.DEFAULT.name
+                        ))
                     },
-                    onCustomClick = {
-                        if (!isCustomTheme) onAction(ThemeSettingsUiAction.UpdateColorScheme(ThemeColorScheme.CUSTOM.name))
-                    }
                 )
 
                 AnimatedVisibility(
@@ -540,59 +545,6 @@ private fun getDisplayColor(scheme: ThemeColorScheme, context: android.content.C
             }
         }
         else -> scheme.primaryColor
-    }
-}
-
-@Composable
-private fun ThemeColorModeSwitch(
-    customSelected: Boolean,
-    onPresetClick: () -> Unit,
-    onCustomClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        ThemeColorModeChip(
-            text = "预设",
-            selected = !customSelected,
-            onClick = onPresetClick,
-            modifier = Modifier.weight(1f)
-        )
-        ThemeColorModeChip(
-            text = "自定义",
-            selected = customSelected,
-            onClick = onCustomClick,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun ThemeColorModeChip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptics = rememberAppHaptics()
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .clickable { haptics.selection(); onClick() }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
