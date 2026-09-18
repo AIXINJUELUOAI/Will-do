@@ -32,6 +32,12 @@ object XiaomiLiveNotificationTemplate {
         startMillis: Long,
         endMillis: Long
     ): XiaomiLiveNotificationContent {
+        if (display.tapOpensAccounting) {
+            // 折叠岛仅显示金额/重复状态，展开保留全部收支与异常数量，不裁剪金额。
+            return XiaomiLiveNotificationContent(title = display.primaryText,
+                content = display.expandedText.orEmpty(), templateKind = XiaomiLiveTemplateKind.TEXT_ICON,
+                tagText = null, hintTitle = null, summaryStatus = "", summaryTitle = display.shortText)
+        }
         val templateKind = resolveTemplateKind(display, hasActions, forceTextIcon)
         return XiaomiLiveNotificationContent(
             title = buildIslandTitle(display, useShortTitle),

@@ -281,6 +281,8 @@ fun MaterialDeveloperScreen(
             addAll(createScheduleActions.map { it.id })
             addAll(normalNotificationActions.map { it.id })
             addAll(liveNotificationActions.map { it.id })
+            add("payment-diagnostic-start")
+            add("payment-diagnostic-export")
             addAll(
                 listOf(
                     "create-dev-all",
@@ -537,6 +539,25 @@ fun MaterialDeveloperScreen(
             }
 
             Text(text = "通知与日志", style = sectionTitleStyle)
+            SettingsCard {
+                ActionSettingItem(
+                    title = "开始支付采集诊断",
+                    subtitle = "两分钟内完成一次微信转账；记录事件、窗口和截图，结束自动导出 ZIP",
+                    value = "", icon = Icons.Default.ChevronRight,
+                    enabled = runningId == null,
+                    onClick = { actionsById["payment-diagnostic-start"]?.let { runAction(it) } },
+                    cardTitleStyle = cardTitleStyle, cardSubtitleStyle = cardSubtitleStyle, cardValueStyle = cardSubtitleStyle
+                )
+                RowDivider()
+                ActionSettingItem(
+                    title = "结束并导出支付诊断",
+                    subtitle = "保存至 Download/WillDo/exports；已自动结束时可重新导出",
+                    value = "", icon = Icons.Default.ChevronRight,
+                    enabled = runningId == null,
+                    onClick = { actionsById["payment-diagnostic-export"]?.let { runAction(it) } },
+                    cardTitleStyle = cardTitleStyle, cardSubtitleStyle = cardSubtitleStyle, cardValueStyle = cardSubtitleStyle
+                )
+            }
             SettingsCard {
                 SwitchSettingItem(
                     title = "自动记录日志",

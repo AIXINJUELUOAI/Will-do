@@ -92,7 +92,7 @@ object MiuiIslandDispatcher {
                 left = ImageTextInfoLeft(
                     type = 1,
                     picInfo = PicInfo(type = 1, pic = PIC_KEY_EVENT),
-                    textInfo = TextInfo(title = request.summaryStatus?.ifBlank { null } ?: request.title),
+                    textInfo = TextInfo(title = request.summaryStatus ?: request.title),
                 ),
                 right = ImageTextInfoRight(
                     type = 2,

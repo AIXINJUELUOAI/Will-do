@@ -165,6 +165,7 @@ data class AgentConfiguration(
 
 @Serializable
 data class AgentModelConnectionInput(
+    /** 仅接受 MULTIMODAL；旧 TEXT 模式已下架。 */
     val mode: String,
     val modelName: String,
     val apiUrl: String,

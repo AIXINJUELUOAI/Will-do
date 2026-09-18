@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.home.ui.render.material
 
+import com.antgskds.calendarassistant.feature.accounting.ui.AccountingSummaryHeader
 import com.antgskds.calendarassistant.shared.ui.material.component.AppPageScaffold
 import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
 
@@ -127,7 +128,6 @@ fun MaterialHomePage(
     onAction: (HomePageUiAction) -> Unit,
     scheduleContent: @Composable () -> Unit,
     allEventsContent: @Composable (String, Dp) -> Unit,
-    noteListContent: @Composable (String, Dp) -> Unit,
     quickMemoContent: @Composable (String, Dp) -> Unit,
     currentPageKey: String,
     pageOrder: List<String>,
@@ -146,13 +146,13 @@ fun MaterialHomePage(
     onAddEventClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
-    onCreateNote: () -> Unit = {},
     onRequestClearQuickMemos: () -> Unit = {},
     quickMemoCount: Int = 0,
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
-    onOpenWeatherDetail: () -> Unit = {}
+    onOpenWeatherDetail: () -> Unit = {},
+    onOpenAccounting: (java.time.LocalDate, Boolean) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -198,7 +198,6 @@ fun MaterialHomePage(
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
     var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
-    var isLegacyNoteMode by rememberSaveable { mutableStateOf(false) }
     var calendarViewName by rememberSaveable { mutableStateOf(HomeCalendarViewMode.TODAY.name) }
     var isCalendarViewMenuExpanded by remember { mutableStateOf(false) }
     var isWideActionMenuExpanded by remember { mutableStateOf(false) }
@@ -209,7 +208,7 @@ fun MaterialHomePage(
     val isNotePage = currentPageKey == HomeEntryKey.NOTE
     val homePageTitle = when {
         isTodayPage -> if (isWideNavigation) "今日" else "今日日程"
-        isNotePage -> if (isLegacyNoteMode) "普通便签" else "随口记"
+        isNotePage -> "随口记"
         else -> if (isWideNavigation) "全部" else "全部日程"
     }
 
@@ -240,7 +239,7 @@ fun MaterialHomePage(
                 if (!settings.isRecognitionConfigReady()) {
                     Log.w(
                         "WillDoRecognition",
-                        "home image rejected configReady=false multimodal=${settings.useMultimodalAi}"
+                        "home image rejected configReady=false multimodal=true"
                     )
                     Toast.makeText(context, settings.recognitionConfigMissingMessage(), Toast.LENGTH_SHORT).show()
                     return@launch
@@ -287,7 +286,7 @@ fun MaterialHomePage(
 
                 when (analysisResult) {
                     is AnalysisResult.Success -> {
-                        Toast.makeText(context, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, analysisResult.feedback(), Toast.LENGTH_LONG).show()
                     }
                     is AnalysisResult.Empty -> return@launch
                     is AnalysisResult.Failure -> return@launch
@@ -433,12 +432,6 @@ fun MaterialHomePage(
     LaunchedEffect(searchRequestId) {
         if (searchRequestId > 0) {
             isSearchMode = true
-        }
-    }
-
-    LaunchedEffect(currentPageKey) {
-        if (!isNotePage) {
-            isLegacyNoteMode = false
         }
     }
 
@@ -588,7 +581,6 @@ fun MaterialHomePage(
                             HomeTopBarActions(
                                 isTodayPage = isTodayPage,
                                 isNotePage = isNotePage,
-                                isLegacyNoteMode = isLegacyNoteMode,
                                 isWideNavigation = isWideNavigation,
                                 quickMemoCount = quickMemoCount,
                                 topBarIconSize = topBarIconSize,
@@ -674,7 +666,6 @@ fun MaterialHomePage(
                     ) { animatedPageKey ->
                     val animatedIsTodayPage = animatedPageKey == HomeEntryKey.TODAY
                     val animatedIsAllPage = animatedPageKey == HomeEntryKey.ALL
-                    val animatedIsNotePage = animatedPageKey == HomeEntryKey.NOTE
 
                     if (animatedIsTodayPage) {
                         // === 今日视图内容 ===
@@ -720,6 +711,7 @@ fun MaterialHomePage(
                                 haptics.click()
                                 onOpenWeatherDetail()
                             },
+                            onOpenAccounting = onOpenAccounting,
                             onOpenAccessibilitySettings = {
                                 context.startActivity(
                                     Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
@@ -746,16 +738,6 @@ fun MaterialHomePage(
                         ) {
                             allEventsContent(
                                 allSearchQuery,
-                                if (showSearchBar) searchBarOffset else 0.dp,
-                            )
-                        }
-                    } else if (animatedIsNotePage && isLegacyNoteMode) {
-                        AdaptiveListPageContainer(
-                            enabled = isWideNavigation,
-                            maxContentWidth = if (isTwoPane) 1120.dp else 960.dp,
-                        ) {
-                            noteListContent(
-                                noteSearchQuery,
                                 if (showSearchBar) searchBarOffset else 0.dp,
                             )
                         }
@@ -791,11 +773,7 @@ fun MaterialHomePage(
                     },
                     placeholder = when {
                         isAllPage -> "搜索标题、备注或地点..."
-                        isNotePage -> if (isLegacyNoteMode) {
-                            "搜索便签标题或正文..."
-                        } else {
-                            "搜索随口记正文..."
-                        }
+                        isNotePage -> "搜索随口记正文..."
                         else -> "搜索标题、备注或地点..."
                     },
                     onDismiss = { isSearchMode = false },
@@ -810,7 +788,7 @@ fun MaterialHomePage(
         PredictiveFloatingActionCard(
             visible = isImageImporting,
             title = "正在识别",
-            content = "OCR + AI 分析中...",
+            content = "多模态 AI 分析中...",
             confirmText = "处理中",
             dismissText = "取消",
             isDestructive = false,
@@ -867,6 +845,7 @@ private fun HomeTodayContent(
     notificationEnabled: Boolean,
     onSelectDate: (LocalDate) -> Unit,
     onOpenWeatherDetail: () -> Unit,
+    onOpenAccounting: (LocalDate, Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onAction: (HomePageUiAction) -> Unit,
@@ -893,6 +872,8 @@ private fun HomeTodayContent(
                 onOpenNotificationSettings = onOpenNotificationSettings,
             )
             homeAgendaItems(
+                monthlyAccounting = calendarViewMode == HomeCalendarViewMode.MONTH,
+                onOpenAccounting = onOpenAccounting,
                 state = state,
                 todayEvents = todayEvents,
                 tomorrowEvents = tomorrowEvents,
@@ -939,6 +920,8 @@ private fun HomeTodayContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 homeAgendaItems(
+                    monthlyAccounting = calendarViewMode == HomeCalendarViewMode.MONTH,
+                    onOpenAccounting = onOpenAccounting,
                     state = state,
                     todayEvents = todayEvents,
                     tomorrowEvents = tomorrowEvents,
@@ -993,6 +976,8 @@ private fun LazyListScope.homeCalendarPaneItems(
 
 private fun LazyListScope.homeAgendaItems(
     state: HomePageUiState,
+    monthlyAccounting: Boolean,
+    onOpenAccounting: (LocalDate, Boolean) -> Unit,
     todayEvents: List<ScheduleDisplayItem>,
     tomorrowEvents: List<ScheduleDisplayItem>,
     searchQuery: String,
@@ -1002,13 +987,19 @@ private fun LazyListScope.homeAgendaItems(
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit,
 ) {
     item {
-        SectionHeader(
+        AccountingSummaryHeader(
+            date = state.selectedDate,
+            onOpen = onOpenAccounting,
+            monthly = monthlyAccounting,
             title = if (state.selectedDate == state.today) {
                 "今日安排"
             } else {
                 "${state.selectedDate.monthValue}月${state.selectedDate.dayOfMonth}日 安排"
             },
-            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+            titleFontWeight = FontWeight.ExtraBold,
+            summaryFontWeight = FontWeight.ExtraBold,
+            hapticEnabled = state.settings.hapticFeedbackEnabled,
         )
     }
 
@@ -1078,7 +1069,6 @@ private fun HomeAgendaEventItem(
 private fun RowScope.HomeTopBarActions(
     isTodayPage: Boolean,
     isNotePage: Boolean,
-    isLegacyNoteMode: Boolean,
     isWideNavigation: Boolean,
     quickMemoCount: Int,
     topBarIconSize: Dp,
@@ -1160,13 +1150,13 @@ private fun RowScope.HomeTopBarActions(
                 items = buildList {
                     add(AppMenuItem("搜索", onSearch, Icons.Default.Search))
                     add(AppMenuItem("上传图片识别", onImage, Icons.Default.Image))
-                    if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
+                    if (isNotePage && quickMemoCount > 0) {
                         add(AppMenuItem("清空随口记", onClearQuickMemos, Icons.Default.DeleteSweep, destructive = true))
                     }
                 },
             )
         }
-    } else if (isNotePage && !isLegacyNoteMode && quickMemoCount > 0) {
+    } else if (isNotePage && quickMemoCount > 0) {
         IconButton(onClick = onClearQuickMemos) {
             Icon(
                 imageVector = Icons.Default.DeleteSweep,

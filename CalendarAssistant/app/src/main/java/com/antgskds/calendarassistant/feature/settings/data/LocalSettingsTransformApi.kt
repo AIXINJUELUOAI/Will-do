@@ -105,7 +105,8 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (autoArchive != null) updated = updated.copy(autoArchiveEnabled = autoArchive)
         if (recognitionMode != null) updated = updated.copy(recognitionMode = MySettings.normalizeRecognitionMode(recognitionMode))
         if (defaultEventDurationMinutes != null) updated = updated.copy(defaultEventDurationMinutes = defaultEventDurationMinutes)
-        if (useMultimodalAi != null) updated = updated.copy(useMultimodalAi = useMultimodalAi)
+        // 兼容旧调用方的参数，已下架的文本模式不能被重新启用。
+        if (useMultimodalAi != null) updated = updated.copy(useMultimodalAi = true)
         if (disableThinking != null) updated = updated.copy(disableThinking = disableThinking)
         if (localSemanticEnabled != null) updated = updated.copy(isLocalSemanticEnabled = localSemanticEnabled)
         if (selectedLocalModelId != null) updated = updated.copy(selectedLocalModelId = selectedLocalModelId)

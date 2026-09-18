@@ -41,6 +41,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatPaymentSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.PaymentDetailPolicy
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -48,6 +53,52 @@ class TextAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var analysisJob: Job? = null
+    private var automaticTriggerJob: Job? = null
+    private var wechatTriggerJob: Job? = null
+    private var detailTriggerJob: Job? = null
+    private var automaticRequest: AutomaticRequest? = null
+    private val automaticPolicy = AutomaticAccountingPolicy()
+    private val wechatSession = WechatPaymentSessionPolicy()
+    private val detailPolicy = PaymentDetailPolicy()
+    private sealed interface AutomaticRequest {
+        val packageName: String
+        data class Screen(val snapshot: PaymentWindowReader.Snapshot) : AutomaticRequest {
+            override val packageName get() = snapshot.packageName
+        }
+        data class WechatSuccess(val candidate: WechatPaymentSessionPolicy.Candidate) : AutomaticRequest {
+            override val packageName get() = AutomaticAccountingPolicy.WECHAT
+        }
+        data class Detail(val candidate: PaymentDetailPolicy.Candidate) : AutomaticRequest {
+            override val packageName get() = candidate.packageName
+        }
+    }
+    private val diagnosticTimes = mutableMapOf<String, Long>()
+    private val paymentDiagnostics by lazy { PaymentAccessibilityDiagnostics(this) { refreshKeyEventFiltering() } }
+
+    suspend fun startPaymentDiagnostics() {
+        check(!isAnalyzing.get()) { "请等待当前识别结束，再开始诊断" }
+        automaticTriggerJob?.cancel()
+        wechatTriggerJob?.cancel()
+        wechatSession.reset()
+        detailTriggerJob?.cancel()
+        detailPolicy.reset()
+        paymentDiagnostics.start()
+    }
+
+    suspend fun exportPaymentDiagnostics(): String =
+        paymentDiagnostics.finish("user_export")?.await()
+            ?: PaymentAccessibilityDiagnostics.exportLatest(applicationContext)
+
+    /** 高频阶段按固定阶段/来源键限流；内容只有判断结果，不带 UI 原文。主线程调用。 */
+    private fun logAutomatic(stage: String, detail: String, source: String = "", throttle: Boolean = false) {
+        if (throttle) {
+            val key = "$stage:$source"
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (diagnosticTimes[key]?.let { now - it < ConfigCatalog.AUTO_ACCOUNTING_DIAGNOSTIC_INTERVAL_MS } == true) return
+            diagnosticTimes[key] = now
+        }
+        Log.i("WillDoAccounting", "accessibility stage=$stage source=$source $detail")
+    }
 
     // 用于处理音量键长按的 Job
     private var volumeLongPressJob: Job? = null
@@ -98,12 +149,170 @@ class TextAccessibilityService : AccessibilityService() {
 
     private var launcherPackageName: String? = null
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-    override fun onInterrupt() {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        event ?: return
+        runCatching { paymentDiagnostics.onEvent(event) }
+            .onFailure { Log.w("WillDoPayDiag", "event capture error=${it.javaClass.simpleName}") }
+        if (paymentDiagnostics.isActive) return
+        val source = event.packageName?.toString().orEmpty()
+        val enabled = AutomaticAccountingPolicy.enabled(settingsQueryApi.settings.value)
+        if (!enabled) {
+            detailTriggerJob?.cancel()
+            detailPolicy.reset()
+            wechatSession.reset()
+            wechatTriggerJob?.cancel()
+            automaticTriggerJob?.cancel()
+            return
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val supportedSource = AutomaticAccountingPolicy.supports(source)
+        val foreground = if (supportedSource || event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            runCatching { PaymentWindowReader.readIdentity(rootInActiveWindow) }.getOrNull()
+        } else null
+        foreground?.let { detailPolicy.observeForeground(it.packageName, it.windowId) }
+        val eventIsForeground = foreground != null && foreground.packageName == source && foreground.windowId == event.windowId
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && eventIsForeground) {
+            wechatSession.observeWindow(source, event.className?.toString().orEmpty(), event.windowId, now)
+            detailPolicy.observeWindow(source, event.className?.toString().orEmpty(), event.windowId,
+                foregroundPackage = foreground.packageName, foregroundWindow = foreground.windowId)
+        }
+        // 不持有 event/source；事件文字与节点树是独立信息源，空树不代表没有成功信号。
+        if (supportedSource && eventIsForeground && event.eventType in setOf(
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_HOVER_ENTER, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED,
+                AccessibilityEvent.TYPE_ANNOUNCEMENT)) {
+            // source 只能当场读取；700ms 后再取 root 会丢掉微信本次刷新暴露的子树。
+            val eventSnapshot = runCatching { PaymentWindowReader.read(event.source) }
+                .onFailure { logAutomatic("detail_source", "reason=read_error", source, throttle = true) }.getOrNull()
+            if (eventSnapshot?.packageName == source && eventSnapshot.windowId == event.windowId) {
+                val ready = PaymentDetailPolicy.inspectReadiness(eventSnapshot.texts, eventSnapshot.editable)
+                if (ready.detail || ready.loading) logAutomatic("detail_content",
+                    "detail=${ready.detail} amount=${ready.amount} time=${ready.time} loading=${ready.loading} ready=${ready.ready}", source, throttle = true)
+                detailPolicy.claimTree(source, eventSnapshot.windowId, eventSnapshot.texts, eventSnapshot.editable,
+                    now, evidence = "event_source")?.let { candidate ->
+                    scheduleDetailRecognition(candidate)
+                    return
+                }
+            }
+            val texts = event.text.take(ConfigCatalog.AUTO_ACCOUNTING_MAX_NODES)
+                .map { it?.toString().orEmpty().take(ConfigCatalog.AUTO_ACCOUNTING_MAX_TEXT) } +
+                event.contentDescription?.toString().orEmpty().take(ConfigCatalog.AUTO_ACCOUNTING_MAX_TEXT)
+            detailPolicy.claimEvent(source, event.windowId, texts, now)?.let { candidate ->
+                scheduleDetailRecognition(candidate)
+                return
+            }
+            if (!detailPolicy.hasDetailContext(source)) wechatSession.claimSuccess(source, event.windowId, texts, now)?.let { candidate ->
+                logAutomatic("success_event", "type=${event.eventType} window=${candidate.windowId} session=${candidate.sessionId}", source)
+                automaticTriggerJob?.cancel()
+                wechatTriggerJob?.cancel()
+                // 独立等待，不被后续空树刷新或系统岛事件取消、无限重置。
+                wechatTriggerJob = serviceScope.launch {
+                    delay(ConfigCatalog.AUTO_ACCOUNTING_DEBOUNCE_MS.toLong())
+                    val request = AutomaticRequest.WechatSuccess(candidate)
+                    if (isAnalyzing.get() || !settingsQueryApi.settings.value.isRecognitionConfigReady()) {
+                        logAutomatic("gate", "reason=success_event_busy_or_config_missing", source)
+                        return@launch
+                    }
+                    if (!automaticPageStillValid(request, "success_event_ready")) return@launch
+                    val reservation = automaticPolicy.reserveWithReason(source, "wechat_session:${candidate.sessionId}", android.os.SystemClock.elapsedRealtime())
+                    logAutomatic("reservation", "route=success_event result=$reservation", source)
+                    if (reservation == AutomaticAccountingPolicy.Reservation.ACCEPTED) startRecognition(0.milliseconds, request)
+                }
+            }
+        }
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
+        val supported = AutomaticAccountingPolicy.supports(source)
+        // 只有支付应用事件能重置支付防抖；其他窗口变化交给截图前的前台校验处理。
+        if (!supported) return
+        if (automaticTriggerJob?.isActive == true) {
+            logAutomatic("debounce_cancel", "reason=${if (supported) "payment_window_event" else "other_window_event"}", throttle = true)
+        }
+        automaticTriggerJob?.cancel()
+        if (supported) logAutomatic("event", "type=${event.eventType} enabled=$enabled busy=${isAnalyzing.get()}", source, throttle = true)
+        if (!enabled) return
+        automaticTriggerJob = serviceScope.launch {
+            delay(ConfigCatalog.AUTO_ACCOUNTING_DEBOUNCE_MS.toLong())
+            val ready = settingsQueryApi.settings.value.isRecognitionConfigReady()
+            if (isAnalyzing.get() || !ready) {
+                logAutomatic("gate", "busy=${isAnalyzing.get()} configReady=$ready", source, throttle = true)
+                return@launch
+            }
+            val snapshot = readAutomaticWindow("screen", source) ?: return@launch
+            detailPolicy.claimTree(snapshot.packageName, snapshot.windowId, snapshot.texts, snapshot.editable,
+                android.os.SystemClock.elapsedRealtime())?.let { candidate ->
+                scheduleDetailRecognition(candidate, waitForPage = false)
+                return@launch
+            }
+            if (detailPolicy.isBlocked(snapshot.packageName, snapshot.windowId, snapshot.texts, snapshot.editable) ||
+                detailPolicy.hasDetailContext(snapshot.packageName) ||
+                (snapshot.packageName == AutomaticAccountingPolicy.WECHAT && wechatSession.hasClaimedSuccess())) return@launch
+            val check = AutomaticAccountingPolicy.inspectScreen(snapshot.packageName, snapshot.texts, snapshot.editable)
+            logAutomatic("screen", "activeSource=${snapshot.packageName} textCount=${snapshot.texts.size} eligible=${check.eligible} " +
+                "editable=${check.editable} excluded=${check.excludedMarker ?: "none"} success=${check.success} amount=${check.amount}", source, throttle = true)
+            if (!check.eligible) return@launch
+            if (!AutomaticAccountingPolicy.enabled(settingsQueryApi.settings.value)) {
+                logAutomatic("gate", "reason=disabled", source, throttle = true)
+                return@launch
+            }
+            val reservation = automaticPolicy.reserveWithReason(snapshot.packageName, snapshot.texts.joinToString("\n"), android.os.SystemClock.elapsedRealtime())
+            logAutomatic("reservation", "result=$reservation", source, throttle = reservation != AutomaticAccountingPolicy.Reservation.ACCEPTED)
+            if (reservation != AutomaticAccountingPolicy.Reservation.ACCEPTED) return@launch
+            startRecognition(0.milliseconds, AutomaticRequest.Screen(snapshot))
+        }
+    }
+
+    private fun scheduleDetailRecognition(candidate: PaymentDetailPolicy.Candidate, waitForPage: Boolean = true) {
+        // 与成功事件共用模型入口，详情信号优先，确保不会把历史账单按当前时间入库。
+        wechatTriggerJob?.cancel()
+        detailTriggerJob?.cancel()
+        logAutomatic("detail_signal", "evidence=${candidate.evidence} window=${candidate.windowId} visit=${candidate.visit}", candidate.packageName)
+        detailTriggerJob = serviceScope.launch {
+            if (waitForPage) delay(ConfigCatalog.AUTO_ACCOUNTING_DEBOUNCE_MS.toLong())
+            if (isAnalyzing.get() || !settingsQueryApi.settings.value.isRecognitionConfigReady()) {
+                logAutomatic("gate", "reason=detail_busy_or_config_missing", candidate.packageName)
+                return@launch
+            }
+            val request = AutomaticRequest.Detail(candidate)
+            if (!automaticPageStillValid(request, "detail_ready")) return@launch
+            // root 仍可能为空，使用就绪时的内容摘要排重；不退回窗口号，避免吞掉同窗另一笔交易。
+            val identity = "detail_content:${candidate.contentFingerprint}"
+            val reservation = automaticPolicy.reserveWithReason(candidate.packageName, identity, android.os.SystemClock.elapsedRealtime())
+            logAutomatic("reservation", "route=detail result=$reservation", candidate.packageName)
+            if (reservation == AutomaticAccountingPolicy.Reservation.ACCEPTED) startRecognition(0.milliseconds, request)
+        }
+    }
+
+    override fun onInterrupt() {
+        paymentDiagnostics.finish("service_interrupted")
+        logAutomatic("service", "state=interrupted")
+        detailTriggerJob?.cancel()
+        detailPolicy.reset()
+        wechatTriggerJob?.cancel()
+        wechatSession.reset()
+        automaticTriggerJob?.cancel(); cancelCurrentAnalysis()
+    }
+
+    private fun readAutomaticWindow(stage: String, source: String): PaymentWindowReader.Snapshot? {
+        return try {
+            val root = rootInActiveWindow
+            if (root == null) {
+                logAutomatic(stage, "reason=no_active_root", source, throttle = true)
+                null
+            } else {
+                PaymentWindowReader.read(root).also {
+                    if (it == null) logAutomatic(stage, "reason=active_app_not_supported", source, throttle = true)
+                }
+            }
+        } catch (e: Exception) {
+            logAutomatic(stage, "reason=read_error error=${e.javaClass.simpleName}", source, throttle = true)
+            null
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        logAutomatic("service", "state=connected")
         lastConnectedAt = System.currentTimeMillis()
         launcherPackageName = getLauncherPackageName()
         baseAccessibilityFlags = serviceInfo?.flags?.and(AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv())
@@ -118,8 +327,21 @@ class TextAccessibilityService : AccessibilityService() {
     private fun subscribeKeyFilterSettings() {
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = serviceScope.launch {
+            var previousAutomaticEnabled: Boolean? = null
             settingsQueryApi.settings.collect {
                 refreshKeyEventFiltering()
+                if (previousAutomaticEnabled != it.automaticAccountingEnabled) {
+                    previousAutomaticEnabled = it.automaticAccountingEnabled
+                    logAutomatic("settings", "enabled=${it.automaticAccountingEnabled} configReady=${it.isRecognitionConfigReady()}")
+                }
+                if (!AutomaticAccountingPolicy.enabled(it)) {
+                    detailTriggerJob?.cancel()
+                    detailPolicy.reset()
+                    automaticTriggerJob?.cancel()
+                    wechatTriggerJob?.cancel()
+                    wechatSession.reset()
+                    if (automaticRequest != null) cancelCurrentAnalysis()
+                }
             }
         }
     }
@@ -128,7 +350,7 @@ class TextAccessibilityService : AccessibilityService() {
         val info = serviceInfo ?: return
         val baseFlags = baseAccessibilityFlags ?: info.flags.and(AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv())
         val shouldFilterKeys = shouldFilterVolumeUpKeys()
-        val nextFlags = if (shouldFilterKeys) {
+        val keyFlags = if (shouldFilterKeys) {
             baseFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
         } else {
             volumeLongPressJob?.cancel()
@@ -137,6 +359,9 @@ class TextAccessibilityService : AccessibilityService() {
             isVolumeUpPressed = false
             baseFlags
         }
+        val nextFlags = if (paymentDiagnostics.isActive) keyFlags or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        else keyFlags
 
         if (info.flags != nextFlags) {
             info.flags = nextFlags
@@ -407,6 +632,14 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        paymentDiagnostics.finish("service_unbound")
+        logAutomatic("service", "state=unbound")
+        detailTriggerJob?.cancel()
+        detailPolicy.reset()
+        automaticTriggerJob?.cancel()
+        wechatTriggerJob?.cancel()
+        wechatSession.reset()
+        cancelCurrentAnalysis()
         instance = null
         lastDisconnectedAt = System.currentTimeMillis()
         recognitionFailedSubscriptionJob?.cancel()
@@ -421,6 +654,7 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        paymentDiagnostics.finish("service_destroyed")
         instance = null
         lastDisconnectedAt = System.currentTimeMillis()
         recognitionFailedSubscriptionJob?.cancel()
@@ -431,6 +665,7 @@ class TextAccessibilityService : AccessibilityService() {
         ingestFailedSubscriptionJob = null
         keyFilterSettingsJob?.cancel()
         keyFilterSettingsJob = null
+        cancelCurrentAnalysis()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -443,9 +678,9 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     fun cancelCurrentAnalysis() {
+        if (automaticRequest != null) logAutomatic("cancel", "reason=cancel_requested")
         analysisJob?.cancel()
-        analysisJob = null
-        isAnalyzing.set(false)
+        // 由任务 finally 释放互斥；取消旧任务后不能提前放行新截图。
         cancelProgressNotification()
     }
 
@@ -517,20 +752,43 @@ class TextAccessibilityService : AccessibilityService() {
             "accessibility start requested delayMs=${delayDuration.inWholeMilliseconds} " +
                 "shortcut=$fromShortcut connected=${isConnected()} busy=${isAnalyzing.get()}"
         )
+        startRecognition(delayDuration, null)
+    }
+
+    private fun startRecognition(delayDuration: Duration, automatic: AutomaticRequest?) {
+        if (paymentDiagnostics.isActive) {
+            Log.i("WillDoPayDiag", "recognition skipped: diagnostic session active")
+            return
+        }
         if (!isAnalyzing.compareAndSet(false, true)) {
+            if (automatic != null) logAutomatic("gate", "reason=busy_before_start", automatic.packageName)
             Log.d(TAG, "已有分析任务在执行中，跳过本次请求")
             return
         }
-        analysisJob?.cancel()
-        analysisJob = serviceScope.launch {
+        automaticRequest = automatic
+        if (automatic != null) logAutomatic("start", "accepted=true", automatic.packageName)
+        analysisJob = serviceScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 delay(delayDuration)
+                if (automatic != null && !automaticPageStillValid(automatic, "before_screenshot")) return@launch
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    takeScreenshotAndAnalyze()
+                    takeScreenshotAndAnalyze(automatic)
                 } else {
                     showResultNotification(SystemNormalDisplay.androidVersionTooLow(), useOcrCapsule = true)
                 }
+            } catch (e: TimeoutCancellationException) {
+                if (automatic != null) logAutomatic("finish", "reason=timeout", automatic.packageName)
+                cancelProgressNotification()
+                if (automatic == null) showResultNotification(RecognitionNormalDisplay.screenshotFailed("截图超时，请重试"), useOcrCapsule = true)
+            } catch (e: Exception) {
+                if (automatic != null) logAutomatic("finish", "reason=${if (e is CancellationException) "cancelled" else "error"} error=${e.javaClass.simpleName}", automatic.packageName)
+                cancelProgressNotification()
+                if (e is CancellationException) throw e
+                Log.w(RECOGNITION_LOG_TAG, "截图任务失败: ${e.javaClass.simpleName}")
+                if (automatic == null) showResultNotification(RecognitionNormalDisplay.screenshotFailed("截图失败，请重试"), useOcrCapsule = true)
             } finally {
+                if (automatic != null) logAutomatic("task_end", "busyReleased=true", automatic.packageName)
+                automaticRequest = null
                 isAnalyzing.set(false)
             }
         }
@@ -542,39 +800,72 @@ class TextAccessibilityService : AccessibilityService() {
      * ⚠️ 注意：takeScreenshot() 必须在主线程调用（系统要求）
      * 但分析工作 (processScreenshot) 会在后台线程执行，避免阻塞主线程
      */
-    private fun takeScreenshotAndAnalyze() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    private fun automaticPageStillValid(expected: AutomaticRequest, phase: String): Boolean {
+        if (!AutomaticAccountingPolicy.enabled(settingsQueryApi.settings.value)) {
+            logAutomatic(phase, "reason=disabled", expected.packageName)
+            return false
+        }
+        val current = readAutomaticWindow(phase, expected.packageName) ?: return false
+        if (expected is AutomaticRequest.Detail) {
+            val valid = detailPolicy.isValid(expected.candidate, current.packageName, current.windowId, current.texts,
+                current.editable, android.os.SystemClock.elapsedRealtime())
+            logAutomatic(phase, "route=detail window=${current.windowId} valid=$valid", expected.packageName)
+            return valid
+        }
+        // 原成功入口不能在截图时变成详情页，否则其缺失时间回填规则会污染历史账单。
+        if (detailPolicy.hasDetailContext(current.packageName) || PaymentDetailPolicy.hasDetailMarker(current.texts) ||
+            detailPolicy.isBlocked(current.packageName, current.windowId, current.texts, current.editable)) return false
+        if (expected is AutomaticRequest.WechatSuccess) {
+            val valid = wechatSession.isValid(expected.candidate, current.packageName, current.windowId, android.os.SystemClock.elapsedRealtime())
+            logAutomatic(phase, "route=success_event window=${current.windowId} valid=$valid", expected.packageName)
+            return valid
+        }
+        val unchanged = current.fingerprint == (expected as AutomaticRequest.Screen).snapshot.fingerprint
+        val valid = current.eligible && unchanged
+        logAutomatic(phase, "eligible=${current.eligible} unchanged=$unchanged valid=$valid", expected.packageName)
+        return valid
+    }
 
-        // ✅ 主线程调用 takeScreenshot（系统要求）
-        takeScreenshot(
+    private suspend fun takeScreenshotAndAnalyze(automatic: AutomaticRequest?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (automatic != null) logAutomatic("screenshot", "state=requested", automatic.packageName)
+        val screenshot = withTimeout(ConfigCatalog.RECOGNITION_SCREENSHOT_TIMEOUT_MS.toLong()) {
+            suspendCancellableCoroutine<ScreenshotResult> { continuation ->
+                takeScreenshot(
             Display.DEFAULT_DISPLAY,
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshotResult: ScreenshotResult) {
-                    Log.i(RECOGNITION_LOG_TAG, "accessibility screenshot captured")
-                    showProgressNotification(RecognitionNormalDisplay.analyzing())
-                    // ✅ 将耗时的分析工作移到后台线程
-                    analysisJob = serviceScope.launch(Dispatchers.IO) {
-                        processScreenshot(screenshotResult)
-                    }
+                    if (automatic != null) logAutomatic("screenshot", "state=success active=${continuation.isActive}", automatic.packageName)
+                    if (!continuation.isActive) { screenshotResult.hardwareBuffer.close(); return }
+                    continuation.resume(screenshotResult, onCancellation = { _, result, _ -> result.hardwareBuffer.close() })
                 }
                 override fun onFailure(errorCode: Int) {
-                    Log.e(RECOGNITION_LOG_TAG, "accessibility screenshot failed code=$errorCode")
-                    Log.w(TAG, "takeScreenshot 失败: code=$errorCode")
-                    showResultNotification(RecognitionNormalDisplay.screenshotFailed(buildScreenshotFailureContent(errorCode)), useOcrCapsule = true)
+                    if (automatic != null) logAutomatic("screenshot", "state=failed errorCode=$errorCode", automatic.packageName)
+                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException("screenshot:$errorCode"))
                 }
             }
         )
+            }
+        }
+        try {
+            if (automatic != null && !automaticPageStillValid(automatic, "after_screenshot")) return
+            showProgressNotification(
+                if (automatic != null) RecognitionNormalDisplay.analyzingAccounting()
+                else RecognitionNormalDisplay.analyzing()
+            )
+            withContext(Dispatchers.IO) { processScreenshot(screenshot, automatic) }
+        } finally { screenshot.hardwareBuffer.close() }
     }
 
-    private suspend fun processScreenshot(result: ScreenshotResult) {
+    private suspend fun processScreenshot(result: ScreenshotResult, automatic: AutomaticRequest?) {
+        var ownedBitmap: Bitmap? = null
         try {
             val hardwareBuffer = result.hardwareBuffer
             val colorSpace = result.colorSpace
             val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
             if (bitmap == null) {
                 Log.e(RECOGNITION_LOG_TAG, "accessibility hardware bitmap wrap failed")
-                hardwareBuffer.close()
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
                     showResultNotification(RecognitionNormalDisplay.screenshotProcessFailed(), useOcrCapsule = true, durationMs = 8000L)
@@ -587,11 +878,10 @@ class TextAccessibilityService : AccessibilityService() {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val imageFile = File(imagesDir, "IMG_$timestamp.jpg")
 
-            val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-            bitmap.recycle()
-            hardwareBuffer.close()
+            val softwareBitmap = try { bitmap.copy(Bitmap.Config.ARGB_8888, true) } finally { bitmap.recycle() }
+            ownedBitmap = softwareBitmap
 
-            FileOutputStream(imageFile).use { out ->
+            if (automatic == null) FileOutputStream(imageFile).use { out ->
                 softwareBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
             }
 
@@ -599,7 +889,7 @@ class TextAccessibilityService : AccessibilityService() {
             if (!settings.isRecognitionConfigReady()) {
                 Log.w(
                     RECOGNITION_LOG_TAG,
-                    "accessibility image rejected configReady=false multimodal=${settings.useMultimodalAi}"
+                    "accessibility image rejected configReady=false multimodal=true"
                 )
                 withContext(Dispatchers.Main) {
                     cancelProgressNotification()
@@ -614,9 +904,12 @@ class TextAccessibilityService : AccessibilityService() {
                 RECOGNITION_LOG_TAG,
                 "accessibility dispatching recognition trace=$traceId " +
                     "size=${softwareBitmap.width}x${softwareBitmap.height} " +
-                    "multimodal=${settings.useMultimodalAi}"
+                    "multimodal=true"
             )
-            val analysisResult = app.recognitionCenter.analyzeImage(
+            val analysisResult = if (automatic != null) app.recognitionApi.analyzeAutomaticAccountingImage(
+                softwareBitmap, settings, applicationContext, automatic.packageName, traceId,
+                isDetailPage = automatic is AutomaticRequest.Detail
+            ) else app.recognitionApi.analyzeImage(
                 bitmap = softwareBitmap,
                 settings = settings,
                 context = applicationContext,
@@ -627,10 +920,31 @@ class TextAccessibilityService : AccessibilityService() {
                 traceId = traceId
             )
             softwareBitmap.recycle()
+            if (automatic != null) {
+                Log.i("WillDoAccounting", "accessibility stage=result source=${automatic.packageName} trace=$traceId result=${analysisResult.javaClass.simpleName}")
+                withContext(Dispatchers.Main) {
+                    // 先结束进度，再展示失败；任务 finally 不能清掉刚发布的结果胶囊。
+                    cancelProgressNotification()
+                    if (analysisResult is AnalysisResult.Failure) {
+                        showResultNotification("自动记账失败", analysisResult.failure.fullMessage(), useOcrCapsule = true)
+                    }
+                }
+                return
+            }
 
             withContext(Dispatchers.Main) {
                 when (analysisResult) {
                     is AnalysisResult.Success -> {
+                        if (analysisResult.accountingResult != null) {
+                            // 记账结果已独立展示；只清理识别进度，避免普通结果覆盖金额。
+                            cancelProgressNotification()
+                            return@withContext
+                        }
+                        if (analysisResult.bills.isNotEmpty() || analysisResult.billIssues.isNotEmpty()) {
+                            cancelProgressNotification()
+                            showResultNotification("识别完成", analysisResult.feedback(), useOcrCapsule = true, durationMs = 8000L)
+                            return@withContext
+                        }
                         val validEvents = analysisResult.data.filter { it.title.isNotBlank() }
                         if (validEvents.isEmpty()) {
                             cancelProgressNotification()
@@ -660,6 +974,8 @@ class TextAccessibilityService : AccessibilityService() {
                 cancelProgressNotification()
                 showResultNotification(RecognitionNormalDisplay.analysisError(e.message), useOcrCapsule = true, durationMs = 8000L)
             }
+        } finally {
+            ownedBitmap?.let { if (!it.isRecycled) it.recycle() }
         }
     }
 

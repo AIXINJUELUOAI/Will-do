@@ -11,6 +11,7 @@ interface PreferenceUiController {
     val availableSyncCalendars: StateFlow<List<CalendarManager.CalendarInfo>>
 
     fun refreshSyncStatus()
+    fun updateAutomaticAccounting(enabled: Boolean)
     fun refreshSyncCalendars()
     fun toggleCalendarSync(enabled: Boolean)
     fun enableCalendarSyncAndSyncNow(callback: suspend (Result<Unit>) -> Unit = {})

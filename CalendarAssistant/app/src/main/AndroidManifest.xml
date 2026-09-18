@@ -55,6 +55,11 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
 
+    <queries>
+        <package android:name="com.tencent.mm" />
+        <package android:name="com.eg.android.AlipayGphone" />
+    </queries>
+
     <application
         android:name=".App"
         android:allowBackup="true"
@@ -74,13 +79,19 @@
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="Will do 超级岛支持" />
+            android:value="Will do 超级岛与自动记账支持" />
         <meta-data
             android:name="xposedminversion"
             android:value="82" />
         <meta-data
             android:name="xposedscope"
-            android:value="com.antgskds.calendarassistant;com.android.systemui" />
+            android:value="com.antgskds.calendarassistant;com.android.systemui;com.tencent.mm;com.eg.android.AlipayGphone" />
+
+        <!-- 支付应用 Hook 入口：Provider 内用 Binder UID 验证来源，关闭总开关即拒绝采集。 -->
+        <provider
+            android:name=".platform.accounting.PaymentCaptureProvider"
+            android:authorities="com.antgskds.calendarassistant.payment.capture"
+            android:exported="true" />
 
         <!-- Flyme 实况通知支持 -->
         <meta-data

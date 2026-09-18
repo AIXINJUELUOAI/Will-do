@@ -112,7 +112,7 @@ object DebugActionRegistry {
         DebugAction("capsule:on", "实况胶囊：开", CATEGORY_CAPSULE) { app -> setCapsule(app, true) },
         DebugAction("capsule:off", "实况胶囊：关", CATEGORY_CAPSULE) { app -> setCapsule(app, false) },
         // —— 胶囊测试（迁自实验室「实况胶囊」段；与旧 chip 同实现，gate 于实况胶囊开关）——
-        DebugAction("test-capsule-ocr", "测试胶囊·OCR 进度", CATEGORY_CAPSULE) { app -> fireOcrProgress(app) },
+        DebugAction("test-capsule-ocr", "测试胶囊·识别进度", CATEGORY_CAPSULE) { app -> fireOcrProgress(app) },
         DebugAction("test-capsule-recognition-1", "测试胶囊·识别成功", CATEGORY_CAPSULE) { app -> fireRecognitionSuccess(app, 1) },
         DebugAction("test-capsule-recognition-2", "测试胶囊·识别成功 x2", CATEGORY_CAPSULE) { app -> fireRecognitionSuccess(app, 2) },
         DebugAction("test-capsule-recognition-fail", "测试胶囊·识别失败", CATEGORY_CAPSULE) { app -> fireRecognitionFailure(app) },
@@ -148,6 +148,9 @@ object DebugActionRegistry {
             deleteTestEvents(app)
         },
         // —— 元 ——
+        // 单次实验会自动结束并导出；日志与截图用于区分窗口、时序、触发规则和截图限制。
+        DebugAction("payment-diagnostic-start", "开始支付采集诊断（2 分钟）", "支付诊断") { app -> app.startPaymentDiagnostics() },
+        DebugAction("payment-diagnostic-export", "结束并导出支付诊断", "支付诊断") { app -> app.exportPaymentDiagnostics() },
         DebugAction("actions", "列出已注册调试动作", CATEGORY_META) { _ -> listActions() },
         DebugAction("verify-sort", "验证列表排序方向（正序/倒序对比）", CATEGORY_META) { app -> verifySort(app) },
         DebugAction("registry-check", "自检所有注册台账（页面/通知类型/事件类型/配置/调试动作/流程/工具/策略/后台任务）", CATEGORY_META) { _ -> registryCheck() },
@@ -750,7 +753,7 @@ object DebugActionRegistry {
 
     private fun fireOcrProgress(app: App) {
         if (!liveCapsuleReady(app)) return
-        app.capsuleCenter.showOcrProgress(title = "正在分析截图", content = "调试：OCR 识别中，预计数秒后完成。")
+        app.capsuleCenter.showOcrProgress(title = "正在分析截图", content = "调试：AI 识别中，预计数秒后完成。")
         Log.d(DEBUG_TAG, "capsule ocr-progress fired")
     }
 

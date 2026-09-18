@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAl
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 
 interface CapsuleCommandApi {
+    fun showAccountingResult(display: com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel)
     fun forceRefresh()
     fun updateNetworkSpeed(speed: NetworkSpeedMonitor.NetworkSpeed?)
     fun showOcrProgress(

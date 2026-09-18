@@ -18,7 +18,8 @@ data class CapsuleDisplayModel(
     val tapEventId: String? = null,
     val tapQuickMemoId: String? = null,
     val action: CapsuleActionSpec? = null,
-    val actions: List<CapsuleActionSpec> = emptyList()
+    val actions: List<CapsuleActionSpec> = emptyList(),
+    val tapOpensAccounting: Boolean = false,
 ) {
     val effectiveActions: List<CapsuleActionSpec>
         get() = actions.ifEmpty { action?.let(::listOf).orEmpty() }

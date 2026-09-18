@@ -19,6 +19,15 @@ class Database17CompatibilityTest {
     @Test
     fun version16KeepsAccountingRowsAndNotes() = verifyUpgrade(16)
 
+    @Test
+    fun version17AddsDraftsAndKeepsAccountingRows() = verifyUpgrade(17)
+
+    @Test
+    fun version18PreservesDraftsAndMarksOldTransactionTypesUnknown() = verifyUpgrade(18)
+
+    @Test
+    fun version19AddsNullableScreenshotsWithoutChangingBillsOrDrafts() = verifyUpgrade(19)
+
     private fun verifyUpgrade(oldVersion: Int) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "database17-test-${UUID.randomUUID()}.db"
@@ -26,7 +35,7 @@ class Database17CompatibilityTest {
             val builder = Room.databaseBuilder(context, EventsDatabase::class.java, name)
                 .allowMainThreadQueries()
             if (withMigrations) {
-                builder.addMigrations(EventsDatabase.MIGRATION_15_17, EventsDatabase.MIGRATION_16_17)
+                builder.addMigrations(EventsDatabase.MIGRATION_15_17, EventsDatabase.MIGRATION_16_17, EventsDatabase.MIGRATION_17_18, EventsDatabase.MIGRATION_18_19, EventsDatabase.MIGRATION_19_20)
             }
             return builder.build()
         }
@@ -35,18 +44,28 @@ class Database17CompatibilityTest {
             val fixture = openDatabase(withMigrations = false)
             try {
                 val db = fixture.openHelper.writableDatabase
+                db.execSQL("DROP TABLE accounting_drafts")
+                db.execSQL("DROP TABLE accounting_entries")
                 db.execSQL("""INSERT INTO notes (id, title, plain_text, document_json, created_at, updated_at)
                     VALUES (1, 'keep-note', 'keep-body', '{}', 1, 1)""".trimIndent())
-                if (oldVersion == 15) {
-                    // 15 与 16 的业务表一致，唯一差别是 15 尚无记账表。
-                    db.execSQL("DROP TABLE accounting_entries")
-                } else {
+                if (oldVersion >= 16) {
+                    // 重新建立真实旧结构，避免当前版本新增列混入旧版本测试夹具。
+                    EventsDatabase.MIGRATION_15_17.migrate(db)
                     db.execSQL("""INSERT INTO accounting_entries
                         (id, amountMinor, direction, currency, merchant, category, note, occurredAt,
                          zoneId, source, channel, transactionId, status, ruleId, createdAt, updatedAt)
                         VALUES ('keep-entry', 1234, 'EXPENSE', 'CNY', 'test', 'other', '', 1,
                                 'Asia/Shanghai', 'MANUAL', '', '', 'CONFIRMED', '', 1, 1)""".trimIndent())
                 }
+                if (oldVersion >= 18) {
+                    EventsDatabase.MIGRATION_17_18.migrate(db)
+                    db.execSQL("""INSERT INTO accounting_drafts
+                        (id, amount, direction, currency, merchant, category, note, occurredAt, zoneId,
+                         channel, transactionId, paymentStatus, sourceType, sourceId, createdAt)
+                        VALUES ('keep-draft', '35.00', 'EXPENSE', 'CNY', '午饭', '', '', '', '',
+                                '微信支付', 'old-id', 'COMPLETED', 'image', 'test', 1)""".trimIndent())
+                }
+                if (oldVersion >= 19) EventsDatabase.MIGRATION_18_19.migrate(db)
                 db.execSQL("UPDATE room_master_table SET identity_hash = 'old-version-fixture' WHERE id = 42")
                 db.version = oldVersion
             } finally {
@@ -58,7 +77,10 @@ class Database17CompatibilityTest {
                 val upgraded = openDatabase(withMigrations = true)
                 try {
                     val db = upgraded.openHelper.writableDatabase
-                    assertEquals(17, db.version)
+                    assertEquals(20, db.version)
+                    db.query("SELECT COUNT(*) FROM accounting_drafts").use { cursor ->
+                        assertTrue(cursor.moveToFirst()); assertEquals(if (oldVersion >= 18) 1 else 0, cursor.getInt(0))
+                    }
                     db.query("SELECT title, plain_text FROM notes WHERE id = 1").use { cursor ->
                         assertTrue(cursor.moveToFirst())
                         assertEquals("keep-note", cursor.getString(0))
@@ -66,12 +88,22 @@ class Database17CompatibilityTest {
                     }
                     db.query("SELECT COUNT(*) FROM accounting_entries").use { cursor ->
                         assertTrue(cursor.moveToFirst())
-                        assertEquals(if (oldVersion == 16) 1 else 0, cursor.getInt(0))
+                        assertEquals(if (oldVersion >= 16) 1 else 0, cursor.getInt(0))
                     }
-                    if (oldVersion == 16) {
-                        db.query("SELECT amountMinor FROM accounting_entries WHERE id = 'keep-entry'").use { cursor ->
+                    if (oldVersion >= 16) {
+                        db.query("SELECT amountMinor, transactionIdType, sourceImagePath FROM accounting_entries WHERE id = 'keep-entry'").use { cursor ->
                             assertTrue(cursor.moveToFirst())
                             assertEquals(1234L, cursor.getLong(0))
+                            assertEquals("UNKNOWN", cursor.getString(1))
+                            assertTrue(cursor.isNull(2))
+                        }
+                    }
+                    if (oldVersion >= 18) {
+                        db.query("SELECT transactionId, transactionIdType, sourceImagePath FROM accounting_drafts WHERE id = 'keep-draft'").use { cursor ->
+                            assertTrue(cursor.moveToFirst())
+                            assertEquals("old-id", cursor.getString(0))
+                            assertEquals("UNKNOWN", cursor.getString(1))
+                            assertTrue(cursor.isNull(2))
                         }
                     }
                 } finally {

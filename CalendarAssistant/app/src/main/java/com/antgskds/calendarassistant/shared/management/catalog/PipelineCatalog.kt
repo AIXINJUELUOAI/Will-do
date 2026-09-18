@@ -55,6 +55,11 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理诊断会话、即时/延迟采样、独立截图与限量导出，结束恢复服务配置"),
+        PipelineEntry("自动支付识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", Maturity.PIPELINE, "自动截图仅提取账单，详情入口要求单笔及真实时间；Hook 消息本地解析，开关二次校验后复用入库与反馈"),
+        PipelineEntry("账单识别入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "识别账单事务内逐条校验并自动入账，明确重复不写入，疑似重复与缺失字段暂存待核对；成功后经独立短时胶囊反馈实际金额"),
+        PipelineEntry("账单文件导入确认", Chain.INGEST, "feature/accounting/ui/AccountingViewModel", Maturity.PIPELINE, "后台解析文件并展示诊断，经用户确认后委派 IngestCommandApi，维护重选取消与入库状态"),
+        PipelineEntry("账单导入入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "IngestCommandApi 统一委派账单批次写入；同平台交易号去重；手动新增、编辑、软删除统一经入库契约，保留删除标记，事务失败整体回滚"),
         PipelineEntry("随口记提醒生命周期", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "维护多个提醒的保存、删除、重排、触发及重复推进；发布经 NotificationApi"),
         PipelineEntry("随口记提醒通知桥接", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoReminderNotificationBridge", Maturity.PIPELINE, "到期随口记经 NotificationApi 按胶囊开关分流，只有 POSTED 才完成本次提醒"),
         PipelineEntry("随口记提醒闹钟调度", Chain.NOTIFICATION, "platform/notification/alarm/QuickMemoReminderScheduler", Maturity.PIPELINE, "统一安装及取消随口记闹钟，精确权限不可用时回退非精确调度"),

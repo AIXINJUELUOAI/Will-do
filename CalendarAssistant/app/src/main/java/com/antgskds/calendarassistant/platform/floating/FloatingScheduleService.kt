@@ -1355,8 +1355,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
             }
             bitmap.recycle()
             when (result) {
-                is AnalysisResult.Success -> Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
-                is AnalysisResult.Empty -> Unit
+                is AnalysisResult.Success -> Toast.makeText(applicationContext, result.feedback(), Toast.LENGTH_LONG).show()
+                is AnalysisResult.Empty -> Toast.makeText(applicationContext, result.message, Toast.LENGTH_LONG).show()
                 is AnalysisResult.Failure -> Unit
             }
             finishPendingImagePick()
@@ -1415,8 +1415,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         )
                     }
                     when (result) {
-                        is AnalysisResult.Success -> Toast.makeText(applicationContext, "识别完成，正在保存...", Toast.LENGTH_SHORT).show()
-                        is AnalysisResult.Empty -> Unit
+                        is AnalysisResult.Success -> Toast.makeText(applicationContext, result.feedback(), Toast.LENGTH_LONG).show()
+                        is AnalysisResult.Empty -> Toast.makeText(applicationContext, result.message, Toast.LENGTH_LONG).show()
                         is AnalysisResult.Failure -> Unit
                     }
                 }

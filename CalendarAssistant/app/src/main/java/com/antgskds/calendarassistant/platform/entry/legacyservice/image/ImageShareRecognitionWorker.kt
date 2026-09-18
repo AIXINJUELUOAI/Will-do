@@ -56,10 +56,9 @@ class ImageShareRecognitionWorker(
                 traceId = EventIdentity.newTraceId("image_share")
             )) {
                 is AnalysisResult.Success -> {
-                    val count = result.data.size
                     showResult(
                         title = "识别完成",
-                        content = if (count > 0) "已识别 $count 个日程，正在保存" else "未识别到有效日程",
+                        content = result.feedback(),
                         durationMs = 5000L
                     )
                 }

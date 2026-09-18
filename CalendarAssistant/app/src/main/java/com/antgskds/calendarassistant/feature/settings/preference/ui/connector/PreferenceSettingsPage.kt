@@ -75,6 +75,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 enum class PreferenceSection {
+    ACCOUNTING,
     DISPLAY,
     QUICK_MEMO,
     OPERATION,
@@ -390,6 +391,19 @@ fun MaterialPreferenceSettingsScreen(
                 .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (PreferenceSection.ACCOUNTING in visibleSections) {
+                Text("记账", style = sectionTitleStyle)
+                SettingsCard {
+                    SwitchSettingItem(
+                        title = "自动记账",
+                        subtitle = "自动捕获支付信息",
+                        checked = settings.automaticAccountingEnabled,
+                        onCheckedChange = controller::updateAutomaticAccounting,
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                    )
+                }
+            }
             // ================== 显示板块 ==================
             if (PreferenceSection.DISPLAY in visibleSections) {
             Text("显示", style = sectionTitleStyle)
@@ -1200,19 +1214,6 @@ fun MaterialPreferenceSettingsScreen(
 
                     AppSettingsDivider()
 
-                    SwitchSettingItem(
-                        title = "使用多模态AI",
-                        subtitle = "开启后图片识别将使用多模态模型",
-                        checked = settings.useMultimodalAi,
-                        onCheckedChange = { isChecked ->
-                            controller.updatePreference(useMultimodalAi = isChecked)
-                            showToast(if (isChecked) "已切换为多模态AI" else "已切换为文本AI")
-                        },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle
-                    )
-
-                    AppSettingsDivider()
                     SwitchSettingItem(
                         title = "关闭思考",
                         subtitle = "仅适配 OpenAI",

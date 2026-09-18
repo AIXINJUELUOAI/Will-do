@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.migrateToMultimodalConfig
 import com.antgskds.calendarassistant.feature.settings.data.model.RecognitionMode
 
 data class AiModelConfig(
@@ -11,34 +12,20 @@ data class AiModelConfig(
 )
 
 fun MySettings.activeAiConfig(): AiModelConfig {
-    return if (useMultimodalAi) {
-        AiModelConfig(
-            key = mmModelKey.trim(),
-            name = mmModelName.trim(),
-            url = mmModelUrl.trim(),
-            isMultimodal = true
-        )
-    } else {
-        AiModelConfig(
-            key = modelKey.trim(),
-            name = modelName.trim(),
-            url = modelUrl.trim(),
-            isMultimodal = false
-        )
-    }
+    val settings = migrateToMultimodalConfig()
+    return AiModelConfig(
+        key = settings.mmModelKey.trim(),
+        name = settings.mmModelName.trim(),
+        url = settings.mmModelUrl.trim(),
+        isMultimodal = true
+    )
 }
 
 fun AiModelConfig.isConfigured(): Boolean {
     return key.isNotBlank() && url.isNotBlank() && name.isNotBlank()
 }
 
-fun AiModelConfig.missingConfigMessage(): String {
-    return if (isMultimodal) {
-        "请先填写多模态AI配置"
-    } else {
-        "请先填写文本AI配置"
-    }
-}
+fun AiModelConfig.missingConfigMessage(): String = "请先配置支持图片输入的多模态模型"
 
 fun MySettings.isRecognitionConfigReady(): Boolean {
     return activeAiConfig().isConfigured()

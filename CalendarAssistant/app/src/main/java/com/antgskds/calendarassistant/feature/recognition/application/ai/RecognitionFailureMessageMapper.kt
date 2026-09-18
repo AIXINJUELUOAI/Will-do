@@ -11,8 +11,10 @@ object RecognitionFailureMessageMapper {
     fun display(payload: RecognitionFailedEvent): RecognitionFailureDisplay {
         val code = payload.errorCode.takeIf { it.isNotBlank() }
             ?: payload.message.trim().takeIf { it.isInternalStatusCode() }
-        val reason = code?.let(::userMessage) ?: userMessage(payload)
+        val reason = userMessage(payload)
         val normalizedReason = reason
+            .removePrefix("图片识别失败：")
+            .removePrefix("分析失败：")
             .removeSuffix("，请稍后重试")
             .removeSuffix("，请重试")
             .takeIf { it != "识别失败" }
@@ -24,6 +26,11 @@ object RecognitionFailureMessageMapper {
     }
 
     fun userMessage(payload: RecognitionFailedEvent): String {
+        // 通用错误码不能盖掉底层已区分的鉴权、额度、网络或图片能力原因。
+        if (payload.errorCode in setOf("ANALYSIS_FAILURE", "UNKNOWN_ERROR", "EMPTY_RESULT") &&
+            payload.message.isNotBlank() && !payload.message.trim().isInternalStatusCode()) {
+            return payload.message.trim()
+        }
         val mapped = userMessage(payload.errorCode)
         if (mapped != null) return mapped
 
@@ -38,8 +45,9 @@ object RecognitionFailureMessageMapper {
 
     fun userMessage(code: String): String? {
         return when (code) {
+            "IMAGE_INPUT_UNSUPPORTED" -> "当前模型不支持图片输入"
             "EMPTY_RESULT",
-            "EMPTY_EVENTS" -> "未识别到有效日程"
+            "EMPTY_EVENTS" -> "未识别到有效日程或账单"
             "INVALID_JSON" -> "模型返回格式异常"
             "INVALID_SCHEMA" -> "模型返回内容不完整"
             "TIMEOUT_LOADING" -> "本地模型加载超时"
@@ -61,8 +69,9 @@ object RecognitionFailureMessageMapper {
 
     private fun suggestionFor(code: String?, retryable: Boolean): String {
         return when (code) {
+            "IMAGE_INPUT_UNSUPPORTED" -> "请更换支持多模态的模型"
             "EMPTY_RESULT",
-            "EMPTY_EVENTS" -> "请换一张更清晰的截图，或手动补充时间地点"
+            "EMPTY_EVENTS" -> "请检查输入是否包含明确日程或已完成的交易，必要时补充信息"
             "INVALID_JSON",
             "INVALID_SCHEMA" -> "请重试，或切换到更稳定的模型"
             "TIMEOUT_LOADING" -> "请稍后重试，或重新选择本地模型"

@@ -27,7 +27,36 @@ class IngestPipeline(
     private val notificationCenter: NotificationOrchestrator? = null,
     private val settingsProvider: (() -> MySettings)? = null,
     private val regexAiReviewCoordinator: RegexAiReviewCoordinator? = null,
+    private val accountingApi: com.antgskds.calendarassistant.feature.accounting.domain.AccountingApi? = null,
 ) : IngestCommandApi {
+    override suspend fun ingestRecognizedBills(drafts: List<com.antgskds.calendarassistant.feature.accounting.data.AccountingDraft>, useCurrentTimeForMissing: Boolean) =
+        requireNotNull(accountingApi).ingestRecognizedBills(drafts, useCurrentTimeForMissing)
+    override suspend fun stageAccountingDrafts(drafts: List<com.antgskds.calendarassistant.feature.accounting.data.AccountingDraft>) {
+        requireNotNull(accountingApi).stageDrafts(drafts)
+    }
+    override suspend fun dismissAccountingDraft(id: String) { requireNotNull(accountingApi).dismissDraft(id) }
+    override suspend fun confirmAccountingDraft(id: String, input: com.antgskds.calendarassistant.feature.accounting.domain.AccountingEntryInput) =
+        requireNotNull(accountingApi).confirmDraft(id, input)
+
+    override suspend fun saveAccountingEntry(
+        input: com.antgskds.calendarassistant.feature.accounting.domain.AccountingEntryInput,
+    ): com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry =
+        requireNotNull(accountingApi) { "账单存储尚未初始化" }.saveEntry(input)
+
+    override suspend fun deleteAccountingEntry(id: String) {
+        requireNotNull(accountingApi) { "账单存储尚未初始化" }.deleteEntry(id)
+    }
+
+    override suspend fun restoreAccountingEntries(
+        entries: List<com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry>,
+    ): com.antgskds.calendarassistant.feature.accounting.domain.AccountingImportResult =
+        requireNotNull(accountingApi) { "账单存储尚未初始化" }.restoreEntries(entries)
+
+    override suspend fun ingestAccountingEntries(
+        entries: List<com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry>,
+    ): com.antgskds.calendarassistant.feature.accounting.domain.AccountingImportResult =
+        requireNotNull(accountingApi) { "账单存储尚未初始化" }.importEntries(entries)
+
     private sealed interface IngestTask {
         val traceId: String
         val sourceType: String

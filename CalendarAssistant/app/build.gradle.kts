@@ -41,8 +41,8 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 122
-        versionName = "2.3.0 Beta2"
+        versionCode = 152
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_MODEL_EDITION", "false")
@@ -164,8 +164,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
     implementation("io.ktor:ktor-client-core:2.3.7")
 
-    // === ML Kit (OCR 识别) ===
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // === 本地二维码/条码扫描（独立于图文 AI 识别） ===
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // === QR 码生成 ===
@@ -204,6 +203,8 @@ dependencies {
 
     // === WorkManager ===
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+    // 与 AndroidX Test 1.7 的原子依赖组对齐，避免 instrumentation 编译/运行类路径版本冲突。
+    implementation("androidx.concurrent:concurrent-futures:1.2.0")
 
     // === Markdown (便签渲染) ===
     implementation("io.noties.markwon:core:4.6.2")

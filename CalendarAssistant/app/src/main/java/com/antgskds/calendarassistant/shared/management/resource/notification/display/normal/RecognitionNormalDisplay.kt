@@ -22,7 +22,7 @@ object RecognitionNormalDisplay {
         return NormalNotificationContent(
             title = compactTitle("识别失败", reason),
             contentText = suggestion,
-            bigText = suggestion
+            bigText = "$reason\n$suggestion"
         )
     }
 
@@ -70,6 +70,13 @@ object RecognitionNormalDisplay {
         )
     }
 
+    fun analyzingAccounting(): NormalNotificationContent {
+        return NormalNotificationContent(
+            title = "正在识别账单",
+            contentText = "正在识别交易信息，请稍候"
+        )
+    }
+
     fun screenshotFailed(content: String): NormalNotificationContent {
         return NormalNotificationContent(
             title = "截图失败",
@@ -94,7 +101,7 @@ object RecognitionNormalDisplay {
     fun analysisCompletedNoValidSchedule(): NormalNotificationContent {
         return NormalNotificationContent(
             title = "分析完成",
-            contentText = "未识别到有效日程"
+            contentText = "未识别到有效日程或账单"
         )
     }
 

@@ -29,7 +29,9 @@ fun AllEventsRoute(
     searchQuery: String = "",
     extraBottomPadding: Dp = 0.dp,
     twoPane: Boolean = false,
-    hapticEnabled: Boolean = true
+    hapticEnabled: Boolean = true,
+    onOpenWeatherDetail: () -> Unit = {},
+    onOpenAccounting: (LocalDate, Boolean) -> Unit = { _, _ -> },
 ) {
     val mainState by viewModel.uiState.collectAsState()
     val reverseOrderEnabled = mainState.settings.allEventsListReverseOrder
@@ -57,13 +59,15 @@ fun AllEventsRoute(
     }
 
     AllEventsScreen(
-        state = connection.state,
+        state = connection.state.copy(weatherData = mainState.weatherData),
         uiSize = uiSize,
         extraBottomPadding = extraBottomPadding,
         twoPane = twoPane,
         hapticEnabled = hapticEnabled,
         onAction = { action ->
             when (action) {
+                AllEventsUiAction.OpenWeather -> onOpenWeatherDetail()
+                is AllEventsUiAction.OpenAccounting -> onOpenAccounting(action.date, false)
                 AllEventsUiAction.LoadMoreFuture -> viewModel.loadMoreFutureAllEvents()
                 is AllEventsUiAction.RevealItem -> viewModel.onRevealItem(action.itemKey)
                 AllEventsUiAction.CollapseItem -> viewModel.onRevealItem(null)
@@ -116,6 +120,12 @@ internal fun buildAllEventsConnection(
     val groups = sortedItems
         .groupBy { it.startDate }
         .map { (date, dateItems) -> AllEventsDateGroupUiModel(date, dateItems) }
+        .let { groups ->
+            // 今天始终提供天气和记账入口；搜索时仍保留真实的空结果。
+            if (searchQuery.isBlank() && groups.none { it.date == today }) {
+                listOf(AllEventsDateGroupUiModel(today, emptyList())) + groups
+            } else groups
+        }
 
     return AllEventsConnection(
         state = AllEventsUiState(

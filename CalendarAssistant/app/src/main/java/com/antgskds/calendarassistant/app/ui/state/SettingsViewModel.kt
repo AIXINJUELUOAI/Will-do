@@ -87,20 +87,6 @@ class SettingsViewModel(
         refreshSyncCalendars()
     }
 
-    // 更新 AI 设置
-    fun updateAiSettings(key: String, name: String, url: String) {
-        viewModelScope.launch {
-            val current = settings.value
-            settingsOperationApi.updateSettings(
-                current.copy(
-                    modelKey = key,
-                    modelName = name,
-                    modelUrl = url
-                )
-            )
-        }
-    }
-
     fun updateMultimodalAiSettings(key: String, name: String, url: String) {
         viewModelScope.launch {
             val current = settings.value
@@ -166,6 +152,12 @@ class SettingsViewModel(
     }
 
     // 更新偏好设置（支持单独更新某一项）
+    fun updateAutomaticAccounting(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsOperationApi.updateSettings(settings.value.copy(automaticAccountingEnabled = enabled))
+        }
+    }
+
     // 【修改】增加了 pickupAggregation、advanceReminder 和 autoArchive 参数
     fun updatePreference(
         showTomorrow: Boolean? = null,

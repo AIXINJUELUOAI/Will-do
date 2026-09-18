@@ -124,6 +124,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
                 putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, tapQuickMemoId)
             } else if (item.type == CapsuleType.WEATHER_ALERT) {
                 putExtra(WidgetActions.EXTRA_WIDGET_ACTION, WidgetActions.ACTION_OPEN_WEATHER)
+            } else if (item.display.tapOpensAccounting) {
+                putExtra("open_accounting", "true")
             } else if (tapOpensPickupList) {
                 putExtra("openPickupList", true)
             }

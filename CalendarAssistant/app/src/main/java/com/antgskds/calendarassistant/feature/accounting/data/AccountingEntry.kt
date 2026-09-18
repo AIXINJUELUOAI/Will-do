@@ -1,14 +1,15 @@
 package com.antgskds.calendarassistant.feature.accounting.data
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * 记账暂停期间仅保留数据库兼容结构，与记账测试版（数据库 16）的字段及索引一致。
- * 当前不提供 DAO、录入入口或同步业务；新安装只建空表，覆盖安装保留原表。
+ * 沿用原记账字段及索引；数据库 19 增加交易号类型，20 增加关联截图路径。
  */
 @Entity(tableName = "accounting_entries", indices = [Index("occurredAt"), Index(value = ["dedupKey"], unique = true)])
+@kotlinx.serialization.Serializable
 data class AccountingEntry(
     @PrimaryKey val id: String,
     val amountMinor: Long,
@@ -29,4 +30,6 @@ data class AccountingEntry(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
+    @ColumnInfo(defaultValue = "'UNKNOWN'") val transactionIdType: String = "UNKNOWN",
+    @ColumnInfo(defaultValue = "NULL") val sourceImagePath: String? = null,
 )

@@ -75,8 +75,10 @@ import com.antgskds.calendarassistant.app.ui.navigation.navBackwardEnterTransiti
 import com.antgskds.calendarassistant.app.ui.navigation.navBackwardExitTransition
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardEnterTransition
 import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
+import com.antgskds.calendarassistant.feature.accounting.ui.AccountingPreviewScreen
+import com.antgskds.calendarassistant.feature.accounting.ui.AccountingViewModel
+import com.antgskds.calendarassistant.feature.accounting.ui.LocalAccountingEntries
 import com.antgskds.calendarassistant.feature.home.ui.connector.HomeScreen
-import com.antgskds.calendarassistant.feature.note.ui.connector.NoteEditorRoute
 import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoDetailPage
 import com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource
 import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
@@ -134,6 +136,8 @@ class MainActivity : ComponentActivity() {
 
     private val pendingWidgetAction = mutableStateOf<PendingWidgetLaunchAction?>(null)
     private val pendingQuickMemoDetailLaunch = mutableStateOf<PendingQuickMemoDetailLaunch?>(null)
+    private val pendingAccountingReview = mutableStateOf(false)
+    private val pendingAccountingPage = mutableStateOf(false)
     private val pendingEventDialogLaunch = mutableStateOf<PendingEventDialogLaunch?>(null)
 
     private fun shouldShowOnboardingOnFirstLaunch(): Boolean {
@@ -244,6 +248,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
             val settings by settingsViewModel.settings.collectAsState()
+            val accountingViewModel: AccountingViewModel = viewModel(factory = remember(app) {
+                AccountingViewModel.Factory(app.accountingApi, app.ingestCommandApi, applicationContext.contentResolver, applicationContext.filesDir)
+            })
+            val accountingEntries by accountingViewModel.entries.collectAsState()
+            val accountingRecognition by accountingViewModel.recognitionState.collectAsState()
+            val accountingEditor by accountingViewModel.editorState.collectAsState()
             val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
             val clipboardPrompt by app.clipboardCodeCenter.pendingPrompt.collectAsState()
             val localModelResiduePrompt by app.localModelResidueCenter.pendingPrompt.collectAsState()
@@ -461,6 +471,20 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                LaunchedEffect(pendingAccountingReview.value) {
+                    if (pendingAccountingReview.value) {
+                        accountingViewModel.openRecognition()
+                        pendingAccountingReview.value = false
+                    }
+                }
+
+                LaunchedEffect(pendingAccountingPage.value) {
+                    if (pendingAccountingPage.value) {
+                        navController.navigate(AppRoutes.accountingPreview(java.time.LocalDate.now(), true)) { launchSingleTop = true }
+                        pendingAccountingPage.value = false
+                    }
+                }
+
                 LaunchedEffect(pendingQuickMemoDetailLaunch.value) {
                     val pending = pendingQuickMemoDetailLaunch.value ?: return@LaunchedEffect
                     if (pending.nonce == lastQuickMemoDetailNonce) return@LaunchedEffect
@@ -500,13 +524,12 @@ class MainActivity : ComponentActivity() {
                     currentRoute in setOf(
                         AppRoutes.Home,
                         AppRoutes.SettingsPattern,
-                        AppRoutes.NoteEditorPattern,
                         AppRoutes.QuickMemoDetailPattern,
                         AppRoutes.WeatherDetail,
                     )
                 val adaptiveSettingsSelected = currentRoute == AppRoutes.SettingsPattern
                 val adaptiveSelectedPageKey = when (currentRoute) {
-                    AppRoutes.NoteEditorPattern, AppRoutes.QuickMemoDetailPattern -> HomeEntryKey.NOTE
+                    AppRoutes.QuickMemoDetailPattern -> HomeEntryKey.NOTE
                     AppRoutes.WeatherDetail -> HomeEntryKey.TODAY
                     else -> selectedHomePageKey
                 }
@@ -528,6 +551,8 @@ class MainActivity : ComponentActivity() {
                         LocalAppBackgroundRootSize provides appBackgroundRootSize,
                         LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance,
                         LocalAdaptiveLayoutInfo provides adaptiveLayoutInfo,
+                        LocalAccountingEntries provides accountingEntries.entries,
+                        com.antgskds.calendarassistant.feature.accounting.ui.LocalAccountingViewModel provides accountingViewModel,
                     ) {
                     // 最外层容器（包裹 NavHost 和所有弹窗）
                     Box(
@@ -649,8 +674,8 @@ class MainActivity : ComponentActivity() {
                                     onOpenWeatherDetail = {
                                         navController.navigate(AppRoutes.WeatherDetail)
                                     },
-                                    onOpenNoteEditor = { noteId ->
-                                        navController.navigate(AppRoutes.noteEditor(noteId))
+                                    onOpenAccounting = { date, monthly ->
+                                        navController.navigate(AppRoutes.accountingPreview(date, monthly)) { launchSingleTop = true }
                                     },
                                     onOpenQuickMemoDetail = { memoId ->
                                         navController.navigate(AppRoutes.quickMemoDetail(memoId))
@@ -665,30 +690,19 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        // 普通便签已下线，仅兼容升级时恢复的旧导航栈，不再挂载编辑器。
                         composable(
                             route = AppRoutes.NoteEditorPattern,
                             arguments = listOf(navArgument(AppRoutes.NoteEditorArg) { type = NavType.LongType }),
-                            enterTransition = { navForwardEnterTransition() },
-                            exitTransition = { null },
-                            popEnterTransition = { null },
-                            popExitTransition = { navBackwardExitTransition() }
-                        ) { backStackEntry ->
-                            BackHandler(enabled = !predictiveBackEnabled) {
-                                navController.popBackStack()
-                            }
-                            val noteId = backStackEntry.arguments?.getLong(AppRoutes.NoteEditorArg) ?: AppRoutes.NoteEditorNewArg
-                            NoteEditorRoute(
-                                noteId = noteId,
-                                newNoteId = AppRoutes.NoteEditorNewArg,
-                                viewModel = mainViewModel,
-                                onDismiss = { navController.popBackStack() },
-                                onOpenImportedNote = { importedId ->
-                                    navController.navigate(AppRoutes.noteEditor(importedId))
-                                },
-                                onShowMessage = { message, _ ->
-                                    android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
+                        ) {
+                            LaunchedEffect(Unit) {
+                                if (!navController.popBackStack(AppRoutes.Home, inclusive = false)) {
+                                    navController.navigate(AppRoutes.Home) {
+                                        popUpTo(navController.graph.id) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
                                 }
-                            )
+                            }
                         }
 
                         composable(
@@ -713,6 +727,33 @@ class MainActivity : ComponentActivity() {
                                 backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
                                 miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
                                 cardAlphaPercent = settings.appBackgroundCardAlphaPercent
+                            )
+                        }
+
+                        composable(
+                            route = AppRoutes.AccountingPreview,
+                            arguments = listOf(
+                                navArgument("date") { type = NavType.StringType },
+                                navArgument("period") { type = NavType.StringType },
+                            ),
+                            enterTransition = { navForwardEnterTransition() },
+                            exitTransition = { null },
+                            popEnterTransition = { null },
+                            popExitTransition = { navBackwardExitTransition() },
+                        ) { entry ->
+                            BackHandler(enabled = !predictiveBackEnabled) { navController.popBackStack() }
+                            AccountingPreviewScreen(
+                                viewModel = accountingViewModel,
+                                uiSize = settings.uiSize,
+                                initialDate = runCatching { java.time.LocalDate.parse(entry.arguments?.getString("date")) }
+                                    .getOrDefault(java.time.LocalDate.now()),
+                                initialMonthly = entry.arguments?.getString("period") == "MONTH",
+                                onBack = { navController.popBackStack() },
+                                hapticEnabled = settings.hapticFeedbackEnabled,
+                                predictiveBackEnabled = predictiveBackEnabled,
+                                backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
+                                miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                                cardAlphaPercent = settings.appBackgroundCardAlphaPercent,
                             )
                         }
 
@@ -762,6 +803,17 @@ class MainActivity : ComponentActivity() {
                     if (CrashHandler.isCrashedLastTime(this@MainActivity)) {
                         crashDialogShown = true
                     }
+                }
+
+                if (accountingEditor.open && accountingEditor.draft != null) {
+                    androidx.compose.runtime.key(accountingEditor.draft?.id) {
+                        com.antgskds.calendarassistant.feature.accounting.ui.AccountingEditorSheet(
+                            accountingEditor, accountingViewModel::saveEntry, accountingViewModel::closeEditor)
+                    }
+                } else if (accountingRecognition.open && !accountingEditor.open) {
+                    com.antgskds.calendarassistant.feature.accounting.ui.AccountingRecognitionSheet(
+                        accountingRecognition, accountingViewModel::editDraft, accountingViewModel::dismissDraft,
+                        accountingViewModel::closeRecognition, accountingViewModel::countAnyway)
                 }
 
                 GlobalPromptHost(
@@ -819,6 +871,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeQuickMemoDetailIntent(intent: Intent?) {
+        if (intent?.getStringExtra("open_accounting") == "true") {
+            pendingAccountingPage.value = true
+            intent.removeExtra("open_accounting")
+        }
+        if (intent?.getStringExtra("open_accounting_recognition") == "true") {
+            pendingAccountingReview.value = true
+            intent.removeExtra("open_accounting_recognition")
+        }
         val memoId = intent?.getLongExtra(EXTRA_OPEN_QUICK_MEMO_ID, -1L)?.takeIf { it > 0L } ?: return
         pendingQuickMemoDetailLaunch.value = PendingQuickMemoDetailLaunch(memoId)
         intent.removeExtra(EXTRA_OPEN_QUICK_MEMO_ID)

@@ -1,5 +1,12 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material
 
+import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.ui.material.component.InlineSummaryAction
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherForecastIconMapper
+import com.antgskds.calendarassistant.feature.weather.domain.WeatherDateSummaryMapper
+import com.antgskds.calendarassistant.feature.accounting.ui.AccountingSummaryHeader
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 
 import androidx.compose.foundation.background
@@ -120,6 +127,7 @@ private fun AllEventsListPane(
     onSelectItem: ((com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem) -> Unit)?,
     onAction: (AllEventsUiAction) -> Unit,
 ) {
+    val haptics = rememberAppHaptics(hapticEnabled)
     var isLoadingMoreFuture by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
     val futureLimitFormatter = remember { DateTimeFormatter.ofPattern("M月d日", java.util.Locale.CHINA) }
@@ -194,13 +202,40 @@ private fun AllEventsListPane(
                             } else {
                                 date.format(DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", java.util.Locale.CHINA))
                             }
-                            Text(
-                                text = "—— $headerText",
-                                modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
+                            val weather = WeatherDateSummaryMapper.forDate(state.weatherData, date, state.today)
+                            val weatherActions = if (weather == null) emptyList() else listOf(
+                                InlineSummaryAction(
+                                    text = "${weather.temperatureText} ${weather.description}",
+                                    icon = painterResource(WeatherForecastIconMapper.iconRes(weather.description, weather.icon)),
+                                    iconDescription = "天气",
+                                    onClick = { haptics.click(); onAction(AllEventsUiAction.OpenWeather) },
+                                )
                             )
+                            AccountingSummaryHeader(
+                                date = date,
+                                title = headerText,
+                                leadingActions = weatherActions,
+                                showAccounting = date == state.today,
+                                onOpen = { selectedDate, _ -> onAction(AllEventsUiAction.OpenAccounting(selectedDate)) },
+                                hapticEnabled = hapticEnabled,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                            )
+                            if (group.items.isEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp)
+                                        .padding(top = 8.dp, bottom = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.width(5.dp).height(40.dp).clip(RoundedCornerShape(3.dp))
+                                        .background(MaterialTheme.colorScheme.primary))
+                                    Spacer(Modifier.width(16.dp))
+                                    Text(
+                                        text = "今日暂无日程",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+                                    )
+                                }
+                            }
                         }
 
                         // 该日期下的所有事件

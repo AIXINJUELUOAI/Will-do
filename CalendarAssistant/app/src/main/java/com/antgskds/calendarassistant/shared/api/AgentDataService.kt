@@ -515,20 +515,16 @@ class AgentDataService(
         requireConnectionManagement()
         val current = settingsQueryApi.settings.value
         val mode = input.mode.trim().uppercase()
-        require(mode == "TEXT" || mode == "MULTIMODAL") { "mode must be TEXT or MULTIMODAL" }
+        require(mode == "MULTIMODAL") { "TEXT model mode has been retired; use MULTIMODAL" }
         val apiUrl = input.apiUrl.trim()
         val modelName = input.modelName.trim()
         require(apiUrl.isNotBlank()) { "API URL is required" }
         require(modelName.isNotBlank()) { "Model name is required" }
         requireHttpUrl(apiUrl, "API URL")
-        val existingKey = if (mode == "MULTIMODAL") current.mmModelKey else current.modelKey
+        val existingKey = current.mmModelKey
         val apiKey = input.apiKey.trim().ifBlank { existingKey }
         require(apiKey.isNotBlank()) { "API Key is required" }
-        val updated = if (mode == "MULTIMODAL") {
-            current.copy(mmModelUrl = apiUrl, mmModelName = modelName, mmModelKey = apiKey)
-        } else {
-            current.copy(modelUrl = apiUrl, modelName = modelName, modelKey = apiKey)
-        }
+        val updated = current.copy(mmModelUrl = apiUrl, mmModelName = modelName, mmModelKey = apiKey)
         settingsOperationApi.updateSettings(updated)
         buildConnectionSummary(updated)
     }
@@ -797,10 +793,11 @@ class AgentDataService(
         }
         return AgentConnectionSummary(
             textModel = AgentModelConnectionSummary(
-                mode = "TEXT",
-                modelName = settings.modelName,
-                endpoint = safeEndpoint(settings.modelUrl),
-                credentialConfigured = settings.modelKey.isNotBlank(),
+                // 保留旧响应字段，文字调用也使用统一多模态连接。
+                mode = "MULTIMODAL",
+                modelName = settings.mmModelName,
+                endpoint = safeEndpoint(settings.mmModelUrl),
+                credentialConfigured = settings.mmModelKey.isNotBlank(),
             ),
             multimodalModel = AgentModelConnectionSummary(
                 mode = "MULTIMODAL",
