@@ -5,12 +5,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
-import com.antgskds.calendarassistant.feature.note.ui.connector.NoteListRoute
 import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoPage
 import com.antgskds.calendarassistant.feature.schedule.ui.connector.AllEventsRoute
 import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen
@@ -39,9 +37,6 @@ fun HomePageRoute(
     onAddEventClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
-    onEditNote: (NoteEntity) -> Unit = {},
-    onCreateNote: () -> Unit = {},
-    onRequestDeleteNote: (NoteEntity) -> Unit = {},
     onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
     onRequestClearQuickMemos: () -> Unit = {},
     quickMemoCount: Int = 0,
@@ -50,6 +45,7 @@ fun HomePageRoute(
     onScheduleProgressChange: (Float) -> Unit = {},
     onScheduleOffsetChange: (Float) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
+    onOpenAccounting: (java.time.LocalDate, Boolean) -> Unit = { _, _ -> },
     onNavigateToSettings: (SettingsDestination) -> Unit = {},
     settingsOverride: MySettings? = null,
 ) {
@@ -104,16 +100,8 @@ fun HomePageRoute(
                 twoPane = isTwoPane,
                 onRequestDeleteItem = onRequestDeleteItem,
                 hapticEnabled = state.settings.hapticFeedbackEnabled,
-            )
-        },
-        noteListContent = { searchQuery, extraBottomPadding ->
-            NoteListRoute(
-                viewModel = viewModel,
-                searchQuery = searchQuery,
-                extraBottomPadding = extraBottomPadding,
-                onEditNote = onEditNote,
-                onRequestDeleteNote = onRequestDeleteNote,
-                hapticEnabled = state.settings.hapticFeedbackEnabled,
+                onOpenWeatherDetail = onOpenWeatherDetail,
+                onOpenAccounting = onOpenAccounting,
             )
         },
         quickMemoContent = { searchQuery, extraBottomPadding ->
@@ -145,13 +133,13 @@ fun HomePageRoute(
         onAddEventClick = onAddEventClick,
         onEditItem = onEditItem,
         onRequestDeleteItem = onRequestDeleteItem,
-        onCreateNote = onCreateNote,
         onRequestClearQuickMemos = onRequestClearQuickMemos,
         quickMemoCount = quickMemoCount,
         onScheduleExpandedChange = onScheduleExpandedChange,
         onScheduleProgressChange = onScheduleProgressChange,
         onScheduleOffsetChange = onScheduleOffsetChange,
         onOpenWeatherDetail = onOpenWeatherDetail,
+        onOpenAccounting = onOpenAccounting,
         onNavigateToSettings = onNavigateToSettings,
     )
 }

@@ -8,6 +8,8 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry
+import com.antgskds.calendarassistant.feature.accounting.data.AccountingDao
+import com.antgskds.calendarassistant.feature.accounting.data.AccountingDraft
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventAttachmentsDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventTypesDao
 import com.antgskds.calendarassistant.feature.schedule.data.db.dao.EventsDao
@@ -32,6 +34,7 @@ import java.util.concurrent.Executors
 @Database(
     entities = [
         AccountingEntry::class,
+        AccountingDraft::class,
         Event::class,
         EventType::class,
         EventAttachment::class,
@@ -45,12 +48,13 @@ import java.util.concurrent.Executors
         SyncV2PeerEntity::class,
         SyncV2MetaEntity::class
     ],
-    version = 17,
+    version = 20,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class EventsDatabase : RoomDatabase() {
 
+    abstract fun accountingDao(): AccountingDao
     abstract fun eventsDao(): EventsDao
     abstract fun eventTypesDao(): EventTypesDao
     abstract fun eventAttachmentsDao(): EventAttachmentsDao
@@ -68,7 +72,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_17, MIGRATION_16_17).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_17, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -86,6 +90,33 @@ abstract class EventsDatabase : RoomDatabase() {
                     color = 0xFF3F51B5.toInt()
                 )
                 database.eventTypesDao().insertOrUpdate(defaultType)
+            }
+        }
+
+        internal val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 原图路径独立于备注；旧账单与草稿保持无图，不猜测关联关系。
+                db.execSQL("ALTER TABLE accounting_entries ADD COLUMN sourceImagePath TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE accounting_drafts ADD COLUMN sourceImagePath TEXT DEFAULT NULL")
+            }
+        }
+
+        internal val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 保留旧交易身份与全部数据；缺少类型证据的旧号码不得用于排除疑似重复。
+                db.execSQL("ALTER TABLE accounting_entries ADD COLUMN transactionIdType TEXT NOT NULL DEFAULT 'UNKNOWN'")
+                db.execSQL("ALTER TABLE accounting_drafts ADD COLUMN transactionIdType TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            }
+        }
+
+        internal val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS accounting_drafts (
+                    id TEXT NOT NULL PRIMARY KEY, amount TEXT NOT NULL, direction TEXT NOT NULL,
+                    currency TEXT NOT NULL, merchant TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL,
+                    occurredAt TEXT NOT NULL, zoneId TEXT NOT NULL, channel TEXT NOT NULL, transactionId TEXT NOT NULL,
+                    paymentStatus TEXT NOT NULL, sourceType TEXT NOT NULL, sourceId TEXT NOT NULL, createdAt INTEGER NOT NULL
+                )""".trimIndent())
             }
         }
 

@@ -22,7 +22,6 @@ import com.antgskds.calendarassistant.shared.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
-import com.antgskds.calendarassistant.feature.note.data.local.NoteEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
@@ -93,7 +92,7 @@ fun HomeScreen(
     onDismissClipboardPrompt: () -> Unit = {},
     onSelectedPageKeyChange: (String) -> Unit = {},
     onOpenWeatherDetail: () -> Unit = {},
-    onOpenNoteEditor: (Long) -> Unit = {},
+    onOpenAccounting: (java.time.LocalDate, Boolean) -> Unit = { _, _ -> },
     onOpenQuickMemoDetail: (Long) -> Unit = {},
     onNavigateToSettings: (SettingsDestination) -> Unit
 ) {
@@ -225,7 +224,6 @@ fun HomeScreen(
     var recurringEditSession by remember { mutableStateOf<RecurringEditSession?>(null) }
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
-    var selectedNoteAction by remember { mutableStateOf<NoteEntity?>(null) }
     var selectedQuickMemoAction by remember { mutableStateOf<QuickMemoEntity?>(null) }
     var showClearQuickMemosConfirm by remember { mutableStateOf(false) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
@@ -485,11 +483,6 @@ fun HomeScreen(
                 onAddEventClick = { openPrimaryCreateDialog() },
                 onEditItem = { item -> beginEditItem(item) },
                 onRequestDeleteItem = { item -> requestDeleteItem(item) },
-                onEditNote = { note -> note.id?.let(onOpenNoteEditor) },
-                onCreateNote = {
-                    onOpenNoteEditor(com.antgskds.calendarassistant.app.ui.navigation.AppRoutes.NoteEditorNewArg)
-                },
-                onRequestDeleteNote = { note -> selectedNoteAction = note },
                 onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
                 onRequestClearQuickMemos = { showClearQuickMemosConfirm = true },
                 quickMemoCount = quickMemoCount,
@@ -498,6 +491,7 @@ fun HomeScreen(
                 onScheduleProgressChange = { scheduleProgress = it },
                 onScheduleOffsetChange = { scheduleOffsetPx = it.coerceAtLeast(0f) },
                 onOpenWeatherDetail = onOpenWeatherDetail,
+                onOpenAccounting = onOpenAccounting,
                 onNavigateToSettings = onNavigateToSettings,
             )
         },
@@ -598,23 +592,6 @@ fun HomeScreen(
                 selectedQuickMemoAction = null
             },
             onDismiss = { selectedQuickMemoAction = null },
-            modifier = Modifier
-                .padding(bottom = cardFloatingBarOffset + 16.dp)
-        )
-
-        HomeActionDialog(
-            visible = selectedNoteAction != null,
-            title = "删除便签",
-            content = "删除后无法恢复，确认删除这条便签吗？",
-            confirmText = "删除",
-            dismissText = "取消",
-            isDestructive = true,
-            predictiveBackEnabled = settings.predictiveBackEnabled,
-            onConfirm = {
-                selectedNoteAction?.id?.let { mainViewModel.deleteNote(it) }
-                selectedNoteAction = null
-            },
-            onDismiss = { selectedNoteAction = null },
             modifier = Modifier
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )

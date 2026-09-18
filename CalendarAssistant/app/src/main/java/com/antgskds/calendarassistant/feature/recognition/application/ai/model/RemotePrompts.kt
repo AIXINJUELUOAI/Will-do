@@ -12,14 +12,16 @@ data class RemotePrompts(
     val userTextPrompt: String = "",
     @SerialName("mm_unified_prompt")
     val mmUnifiedPrompt: String = "",
+    // 仅兼容旧提示词文件；运行时使用统一图文提示词。
     @SerialName("schedule_prompt")
     val schedulePrompt: String = "",
     @SerialName("pickup_prompt")
     val pickupPrompt: String = ""
 ) {
     fun isValid(): Boolean {
-        return version > 0 &&
-            schedulePrompt.isNotBlank() &&
-            pickupPrompt.isNotBlank()
+        return version > 0 && (
+            mmUnifiedPrompt.isNotBlank() || userTextPrompt.isNotBlank() ||
+                (schedulePrompt.isNotBlank() && pickupPrompt.isNotBlank())
+            )
     }
 }

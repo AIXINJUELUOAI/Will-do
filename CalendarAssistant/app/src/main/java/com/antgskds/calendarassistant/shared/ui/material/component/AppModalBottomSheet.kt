@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import com.antgskds.calendarassistant.shared.ui.material.dialog.DisableDialogWindowDimEffect
@@ -58,6 +59,8 @@ fun AppModalBottomSheet(
     actions: List<AppSheetAction> = emptyList(),
     sheetState: SheetState? = null,
     scrollState: ScrollState? = rememberScrollState(),
+    contentBottomPadding: Dp = 16.dp,
+    footer: @Composable ColumnScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     require(actions.size <= 3) { "AppModalBottomSheet supports at most three actions" }
@@ -127,9 +130,10 @@ fun AppModalBottomSheet(
                         Column(
                             modifier = Modifier.weight(1f, fill = false).fillMaxWidth()
                                 .then(if (scrollState != null) Modifier.verticalScroll(scrollState) else Modifier)
-                                .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+                                .padding(start = 20.dp, end = 20.dp, bottom = contentBottomPadding),
                             content = content,
                         )
+                        footer()
                         AppSheetActions(actions)
                     }
                 }

@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.contract
 
+import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import java.time.LocalDate
 
@@ -10,7 +11,8 @@ data class AllEventsUiState(
     val revealedItemKey: String? = null,
     val timeRefreshToken: Long = 0L,
     val futureDays: Int = 0,
-    val futureLimit: LocalDate = LocalDate.now()
+    val futureLimit: LocalDate = LocalDate.now(),
+    val weatherData: WeatherData? = null,
 )
 
 data class AllEventsDateGroupUiModel(
@@ -19,6 +21,8 @@ data class AllEventsDateGroupUiModel(
 )
 
 sealed interface AllEventsUiAction {
+    data object OpenWeather : AllEventsUiAction
+    data class OpenAccounting(val date: LocalDate) : AllEventsUiAction
     data object LoadMoreFuture : AllEventsUiAction
     data class RevealItem(val itemKey: String) : AllEventsUiAction
     data object CollapseItem : AllEventsUiAction

@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.feature.settings.data
 
 import android.content.Context
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.data.model.migrateToMultimodalConfig
 import com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +16,16 @@ class SettingsRepository(context: Context) {
     val settingsFlow: StateFlow<MySettings> = _settingsFlow.asStateFlow()
 
     fun loadSettings(): MySettings {
-        return settingsSource.loadSettings()
+        val stored = settingsSource.loadSettings()
+        val migrated = stored.migrateToMultimodalConfig()
+        if (migrated != stored) settingsSource.saveSettings(migrated)
+        return migrated
     }
 
     fun saveSettings(settings: MySettings) {
-        settingsSource.saveSettings(settings)
-        _settingsFlow.value = settings
+        val migrated = settings.migrateToMultimodalConfig()
+        settingsSource.saveSettings(migrated)
+        _settingsFlow.value = migrated
     }
 
     // Room 相关开关（保留用于渐进迁移）

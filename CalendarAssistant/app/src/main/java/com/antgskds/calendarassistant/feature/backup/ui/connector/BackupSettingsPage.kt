@@ -1,6 +1,9 @@
 package com.antgskds.calendarassistant.feature.backup.ui.connector
 
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
+import com.antgskds.calendarassistant.feature.accounting.ui.LocalAccountingViewModel
+import com.antgskds.calendarassistant.feature.accounting.ui.AccountingImportSheet
+import com.antgskds.calendarassistant.feature.accounting.ui.rememberAccountingExportAction
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
 import com.antgskds.calendarassistant.shared.ui.edition.EditionRadioButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionOutlinedButton
@@ -11,6 +14,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -56,6 +61,11 @@ fun BackupSettingsPage(viewModel: SettingsViewModel, mainViewModel: MainViewMode
 
 @Composable
 fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2) {
+    val accountingViewModel = LocalAccountingViewModel.current
+    val accountingImport by accountingViewModel.importState.collectAsState()
+    val exportAccounting = rememberAccountingExportAction(accountingViewModel)
+    if (accountingImport.open) AccountingImportSheet(accountingImport, accountingViewModel::selectSource,
+        accountingViewModel::readFile, accountingViewModel::confirmImport, accountingViewModel::closeImport)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -288,11 +298,21 @@ fun MaterialBackupSettingsScreen(controller: BackupUiController, uiSize: Int = 2
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
                 .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("数据管理", style = sectionTitleStyle)
+
+            BackupCard(
+                title = "账单数据",
+                desc = "导出全部已保存账单；导入账单备份、微信或支付宝账单",
+                onExport = { haptics.click(); exportAccounting() },
+                onImport = { haptics.click(); accountingViewModel.openImport() },
+                cardTitleStyle = cardTitleStyle,
+                cardSubtitleStyle = cardSubtitleStyle,
+            )
 
             BackupCard(
                 title = "课程数据",

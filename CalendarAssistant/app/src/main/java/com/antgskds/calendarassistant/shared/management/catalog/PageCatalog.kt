@@ -92,6 +92,13 @@ object PageCatalog {
         title = "天气详情",
     )
 
+    /** 首页入口直接打开的独立页面，不增加设置菜单项。 */
+    data class StandalonePageEntry(val route: String, val title: String, val note: String)
+
+    val standalonePages = listOf(
+        StandalonePageEntry("accounting_preview/{date}/{period}", "记账", "日周月真实账单、分析与微信/支付宝文件导入"),
+    )
+
     private val destinationAliases = mapOf(
         "course_manager" to SettingsDestination.CourseManage,
         "timetable_editor" to SettingsDestination.TimeTableManage,

@@ -10,6 +10,9 @@ import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonit
 class CapsuleStateManagerCommandApi(
     private val capsuleStateManager: CapsuleStateManager
 ) : CapsuleCommandApi {
+    override fun showAccountingResult(display: com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel) {
+        capsuleStateManager.showAccountingResult(display)
+    }
     override fun forceRefresh() {
         capsuleStateManager.forceRefresh()
     }

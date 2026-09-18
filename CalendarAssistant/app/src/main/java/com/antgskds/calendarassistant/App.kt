@@ -140,6 +140,12 @@ class App : Application() {
         EventAttachmentManager(applicationContext)
     }
 
+    val accountingApi: com.antgskds.calendarassistant.feature.accounting.domain.AccountingApi by lazy {
+        com.antgskds.calendarassistant.feature.accounting.application.AccountingRepository(
+            com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext)
+        )
+    }
+
     private val noteRepository: NoteRepository by lazy {
         NoteRepository(com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext).notesDao())
     }
@@ -288,8 +294,11 @@ class App : Application() {
     // ══════════════════════════════════════════════════════════════════════
 
     val recognitionCenter: RecognitionOrchestrator by lazy {
-        RecognitionOrchestrator(domainEventBus = domainEventBus)
+        RecognitionOrchestrator(domainEventBus = domainEventBus, ingestProvider = { ingestCommandApi }, notificationApi = notificationCenter,
+            capsuleProvider = { capsuleCommandApi }, automaticAccountingEnabled = { settingsQueryApi.settings.value.automaticAccountingEnabled })
     }
+
+    val recognitionApi: com.antgskds.calendarassistant.shared.operation.RecognitionApi get() = recognitionCenter
 
     private val regexAiReviewCoordinator: com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator by lazy {
         com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator(
@@ -314,7 +323,8 @@ class App : Application() {
             appScope = appScope,
             notificationCenter = notificationCenter,
             settingsProvider = { settingsQueryApi.settings.value },
-            regexAiReviewCoordinator = regexAiReviewCoordinator
+            regexAiReviewCoordinator = regexAiReviewCoordinator,
+            accountingApi = accountingApi
         )
     }
 
@@ -439,6 +449,19 @@ class App : Application() {
             capsuleCenter = capsuleCenter,
             appScope = appScope
         )
+    }
+
+    /** 开发者诊断只调用公开入口，不直接访问无障碍服务内部状态。 */
+    suspend fun startPaymentDiagnostics() = kotlinx.coroutines.withContext(Dispatchers.Main) {
+        val service = com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService.instance
+        checkNotNull(service) { "请先开启 Will do 无障碍服务" }.startPaymentDiagnostics()
+    }
+
+    suspend fun exportPaymentDiagnostics() = kotlinx.coroutines.withContext(Dispatchers.Main) {
+        val service = com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService.instance
+        val path = service?.exportPaymentDiagnostics()
+            ?: com.antgskds.calendarassistant.platform.accessibility.PaymentAccessibilityDiagnostics.exportLatest(applicationContext)
+        android.widget.Toast.makeText(applicationContext, "诊断已导出：$path", android.widget.Toast.LENGTH_LONG).show()
     }
 
     // 短信内容观察者

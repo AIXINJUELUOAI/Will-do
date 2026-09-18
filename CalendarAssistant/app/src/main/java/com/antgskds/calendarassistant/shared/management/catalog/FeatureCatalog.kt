@@ -42,8 +42,11 @@ object FeatureCatalog {
     )
 
     val features: List<FeatureEntry> = listOf(
+        FeatureEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", "两分钟一次性实验：即时事件、多窗口和延迟节点采样、独立截图，自动导出本地 ZIP，不调用 AI"),
+        FeatureEntry("自动记账", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "偏好设置单一默认关闭开关；无障碍支付完成/单笔详情截图与微信支付宝 Xposed 消息采集，共用去重入库及结果反馈"),
+        FeatureEntry("主动账单识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "图文一次识别日程与账单；正常账单自动入账并在岛上展示金额，重复暂不入库，异常信息留待核对"),
         // —— 识别 ——
-        FeatureEntry("AI 识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "截图/图片/文本/语音 → OCR/多模态/文本解析 → 日程草稿"),
+        FeatureEntry("AI 识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "截图/图片统一多模态识别；直接文本与语音转写共用模型配置，旧 OCR 与文本模型模式已下架"),
         FeatureEntry("正则日程识别", Chain.RECOGNITION, "data/node/recognition/RecognitionRegexNode", "文本/语音转写先走可配置正则规则生成日程草稿"),
         FeatureEntry("随口记", Chain.RECOGNITION, "core/service/voice/VoiceCaptureHandleActivity", "长按音量+或悬浮窗入口录音，转写为随口记/识别输入"),
         FeatureEntry("短信取件码", Chain.RECOGNITION, "feature/recognition/ingest/sms/SmsPickupIngestCoordinator", "监听短信、本地解析取件码"),
@@ -68,11 +71,12 @@ object FeatureCatalog {
         FeatureEntry("图片随口记", Chain.SCHEDULE, "feature/quickmemo/application/QuickMemoFacade", "系统图片/分享图片保存为随口记素材"),
         FeatureEntry("随口记多提醒", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", "维护单条随口记的多个提醒及重复规则，统一调用通知入口"),
         FeatureEntry("悬浮媒体查看", Chain.SUPPORT, "platform/floating/ui/connector/FloatingMediaCardConnector", "从胶囊查看日程二维码、图片附件或随口记图片，失败时返回详情"),
-        FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "便签编辑与存储"),
+        FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "普通便签已下线；保留旧数据存储及历史数据迁移兼容能力，首页不再提供编辑入口"),
         FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记数据"),
 
         // —— 横切支撑 ——
-        FeatureEntry("记账表兼容（功能暂停）", Chain.SUPPORT, "feature/accounting/data/AccountingEntry", "仅保留 Room 表结构，兼容记账测试版数据库升级；不接入记账页面、录入、识别或同步业务"),
+        FeatureEntry("账单持久化", Chain.SUPPORT, "feature/accounting/data/AccountingEntry", "沿用兼容表与索引，文件导入经统一入库接口写入；不升级数据库结构"),
+        FeatureEntry("记账与账单文件导入", Chain.SUPPORT, "feature/accounting/ui/AccountingPreviewScreen", "日周月真实账单与统计，支持手动新增、编辑及删除；微信 CSV/XLSX、支付宝 CSV 经预览确认导入，不接自动识别或同步"),
         FeatureEntry("设备定位", Chain.SUPPORT, "location/LocationProvider", "独立定位模块，为天气及后续位置功能提供坐标能力"),
         FeatureEntry("天气", Chain.SUPPORT, "core/weather", "天气预警/风险，位置选择"),
         FeatureEntry("背景自定义", Chain.SUPPORT, "feature/appearance/domain/AppBackgroundImageStore", "用户图片背景导入、私有存储与背景取色"),

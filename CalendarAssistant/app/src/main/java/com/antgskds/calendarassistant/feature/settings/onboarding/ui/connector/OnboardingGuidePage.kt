@@ -1483,14 +1483,13 @@ private fun WeatherConfigStep(
 @Composable
 private fun AiConfigStep(
     settings: MySettings,
-    onMultimodalChange: (Boolean) -> Unit,
     onDisableThinkingChange: (Boolean) -> Unit,
     onLocalSemanticChange: (Boolean) -> Unit,
     onSaveAiConfig: (String, String, String) -> Unit,
 ) {
-    var aiKey by remember(settings.modelKey) { mutableStateOf(settings.modelKey) }
-    var aiName by remember(settings.modelName) { mutableStateOf(settings.modelName) }
-    var aiUrl by remember(settings.modelUrl) { mutableStateOf(settings.modelUrl) }
+    var aiKey by remember(settings.mmModelKey) { mutableStateOf(settings.mmModelKey) }
+    var aiName by remember(settings.mmModelName) { mutableStateOf(settings.mmModelName) }
+    var aiUrl by remember(settings.mmModelUrl) { mutableStateOf(settings.mmModelUrl) }
     val cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface,
@@ -1507,8 +1506,8 @@ private fun AiConfigStep(
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 ActionSettingItem(
                     title = "AI 模型",
-                    subtitle = settings.modelName.ifBlank { "未配置模型名称，AI 识别暂不可用" },
-                    value = if (settings.modelKey.isNotBlank() && settings.modelUrl.isNotBlank()) "已配置" else "未配置",
+                    subtitle = settings.mmModelName.ifBlank { "未配置模型名称，AI 识别暂不可用" },
+                    value = if (settings.mmModelKey.isNotBlank() && settings.mmModelUrl.isNotBlank()) "已配置" else "未配置",
                     enabled = false,
                     onClick = {},
                     cardTitleStyle = cardTitleStyle,
@@ -1518,8 +1517,8 @@ private fun AiConfigStep(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 ActionSettingItem(
                     title = "接口地址",
-                    subtitle = settings.modelUrl.ifBlank { "未填写接口地址" },
-                    value = if (settings.modelUrl.isNotBlank()) "已配置" else "未配置",
+                    subtitle = settings.mmModelUrl.ifBlank { "未填写接口地址" },
+                    value = if (settings.mmModelUrl.isNotBlank()) "已配置" else "未配置",
                     enabled = false,
                     onClick = {},
                     cardTitleStyle = cardTitleStyle,
@@ -1577,15 +1576,6 @@ private fun AiConfigStep(
 
         AppSettingsCard {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                SwitchSettingItem(
-                    title = "多模态 AI",
-                    subtitle = "用于图片识别等能力，需要额外配置多模态模型",
-                    checked = settings.useMultimodalAi,
-                    onCheckedChange = onMultimodalChange,
-                    cardTitleStyle = cardTitleStyle,
-                    cardSubtitleStyle = cardSubtitleStyle,
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 SwitchSettingItem(
                     title = "禁用思考",
                     subtitle = "适用于不需要 reasoning 的模型或场景",
@@ -2018,7 +2008,7 @@ private enum class OnboardingStep(
     ),
     MODEL(
         "模型与连接",
-        "配置 AI 接口、多模态、本地语义等识别能力。",
+        "配置支持图片输入的 AI 模型及识别偏好。",
     ),
     WEATHER(
         "天气配置",

@@ -1,9 +1,9 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material.component
 
+import com.antgskds.calendarassistant.shared.ui.material.component.SwipeActionIcon
 import com.antgskds.calendarassistant.shared.ui.material.component.AppSwipeReveal
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -215,30 +214,5 @@ fun SwipeableEventItem(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun SwipeActionIcon(
-    icon: ImageVector,
-    tint: Color,
-    size: androidx.compose.ui.unit.Dp,
-    hapticEnabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    val haptics = rememberAppHaptics(hapticEnabled)
-    Box(
-        modifier = Modifier
-            .size(size)
-            .padding(4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(tint.copy(alpha = 0.15f))
-            .clickable {
-                haptics.click()
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, null, tint = tint)
     }
 }

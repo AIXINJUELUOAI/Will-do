@@ -130,10 +130,13 @@ class CapsuleStateManager(
         val weather: List<OcrCapsuleState>,
         val voiceTranscription: OcrCapsuleState?,
         val textQuickMemo: OcrCapsuleState?,
-        val quickMemoRecording: OcrCapsuleState?
+        val quickMemoRecording: OcrCapsuleState?,
+        val accounting: OcrCapsuleState? = null,
     )
 
     private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private val accountingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private var accountingAutoClearJob: Job? = null
     private val modelLoadingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
     private val weatherCapsuleState = MutableStateFlow<List<OcrCapsuleState>>(emptyList())
     private val voiceTranscriptionCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
@@ -169,6 +172,8 @@ class CapsuleStateManager(
         content: String,
         actions: List<CapsuleActionSpec> = emptyList()
     ) {
+        accountingAutoClearJob?.cancel()
+        accountingCapsuleState.value = null
         val now = System.currentTimeMillis()
         val display = CapsuleMessageComposer.composeOcrProgress(title, content).copy(actions = actions)
         updateOcrCapsule(
@@ -232,6 +237,21 @@ class CapsuleStateManager(
             ),
             durationMs
         )
+    }
+
+    fun showAccountingResult(display: CapsuleDisplayModel) {
+        val now = System.currentTimeMillis()
+        val duration = ocrResultTimeoutMs()
+        accountingAutoClearJob?.cancel()
+        val state = OcrCapsuleState(id = "ACCOUNTING_RESULT", notifId = NotificationIds.liveCapsule("accounting_result"),
+            type = TYPE_OCR_RESULT, eventType = "accounting_result", title = display.shortText,
+            content = display.expandedText.orEmpty(), description = "", color = android.graphics.Color.parseColor("#4CAF50"),
+            startMillis = now, endMillis = now + duration, display = display, expiresAt = now + duration)
+        accountingCapsuleState.value = state
+        accountingAutoClearJob = appScope.launch {
+            kotlinx.coroutines.delay(duration)
+            accountingCapsuleState.compareAndSet(state, null)
+        }
     }
 
     fun clearOcrCapsule() {
@@ -529,9 +549,10 @@ class CapsuleStateManager(
 
         val capsuleTransientCombine = combine(
             baseTransientCombine,
-            quickMemoRecordingCapsuleState
-        ) { transient, quickMemoRecording ->
-            transient.copy(quickMemoRecording = quickMemoRecording)
+            quickMemoRecordingCapsuleState,
+            accountingCapsuleState,
+        ) { transient, quickMemoRecording, accounting ->
+            transient.copy(quickMemoRecording = quickMemoRecording, accounting = accounting)
         }
 
         return combine(baseCombine, networkSpeedState, capsuleTransientCombine) { (events, settings), networkSpeed, transient ->
@@ -609,8 +630,10 @@ class CapsuleStateManager(
             weatherCapsuleState.value = activeWeatherCapsules
         }
 
-        if ((activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null || activeQuickMemoRecordingCapsule != null) && settings.isLiveCapsuleEnabled) {
+        val activeAccounting = transient.accounting?.takeIf { it.expiresAt == null || nowMillis < it.expiresAt }
+        if ((activeAccounting != null || activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null || activeQuickMemoRecordingCapsule != null) && settings.isLiveCapsuleEnabled) {
             val transientItems = buildList {
+                activeAccounting?.let { add(createTransientCapsuleItem(it)) }
                 activeQuickMemoRecordingCapsule?.let { state ->
                     add(createTransientCapsuleItem(state))
                 }

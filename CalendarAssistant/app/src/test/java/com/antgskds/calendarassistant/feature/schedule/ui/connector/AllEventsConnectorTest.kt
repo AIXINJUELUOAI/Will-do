@@ -11,6 +11,26 @@ import org.junit.Test
 
 class AllEventsConnectorTest {
     @Test
+    fun `empty schedule still has a today header without synthetic events`() {
+        val today = LocalDate.of(2026, 9, 16)
+        val connection = buildConnection(emptyList(), today, reverse = false)
+        assertEquals(today, connection.state.groups.single().date)
+        assertEquals(emptyList<ScheduleDisplayItem>(), connection.state.groups.single().items)
+        assertEquals(emptyMap<String, ScheduleDisplayItem>(), connection.itemsByKey)
+    }
+
+    @Test
+    fun `unmatched search does not insert today placeholder`() {
+        val today = LocalDate.of(2026, 9, 16)
+        val connection = buildAllEventsConnection(
+            items = emptyList(), searchQuery = "missing", today = today, now = today.atTime(8, 0),
+            reverseOrderEnabled = false, revealedItemKey = null, timeRefreshToken = 1L,
+            futureDays = 7, futureLimit = today.plusDays(7),
+        )
+        assertEquals(0, connection.state.groups.size)
+    }
+
+    @Test
     fun `searches display fields and keeps first item for duplicate stable keys`() {
         val today = LocalDate.of(2026, 7, 14)
         val first = item("same", "Project review", today, LocalTime.of(9, 0), eventId = 1L)

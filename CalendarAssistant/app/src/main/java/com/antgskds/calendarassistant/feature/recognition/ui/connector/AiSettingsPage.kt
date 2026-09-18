@@ -131,7 +131,6 @@ fun AiSettingsPage(
         uiSize = uiSize,
         onAction = { action ->
             when (action) {
-                is AiSettingsUiAction.SaveTextModel -> viewModel.updateAiSettings(action.key, action.name, action.url)
                 is AiSettingsUiAction.SaveMultimodalModel -> viewModel.updateMultimodalAiSettings(action.key, action.name, action.url)
                 is AiSettingsUiAction.SetAgentAccess -> viewModel.updateAgentAccessOptions(accessEnabled = action.enabled)
                 is AiSettingsUiAction.SetThirdPartyAgentAccess -> {
@@ -178,16 +177,6 @@ fun MaterialAiSettingsScreen(
     val focusManager = LocalFocusManager.current
     var currentToastType by remember { mutableStateOf(ToastType.SUCCESS) }
 
-    val isMultimodalEnabled = settings.useMultimodalAi
-
-    var textModelUrl by remember(settings) { mutableStateOf(settings.modelUrl) }
-    var textModelName by remember(settings) { mutableStateOf(settings.modelName) }
-    var textModelKey by remember(settings) { mutableStateOf(settings.modelKey) }
-    var textProvider by remember(settings) { mutableStateOf(detectPresetProvider(settings.modelUrl, settings.modelName)) }
-    var textCustomModels by remember { mutableStateOf(emptyList<String>()) }
-    var textConnected by remember { mutableStateOf(false) }
-    var textModelFetchFailed by remember { mutableStateOf(false) }
-
     var mmModelUrl by remember(settings) { mutableStateOf(settings.mmModelUrl) }
     var mmModelName by remember(settings) { mutableStateOf(settings.mmModelName) }
     var mmModelKey by remember(settings) { mutableStateOf(settings.mmModelKey) }
@@ -209,13 +198,13 @@ fun MaterialAiSettingsScreen(
     var syncPassphrase by remember { mutableStateOf("") }
     var syncPassphraseStored by remember(state.syncPassphraseStored) { mutableStateOf(state.syncPassphraseStored) }
 
-    val activeProvider = if (isMultimodalEnabled) mmProvider else textProvider
-    val activeModelUrl = if (isMultimodalEnabled) mmModelUrl else textModelUrl
-    val activeModelName = if (isMultimodalEnabled) mmModelName else textModelName
-    val activeModelKey = if (isMultimodalEnabled) mmModelKey else textModelKey
-    val activeCustomModels = if (isMultimodalEnabled) mmCustomModels else textCustomModels
-    val activeConnected = if (isMultimodalEnabled) mmConnected else textConnected
-    val activeModelFetchFailed = if (isMultimodalEnabled) mmModelFetchFailed else textModelFetchFailed
+    val activeProvider = mmProvider
+    val activeModelUrl = mmModelUrl
+    val activeModelName = mmModelName
+    val activeModelKey = mmModelKey
+    val activeCustomModels = mmCustomModels
+    val activeConnected = mmConnected
+    val activeModelFetchFailed = mmModelFetchFailed
     val effectiveModelName = if (
         activeProvider == PROVIDER_CUSTOM &&
         activeModelUrl.isBlank() &&
@@ -250,15 +239,15 @@ fun MaterialAiSettingsScreen(
     }
 
     fun setActiveProvider(value: String) {
-        if (isMultimodalEnabled) mmProvider = value else textProvider = value
+        mmProvider = value
     }
 
     fun setActiveUrl(value: String) {
-        if (isMultimodalEnabled) mmModelUrl = value else textModelUrl = value
+        mmModelUrl = value
     }
 
     fun setActiveName(value: String) {
-        if (isMultimodalEnabled) mmModelName = value else textModelName = value
+        mmModelName = value
         // 模板地址随模型更新（Gemini 的路径包含模型名），不重置已连接状态。
         providerPresets[activeProvider]?.let { preset ->
             setActiveUrl(preset.endpointBuilder(value.trim()))
@@ -266,19 +255,19 @@ fun MaterialAiSettingsScreen(
     }
 
     fun setActiveKey(value: String) {
-        if (isMultimodalEnabled) mmModelKey = value else textModelKey = value
+        mmModelKey = value
     }
 
     fun setActiveCustomModels(value: List<String>) {
-        if (isMultimodalEnabled) mmCustomModels = value else textCustomModels = value
+        mmCustomModels = value
     }
 
     fun setActiveConnected(value: Boolean) {
-        if (isMultimodalEnabled) mmConnected = value else textConnected = value
+        mmConnected = value
     }
 
     fun setActiveModelFetchFailed(value: Boolean) {
-        if (isMultimodalEnabled) mmModelFetchFailed = value else textModelFetchFailed = value
+        mmModelFetchFailed = value
     }
 
     fun applyProviderPreset(provider: String) {
@@ -291,11 +280,7 @@ fun MaterialAiSettingsScreen(
     }
 
     suspend fun saveCurrent(url: String, name: String, key: String) {
-        if (isMultimodalEnabled) {
-            onAction(AiSettingsUiAction.SaveMultimodalModel(key.trim(), name.trim(), url.trim()))
-        } else {
-            onAction(AiSettingsUiAction.SaveTextModel(key.trim(), name.trim(), url.trim()))
-        }
+        onAction(AiSettingsUiAction.SaveMultimodalModel(key.trim(), name.trim(), url.trim()))
         showToast("配置保存成功")
     }
 
@@ -321,21 +306,15 @@ fun MaterialAiSettingsScreen(
         actionLoading = true
         when (val result = fetchModels(activeModelKey.trim(), modelsUrl.trim())) {
             is ModelListResult.Success -> {
-                val preferVision = isMultimodalEnabled && activeProvider == PROVIDER_DEEPSEEK
-                val models = if (preferVision) {
-                    result.models.sortedBy { if (it.contains("vision", ignoreCase = true)) 0 else 1 }
-                } else result.models
+                val models = result.models
                 setActiveConnected(true)
                 setActiveModelFetchFailed(models.isEmpty())
                 setActiveCustomModels(models)
                 if (models.isEmpty()) {
                     showToast("连接成功，但无法获取模型列表，请手动输入模型", ToastType.INFO)
                 } else {
-                    if (activeModelName !in models ||
-                        (preferVision && !activeModelName.contains("vision", ignoreCase = true))) {
-                        setActiveName(if (preferVision) models.firstOrNull {
-                            it.contains("vision", ignoreCase = true)
-                        }.orEmpty() else "")
+                    if (activeModelName !in models) {
+                        setActiveName("")
                     }
                     isModelExpanded = true
                     showToast("连接成功")
@@ -451,7 +430,6 @@ fun MaterialAiSettingsScreen(
     }
 
     val bottomInset = LocalAppPageBottomPadding.current
-    val modeLabel = if (isMultimodalEnabled) "多模态AI" else "文本AI"
 
     Box(
         modifier = Modifier
@@ -475,16 +453,6 @@ fun MaterialAiSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("参数配置", style = sectionTitleStyle)
-            Text(
-                text = "当前模式：$modeLabel（在偏好设置中切换）",
-                style = cardSubtitleStyle
-            )
-            if (isMultimodalEnabled && activeProvider == PROVIDER_DEEPSEEK) {
-                Text(
-                    text = "图片识别请选择 deepseek-v4-flash-vision-exp 等视觉模型，文本模型不支持图片。",
-                    style = cardSubtitleStyle
-                )
-            }
 
             AiConfigForm(
                 selectedProvider = activeProvider,
@@ -647,10 +615,6 @@ fun MaterialAiSettingsScreen(
         )
     }
 
-    LaunchedEffect(isMultimodalEnabled) {
-        isProviderExpanded = false
-        isModelExpanded = false
-    }
 }
 
 @Composable

@@ -51,6 +51,9 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("自动记账触发", Chain.RECOGNITION, "feature/accounting/domain/AutomaticAccountingPolicy", Maturity.ACTIVE, "统一开关、支付包白名单、成功页面匹配、频率限制及重复内容抑制"),
+        PolicyEntry("微信支付事件会话", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentSessionPolicy", Maturity.ACTIVE, "统一接收微信支付承载页的成功事件，不依赖好友转账入口；每窗口会话只消费一次，截图前后校验前台与有效期"),
+        PolicyEntry("账单详情页触发", Chain.RECOGNITION, "feature/accounting/domain/PaymentDetailPolicy", Maturity.ACTIVE, "按实际前台窗口关联详情与收款汇总首页；金额及交易时间或统计日期就绪后截图，汇总按单笔识别，支持事件源子树并排除加载/聊天/编辑及重复触发"),
         PolicyEntry("随口记胶囊持续时间", Chain.NOTIFICATION, "feature/capsule/domain/QuickMemoCapsuleDurationPolicy", Maturity.ACTIVE, "手动挂起和到期提醒共用默认日程时长；当天结束模式统一到本地 23:59"),
         PolicyEntry("随口记提醒投递策略", Chain.NOTIFICATION, "feature/notification/policy/QuickMemoReminderDeliveryPolicy", Maturity.ACTIVE, "根据胶囊开关选择发布路由，只把 POSTED 视为本次提醒完成，READY 和失败保留重试"),
         PolicyEntry(

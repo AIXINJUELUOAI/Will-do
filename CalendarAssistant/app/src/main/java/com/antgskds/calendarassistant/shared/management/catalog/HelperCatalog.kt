@@ -44,10 +44,26 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("无障碍诊断快照", Chain.SUPPORT, "platform/accessibility/AccessibilityDiagnosticSnapshot", "有界读取事件源及窗口节点并立即回收，输出不可变 JSON 与现有支付规则判断，遮蔽密码字段"),
+        HelperEntry("支付消息解析", Chain.RECOGNITION, "feature/accounting/domain/PaymentMessageParser", "支付凭证、收款及到账退款本地解析；消息保留时效校验，不调用 AI"),
+        HelperEntry("微信结构化支付解析", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentParser", "解析转账 XML、详情桥接响应及红包领取响应；按本人方向、实际金额与原始交易时间生成账单"),
+        HelperEntry("自动记账跨进程接收", Chain.RECOGNITION, "platform/accounting/PaymentCaptureProvider", "Binder 校验支付应用 UID；检查开关、限制数据大小后调用识别契约，拒绝其他应用注入"),
+        HelperEntry("支付应用 Hook", Chain.RECOGNITION, "platform/xposed/PaymentCaptureHook", "微信支付/转账数据库、详情桥接、红包领取回调及支付宝同步消息；独立安装、有界后台转发，不改宿主参数"),
+        HelperEntry("无障碍支付页面采样", Chain.RECOGNITION, "platform/accessibility/PaymentWindowReader", "有界采集可见根节点/事件源子树并立即回收；单独读取前台包与窗口身份，详情内容就绪后才触发截图，不引入 OCR"),
+        HelperEntry("记账结果展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/AccountingRecognitionDisplay", "按实际入库账单汇总金额与收支，重复和待核对另计；小岛仅金额，展开显示明细汇总"),
+        HelperEntry("统一识别结果解析", Chain.RECOGNITION, "feature/recognition/application/ai/RecognitionJsonParser", "分别解析 events 与 bills，坏条目隔离；旧响应兼容，账单缺失字段留待确认"),
+        HelperEntry("账单识别转换", Chain.INGEST, "feature/accounting/domain/AccountingRecognitionMapper", "同金额同一分钟独立拦截疑似重复；时间仅接近时结合名称，同类交易号明确不同可放行，支付交易号精确排重兜底"),
+        HelperEntry("账单识别待确认列表", Chain.SUPPORT, "feature/accounting/ui/AccountingRecognitionSheet", "展示持久化识别草稿，逐条编辑确认或丢弃，未确认不计入收支"),
+        HelperEntry("统一多模态配置", Chain.SUPPORT, "feature/recognition/application/ai/AiModelConfig", "统一图文模型配置；旧设置在 MySettings.migrateToMultimodalConfig 中兼容迁移，不覆盖已有多模态凭据"),
+        HelperEntry("账单编辑转换", Chain.INGEST, "feature/accounting/domain/AccountingEntryEditor", "手动账单金额校验和字段转换；编辑保留原始来源、去重标识及待核对状态"),
+        HelperEntry("账单编辑面板", Chain.SUPPORT, "feature/accounting/ui/AccountingEditorSheet", "共用 Sheet 新建和编辑账单，复用日期时间滚轮，校验后保存真实数据"),
+        HelperEntry("快捷新建账单", Chain.SUPPORT, "feature/accounting/ui/AccountingCreateSheet", "收支分类按钮网格、固定金额输入与保存；默认聚焦数字键盘，更多字段折叠"),
+        HelperEntry("账单原图展示", Chain.SUPPORT, "feature/accounting/ui/AccountingSourceImage", "在账单详情和待确认 Sheet 下方按比例展示关联截图，异步采样解码"),
+        HelperEntry("侧滑操作图标", Chain.SUPPORT, "shared/ui/material/component/SwipeActionIcon", "日程与账单共用带圆角矩形背景的侧滑动作，保留日程尺寸、颜色和触感"),
         HelperEntry("重复实例时间计算", Chain.SCHEDULE, "feature/schedule/domain/model/RepeatOccurrenceCalculator", "共用重复规则推进和下一次时间计算，供日程展示及随口记提醒使用"),
         // —— 识别 ——
-        HelperEntry("AI 失败映射", Chain.RECOGNITION, "core/ai/AiFailureMapper", "AI 调用失败原因 → 内部失败类型"),
-        HelperEntry("识别失败文案映射", Chain.RECOGNITION, "core/ai/RecognitionFailureMessageMapper", "识别失败类型 → 用户可读提示"),
+        HelperEntry("AI 失败映射", Chain.RECOGNITION, "feature/recognition/application/ai/AiFailureMapper", "区分接口明确拒绝图片输入与鉴权、额度、网络等失败，保留可读接口原因"),
+        HelperEntry("识别失败文案映射", Chain.RECOGNITION, "feature/recognition/application/ai/RecognitionFailureMessageMapper", "识别失败类型与详情 → 现有结果反馈；不支持图片时引导更换模型，不新增提醒入口"),
         HelperEntry("即时码二维码支持", Chain.RECOGNITION, "core/instantcode/InstantCodeQrSupport", "取件/取餐/取票/寄件图片二维码解析与卡片二维码生成"),
         HelperEntry("正则日程解析", Chain.RECOGNITION, "core/rule/RegexScheduleRecognizer", "可配置正则规则 → 日程草稿"),
         HelperEntry("正则规则偏好存储", Chain.RECOGNITION, "core/rule/RegexScheduleRulePrefs", "开发者可编辑正则规则 JSON 读写"),
@@ -64,12 +80,23 @@ object HelperCatalog {
         HelperEntry("天气实况展示支持", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/WeatherLiveDisplaySupport", "天气胶囊展示字段裁剪/拼接"),
 
         // —— 天气 ——
+        HelperEntry("按日期天气摘要", Chain.WEATHER, "feature/weather/domain/WeatherDateSummaryMapper", "今日使用实时天气，未来按日期匹配预报；过去、缺失或无效天气不显示"),
         HelperEntry("天气预警图标映射", Chain.WEATHER, "feature/weather/domain/WeatherAlertIconMapper", "预警类型 → 图标"),
         HelperEntry("天气颜色映射", Chain.WEATHER, "feature/weather/domain/WeatherColorMapper", "天气状态 → 颜色"),
         HelperEntry("天气预报图标映射", Chain.WEATHER, "feature/weather/domain/WeatherForecastIconMapper", "预报代码 → 图标"),
         HelperEntry("天气图标映射", Chain.WEATHER, "feature/weather/domain/WeatherIconMapper", "天气代码 → 图标"),
 
         // —— 横切支撑 ——
+        HelperEntry("行内摘要标题", Chain.SUPPORT, "shared/ui/material/component/InlineSummaryHeader", "日期、天气及钱包图标按文字自然换行，仅以空格和间隔点分隔，标题可独立设置字重"),
+        HelperEntry("账单备份格式", Chain.SUPPORT, "feature/accounting/domain/AccountingBackupCodec", "版本化 JSON 保存账单原始字段与身份；有界读取、整批校验后通过统一入库入口追加恢复"),
+        HelperEntry("账单导出入口", Chain.SUPPORT, "feature/accounting/ui/AccountingExportAction", "记账页与备份页共用文件保存选择器及导出结果反馈"),
+        HelperEntry("账单文件解析", Chain.SUPPORT, "feature/accounting/domain/AccountingFileParser", "官方 CSV/XLSX 动态表头、编码与 Excel 日期解析，输出逐行诊断和待核对草稿"),
+        HelperEntry("账单导入预览", Chain.SUPPORT, "feature/accounting/ui/AccountingImportSheet", "选择来源、文件与确认，展示错误行及重复导入结果"),
+        HelperEntry("账单摘要上下文", Chain.SUPPORT, "feature/accounting/ui/AccountingUiState", "导航装配真实账单，今日与全部页通过相同数据源展示消费摘要"),
+        HelperEntry("记账入口展示", Chain.SUPPORT, "feature/accounting/ui/AccountingSummaryHeader", "今日与全部页共用钱包摘要，使用导航注入的真实账单显示日/月支出，向导航层传递日期与月份模式"),
+        HelperEntry("记账预览数据", Chain.SUPPORT, "feature/accounting/ui/AccountingPreviewData", "真实账单的日期映射、周期标题与统计展示，不生成演示账单或消费判断"),
+        HelperEntry("收支建议映射", Chain.SUPPORT, "feature/accounting/ui/AccountingSuggestionMapper", "按当前周期的已确认人民币账单生成原有十二类提示；同期比较使用相同天数，缺少证据不推断转账或报销"),
+        HelperEntry("记账预览图表", Chain.SUPPORT, "feature/accounting/ui/AccountingPreviewCharts", "预览卡片与分析 Sheet 共用折线；结构图按收支最大内容高度布局并交叉淡入淡出，未来日期留空"),
         HelperEntry("公共设置分隔线", Chain.SUPPORT, "shared/ui/material/settings/AppSettingsDivider", "设置卡片内统一 16 dp 水平缩进、0.5 dp 线宽与主题分隔色；开发者相关页面暂不迁移"),
         HelperEntry("公共列表侧滑容器", Chain.SUPPORT, "shared/ui/material/component/AppSwipeReveal", "日程、课程和随口记共用单向拖动、动作区裁切、取消回弹与阈值触感，保留业务内容和既有展开参数"),
         HelperEntry("公共设置行", Chain.SUPPORT, "shared/ui/material/settings/SettingsRowComponents", "设置开关、点击项及滑块等统一展示入口；实验室四项开关复用 SwitchSettingItem"),
@@ -84,7 +111,7 @@ object HelperCatalog {
         HelperEntry("公共锚点菜单", Chain.SUPPORT, "shared/ui/material/component/AppDropdownMenu", "AppMenuItem 定义菜单项；独立 Popup 隔离背景采样，统一定位、选中态、材质及返回和外部点击关闭，供今日视图切换与宽屏更多操作复用"),
         HelperEntry("公共分段切换", Chain.SUPPORT, "shared/ui/material/component/AppSegmentedControl", "主题色选中项与颜色动画、等宽布局、公共背景材质和单次选择触感，统一主题模式、小组件设置及默认启动页切换"),
         HelperEntry("公共滚轮选择器", Chain.SUPPORT, "shared/ui/material/component/AppWheelPicker", "日期、时间及单列选择共用滚轮和弹窗入口，保留 175 dp 高度与 35 dp 行高"),
-        HelperEntry("公共悬浮按钮", Chain.SUPPORT, "shared/ui/material/component/AppFloatingActionButton", "统一悬浮操作的表面材质与点击入口，保留 72 dp 尺寸、34 dp 图标及页面操作语义"),
+        HelperEntry("公共悬浮按钮", Chain.SUPPORT, "shared/ui/material/component/AppFloatingActionButton", "统一悬浮操作的表面材质与点击入口；玻璃模式使用 onSurface 图标和文字，普通模式保留调用方配色，保持 72 dp 尺寸及 34 dp 图标"),
         HelperEntry("小组件渲染支持", Chain.SUPPORT, "platform/widget/WidgetRenderingSupport", "桌面小组件 RemoteViews 渲染辅助"),
     )
 }

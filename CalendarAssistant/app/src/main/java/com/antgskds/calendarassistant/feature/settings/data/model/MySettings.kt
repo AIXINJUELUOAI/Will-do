@@ -84,12 +84,15 @@ fun eventColorPaletteToArgb(colors: List<String>): List<Int> =
 
 @Serializable
 data class MySettings(
+    // 同时控制无障碍自动截图与支付应用 Hook；旧配置缺失此字段时保持关闭。
+    val automaticAccountingEnabled: Boolean = false,
     // AI 模型配置
     val modelKey: String = "",
     val modelName: String = "",
     val modelUrl: String = "",
     val modelProvider: String = "", // 保留旧字段，防止数据丢失
-    val useMultimodalAi: Boolean = false,
+    // 仅为旧备份兼容保留，加载和保存时固定为 true，不再控制识别路由。
+    val useMultimodalAi: Boolean = true,
     val mmModelKey: String = "",
     val mmModelName: String = "",
     val mmModelUrl: String = "",
@@ -449,5 +452,16 @@ object FloatingBallGestureAction {
             OPEN_APP_HOME -> "打开首页"
             else -> "无操作"
         }
+    }
+}
+
+/** 兼容旧版双模型配置；整组迁移，禁止拼接不同服务商的地址和密钥。 */
+fun MySettings.migrateToMultimodalConfig(): MySettings {
+    val hasMultimodalConfig = mmModelKey.isNotBlank() || mmModelName.isNotBlank() || mmModelUrl.isNotBlank()
+    return if (hasMultimodalConfig) {
+        if (useMultimodalAi) this else copy(useMultimodalAi = true)
+    } else {
+        // 保留原模型名称，不能将未知文本模型自动认定或改名为视觉模型。
+        copy(useMultimodalAi = true, mmModelKey = modelKey, mmModelName = modelName, mmModelUrl = modelUrl)
     }
 }

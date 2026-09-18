@@ -75,7 +75,13 @@ fun AppFloatingActionButton(
         modifier = modifier.size(AppFloatingActionButtonDefaults.Size),
         shape = shape,
         containerColor = containerColor,
-        contentColor = contentColor,
+        // 玻璃底材是中性的明/暗磨砂，不再沿用 primary 实色底上的 onPrimary。
+        // 仅统一独立悬浮按钮的图标/文字；共享表面及首页组合栏的配色保持由调用方决定。
+        contentColor = if (LocalAppGlassSettings.current.active) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            contentColor
+        },
     ) {
         Box(
             modifier = Modifier.fillMaxSize().combinedClickable(

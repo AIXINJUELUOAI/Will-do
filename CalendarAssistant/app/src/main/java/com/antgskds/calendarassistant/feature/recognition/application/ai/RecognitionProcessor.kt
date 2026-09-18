@@ -2,12 +2,8 @@ package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Rect
 import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import com.antgskds.calendarassistant.shared.util.ImageCompressionUtils
-import com.antgskds.calendarassistant.shared.util.LayoutAnalyzer
-import com.antgskds.calendarassistant.shared.util.OcrElement
-import com.antgskds.calendarassistant.shared.util.ScreenMetrics
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RulePatchProvider
 import com.antgskds.calendarassistant.feature.recognition.ingest.instantcode.InstantCodeQrSupport
@@ -16,27 +12,11 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.recognition.application.ai.model.ModelMessage
 import com.antgskds.calendarassistant.feature.recognition.application.ai.model.ModelRequest
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.Json
 import java.time.DayOfWeek
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalAdjusters
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * AI 返回的原始 JSON 事件 DTO —— 字段名与 prompt 约定一致。
@@ -86,7 +66,9 @@ data class AiResponse(
 
 data class AnalysisFailure(
     val title: String,
-    val detail: String
+    val detail: String,
+    val errorCode: String? = null,
+    val retryable: Boolean = true
 ) {
     fun fullMessage(): String {
         return if (detail.isBlank()) title else "$title：$detail"
@@ -94,17 +76,28 @@ data class AnalysisFailure(
 }
 
 sealed class AnalysisResult<out T> {
-    data class Success<T>(val data: T) : AnalysisResult<T>()
+    data class Success<T>(
+        val data: T,
+        val bills: List<com.antgskds.calendarassistant.feature.accounting.data.AccountingDraft> = emptyList(),
+        val billIssues: List<String> = emptyList(),
+        val accountingResult: com.antgskds.calendarassistant.feature.accounting.domain.AccountingRecognitionResult? = null,
+    ) : AnalysisResult<T>() {
+        fun feedback(): String = buildList {
+            val count = (data as? Collection<*>)?.size ?: 1
+            if (count > 0) add("已识别 $count 个日程，正在保存")
+            accountingResult?.let {
+                if (it.saved.isNotEmpty()) add("已记 ${it.saved.size} 笔账单")
+                if (it.duplicates > 0) add("账单重复 ${it.duplicates} 笔，暂不入库")
+                if (it.suspectedDuplicates > 0) add("疑似重复 ${it.suspectedDuplicates} 笔，暂不入库")
+                if (it.pending > 0) add("${it.pending} 笔待核对，暂不入库")
+            }
+            if (bills.isNotEmpty() && accountingResult == null) add("${bills.size} 条账单待处理")
+            addAll(billIssues)
+        }.joinToString("；")
+    }
     data class Empty(val message: String = "未识别到有效日程") : AnalysisResult<Nothing>()
     data class Failure(val failure: AnalysisFailure) : AnalysisResult<Nothing>()
 }
-
-data class OcrResult(
-    val rawText: String,
-    val reconstructedText: String,
-    val screenWidth: Int,
-    val screenHeight: Int
-)
 
 private data class AiEventFeature(
     val event: RecognitionDraft,
@@ -119,87 +112,7 @@ private data class AiEventFeature(
 )
 
 object RecognitionProcessor {
-    private const val TAG = "CALENDAR_OCR_DEBUG"
-
-    private val jsonParser = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
-        encodeDefaults = true
-    }
-
-    private val recognizer by lazy {
-        TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-    }
-
-    /**
-     * Lightweight OCR helper for manual image import.
-     * Returns raw recognized text (no layout reconstruction).
-     */
-    suspend fun recognizeText(bitmap: Bitmap): String {
-        return try {
-            processImageWithMlKit(bitmap).text
-        } catch (e: Exception) {
-            Log.e(TAG, "OCR 识别失败", e)
-            ""
-        }
-    }
-
-    suspend fun recognizeOptimizedText(bitmap: Bitmap, context: Context): String {
-        return try {
-            val ocrResult = buildOptimizedOcrResult(bitmap, context.applicationContext)
-            if (ocrResult.reconstructedText.isBlank()) {
-                Log.w(TAG, "OCR 结果为空！")
-                ""
-            } else {
-                val anchoredText = injectDateAnchors(ocrResult.reconstructedText, LocalDate.now())
-                Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
-                Log.d(TAG, anchoredText)
-                Log.d(TAG, "============================================")
-                anchoredText
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "OCR 优化识别失败", e)
-            ""
-        }
-    }
-
-    private suspend fun buildOptimizedOcrResult(bitmap: Bitmap, context: Context): OcrResult {
-        val appContext = context.applicationContext
-        val visionText = processImageWithMlKit(bitmap)
-
-        return withContext(Dispatchers.Default) {
-            val screenWidth = bitmap.width
-            val screenHeight = bitmap.height
-
-            val ocrElements = visionText.textBlocks
-                .flatMap { it.lines }
-                .flatMap { it.elements }
-                .filter { it.text.isNotBlank() }
-                .map { element ->
-                    OcrElement(
-                        text = element.text,
-                        boundingBox = element.boundingBox ?: Rect(),
-                        confidence = element.confidence ?: 0f
-                    )
-                }
-
-            val filteredElements = LayoutAnalyzer.filterNoise(
-                ocrElements,
-                ScreenMetrics.getStatusBarHeight(appContext),
-                ScreenMetrics.getNavigationBarHeight(appContext),
-                screenHeight
-            )
-
-            val reconstructedText = LayoutAnalyzer.reconstructLayout(filteredElements, screenWidth)
-
-            val rawText = filteredElements
-                .sortedBy { it.boundingBox.top }
-                .joinToString("\n") { it.text }
-
-            OcrResult(rawText, reconstructedText, screenWidth, screenHeight)
-        }
-    }
+    private const val TAG = "CALENDAR_AI_DEBUG"
 
     suspend fun parseUserText(text: String, settings: MySettings, context: Context): AnalysisResult<RecognitionDraft> {
         val appContext = context.applicationContext
@@ -277,74 +190,10 @@ object RecognitionProcessor {
         return analyzeSchedule(normalizedText, settings, context.applicationContext)
     }
 
+    /** 图片直接交给多模态模型，二维码仍由本地条码扫描补全。 */
     suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<RecognitionDraft>> {
-        val appContext = context.applicationContext
-        Log.i(TAG, ">>> 开始处理图片 (尺寸: ${bitmap.width} x ${bitmap.height})")
-
-        if (settings.useMultimodalAi) {
-            val result = analyzeImageWithMultimodal(bitmap, settings, appContext)
-            val qrPayloads = scanQrPayloadsSafely(bitmap)
-            return attachQrPayloads(result, qrPayloads)
-        }
-
-        val ocrResult = try {
-            buildOptimizedOcrResult(bitmap, appContext)
-        } catch (e: Exception) {
-            Log.e(TAG, "OCR 过程发生异常", e)
-            return AnalysisResult.Empty()
-        }
-
-        if (ocrResult.reconstructedText.isBlank()) {
-            Log.w(TAG, "OCR 结果为空！")
-            return AnalysisResult.Empty()
-        }
-
-        val anchoredText = injectDateAnchors(ocrResult.reconstructedText, LocalDate.now())
-        val qrPayloads = scanQrPayloadsSafely(bitmap)
-
-        Log.d(TAG, "========== [OCR 重构文本 (SSORS)] ==========")
-        Log.d(TAG, anchoredText)
-        Log.d(TAG, "============================================")
-
-        return coroutineScope {
-            try {
-                val scheduleDeferred = async { analyzeSchedule(anchoredText, settings, appContext) }
-                val pickupDeferred = async { analyzePickup(anchoredText, settings, appContext) }
-
-                val scheduleResult = scheduleDeferred.await()
-                val pickupResult = pickupDeferred.await()
-
-                val scheduleEvents = (scheduleResult as? AnalysisResult.Success)?.data ?: emptyList()
-                val pickupEvents = (pickupResult as? AnalysisResult.Success)?.data ?: emptyList()
-
-                Log.d(TAG, "识别结果: 日程=${scheduleEvents.size}, 取件=${pickupEvents.size}")
-
-                // 低信息量日程清洗：过滤被 pickup 覆盖的 general 事件
-                val refinedScheduleEvents = filterRedundantSchedules(scheduleEvents, pickupEvents)
-                if (refinedScheduleEvents.size < scheduleEvents.size) {
-                    Log.d(TAG, "已过滤 ${scheduleEvents.size - refinedScheduleEvents.size} 个冗余日程")
-                }
-
-                val allEvents = refinedScheduleEvents + pickupEvents
-                val finalEvents = attachQrPayloads(deduplicateAiEvents(allEvents), qrPayloads)
-
-                if (finalEvents.isNotEmpty()) {
-                    AnalysisResult.Success(finalEvents)
-                } else {
-                    val failure = listOf(scheduleResult, pickupResult)
-                        .filterIsInstance<AnalysisResult.Failure>()
-                        .firstOrNull()
-                    if (failure != null) {
-                        AnalysisResult.Failure(failure.failure)
-                    } else {
-                        AnalysisResult.Empty()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "AI 分析过程出错", e)
-                AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
-            }
-        }
+        val result = analyzeImageWithMultimodal(bitmap, settings, context.applicationContext)
+        return attachQrPayloads(result, scanQrPayloadsSafely(bitmap))
     }
 
     private suspend fun analyzeSchedule(
@@ -358,38 +207,16 @@ object RecognitionProcessor {
 
         val rulePatch = RulePatchProvider.loadSchedulePatch(context)
 
-        val schedulePrompt = AiPrompts.getSchedulePrompt(
+        val schedulePrompt = AiPrompts.getUserTextPrompt(
             context = context.applicationContext,
             timeStr = now.format(dtfFull),
             dateToday = now.format(dtfDate),
-            dateYesterday = now.minusDays(1).format(dtfDate),
-            dateBeforeYesterday = now.minusDays(2).format(dtfDate),
             dayOfWeek = getDayOfWeek(now),
             rulePatch = rulePatch,
             defaultDurationMinutes = settings.defaultEventDurationMinutes
         )
 
         return executeAiRequest(schedulePrompt, extractedText, settings, "日程识别")
-    }
-
-    private suspend fun analyzePickup(
-        extractedText: String,
-        settings: MySettings,
-        context: Context
-    ): AnalysisResult<List<RecognitionDraft>> {
-        val now = LocalDateTime.now()
-        val dtfFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm EEEE")
-        val dtfTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-
-        val pickupPrompt = AiPrompts.getPickupPrompt(
-            context = context.applicationContext,
-            timeStr = now.format(dtfFull),
-            nowTime = now.format(dtfTime),
-            nowPlusHourTime = now.plusHours(1).format(dtfTime),
-            defaultDurationMinutes = settings.defaultEventDurationMinutes
-        )
-
-        return executeAiRequest(pickupPrompt, extractedText, settings, "取件码识别")
     }
 
     private suspend fun executeAiRequest(
@@ -404,7 +231,7 @@ object RecognitionProcessor {
             return AnalysisResult.Failure(AnalysisFailure("分析失败", "AI 配置缺失"))
         }
         val modelName = modelConfig.name.ifBlank { "deepseek-chat" }
-        val userPrompt = "[OCR文本开始]\n$userText\n[OCR文本结束]"
+        val userPrompt = "[输入文本开始]\n$userText\n[输入文本结束]"
 
         val request = ModelRequest(
             model = modelName,
@@ -425,13 +252,14 @@ object RecognitionProcessor {
             )) {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
-                    val parsedEvents = parseCalendarEvents(cleanJson)
+                    val content = RecognitionJsonParser.parseContent(cleanJson)
+                    val parsedEvents = content.events
 
                     Log.d(TAG, "[$debugTag] AI 解析完成，生成 ${parsedEvents.size} 个事件")
-                    if (parsedEvents.isEmpty()) {
-                        AnalysisResult.Empty()
+                    if (parsedEvents.isEmpty() && content.bills.isEmpty()) {
+                        AnalysisResult.Empty(content.issues.joinToString("；").ifBlank { "未识别到有效日程或账单" })
                     } else {
-                        AnalysisResult.Success(enforceRuleHeaders(parsedEvents))
+                        AnalysisResult.Success(enforceRuleHeaders(parsedEvents), content.bills, content.issues)
                     }
                 }
                 is ApiCallResult.Failure -> {
@@ -444,14 +272,6 @@ object RecognitionProcessor {
             AnalysisResult.Failure(AnalysisFailure("分析失败", "返回格式错误"))
         }
     }
-
-    private suspend fun processImageWithMlKit(bitmap: Bitmap): Text =
-        suspendCancellableCoroutine { continuation ->
-            val image = InputImage.fromBitmap(bitmap, 0)
-            recognizer.process(image)
-                .addOnSuccessListener { continuation.resume(it) }
-                .addOnFailureListener { continuation.resumeWithException(it) }
-        }
 
     private suspend fun analyzeImageWithMultimodal(
         bitmap: Bitmap,
@@ -499,7 +319,8 @@ object RecognitionProcessor {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
                         Log.d(TAG, "[多模态识别] 清洗后内容(${cleanJson.length} chars): $cleanJson")
-                        val events = parseCalendarEvents(cleanJson)
+                        val content = RecognitionJsonParser.parseContent(cleanJson)
+                        val events = content.events
                         val normalizedEvents = enforceRuleHeaders(events)
 
                         val pickupEvents = normalizedEvents.filter(::isInstantCodeDraft)
@@ -509,10 +330,10 @@ object RecognitionProcessor {
                         val mergedEvents = refinedScheduleEvents + pickupEvents
                         val finalEvents = deduplicateAiEvents(mergedEvents)
 
-                    if (finalEvents.isEmpty()) {
-                        AnalysisResult.Empty()
+                    if (finalEvents.isEmpty() && content.bills.isEmpty()) {
+                        AnalysisResult.Empty(content.issues.joinToString("；").ifBlank { "未识别到有效日程或账单" })
                     } else {
-                        AnalysisResult.Success(finalEvents)
+                        AnalysisResult.Success(finalEvents, content.bills, content.issues)
                     }
                 }
                 is ApiCallResult.Failure -> {
@@ -520,7 +341,8 @@ object RecognitionProcessor {
                         TAG,
                         "[多模态识别] API 失败: kind=${response.kind}, status=${response.statusCode}, message=${response.message}, rawBody=${response.rawBody}"
                     )
-                    val failure = mapApiFailure(response)
+                    val mapped = AiFailureMapper.mapImage(response)
+                    val failure = AnalysisFailure(mapped.title, mapped.detail, mapped.errorCode, mapped.retryable)
                     AnalysisResult.Failure(failure)
                 }
             }
@@ -540,23 +362,6 @@ object RecognitionProcessor {
 
     private fun parseCalendarEvents(cleanJson: String): List<RecognitionDraft> {
         return RecognitionJsonParser.parseCalendarEvents(cleanJson)
-    }
-
-    private fun parseCalendarEventsFromObject(jsonObject: JsonObject): List<RecognitionDraft> {
-        val eventsElement = jsonObject["events"]
-        return when (eventsElement) {
-            is JsonArray -> parseCalendarEventsFromArray(eventsElement)
-            null -> listOf(jsonParser.decodeFromJsonElement(AiEventDto.serializer(), jsonObject).toRecognitionDraft())
-            else -> emptyList()
-        }
-    }
-
-    private fun parseCalendarEventsFromArray(jsonArray: JsonArray): List<RecognitionDraft> {
-        return jsonArray.mapNotNull { element ->
-            runCatching {
-                jsonParser.decodeFromJsonElement(AiEventDto.serializer(), element).toRecognitionDraft()
-            }.getOrNull()
-        }
     }
 
     private fun mapApiFailure(failure: ApiCallResult.Failure): AnalysisFailure {
@@ -661,113 +466,6 @@ object RecognitionProcessor {
         }
 
         return "【$displayName】$clean".trim()
-    }
-
-    private val fullDateRegex = Regex("(\\d{4})[年/\\-.](\\d{1,2})[月/\\-.](\\d{1,2})(?:日|号)?")
-    private val monthDayRegex = Regex("(\\d{1,2})[月/\\-.](\\d{1,2})(?:日|号)?")
-    private val dayOnlyRegex = Regex("(?<!\\d)(\\d{1,2})(?:日|号)(?!\\d)")
-    private val dayOfWeekRegex = Regex("(?:周|星期|礼拜)([一二三四五六日天])")
-
-    private fun injectDateAnchors(text: String, now: LocalDate): String {
-        if (text.isBlank()) return text
-        val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-        val result = StringBuilder()
-        var lastAnchor: LocalDate? = null
-
-        text.lines().forEach { line ->
-            result.appendLine(line)
-            val anchor = parseBaseDateFromSystemLine(line, now) ?: return@forEach
-            if (anchor != lastAnchor) {
-                result.appendLine("[@date=${anchor.format(formatter)}]")
-                lastAnchor = anchor
-            }
-        }
-
-        return result.toString().trimEnd()
-    }
-
-    private fun parseBaseDateFromSystemLine(line: String, now: LocalDate): LocalDate? {
-        val trimmed = line.trim()
-        if (!trimmed.startsWith("[C]")) return null
-        val content = trimmed.removePrefix("[C]").trim()
-        if (content.isBlank()) return null
-
-        parseRelativeDateKeyword(content, now)?.let { return it }
-        parseFullDate(content)?.let { return it }
-        parseMonthDay(content, now)?.let { return it }
-        parseDayOnly(content, now)?.let { return it }
-        parseDayOfWeekOnly(content, now)?.let { return it }
-
-        return null
-    }
-
-    private fun parseRelativeDateKeyword(text: String, now: LocalDate): LocalDate? {
-        return when {
-            text.contains("今天") -> now
-            text.contains("昨日") || text.contains("昨天") -> now.minusDays(1)
-            text.contains("前天") -> now.minusDays(2)
-            else -> null
-        }
-    }
-
-    private fun parseFullDate(text: String): LocalDate? {
-        val match = fullDateRegex.find(text) ?: return null
-        val year = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
-        val month = match.groupValues.getOrNull(2)?.toIntOrNull() ?: return null
-        val day = match.groupValues.getOrNull(3)?.toIntOrNull() ?: return null
-        return safeDate(year, month, day)
-    }
-
-    private fun parseMonthDay(text: String, now: LocalDate): LocalDate? {
-        val match = monthDayRegex.find(text) ?: return null
-        val month = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
-        val day = match.groupValues.getOrNull(2)?.toIntOrNull() ?: return null
-        var candidate = safeDate(now.year, month, day) ?: return null
-        if (candidate.isAfter(now.plusDays(7))) {
-            candidate = candidate.minusYears(1)
-        }
-        return candidate
-    }
-
-    private fun parseDayOnly(text: String, now: LocalDate): LocalDate? {
-        if (text.contains("月") || text.contains("-") || text.contains("/") || text.contains(".")) return null
-        val match = dayOnlyRegex.find(text) ?: return null
-        val day = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
-        val currentMonthCandidate = safeDate(now.year, now.monthValue, day)
-        val previousMonth = now.minusMonths(1)
-        var candidate = currentMonthCandidate ?: safeDate(previousMonth.year, previousMonth.monthValue, day) ?: return null
-        if (candidate.isAfter(now.plusDays(7))) {
-            candidate = candidate.minusMonths(1)
-        }
-        return candidate
-    }
-
-    private fun parseDayOfWeekOnly(text: String, now: LocalDate): LocalDate? {
-        val match = dayOfWeekRegex.find(text) ?: return null
-        val dayChar = match.groupValues.getOrNull(1)?.firstOrNull() ?: return null
-        val targetDay = resolveDayOfWeek(dayChar) ?: return null
-        return now.with(TemporalAdjusters.previousOrSame(targetDay))
-    }
-
-    private fun resolveDayOfWeek(ch: Char): DayOfWeek? {
-        return when (ch) {
-            '一' -> DayOfWeek.MONDAY
-            '二' -> DayOfWeek.TUESDAY
-            '三' -> DayOfWeek.WEDNESDAY
-            '四' -> DayOfWeek.THURSDAY
-            '五' -> DayOfWeek.FRIDAY
-            '六' -> DayOfWeek.SATURDAY
-            '日', '天' -> DayOfWeek.SUNDAY
-            else -> null
-        }
-    }
-
-    private fun safeDate(year: Int, month: Int, day: Int): LocalDate? {
-        return try {
-            LocalDate.of(year, month, day)
-        } catch (_: Exception) {
-            null
-        }
     }
 
     /**
