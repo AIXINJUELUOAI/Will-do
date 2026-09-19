@@ -298,6 +298,10 @@ class App : Application() {
             capsuleProvider = { capsuleCommandApi }, automaticAccountingEnabled = { settingsQueryApi.settings.value.automaticAccountingEnabled })
     }
 
+    val accountingMessageCoordinator by lazy {
+        com.antgskds.calendarassistant.feature.accounting.application.AccountingMessageCoordinator(this) { recognitionApi }
+    }
+
     val recognitionApi: com.antgskds.calendarassistant.shared.operation.RecognitionApi get() = recognitionCenter
 
     private val regexAiReviewCoordinator: com.antgskds.calendarassistant.feature.recognition.application.rule.RegexAiReviewCoordinator by lazy {
@@ -642,7 +646,7 @@ class App : Application() {
             this,
             Manifest.permission.READ_SMS
         ) == PackageManager.PERMISSION_GRANTED
-        if (enabled && hasReadSmsPermission) {
+        if ((enabled || com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.enabled(this)) && hasReadSmsPermission) {
             smsObserver?.register()
         } else {
             smsObserver?.unregister()

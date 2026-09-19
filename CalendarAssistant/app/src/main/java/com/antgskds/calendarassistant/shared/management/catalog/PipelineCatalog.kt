@@ -55,7 +55,8 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
-        PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理诊断会话、即时/延迟采样、独立截图与限量导出，结束恢复服务配置"),
+        PipelineEntry("财务消息采集", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", Maturity.PIPELINE, "通知和短信串行提交 RecognitionApi，本地规则识别后复用统一去重入库和结果通知"),
+        PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理微信、支付宝、拼多多、淘宝和京东的诊断会话、即时/延迟采样、独立截图与限量导出，结束恢复服务配置"),
         PipelineEntry("自动支付识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", Maturity.PIPELINE, "自动截图仅提取账单，详情入口要求单笔及真实时间；Hook 消息本地解析，开关二次校验后复用入库与反馈"),
         PipelineEntry("账单识别入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "识别账单事务内逐条校验并自动入账，明确重复不写入，疑似重复与缺失字段暂存待核对；成功后经独立短时胶囊反馈实际金额"),
         PipelineEntry("账单文件导入确认", Chain.INGEST, "feature/accounting/ui/AccountingViewModel", Maturity.PIPELINE, "后台解析文件并展示诊断，经用户确认后委派 IngestCommandApi，维护重选取消与入库状态"),

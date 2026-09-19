@@ -95,6 +95,7 @@ class PaymentAccessibilityDiagnostics(
             .put("appVersion", version(service.packageName))
             .put("wechatVersion", version(AutomaticAccountingPolicy.WECHAT))
             .put("alipayVersion", version(AutomaticAccountingPolicy.ALIPAY))
+            .put("capturePackages", JSONArray(AutomaticAccountingPolicy.diagnosticPackages.toList()))
             .put("serviceFlags", service.serviceInfo?.flags)
             .put("durationMs", ConfigCatalog.PAYMENT_DIAGNOSTIC_DURATION_MS))
         s.timer = s.scope.launch {
@@ -120,7 +121,7 @@ class PaymentAccessibilityDiagnostics(
             s.lastWindowPackage = pkg
             s.lastWindowClass = event.className?.toString().orEmpty()
         }
-        val supported = AutomaticAccountingPolicy.supports(pkg)
+        val supported = AutomaticAccountingPolicy.supportsDiagnostics(pkg)
         if (supported) s.lastPaymentEventAt = SystemClock.elapsedRealtime()
         // 其他应用只记录窗口切换元信息，不采集它们的事件原文/源节点。
         if (!supported && event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
@@ -215,10 +216,10 @@ class PaymentAccessibilityDiagnostics(
 
     private suspend fun captureScreenshot(s: Session) {
         val rootPkg = runCatching { activePackage() }.getOrNull()
-        val eventFallback = rootPkg == null && AutomaticAccountingPolicy.supports(s.lastWindowPackage) &&
+        val eventFallback = rootPkg == null && AutomaticAccountingPolicy.supportsDiagnostics(s.lastWindowPackage) &&
             SystemClock.elapsedRealtime() - s.lastPaymentEventAt <= ConfigCatalog.PAYMENT_DIAGNOSTIC_SCREENSHOT_INTERVAL_MS * 2L
         val pkg = rootPkg ?: s.lastWindowPackage
-        if (!AutomaticAccountingPolicy.supports(pkg) || (rootPkg == null && !eventFallback)) {
+        if (!AutomaticAccountingPolicy.supportsDiagnostics(pkg) || (rootPkg == null && !eventFallback)) {
             record(s, "screenshot_skip", JSONObject().put("reason", "no_payment_foreground_evidence")
                 .put("activePackage", rootPkg ?: JSONObject.NULL).put("lastWindowPackage", s.lastWindowPackage))
             return
@@ -322,13 +323,15 @@ class PaymentAccessibilityDiagnostics(
                     .put("elapsedMs", SystemClock.elapsedRealtime() - s.started).toString(2))
                 File(s.directory, "README.txt").writeText("""
                     支付采集诊断（本地实验，无 AI 调用）
+                    采集微信、支付宝、拼多多、淘宝和京东的事件正文、source、多窗口与截图，包含购物 App 内嵌支付页。
                     events.jsonl：按行 JSON；event 为当场事件和 source；windows 为活动根及多窗口。
                     节点树以 treeId 引用同文件中的 tree_snapshot，重复的树只写一次；null treeId 表示容量/队列限制。
                     phase=immediate / delay_100ms / delay_700ms / delay_1500ms，通过 anchorEventId 对照。
                     source 只即时读取，延迟样本重新读取根/窗口，不复用过期事件或节点。
                     rule 为样本内对现有规则的判断；truncated=true 或发生节流/丢弃时不能断言内容不存在。
+                    购物包的 rule.supported=false 仅表示未开启该包的正式自动识别，不代表诊断未采集。
                     screenshot_request/result 记录图片、对应时间/窗口、错误码；PNG 必须人工查看是否黑屏或区域缺失。
-                    定时截图不依赖成功文字，整个支付 App 操作过程均可能被保存；无目标前台信号时不截图。
+                    定时截图不依赖成功文字，采集范围内 App 的操作过程均可能被保存；无目标前台信号时不截图。
                     summary.json 标明采样及资源上限情况；没有图片不能直接断言系统禁止截图。
                     自动结束和导出后会恢复无障碍配置与原有自动记账；Xposed 链路独立运行。
                 """.trimIndent())

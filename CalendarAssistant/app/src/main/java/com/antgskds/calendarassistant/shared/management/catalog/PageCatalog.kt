@@ -83,7 +83,7 @@ object PageCatalog {
         PageEntry(SettingsDestination.Developer, "settings_developer", "开发者", PageVisibility.DEVELOPER, "测试中心：列表排序开关 + DebugActionRegistry 调试动作（从实验室进入）"),
         PageEntry(SettingsDestination.ConfigEditor, "settings_config_editor", "配置编辑", PageVisibility.DEVELOPER, "由 ConfigCatalog 驱动的底层配置编辑（从开发者页进入）"),
         PageEntry(SettingsDestination.OnboardingGuide, "settings_onboarding_guide", "初始化引导", PageVisibility.DEVELOPER, "首次启动引导页调试入口：权限与一级功能开关体检"),
-        PageEntry(SettingsDestination.RegexRuleEditor, "settings_regex_rule_editor", "正则规则", PageVisibility.DEVELOPER, "编辑本地正则日程识别规则并测试匹配结果"),
+        PageEntry(SettingsDestination.RegexRuleEditor, "settings_regex_rule_editor", "正则规则", PageVisibility.DEVELOPER, "编辑日程及通知短信记账规则；测试仅解析、不入库"),
     )
 
     val weatherDetailPage = NestedPageEntry(

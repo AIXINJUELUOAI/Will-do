@@ -23,6 +23,22 @@ class RecognitionOrchestrator(
     private val capsuleProvider: () -> com.antgskds.calendarassistant.shared.operation.CapsuleCommandApi,
     private val automaticAccountingEnabled: () -> Boolean,
 ) : com.antgskds.calendarassistant.shared.operation.RecognitionApi {
+    override suspend fun analyzeAccountingMessage(
+        message: com.antgskds.calendarassistant.feature.accounting.domain.AccountingMessage,
+        context: Context, traceId: String,
+    ): AnalysisResult<List<RecognitionDraft>> {
+        val access = com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy
+        if (!access.enabled(context)) return AnalysisResult.Empty("通知与短信记账未开启或权限不足")
+        val draft = com.antgskds.calendarassistant.feature.accounting.domain.AccountingMessageRules.parse(message,
+            com.antgskds.calendarassistant.feature.accounting.data.AccountingMessageRulePrefs.load(context))
+            ?: return AnalysisResult.Empty("未匹配账单规则")
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        val settings = com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource(context).loadSettings()
+        if (!access.enabled(context, settings)) return AnalysisResult.Empty("通知与短信记账已关闭")
+        return ingestBills(AnalysisResult.Success(emptyList(), bills = listOf(draft)),
+            "accounting.${message.kind.name.lowercase()}", message.sender, traceId, false, settings.isLiveCapsuleEnabled)
+    }
+
     override suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String, isDetailPage: Boolean): AnalysisResult<List<RecognitionDraft>> {
         if (!automaticAccountingEnabled() || !com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.supports(sourcePackage))

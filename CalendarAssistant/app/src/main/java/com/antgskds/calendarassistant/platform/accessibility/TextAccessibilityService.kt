@@ -193,6 +193,11 @@ class TextAccessibilityService : AccessibilityService() {
                     scheduleDetailRecognition(candidate)
                     return
                 }
+                detailPolicy.claimPaymentResult(source, eventSnapshot.windowId, eventSnapshot.texts,
+                    eventSnapshot.editable, now)?.let { candidate ->
+                    scheduleDetailRecognition(candidate)
+                    return
+                }
             }
             val texts = event.text.take(ConfigCatalog.AUTO_ACCOUNTING_MAX_NODES)
                 .map { it?.toString().orEmpty().take(ConfigCatalog.AUTO_ACCOUNTING_MAX_TEXT) } +
@@ -201,7 +206,7 @@ class TextAccessibilityService : AccessibilityService() {
                 scheduleDetailRecognition(candidate)
                 return
             }
-            if (!detailPolicy.hasDetailContext(source)) wechatSession.claimSuccess(source, event.windowId, texts, now)?.let { candidate ->
+            if (!detailPolicy.hasClaimed(source) && !detailPolicy.hasDetailContext(source)) wechatSession.claimSuccess(source, event.windowId, texts, now)?.let { candidate ->
                 logAutomatic("success_event", "type=${event.eventType} window=${candidate.windowId} session=${candidate.sessionId}", source)
                 automaticTriggerJob?.cancel()
                 wechatTriggerJob?.cancel()
@@ -221,6 +226,8 @@ class TextAccessibilityService : AccessibilityService() {
             }
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
+        // 就绪候选自己完成等待与校验；后续空树刷新不能改走旧入口或再请求一次模型。
+        if (detailPolicy.hasClaimed(source)) return
         val supported = AutomaticAccountingPolicy.supports(source)
         // 只有支付应用事件能重置支付防抖；其他窗口变化交给截图前的前台校验处理。
         if (!supported) return
@@ -262,22 +269,24 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     private fun scheduleDetailRecognition(candidate: PaymentDetailPolicy.Candidate, waitForPage: Boolean = true) {
-        // 与成功事件共用模型入口，详情信号优先，确保不会把历史账单按当前时间入库。
+        // 支付结果与详情共享调度，候选明确携带时间要求，历史详情不允许回填当前时间。
+        automaticTriggerJob?.cancel()
         wechatTriggerJob?.cancel()
         detailTriggerJob?.cancel()
-        logAutomatic("detail_signal", "evidence=${candidate.evidence} window=${candidate.windowId} visit=${candidate.visit}", candidate.packageName)
+        val route = if (candidate.isPaymentResult) "payment_source" else "detail"
+        logAutomatic("${route}_signal", "evidence=${candidate.evidence} window=${candidate.windowId} visit=${candidate.visit}", candidate.packageName)
         detailTriggerJob = serviceScope.launch {
             if (waitForPage) delay(ConfigCatalog.AUTO_ACCOUNTING_DEBOUNCE_MS.toLong())
             if (isAnalyzing.get() || !settingsQueryApi.settings.value.isRecognitionConfigReady()) {
-                logAutomatic("gate", "reason=detail_busy_or_config_missing", candidate.packageName)
+                logAutomatic("gate", "reason=${route}_busy_or_config_missing", candidate.packageName)
                 return@launch
             }
             val request = AutomaticRequest.Detail(candidate)
-            if (!automaticPageStillValid(request, "detail_ready")) return@launch
+            if (!automaticPageStillValid(request, "${route}_ready")) return@launch
             // root 仍可能为空，使用就绪时的内容摘要排重；不退回窗口号，避免吞掉同窗另一笔交易。
-            val identity = "detail_content:${candidate.contentFingerprint}"
+            val identity = "${route}_content:${candidate.contentFingerprint}"
             val reservation = automaticPolicy.reserveWithReason(candidate.packageName, identity, android.os.SystemClock.elapsedRealtime())
-            logAutomatic("reservation", "route=detail result=$reservation", candidate.packageName)
+            logAutomatic("reservation", "route=$route result=$reservation", candidate.packageName)
             if (reservation == AutomaticAccountingPolicy.Reservation.ACCEPTED) startRecognition(0.milliseconds, request)
         }
     }
@@ -809,7 +818,8 @@ class TextAccessibilityService : AccessibilityService() {
         if (expected is AutomaticRequest.Detail) {
             val valid = detailPolicy.isValid(expected.candidate, current.packageName, current.windowId, current.texts,
                 current.editable, android.os.SystemClock.elapsedRealtime())
-            logAutomatic(phase, "route=detail window=${current.windowId} valid=$valid", expected.packageName)
+            val route = if (expected.candidate.isPaymentResult) "payment_source" else "detail"
+            logAutomatic(phase, "route=$route window=${current.windowId} valid=$valid", expected.packageName)
             return valid
         }
         // 原成功入口不能在截图时变成详情页，否则其缺失时间回填规则会污染历史账单。
@@ -908,7 +918,7 @@ class TextAccessibilityService : AccessibilityService() {
             )
             val analysisResult = if (automatic != null) app.recognitionApi.analyzeAutomaticAccountingImage(
                 softwareBitmap, settings, applicationContext, automatic.packageName, traceId,
-                isDetailPage = automatic is AutomaticRequest.Detail
+                isDetailPage = automatic is AutomaticRequest.Detail && !automatic.candidate.isPaymentResult
             ) else app.recognitionApi.analyzeImage(
                 bitmap = softwareBitmap,
                 settings = settings,

@@ -47,7 +47,7 @@ import java.time.Instant
 import java.time.ZoneId
 
 class SettingsViewModel(
-    appContext: Context,
+    private val appContext: Context,
     private val scheduleCenter: ScheduleFacade,
     private val backupCenter: BackupCoordinator,
     private val syncCenter: CalendarSyncService,
@@ -152,9 +152,22 @@ class SettingsViewModel(
     }
 
     // 更新偏好设置（支持单独更新某一项）
+    fun updateAccountingMessages(enabled: Boolean) {
+        viewModelScope.launch {
+            val allowed = !enabled || (settings.value.automaticAccountingEnabled &&
+                com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.permissionsGranted(appContext))
+            if (!allowed) return@launch
+            settingsOperationApi.updateSettings(settings.value.copy(accountingMessagesEnabled = enabled))
+            (appContext.applicationContext as? com.antgskds.calendarassistant.App)?.refreshSmsObserver()
+            if (enabled) com.antgskds.calendarassistant.platform.receiver.SmsNotificationListenerService.rebind(appContext)
+        }
+    }
+
     fun updateAutomaticAccounting(enabled: Boolean) {
         viewModelScope.launch {
-            settingsOperationApi.updateSettings(settings.value.copy(automaticAccountingEnabled = enabled))
+            settingsOperationApi.updateSettings(settings.value.copy(automaticAccountingEnabled = enabled,
+                accountingMessagesEnabled = enabled && settings.value.accountingMessagesEnabled))
+            (appContext.applicationContext as? com.antgskds.calendarassistant.App)?.refreshSmsObserver()
         }
     }
 
