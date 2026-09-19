@@ -42,6 +42,7 @@ object FeatureCatalog {
     )
 
     val features: List<FeatureEntry> = listOf(
+        FeatureEntry("通知与短信记账", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", "双权限子开关控制；可编辑正则提取账单，仅返回入库结果，不调用 AI"),
         FeatureEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", "两分钟一次性实验：即时事件、多窗口和延迟节点采样、独立截图，自动导出本地 ZIP，不调用 AI"),
         FeatureEntry("自动记账", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "偏好设置单一默认关闭开关；无障碍支付完成/单笔详情截图与微信支付宝 Xposed 消息采集，共用去重入库及结果反馈"),
         FeatureEntry("主动账单识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "图文一次识别日程与账单；正常账单自动入账并在岛上展示金额，重复暂不入库，异常信息留待核对"),

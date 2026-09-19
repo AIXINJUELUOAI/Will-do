@@ -40,6 +40,17 @@ class AutomaticAccountingTest {
         assertFalse(AutomaticAccountingPolicy.matchesScreen(wechat, listOf("确认付款", "35.20元"), false))
     }
 
+    @Test fun shoppingPackagesAreCapturedOnlyDuringDiagnostics() {
+        for (pkg in listOf("com.xunmeng.pinduoduo", "com.taobao.taobao", "com.jingdong.app.mall")) {
+            assertTrue(AutomaticAccountingPolicy.supportsDiagnostics(pkg))
+            assertFalse(AutomaticAccountingPolicy.supports(pkg))
+            assertFalse(AutomaticAccountingPolicy.matchesScreen(pkg, listOf("支付成功", "￥17.20"), false))
+        }
+        assertTrue(AutomaticAccountingPolicy.supportsDiagnostics(wechat))
+        assertTrue(AutomaticAccountingPolicy.supportsDiagnostics(alipay))
+        assertFalse(AutomaticAccountingPolicy.supportsDiagnostics("com.example.unrelated"))
+    }
+
     @Test fun debounceGateRetainsAmountAndLimitsRepeatedRequests() {
         val policy = AutomaticAccountingPolicy()
         assertTrue(policy.reserve(wechat, "支付成功35元", 0))

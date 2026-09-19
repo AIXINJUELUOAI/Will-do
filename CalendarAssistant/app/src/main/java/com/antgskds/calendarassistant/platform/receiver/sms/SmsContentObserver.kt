@@ -44,6 +44,7 @@ class SmsContentObserver(
     }
 
     private val pollHandler = Handler(Looper.getMainLooper())
+    private var accountingBaseline = System.currentTimeMillis()
     private var registered = false
     private var polling = false
     private val pollRunnable = object : Runnable {
@@ -61,6 +62,7 @@ class SmsContentObserver(
     @Synchronized
     fun register() {
         if (registered) return
+        accountingBaseline = System.currentTimeMillis()
         val contentResolver = context.contentResolver
         try {
             val persistedId = prefs.getLong(KEY_LAST_PROCESSED_ID, -1L)
@@ -159,12 +161,13 @@ class SmsContentObserver(
         val ingestCoordinator = getSmsPickupIngestCoordinator() ?: return
 
         val settings = SettingsDataSource(context).loadSettings()
-        if (!settings.isSmsMonitoringEnabled) return
+        val accountingEnabled = com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.enabled(context, settings)
+        if (!settings.isSmsMonitoringEnabled && !accountingEnabled) return
 
         // 查询比 lastProcessedId 更新的短信
         val cursor = contentResolver.query(
             SMS_URI,
-            arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY),
+            arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
             "${Telephony.Sms._ID} > ?",
             arrayOf(lastProcessedId.toString()),
             "${Telephony.Sms._ID} ASC"
@@ -177,6 +180,13 @@ class SmsContentObserver(
                 val address = it.getString(1) ?: continue
                 val body = it.getString(2) ?: continue
                 newMessages.add(Triple(id, address, body))
+                val receivedAt = it.getLong(3)
+                if (accountingEnabled && receivedAt >= accountingBaseline) {
+                    (context.applicationContext as? com.antgskds.calendarassistant.App)?.accountingMessageCoordinator?.submit(
+                        com.antgskds.calendarassistant.feature.accounting.domain.AccountingMessage(
+                            com.antgskds.calendarassistant.feature.accounting.domain.AccountingMessageKind.SMS,
+                            address, body, receivedAt))
+                }
             }
         }
 
@@ -191,7 +201,7 @@ class SmsContentObserver(
         scope.launch {
             for ((id, sender, body) in newMessages) {
                 try {
-                    processSms(ingestCoordinator, sender, body, id)
+                    if (settings.isSmsMonitoringEnabled) processSms(ingestCoordinator, sender, body, id)
                 } catch (e: Exception) {
                     Log.e(TAG, "[探针] 处理短信异常 id=$id", e)
                 }
@@ -205,7 +215,7 @@ class SmsContentObserver(
         body: String,
         smsId: Long
     ) {
-        Log.d(TAG, "[探针] 提交短信候选 id=$smsId from=$sender, body=${body.take(80)}...")
+        Log.d(TAG, "[探针] 提交短信候选 id=$smsId, bodyLength=${body.length}")
         ingestCoordinator.submit(
             source = SmsPickupSource.CONTENT_OBSERVER,
             sender = sender,

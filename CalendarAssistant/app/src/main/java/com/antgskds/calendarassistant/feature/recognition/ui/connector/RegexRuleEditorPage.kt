@@ -60,7 +60,13 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
     var testMessage by remember { mutableStateOf("输入一句话后点击测试，结果不会写入日程。") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
 
-    MaterialRegexRuleEditorScreen(
+    var accountingTab by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            TextButton(onClick = { accountingTab = false }) { Text(if (!accountingTab) "✓ 日程规则" else "日程规则") }
+            TextButton(onClick = { accountingTab = true }) { Text(if (accountingTab) "✓ 记账规则" else "记账规则") }
+        }
+        if (accountingTab) AccountingRulesEditor() else MaterialRegexRuleEditorScreen(
         state = RegexRuleEditorUiState(rules = rules, testMessage = testMessage),
         uiSize = uiSize,
         onAction = { action ->
@@ -94,6 +100,7 @@ fun RegexRuleEditorPage(uiSize: Int = 2) {
             }
         }
     )
+    }
 }
 
 @Composable

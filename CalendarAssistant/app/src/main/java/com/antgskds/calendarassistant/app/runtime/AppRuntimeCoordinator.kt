@@ -66,7 +66,7 @@ class AppRuntimeCoordinator(
     fun restoreSmsNotificationListenerIfNeeded() {
         try {
             val settings = settingsQueryApi.settings.value
-            if (settings.isSmsMonitoringEnabled) {
+            if (settings.isSmsMonitoringEnabled || (settings.automaticAccountingEnabled && settings.accountingMessagesEnabled)) {
                 SmsNotificationListenerService.rebind(appContext)
             }
         } catch (e: Exception) {

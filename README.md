@@ -1,81 +1,89 @@
-<div align="center">
+# Will do
 
-<h1>Will do | AIXINJUELUOAI</h1>
+## 一、项目简介
 
-![License](https://img.shields.io/badge/license-GPLv3-red.svg)
-![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0-blue.svg)
-![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-purple.svg)
+**Will do 是一款 Android 智能信息记录助手**
+通过截图、图片、文字等方式，识别日常生活中的各类信息，将日程安排、出行信息、取件码和账单自动整理并记录，配合提醒与实况通知，让信息从看到到记下更省事。
 
-<p>
-  <b>基于 Android Jetpack Compose 与 AI 大模型的现代智能日程管理应用</b>
-</p>
+## 二、核心功能
 
-</div>
+### 信息提取与记录
 
-## 📖 项目简介
+- **日程安排**：提取时间、地点和事项，支持提醒、重复日程、归档及系统日历同步。
+- **取件与取餐**：识别取件码、取餐码及相关地点，集中展示，方便随时查看。
+- **出行信息**：识别火车、航班、打车等信息，提取班次、座位、检票口等关键内容。
+- **账单记录**：识别金额、收支方向和交易时间，自动记账并提示重复，支持手动编辑、收支统计及账单导入导出。
+- **自动记账**：支持无障碍页面采集、Xposed 支付消息采集，以及通知与短信正则识别。适配情况随应用版本和系统环境有所不同。
 
-**Will do** 是一款不仅“能做”而且“会做”的智能日历助手。它利用现代 AI 技术（LLM）与系统深度集成（无障碍服务、实况通知），致力于解决传统日历录入繁琐、提醒单一的痛点。
+### 悬浮窗与随口记
 
-无论是复杂的大学课程表、琐碎的取件取餐码，还是高铁飞机的出行计划，Will do 都能通过**一键识屏**或**文本解析**自动生成结构化日程，并通过 **Android 实况胶囊 (Live Activity)** 提供灵动交互体验。
+- 通过悬浮窗快速输入信息、发起识别或查看记录。
+- 支持文字、语音与图片随口记，随时保存临时事项和灵感。
+- 配合侧边栏、快捷磁贴等入口，减少应用间切换。
+- 通过实况通知展示日程、取件和记账结果，适配部分厂商胶囊与超级岛。
 
-## ✨ 核心功能
+### 课表
 
-### 🤖 AI 智能识别 (v1.5+)
-- **双 Prompt 并发架构**：采用 Schedule 与 Pickup 双通道并发解析，大幅提升识别速度与准确率。
-- **多模态 AI（可选）**：开启后图片识别改为图片直传 unified prompt，适配视觉模型。
-- **多场景覆盖**：
-  - 🚄 **出行**：自动识别火车票（检票口/座位）、网约车（车牌/车型/颜色）。
-  - 📦 **取件**：区分快递取件（📦）与餐饮取餐（🍔），支持取件码聚合显示。
-  - 📅 **日程**：会议、约会、课程等常规日程。
-- **一键识屏**：通过快捷设置磁贴或侧滑手势，利用 ML Kit 本地 OCR + AI 快速录入。
-- **图片导入识别**：支持从相册选择图片进行 OCR + AI 解析。
+- 支持课程导入与管理，以及单双周、重复课程和调课。
+- 课程与日程结合展示，方便统一查看当天安排。
+- 支持课程提醒和桌面小组件。
 
-### 💊 实况胶囊通知 (Live Capsule)
-适配 Android 16 类原生/Oneui/ColorOS/Flyme/HyperOS 系统，在锁屏与通知栏提供类似“灵动岛”的实时状态：
-- **动态标题**：火车票显示检票口/座位，网约车显示车牌号，倒计时结束自动流转。
-- **OCR 胶囊**：识别进度/结果优先显示，完成后自动恢复事件胶囊。
-- **网速胶囊**：优雅的实时网速监控（v1.2.1 优化格式）。
-- **主动唤醒**：基于 `CapsuleStateManager` 的智能状态计算，仅在需要时唤醒服务，极致省电。
+### 天气
 
-### 🎓 课程表管理系统
-- **复杂排课支持**：支持单双周、多学期、排除特定日期及临时调课（影子课程机制）。
-- **一键导入**：兼容“醒课表”数据格式导入。
-- **桌面与日历融合**：课程数据自动转换为虚拟日程，不污染系统日历，但在时间轴中无缝展示。
+- 查看天气信息，支持定位或选择位置。
+- 提供天气预警与风险提示。
+- 支持天气实况通知，方便及时了解天气变化。
 
-### 🪟 悬浮窗交互
-- 长按音量+键呼出悬浮日程，覆盖全屏应用。
-- 支持左滑快捷操作：一键标记“已取件”、“已检票”、“已用车”。
+### WebDAV
 
-### 🔄 数据同步与备份
-- **日历双向同步**：支持与系统日历（Google/Outlook/本地）双向同步。
-- **重复日程同步 (Beta)**：仅同步 ±30 天实例，超过上限自动保护。
-- **完整备份**：支持导出 JSON 格式的完整备份文件。
+- 连接自己的 WebDAV 服务，进行数据备份与同步。
+- 支持本地备份与恢复，方便迁移和保存数据。
 
-### 🧯 稳定性与日志
-- 崩溃/ANR 记录到 `/Download/CrashLogs/exception.log`，便于定位问题。
+## 三、安装与使用
 
-## 🛠️ 技术栈
+**支持 Android 13 及以上版本。**
 
-本项目采用纯现代 Android 技术栈构建：
+### 下载
 
-| 架构层级 | 技术选型 | 说明 |
-|:---|:---|:---|
-| **UI 框架** | **Jetpack Compose** | 100% Compose 实现，Material 3 设计规范 |
-| **架构模式** | **MVVM + MVI** | Repository 模式，Unidirectional Data Flow |
-| **状态管理** | **StateFlow** | 替代 LiveData，全响应式数据流 |
-| **异步处理** | **Coroutines + Flow** | 高效处理并发任务 |
-| **网络请求** | **Ktor Client** | 轻量级协程网络库，处理 AI API 请求 |
-| **本地智能** | **ML Kit OCR** | Google 离线文字识别，保护隐私 |
-| **数据存储** | **Kotlinx Serialization** | JSON 文件存储，轻量且易于迁移 |
-| **系统服务** | **Accessibility & Tile** | 无障碍服务截屏，快捷设置磁贴 |
+[点击下载](https://github.com/AIXINJUELUOAI/Will-do/releases)
 
-## 📜 开源协议
+### 开始使用
 
-Copyright (C) 2024-2026 AIXINJUELUOAI
+1. 下载并安装 Release 页面提供的安装包。
+2. 在“模型与连接”中配置模型服务；截图和图片识别需要支持图片输入的多模态模型。
+3. 根据需要授予通知、日历、悬浮窗或无障碍等权限。
+4. 通过应用内入口、悬浮窗或快捷磁贴开始识别与记录。
 
-This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License as published by the Free Software Foundation**, either version 3 of the License, or (at your option) any later version.
+### 开启自动记账
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+在 **偏好设置 → 记账** 中开启“自动记账”，默认关闭。
 
-查看完整协议文件：[LICENSE](./LICENSE)
+| 识别方式 | 使用条件 | 是否调用 AI |
+| --- | --- | --- |
+| 无障碍截图识别 | 开启无障碍服务并配置多模态模型 | 是 |
+| Xposed 支付消息识别 | 激活模块、启用对应支付应用作用域并重启支付应用 | 否 |
+| 通知与短信识别 | 开启对应子开关，并授予通知使用权和短信权限 | 否 |
+
+无障碍截图识别可能产生模型调用费用，具体取决于所配置的服务。通知与短信使用本地正则，可在开发者设置中修改和补充规则。
+
+## 四、特别感谢
+
+感谢以下开源项目，本项目的部分功能参考或使用了它们的实现：
+
+| 项目 | 参考或使用的部分 |
+| --- | --- |
+| [HopOntoIsland](https://github.com/kmod-midori/HopOntoIsland) | 早期原生实况通知反射调用方案参考，现已改用 Google 官方 API |
+| [starSchedule](https://github.com/lightStarrr/starSchedule) | Flyme 实况通知相关代码 |
+| [HyperIsland](https://github.com/1812z/HyperIsland) | 小米超级岛相关代码 |
+| [parcel](https://github.com/shareven/parcel) | 短信取件码提取相关代码 |
+| [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting) | Xposed 自动记账、通知与短信信息提取相关实现 |
+
+感谢上述项目的开发者，以及参与 Will do 测试、反馈问题和提出建议的用户。
+
+## 五、开源许可
+
+Copyright © 2024–2026 AIXINJUELUOAI
+
+本项目采用 **GNU GPL v3 或更新版本**开源许可。使用、修改与分发本项目时，请遵守相应许可条款，并保留版权及许可声明。
+
+完整条款请参阅 [LICENSE](https://github.com/AIXINJUELUOAI/Will-do/blob/main/LICENSE)。

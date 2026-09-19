@@ -18,6 +18,12 @@ import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
  * 由 RecognitionOrchestrator 实现。方法签名与其现有实现一致（纯增量契约，不改行为）。
  */
 interface RecognitionApi {
+    /** 通知和短信只走可编辑本地正则，不产生识别进度、不调用模型。 */
+    suspend fun analyzeAccountingMessage(
+        message: com.antgskds.calendarassistant.feature.accounting.domain.AccountingMessage,
+        context: Context, traceId: String,
+    ): AnalysisResult<List<RecognitionDraft>>
+
     /** 自动入口仅处理账单；详情/收款汇总必须输出单笔及明确时间（汇总可用统计日期零点），不回填当前时间。 */
     suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String = EventIdentity.newTraceId(), isDetailPage: Boolean = false): AnalysisResult<List<RecognitionDraft>>

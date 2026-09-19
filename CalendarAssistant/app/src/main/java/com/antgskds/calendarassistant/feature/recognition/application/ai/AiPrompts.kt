@@ -80,7 +80,7 @@ object AiPrompts {
     """.trimIndent()
 
     private val accountingContract = """
-        【统一图文输出协议 v13】
+        【统一图文输出协议 v15】
         同时提取输入中的日程和已发生的收支交易，不需要先分类或再次请求。
         最终仅输出一个 JSON 对象，顶层必须包含 events 和 bills 两个数组；某类无结果时为空数组。
         events 的字段与日程规则保持一致，取件/取餐仍放在 events 中。日程的标题、description、时间规则仅作用于 events，不作用于 bills。
@@ -92,7 +92,10 @@ object AiPrompts {
         paymentStatus 使用 COMPLETED、REFUNDED、UNPAID、CANCELLED、FAILED、REFUND_PENDING、REVIEW。
         未支付、失败、已关闭订单或仅有报价不生成 bills；付款成功或文字明确已消费/收到款项才视为完成。
         微信好友转账必须区分付款方和收款方：付款方结果页明确“支付成功/转账成功”且等待对方收款时，钱已转出，生成 EXPENSE、COMPLETED；收款方尚未领取的转账不能生成收入。仅有“待收款”而无明确已转出依据时，不推测付款已完成。支付确认、密码输入或支付处理中不生成 bills。忽略系统状态栏、岛/胶囊及其他记账应用叠加的金额，只依据交易页面本身。
-        退款只有明确已到账的独立退款金额和时间才生成 INCOME，category 为“退款”，备注保留原交易关联信息；原付款页的“已退款/部分退款”状态不能当作新收入，无法确定则 REVIEW，不推测退款金额或修改原账单。
+        付款已经记录支出，退款实际到账后再生成一笔 INCOME、REFUNDED，category 为“退款”，保留原支出，不冲销、不修改原账单。适用于购物退款、转账被退还及转账超时自动退回；好友重新转来的一笔钱是普通转账收入，不标为退款。
+        退款可以来自退款通知、独立退款详情，也可以来自原付款详情里的“退款记录”：只有明确已到账、实际退回金额及退款到账时间齐全才生成收入。顶部负数和支付/转账时间属于原支出，不能直接拿来作为退款金额和时间；应提取“退款金额/已退款…元”及其对应的到账日期时间。仅显示“已退款/部分退款/已全额退款/过期已退还”状态而无明确退款金额或到账时间时使用 REVIEW；退款处理中不生成已到账收入。退款记录只有累计金额而无法区分多次退款金额和时间时，不拆分、不猜测。只输出本次退款收入，不再输出页面里的原支出。
+        独立退款账单的主金额就是本笔退回金额：微信“转账-退款”详情使用正金额及“退款时间”；支付宝“账单详情”明确“退款成功”并展示“退款方式”时，可使用该退款账单的“创建时间”作为退款记账时间，note 注明使用退款账单创建时间，不将其解释为精确到账时刻。只输出一笔 INCOME、REFUNDED。此例外不适用于原支出中“已全额退款”的状态，也不适用于退款申请、处理中或普通订单创建时间；缺少完整日期时间时仍使用 REVIEW。
+        退款的 transactionId 只填写明确属于本次退款的退款单号；页面上的原交易单号、原转账单号及商户单号放在 note 中，不能当作退款单号。没有独立退款单号时留空，transactionIdType 为 UNKNOWN，继续按金额、到账时间等现有规则去重。
         本人账户转账只生成一条 TRANSFER。transactionIdType 必须按原文标签区分 PAYMENT（支付平台交易单号）、MERCHANT_ORDER（商户订单号）、UNKNOWN（无法确定）。付款单号和商户订单号不能混用，不根据号码长度或格式猜类型。
         同时有两种单号时 transactionId 优先使用支付交易单号，商户订单号保留在 note；仅有商户订单号时使用 MERCHANT_ORDER。脱敏、不完整、缺失的号码留空，类型为 UNKNOWN，不能猜测或补齐。
         交易时间来自原文，结合当前时间解释今天/昨天。原文未提供时间时 occurredAt 留空，应用对主动文字输入使用当前时间；图片时间缺失或原文明示但无法确定的时间留待核对，后者 paymentStatus 使用 REVIEW。
@@ -382,8 +385,8 @@ object AiPrompts {
         }
         // 缓存/云端/导入的旧统一提示词保留自定义正文，只补齐新增的返回协议。
         // 仅替换已知旧协议块，避免重复附加相互冲突的交易时间规则，保留其余自定义正文。
-        val upgraded = unified.replace(Regex("(?s)【统一图文输出协议 v(?:9|10|11|12)】.*?此协议优先于旧提示词中“仅输出 events”或“仅识别日程”的限制，其他自定义日程规则继续生效。"), "").trimEnd()
-        val mmUnifiedPrompt = if (upgraded.contains("【统一图文输出协议 v13】")) upgraded else "$upgraded\n\n$accountingContract"
+        val upgraded = unified.replace(Regex("(?s)【统一图文输出协议 v(?:9|10|11|12|13|14)】.*?此协议优先于旧提示词中“仅输出 events”或“仅识别日程”的限制，其他自定义日程规则继续生效。"), "").trimEnd()
+        val mmUnifiedPrompt = if (upgraded.contains("【统一图文输出协议 v15】")) upgraded else "$upgraded\n\n$accountingContract"
         return prompts.copy(
             promptHeader = header,
             userTextPrompt = mmUnifiedPrompt,

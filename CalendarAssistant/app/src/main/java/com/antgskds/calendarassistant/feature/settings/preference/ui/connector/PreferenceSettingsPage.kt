@@ -381,6 +381,40 @@ fun MaterialPreferenceSettingsScreen(
         }
     }
 
+    var requestingAccountingPermission by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var accountingPermissionsGranted by remember { mutableStateOf(
+        com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.permissionsGranted(context)) }
+    fun finishAccountingPermissionRequest() {
+        requestingAccountingPermission = false
+        accountingPermissionsGranted = com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.permissionsGranted(context)
+        if (accountingPermissionsGranted && controller.settings.value.automaticAccountingEnabled) {
+            controller.updateAccountingMessages(true)
+        } else if (!accountingPermissionsGranted) {
+            Toast.makeText(context, "未取得通知使用权和短信权限，通知与短信记账未开启", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val accountingSmsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        finishAccountingPermissionRequest()
+    }
+    val accountingNotificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (!SmsNotificationListenerService.isEnabled(context) || !controller.settings.value.automaticAccountingEnabled) {
+            requestingAccountingPermission = false
+        } else if (hasSmsPermission()) {
+            finishAccountingPermissionRequest()
+        } else {
+            accountingSmsLauncher.launch(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
+        }
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accountingPermissionsGranted = com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy.permissionsGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     CompositionLocalProvider(LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -398,10 +432,42 @@ fun MaterialPreferenceSettingsScreen(
                         title = "自动记账",
                         subtitle = "自动捕获支付信息",
                         checked = settings.automaticAccountingEnabled,
-                        onCheckedChange = controller::updateAutomaticAccounting,
+                        onCheckedChange = {
+                            requestingAccountingPermission = false
+                            controller.updateAutomaticAccounting(it)
+                        },
                         cardTitleStyle = cardTitleStyle,
                         cardSubtitleStyle = cardSubtitleStyle,
                     )
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = settings.automaticAccountingEnabled,
+                        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+                    ) {
+                        Column {
+                            AppSettingsDivider()
+                            SwitchSettingItem(
+                                title = "通知与短信记账",
+                                subtitle = "自动捕获通知和短信中的账单",
+                                checked = settings.accountingMessagesEnabled && accountingPermissionsGranted,
+                                onCheckedChange = { enabled ->
+                                    if (!enabled) controller.updateAccountingMessages(false)
+                                    else if (!requestingAccountingPermission) {
+                                        requestingAccountingPermission = true
+                                        when {
+                                            !SmsNotificationListenerService.isEnabled(context) ->
+                                                accountingNotificationLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                                            !hasSmsPermission() -> accountingSmsLauncher.launch(
+                                                arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
+                                            else -> finishAccountingPermissionRequest()
+                                        }
+                                    }
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                            )
+                        }
+                    }
                 }
             }
             // ================== 显示板块 ==================

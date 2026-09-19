@@ -44,6 +44,9 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("财务消息正则", Chain.RECOGNITION, "feature/accounting/domain/AccountingMessageRules", "按通知包名或短信发件人匹配，命名分组抽取金额、名称、时间和单号，未知静默跳过"),
+        HelperEntry("财务规则存储", Chain.RECOGNITION, "feature/accounting/data/AccountingMessageRulePrefs", "开发者编辑与运行时共用本地规则，不覆盖用户禁用和删除"),
+        HelperEntry("财务规则编辑", Chain.SUPPORT, "feature/recognition/ui/connector/AccountingRulesEditor", "现有正则页内编辑、增删和测试财务规则，测试不入库"),
         HelperEntry("无障碍诊断快照", Chain.SUPPORT, "platform/accessibility/AccessibilityDiagnosticSnapshot", "有界读取事件源及窗口节点并立即回收，输出不可变 JSON 与现有支付规则判断，遮蔽密码字段"),
         HelperEntry("支付消息解析", Chain.RECOGNITION, "feature/accounting/domain/PaymentMessageParser", "支付凭证、收款及到账退款本地解析；消息保留时效校验，不调用 AI"),
         HelperEntry("微信结构化支付解析", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentParser", "解析转账 XML、详情桥接响应及红包领取响应；按本人方向、实际金额与原始交易时间生成账单"),

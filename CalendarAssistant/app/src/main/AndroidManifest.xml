@@ -454,12 +454,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- 系统短信通知监听（用于 MIUI 等 ROM 对 SMS_RECEIVED 的兜底） -->
+        <!-- 财务通知读取与系统短信取件兜底，共用已有通知使用权 -->
         <service
             android:name=".platform.receiver.SmsNotificationListenerService"
             android:enabled="true"
             android:exported="false"
-            android:label="短信通知监听"
+            android:label="通知读取（取件与记账）"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

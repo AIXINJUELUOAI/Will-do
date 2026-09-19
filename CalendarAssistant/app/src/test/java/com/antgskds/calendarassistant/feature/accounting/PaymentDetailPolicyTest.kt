@@ -17,6 +17,259 @@ class PaymentDetailPolicyTest {
     private val completeFields = listOf("-8.50", "支付时间", "2026-09-17 12:30:00")
     private fun readyTexts(marker: String = "账单详情") = listOf(marker) + completeFields
 
+    private val checkoutControls = listOf("关闭", "使用密码", "测试商家", "付款方式，已选择零钱，尾号:，点按两次进行修改")
+    private val alipayCheckout = "com.alipay.android.msp.ui.views.MspContainerActivity"
+
+    /** 拼多多微信：LauncherUI -> 独立收银台窗口 -> 指纹 -> 成功，后续根节点可一直为空。 */
+    @Test fun shoppingWechatRequiresCheckoutThenSuccessInItsOwnWindow() {
+        for (amount in listOf("7.45", "32.18")) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(wechat, "com.tencent.mm.ui.LauncherUI", 10)
+            policy.observeForeground(wechat, 11)
+            assertNull(policy.claimTree(wechat, 11, checkoutControls, false, 100, "event_source"))
+            assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls, false, 100))
+            assertNull(policy.claimPaymentResult(wechat, 11, listOf("请验证指纹"), false, 200))
+            assertNull(policy.claimPaymentResult(wechat, 11, listOf("微信支付", "￥$amount"), false, 300))
+            assertNull(policy.claimPaymentResult(wechat, 11, listOf("支付成功", "￥$amount"), false, 400))
+            val success = listOf("支付成功", "测试商家", "￥$amount", "返回商家")
+            assertNull(policy.claimTree(wechat, 11, success, false, 500, "event_source"))
+            val candidate = requireNotNull(policy.claimPaymentResult(wechat, 11, success, false, 500))
+            assertEquals("wechat_checkout_source", candidate.evidence)
+            assertTrue(candidate.isPaymentResult)
+            policy.observeWindow(wechat, "android.widget.FrameLayout", 11)
+            assertNull(policy.claimTree(wechat, 11, emptyList(), false, 600))
+            assertNull(policy.claimPaymentResult(wechat, 11, success, false, 600))
+            assertTrue(policy.isValid(candidate, wechat, 11, emptyList(), false, 1_200))
+            assertTrue(policy.isValid(candidate, wechat, 11, success, false, 1_300))
+            assertFalse(policy.isValid(candidate, wechat, 11, success, true, 1_300))
+            policy.observeForeground("com.xunmeng.pinduoduo", 12)
+            assertFalse(policy.isValid(candidate, wechat, 11, emptyList(), false, 1_400))
+        }
+    }
+
+    @Test fun shoppingWordsCannotAuthorizeChatMainWindowOrAnotherWindow() {
+        val success = listOf("支付成功", "￥7.45", "返回商家")
+        for (page in listOf("com.tencent.mm.ui.LauncherUI", "com.tencent.mm.ui.chatting.ChattingUI")) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(wechat, page, 10)
+            assertNull(policy.claimPaymentResult(wechat, 10, checkoutControls, false, 0))
+            assertNull(policy.claimPaymentResult(wechat, 10, success, false, 100))
+            policy.observeForeground(wechat, 11)
+            assertNull(policy.claimPaymentResult(wechat, 11, success, false, 200))
+            assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls + "按住说话", false, 300))
+            assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls, true, 400))
+            assertNull(policy.claimPaymentResult(wechat, 11, success, false, 500))
+            assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls, false, 600))
+            if (page.contains("chatting")) assertNull(policy.claimPaymentResult(wechat, 11, success, false, 700))
+            policy.observeForeground(wechat, 12)
+            assertNull(policy.claimPaymentResult(wechat, 12, success, false, 800))
+        }
+    }
+
+    @Test fun shoppingWechatCheckoutExpiresAndDoesNotRefreshOnRepeatedControls() {
+        val policy = PaymentDetailPolicy()
+        policy.observeWindow(wechat, "com.tencent.mm.ui.LauncherUI", 10)
+        policy.observeForeground(wechat, 11)
+        assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls, false, 0))
+        val expired = ConfigCatalog.AUTO_ACCOUNTING_WECHAT_SESSION_MS + 1L
+        assertNull(policy.claimPaymentResult(wechat, 11, checkoutControls, false, expired))
+        assertNull(policy.claimPaymentResult(wechat, 11, listOf("支付成功", "￥7.45", "返回商家"), false, expired))
+    }
+
+    @Test fun shoppingWechatLoadingOrHistoricalSourceCancelsPendingScreenshot() {
+        for (next in listOf(listOf("加载中"), readyTexts())) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(wechat, "com.tencent.mm.ui.LauncherUI", 10)
+            policy.observeForeground(wechat, 11)
+            policy.claimPaymentResult(wechat, 11, checkoutControls, false, 0)
+            val candidate = requireNotNull(policy.claimPaymentResult(wechat, 11,
+                listOf("支付成功", "￥7.45", "返回商家"), false, 100))
+            assertNull(policy.claimTree(wechat, 11, next, false, 200, "event_source"))
+            assertNull(policy.claimPaymentResult(wechat, 11, next, false, 200))
+            assertFalse(policy.isValid(candidate, wechat, 11, emptyList(), false, 800))
+        }
+    }
+
+    /** 拼多多支付宝收银台付款前已带商户单号，且含“支付成功得绿色能量”营销文案。 */
+    @Test fun alipayShoppingOrderNumberDoesNotLatchHistoricalDetailBeforeSuccess() {
+        for (amount in listOf("6.15", "28.90")) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(alipay, alipayCheckout, 20)
+            val unpaid = listOf("商户单号EXAMPLE", "¥", amount, "立即付款", "付款并开通", "使用密码",
+                "付款,确认付款，测试商家，付款金额${amount}元人民币", "支付成功得绿色能量5g")
+            assertNull(policy.claimTree(alipay, 20, unpaid, false, 100, "event_source"))
+            assertNull(policy.claimEvent(alipay, 20, unpaid, 100))
+            assertFalse(policy.hasDetailContext(alipay))
+            assertNull(policy.claimPaymentResult(alipay, 20, unpaid, false, 100))
+            val success = listOf("完成", "商户单号EXAMPLE", "支付成功￥$amount", "支付成功", "￥$amount", "交易方式", "余额宝")
+            assertNull(policy.claimTree(alipay, 20, success, false, 200, "event_source"))
+            val candidate = requireNotNull(policy.claimPaymentResult(alipay, 20, success, false, 200))
+            assertTrue(candidate.isPaymentResult)
+            assertFalse(policy.hasDetailContext(alipay))
+            assertTrue(policy.isValid(candidate, alipay, 20, success, false, 900))
+            assertTrue(policy.isValid(candidate, alipay, 20, emptyList(), false, 1_000))
+            assertNull(policy.claimTree(alipay, 20, success, false, 1_100, "event_source"))
+            assertNull(policy.claimPaymentResult(alipay, 20, success, false, 1_100))
+            assertTrue(policy.isValid(candidate, alipay, 20, emptyList(), false, 1_200))
+        }
+    }
+
+    @Test fun alipayCheckoutStillHonorsHistoricalDetailAndRefundEvidence() {
+        for (fields in listOf(readyTexts("商户订单号"), readyTexts("账单详情"), readyTexts("退款记录"))) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(alipay, alipayCheckout, 20)
+            val success = requireNotNull(policy.claimPaymentResult(alipay, 20, listOf("支付成功", "￥6.15"), false, 0))
+            assertFalse(policy.isValid(success, alipay, 20, fields, false, 700))
+            val detailCandidate = requireNotNull(policy.claimTree(alipay, 20, fields, false, 800, "event_source"))
+            assertFalse(detailCandidate.isPaymentResult)
+            assertFalse(policy.isValid(success, alipay, 20, emptyList(), false, 900))
+        }
+    }
+
+    @Test fun wechatPaymentCodeUsesSourceAfterPageSwitchWithEmptyRootAndEventText() {
+        // 诊断时序：付款码页 -> 支付中弹窗 -> Lite 成功页；文字仅在 source.desc 中。
+        val policy = PaymentDetailPolicy()
+        policy.observeWindow(wechat, "com.tencent.mm.plugin.offline.ui.WalletOfflineEntranceUI", 1)
+        policy.observeForeground(wechat, 2)
+        val texts = listOf("支付成功", "测试商店", "￥8.70", "完成")
+        assertNull(policy.claimPaymentResult(wechat, 2, texts, false, 100))
+        policy.observeWindow(wechat, "com.tencent.mm.plugin.lite.ui.WxaLiteAppLiteUI", 2)
+        assertNull(policy.claimTree(wechat, 2, texts, false, 120, "event_source"))
+        val candidate = requireNotNull(policy.claimPaymentResult(wechat, 2, texts, false, 120))
+        assertTrue(candidate.isPaymentResult)
+        assertEquals("payment_source", candidate.evidence)
+        // 后续根节点只有一个空节点，不使已就绪候选失效，也不重启等待。
+        assertNull(policy.claimTree(wechat, 2, emptyList(), false, 400, "event_source"))
+        assertNull(policy.claimPaymentResult(wechat, 2, texts, false, 500))
+        assertEquals(120L, candidate.detectedAt)
+        assertTrue(policy.isValid(candidate, wechat, 2, emptyList(), false, 820))
+        policy.observeWindow(wechat, "com.tencent.mm.ui.LauncherUI", 3)
+        assertFalse(policy.isValid(candidate, wechat, 3, emptyList(), false, 900))
+    }
+
+    @Test fun alipayPaymentSourceDoesNotRequireDetailTitleOrTransactionTime() {
+        val policy = PaymentDetailPolicy()
+        policy.observeWindow(alipay, "com.eg.android.AlipayGphone.AlipayLogin", 4)
+        val texts = listOf("支付成功￥3.60", "支付成功", "￥3.60", "测试便利店", "交易方式", "余额宝(转出资金付款)")
+        assertFalse(PaymentDetailPolicy.inspectReadiness(texts, false).ready)
+        val candidate = requireNotNull(policy.claimPaymentResult(alipay, 4, texts, false, 200))
+        // 根中仍可有原付款码页面，不能要求它重新提供成功金额。
+        assertTrue(policy.isValid(candidate, alipay, 4, listOf("收付款", "向商家付款", "二维码"), false, 900))
+        assertNull(policy.claimPaymentResult(alipay, 4, texts, false, 1000))
+        assertFalse(policy.isValid(candidate, alipay, 4, emptyList(), false,
+            201L + ConfigCatalog.AUTO_ACCOUNTING_DETAIL_SIGNAL_MS))
+    }
+
+    @Test fun paymentSourceRejectsChatUnknownIdentityWrongWindowAndIncompletePayment() {
+        val texts = listOf("支付成功", "￥8.70")
+        val policy = PaymentDetailPolicy()
+        assertNull(policy.claimPaymentResult(wechat, 1, texts, false, 0))
+        policy.observeWindow(wechat, "com.tencent.mm.ui.LauncherUI", 1)
+        assertNull(policy.claimPaymentResult(wechat, 1, texts, false, 0))
+        policy.observeForeground(wechat, 2)
+        assertNull(policy.claimPaymentResult(wechat, 2, texts, false, 0))
+        policy.observeWindow(wechat, "com.tencent.mm.plugin.lite.ui.WxaLiteAppLiteUI", 2)
+        assertNull(policy.claimPaymentResult(wechat, 1, texts, false, 0))
+        assertNull(policy.claimPaymentResult(alipay, 2, texts, false, 0))
+        assertNull(policy.claimPaymentResult(wechat, 2, texts, true, 0))
+        for (invalid in listOf(listOf("付款码"), listOf("支付成功"), listOf("支付中", "￥8.70"),
+            texts + "输入密码", texts + "账单详情", texts + "退款记录", texts + "加载中", texts + "按住说话")) {
+            assertNull(invalid.toString(), policy.claimPaymentResult(wechat, 2, invalid, false, 0))
+        }
+    }
+
+    @Test fun sourceCandidateCannotRefillCurrentTimeAfterSwitchingToHistoricalDetail() {
+        val policy = PaymentDetailPolicy()
+        policy.observeWindow(alipay, "com.eg.android.AlipayGphone.AlipayLogin", 1)
+        val success = requireNotNull(policy.claimPaymentResult(alipay, 1, listOf("支付成功", "￥9.80"), false, 0))
+        assertFalse(policy.isValid(success, alipay, 1, readyTexts(), false, 700))
+        val detailCandidate = requireNotNull(policy.claimTree(alipay, 1, readyTexts(), false, 800, "event_source"))
+        assertFalse(detailCandidate.isPaymentResult)
+        assertFalse(policy.isValid(success, alipay, 1, emptyList(), false, 900))
+        assertTrue(policy.isValid(detailCandidate, alipay, 1, emptyList(), false, 1500))
+        policy.observeForeground("com.android.launcher", 2)
+        assertFalse(policy.isValid(detailCandidate, alipay, 1, emptyList(), false, 1550))
+    }
+
+    @Test fun refundRecordsAndExpiredTransfersUseDetailRouteWithOriginalTime() {
+        for (status in listOf("过期已退还", "已全额退款")) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(wechat, web, 1)
+            val texts = listOf("退款记录", "已退款7.30元", "2026年9月18日 15:52:25", "当前状态", status, "-7.30")
+            assertNull(policy.claimPaymentResult(wechat, 1, texts, false, 0))
+            val candidate = requireNotNull(policy.claimTree(wechat, 1, texts, false, 100, "event_source"))
+            assertFalse(candidate.isPaymentResult)
+            assertTrue(policy.isValid(candidate, wechat, 1, emptyList(), false, 800))
+        }
+        assertFalse(PaymentDetailPolicy.inspectReadiness(listOf("退款记录", "已退款7.30元"), false).ready)
+        assertTrue(PaymentDetailPolicy.inspectReadiness(
+            listOf("退款到账通知", "退款金额", "￥7.30", "退款时间", "2026-09-18 15:52:25"), false).ready)
+    }
+
+    @Test fun confirmedRefundIsIncomeAndRequiresItsOwnArrivalTime() {
+        val refund = AccountingDraft(amount = "7.30", direction = "INCOME", merchant = "测试退款", category = "退款",
+            paymentStatus = "REFUNDED", occurredAt = "2026-09-18T15:52:25", currency = "CNY",
+            transactionId = "", transactionIdType = "UNKNOWN")
+        assertTrue(AutomaticAccountingPolicy.acceptsDetailResult(listOf(refund), emptyList()))
+        assertFalse(AutomaticAccountingPolicy.acceptsDetailResult(listOf(refund.copy(occurredAt = "")), emptyList()))
+        assertFalse(AutomaticAccountingPolicy.acceptsDetailResult(listOf(refund.copy(paymentStatus = "REFUND_PENDING")), emptyList()))
+        val input = requireNotNull(AccountingRecognitionMapper.automaticInput(refund, false))
+        val entry = AccountingRecognitionMapper.build(refund, input, 0)
+        assertEquals("INCOME", entry.direction)
+        assertEquals(730L, entry.amountMinor)
+        assertEquals(java.time.LocalTime.of(15, 52, 25), input.time)
+        assertNull(AccountingRecognitionMapper.transactionKey(refund.channel, refund.transactionId, refund.direction))
+    }
+
+    @Test fun wechatRefundOpenedFromBillListWaitsForRefundNumberAmountAndTime() {
+        for (amount in listOf("+0.08", "+29.60")) {
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(wechat, web, 40)
+            assertNull(policy.claimTree(wechat, 40, listOf("全部账单", "转账-退款,收入${amount}元"), false, 0))
+            policy.observeForeground(wechat, 41)
+            policy.observeWindow(wechat, web, 41)
+            val fields = listOf("转账-退款", amount, "退款状态", "已退款", "退款时间", "2026年9月18日 10:15:20",
+                "退款方式", "零钱", "退款单号", "refund-example", "原订单", "查看原订单")
+            assertNull(policy.claimTree(wechat, 41, fields - amount, false, 100, "event_source"))
+            assertNull(policy.claimTree(wechat, 41, fields - "2026年9月18日 10:15:20", false, 200, "event_source"))
+            val candidate = requireNotNull(policy.claimTree(wechat, 41, fields, false, 300, "event_source"))
+            assertFalse(candidate.isPaymentResult)
+            assertTrue(policy.isValid(candidate, wechat, 41, emptyList(), false, 1_000))
+            assertNull(policy.claimTree(wechat, 41, fields, false, 1_100, "event_source"))
+        }
+    }
+
+    @Test fun independentAlipayRefundUsesCreationTimeAcrossMerchants() {
+        for (amount in listOf("6.20", "18.35")) {
+            val fields = listOf("账单详情", "全部账单", "${amount}元", "退款成功", "退款方式", "余额宝",
+                "关联记录", "查看原账单", "创建时间", "2026-09-18 09:15:20")
+            val policy = PaymentDetailPolicy()
+            policy.observeWindow(alipay, "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity", 50)
+            val candidate = requireNotNull(policy.claimTree(alipay, 50, fields, false, 100, "event_source"))
+            assertFalse(candidate.isPaymentResult)
+            assertTrue(policy.isValid(candidate, alipay, 50, fields, false, 800))
+            assertNull(policy.claimTree(alipay, 50, fields, false, 900, "event_source"))
+            assertNull(policy.claimPaymentResult(alipay, 50, fields, false, 900))
+            val bill = AccountingDraft(amount = amount, direction = "INCOME", currency = "CNY", category = "退款",
+                paymentStatus = "REFUNDED", occurredAt = "2026-09-18 09:15:20", zoneId = "UTC")
+            assertTrue(AutomaticAccountingPolicy.acceptsDetailResult(listOf(bill), emptyList()))
+            val input = requireNotNull(AccountingRecognitionMapper.automaticInput(bill, false))
+            assertEquals(LocalDate.of(2026, 9, 18), input.date)
+            assertEquals(java.time.LocalTime.of(9, 15, 20), input.time)
+        }
+    }
+
+    @Test fun creationTimeDoesNotAuthorizeOriginalPaymentPendingRefundOrIncompletePage() {
+        val fields = listOf("账单详情", "6.20元", "退款成功", "退款方式", "余额宝", "创建时间", "2026-09-18 09:15:20")
+        val invalid = listOf(fields - "账单详情", fields - "退款方式", fields - "6.20元",
+            fields - "创建时间", fields - "2026-09-18 09:15:20", fields + "加载中", fields + "按住说话") +
+            listOf("已全额退款", "退款处理中", "退款申请", "交易成功", "等待付款").map { (fields - "退款成功") + it }
+        for (texts in invalid) assertFalse(texts.toString(), PaymentDetailPolicy.inspectReadiness(texts, false).ready)
+        assertFalse(PaymentDetailPolicy.inspectReadiness(fields, true).ready)
+        assertFalse(PaymentDetailPolicy.inspectReadiness(listOf("账单详情", "支出6.20元", "已全额退款",
+            "付款方式", "余额宝", "创建时间", "2026-09-18 09:15:20"), false).ready)
+    }
+
     @Test fun recognizedDetailMarkersRequireAmountAndTimeBeforeTriggering() {
         for (pkg in listOf(wechat, alipay)) for (marker in listOf("账单详情", "交易详情", "交易单号：123", "商户订单号")) {
             val policy = PaymentDetailPolicy()

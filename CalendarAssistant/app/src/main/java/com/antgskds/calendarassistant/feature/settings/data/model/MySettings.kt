@@ -86,6 +86,7 @@ fun eventColorPaletteToArgb(colors: List<String>): List<Int> =
 data class MySettings(
     // 同时控制无障碍自动截图与支付应用 Hook；旧配置缺失此字段时保持关闭。
     val automaticAccountingEnabled: Boolean = false,
+    val accountingMessagesEnabled: Boolean = false,
     // AI 模型配置
     val modelKey: String = "",
     val modelName: String = "",

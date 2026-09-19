@@ -84,6 +84,11 @@ class ConfigItem(
 )
 
 object ConfigCatalog {
+    // 通知与短信正则资源上限及成功投递凭据数量。
+    const val ACCOUNTING_MESSAGE_MAX_TEXT = 8192
+    const val ACCOUNTING_MESSAGE_MAX_RULES = 128
+    const val ACCOUNTING_MESSAGE_RECEIPTS = 256
+
     // 自动记账资源及调用策略；对用户只暴露总开关。
     const val AUTO_ACCOUNTING_DEBOUNCE_MS = 700
     // 微信支付窗口上下文只在短会话内有效；成功事件过期后不再补拍其他页面。
@@ -155,6 +160,10 @@ object ConfigCatalog {
     const val LOG_MAX_BYTES = 4 * 1024 * 1024L
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "accounting.messages_enabled", "通知与短信记账", "通过本地正则自动捕获通知和短信中的账单", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.accountingMessagesEnabled) 1 else 0 }, { s, v -> s.copy(accountingMessagesEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
+        *listOf("max_text" to ACCOUNTING_MESSAGE_MAX_TEXT, "max_rules" to ACCOUNTING_MESSAGE_MAX_RULES, "receipts" to ACCOUNTING_MESSAGE_RECEIPTS).map { (key, value) ->
+            ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "accounting.message_$key", "财务消息 $key", "限制本地正则输入、规则数量和重复投递凭据。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(value, value), { value }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE)
+        }.toTypedArray(),
         *listOf(
             Triple("min_records", ACCOUNTING_SUGGESTION_MIN_RECORDS, "频繁消费、同人转账及同期比较至少三笔"),
             Triple("share_percent", ACCOUNTING_SUGGESTION_SHARE_PERCENT, "购物或餐饮达到本期已记录支出的百分比"),

@@ -37,6 +37,9 @@ class AutomaticAccountingPolicy {
         const val ALIPAY = "com.eg.android.AlipayGphone"
         fun enabled(settings: MySettings) = settings.automaticAccountingEnabled
         fun supports(packageName: String) = packageName == WECHAT || packageName == ALIPAY
+        // 购物 App 内嵌支付仍属于购物包；只扩大用户主动开启的诊断，不启用这些包的自动识别。
+        val diagnosticPackages = setOf(WECHAT, ALIPAY, "com.xunmeng.pinduoduo", "com.taobao.taobao", "com.jingdong.app.mall")
+        fun supportsDiagnostics(packageName: String) = packageName in diagnosticPackages
         /** 详情触发信号可以宽松，但历史账单入库不容许多笔、部分解析失败或缺失真实时间。 */
         fun acceptsDetailResult(bills: List<AccountingDraft>, issues: List<String>): Boolean {
             val bill = bills.singleOrNull() ?: return false

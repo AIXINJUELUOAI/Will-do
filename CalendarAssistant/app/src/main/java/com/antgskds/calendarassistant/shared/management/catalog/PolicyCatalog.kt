@@ -51,9 +51,10 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
-        PolicyEntry("自动记账触发", Chain.RECOGNITION, "feature/accounting/domain/AutomaticAccountingPolicy", Maturity.ACTIVE, "统一开关、支付包白名单、成功页面匹配、频率限制及重复内容抑制"),
+        PolicyEntry("财务消息权限", Chain.RECOGNITION, "platform/receiver/AccountingMessageAccessPolicy", Maturity.ACTIVE, "总开关、子开关、通知使用权和两项短信权限共同控制消息记账"),
+        PolicyEntry("自动记账触发", Chain.RECOGNITION, "feature/accounting/domain/AutomaticAccountingPolicy", Maturity.ACTIVE, "统一开关、支付包白名单、成功页面匹配、频率限制及重复内容抑制；诊断另覆盖拼多多、淘宝和京东，不扩大自动识别范围"),
         PolicyEntry("微信支付事件会话", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentSessionPolicy", Maturity.ACTIVE, "统一接收微信支付承载页的成功事件，不依赖好友转账入口；每窗口会话只消费一次，截图前后校验前台与有效期"),
-        PolicyEntry("账单详情页触发", Chain.RECOGNITION, "feature/accounting/domain/PaymentDetailPolicy", Maturity.ACTIVE, "按实际前台窗口关联详情与收款汇总首页；金额及交易时间或统计日期就绪后截图，汇总按单笔识别，支持事件源子树并排除加载/聊天/编辑及重复触发"),
+        PolicyEntry("支付页面触发", Chain.RECOGNITION, "feature/accounting/domain/PaymentDetailPolicy", Maturity.ACTIVE, "按前台窗口校验支付成功局部节点、账单/退款详情与收款汇总；微信购物付款子窗口先确认收银台再等待成功，支付宝收银台商户单号不单独视作详情；退款单号标记详情，独立退款成功账单允许创建时间；共用等待、时间约束及重复抑制"),
         PolicyEntry("随口记胶囊持续时间", Chain.NOTIFICATION, "feature/capsule/domain/QuickMemoCapsuleDurationPolicy", Maturity.ACTIVE, "手动挂起和到期提醒共用默认日程时长；当天结束模式统一到本地 23:59"),
         PolicyEntry("随口记提醒投递策略", Chain.NOTIFICATION, "feature/notification/policy/QuickMemoReminderDeliveryPolicy", Maturity.ACTIVE, "根据胶囊开关选择发布路由，只把 POSTED 视为本次提醒完成，READY 和失败保留重试"),
         PolicyEntry(
