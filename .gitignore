@@ -50,9 +50,14 @@ output-metadata.json
 .DS_Store
 Thumbs.dbn
 
-# ===== Claude 相关 =====
+# ===== 本地工具配置 =====
 .claude/
-CalendarAssistant/.claude/
+
 
 # ===== 本地配置（避免误提交） =====
 settings.local.json
+# ===== 工程上移：本地缓存与迁移备份 =====
+**/build/
+.kotlin/
+.codex_tmp/
+.local-layout-backup/

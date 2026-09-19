@@ -4,11 +4,11 @@ Will do 是 Android 智能信息记录助手，使用 Kotlin + Jetpack Compose�
 
 ## 工作区与事实来源
 
-- 当前仓库根目录是 `F:/CalendarAssistant`，Android 工程仍位于内层 `CalendarAssistant/`。尚未执行目录上移；Gradle 命令在有 `gradlew.bat` 的工程目录执行。
+- 仓库根目录同时是 Android 工程目录，`app/`、`location/`、`gradlew.bat` 与 `.git/` 同级；Gradle 命令在仓库根目录执行。当前本地路径为 `F:/CalendarAssistant`。
 - 版本、SDK、ABI 和 flavor 以 [app/build.gradle.kts](app/build.gradle.kts) 为准，不在此重复维护版本号。
-- 构建模块以 [settings.gradle.kts](settings.gradle.kts) 为准，目前包含 `:app`、`:location`；`ai-engine/` 不参与构建。
+- 构建模块以 [settings.gradle.kts](settings.gradle.kts) 为准，目前包含 `:app`、`:location`；旧 `ai-engine` 不参与构建，其本地产物已随目录上移归入本地备份。
 - 当前仅维护 `native` UI flavor；HyperOS/Flyme 是系统适配，不是独立 UI flavor。
-- 功能说明见 [项目首页](../README.md)，架构说明见 [技术文档](技术文档.md)。历史开发记录不代表当前实现。
+- 功能说明见 [项目首页](README.md)，架构说明见 [技术文档](技术文档.md)。历史开发记录不代表当前实现。
 - 先讨论、确定范围再实施；已获授权的任务继续完成。不要自行扩大为目录重构、打包、装机、提交或推送。
 
 ## 核心纪律：先注册，再开发
