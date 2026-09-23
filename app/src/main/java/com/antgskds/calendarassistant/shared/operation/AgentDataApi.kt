@@ -11,6 +11,13 @@ import kotlinx.serialization.Serializable
  * seconds, matching WillDo's internal event model.
  */
 interface AgentDataApi {
+    suspend fun createBill(draft: AgentBillDraft): Result<AgentBillCreation>
+    suspend fun getBill(id: String): Result<AgentBill>
+    suspend fun queryBills(query: AgentBillQuery): Result<AgentBillPage>
+    suspend fun updateBill(id: String, patch: AgentBillPatch): Result<AgentBill>
+    suspend fun deleteBill(id: String): Result<Unit>
+    suspend fun getBillSummary(filter: AgentBillFilter): Result<List<AgentBillSummary>>
+
     suspend fun createEvent(draft: AgentEventDraft): Result<Long>
     suspend fun batchCreateEvents(drafts: List<AgentEventDraft>): Result<List<Long>>
     suspend fun getEvent(id: Long): Result<AgentEvent>
@@ -87,6 +94,12 @@ object WillDoAgentContract {
     const val MAX_REQUEST_BYTES = 1_000_000
 
     const val GET_CAPABILITIES = "getCapabilities"
+    const val CREATE_BILL = "createBill"
+    const val GET_BILL = "getBill"
+    const val QUERY_BILLS = "queryBills"
+    const val UPDATE_BILL = "updateBill"
+    const val DELETE_BILL = "deleteBill"
+    const val GET_BILL_SUMMARY = "getBillSummary"
     const val CREATE_EVENT = "createEvent"
     const val BATCH_CREATE_EVENTS = "batchCreateEvents"
     const val GET_EVENT = "getEvent"

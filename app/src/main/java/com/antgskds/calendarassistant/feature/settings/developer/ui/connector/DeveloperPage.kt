@@ -27,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -104,6 +105,9 @@ fun DeveloperPage(
             is DeveloperUiAction.SetSimulateRoot -> settingsViewModel.updatePreference(
                 developerSimulateRootEnabled = action.enabled,
             )
+            is DeveloperUiAction.SetCourseModule -> settingsViewModel.setCourseModuleEnabled(action.enabled)
+            is DeveloperUiAction.SetAgendaOnlyScheduled -> settingsViewModel.setHomeAgendaOnlyScheduled(action.enabled)
+            is DeveloperUiAction.SetDemoMode -> settingsViewModel.setDemoModeEnabled(action.enabled)
             is DeveloperUiAction.SetQuickMemoPinnedFixedTitle -> {
                 settingsViewModel.setQuickMemoPinnedFixedTitleEnabled(action.enabled) {
                     refreshScope.launch {
@@ -114,6 +118,7 @@ fun DeveloperPage(
             is DeveloperUiAction.SetScheduleIngestDedup -> settingsViewModel.setScheduleIngestDedupEnabled(action.enabled)
             is DeveloperUiAction.SetLiveTemplateMode -> { settingsViewModel.updatePreference(liveNotificationTemplateMode = action.mode); app?.capsuleCenter?.forceRefresh() }
             is DeveloperUiAction.SetListReverse -> when (action.kind) {
+                DeveloperListKind.HOME_AGENDA -> settingsViewModel.updateListSortOrder(homeAgendaReverseOrder = action.enabled)
                 DeveloperListKind.HOME -> settingsViewModel.updateListSortOrder(homeListReverseOrder = action.enabled)
                 DeveloperListKind.ALL_EVENTS -> settingsViewModel.updateListSortOrder(allEventsListReverseOrder = action.enabled)
                 DeveloperListKind.FLOATING -> settingsViewModel.updateListSortOrder(floatingListReverseOrder = action.enabled)
@@ -437,6 +442,41 @@ fun MaterialDeveloperScreen(
                 return@Column
             }
 
+            Text(text = "界面演示", style = sectionTitleStyle)
+            SettingsCard {
+                SwitchSettingItem(
+                    title = "演示模式",
+                    subtitle = "使用本地只读示例数据展示日程、课表、随口记、记账和天气；不写入数据库，不同步，也不发送通知",
+                    checked = settings.developerDemoModeEnabled,
+                    onCheckedChange = { onAction(DeveloperUiAction.SetDemoMode(it)) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+            }
+
+            Text(text = "页面功能", style = sectionTitleStyle)
+            SettingsCard {
+                SwitchSettingItem(
+                    title = "启用课表功能",
+                    subtitle = "关闭后隐藏课表和课程入口、暂停课程提醒，保留课程数据和下滑偏好",
+                    checked = settings.courseModuleEnabled,
+                    onCheckedChange = { onAction(DeveloperUiAction.SetCourseModule(it)) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+                RowDivider()
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("日程视图显示模式", style = cardTitleStyle)
+                    Text("仅影响今日页日程列表；仅日程不显示空日期或只有账单的日期", style = cardSubtitleStyle)
+                    com.antgskds.calendarassistant.shared.ui.material.component.AppSegmentedControl(
+                        options = listOf(false, true),
+                        selectedOption = settings.homeAgendaOnlyScheduled,
+                        onSelected = { onAction(DeveloperUiAction.SetAgendaOnlyScheduled(it)) },
+                        label = { if (it) "仅日程" else "完整" },
+                    )
+                }
+            }
+
             Text(text = "权限调试", style = sectionTitleStyle)
             SettingsCard {
                 SwitchSettingItem(
@@ -542,7 +582,7 @@ fun MaterialDeveloperScreen(
             SettingsCard {
                 ActionSettingItem(
                     title = "开始支付采集诊断",
-                    subtitle = "两分钟内完成一次微信转账；记录事件、窗口和截图，结束自动导出 ZIP",
+                    subtitle = "两分钟内复现支付问题；主动检查服务状态并记录事件、窗口和截图，期间暂停无障碍自动识别，结束导出 ZIP",
                     value = "", icon = Icons.Default.ChevronRight,
                     enabled = runningId == null,
                     onClick = { actionsById["payment-diagnostic-start"]?.let { runAction(it) } },
@@ -652,6 +692,27 @@ fun MaterialDeveloperScreen(
                 )
             }
 
+            Text(text = "日程视图", style = sectionTitleStyle)
+            SettingsCard {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !settings.homeAgendaReverseOrder,
+                        onClick = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.HOME_AGENDA, false)) },
+                        label = { Text("向下排列") },
+                    )
+                    FilterChip(
+                        selected = settings.homeAgendaReverseOrder,
+                        onClick = { onAction(DeveloperUiAction.SetListReverse(DeveloperListKind.HOME_AGENDA, true)) },
+                        label = { Text("向上排列") },
+                    )
+                }
+                Text(
+                    text = if (settings.homeAgendaReverseOrder) "最后日期在顶部，同一天仍按时间先后" else "最后日期在底部，同一天仍按时间先后",
+                    style = cardSubtitleStyle,
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                )
+            }
+
             // 列表排序方向
             Text(text = "列表排序", style = sectionTitleStyle)
             SettingsCard {
@@ -693,7 +754,7 @@ fun MaterialDeveloperScreen(
                 RowDivider()
                 ActionSettingItem(
                     title = "恢复列表排序默认",
-                    subtitle = "首页/全部=正序，悬浮窗/归档=倒序",
+                    subtitle = "首页/全部=正序，日程视图=向下，悬浮窗/归档=倒序",
                     value = "",
                     enabled = true,
                     onClick = { showResetConfirm = true },

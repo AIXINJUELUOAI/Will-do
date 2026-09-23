@@ -33,8 +33,11 @@ fun HomePageRoute(
     isSidebarOpen: Boolean = false,
     isWideNavigation: Boolean = false,
     isTwoPane: Boolean = false,
+    openQuickMemoId: Long? = null,
+    onQuickMemoOpened: () -> Unit = {},
     onPageChange: (String) -> Unit = {},
     onAddEventClick: () -> Unit = {},
+    onAddCourseClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
@@ -50,6 +53,8 @@ fun HomePageRoute(
     settingsOverride: MySettings? = null,
 ) {
     val mainState by viewModel.uiState.collectAsState()
+    val demoModeEnabled = mainState.settings.developerOptionsEnabled &&
+        mainState.settings.developerDemoModeEnabled
     val state = remember(mainState, settingsOverride) {
         HomePageUiState(
             selectedDate = mainState.selectedDate,
@@ -60,6 +65,11 @@ fun HomePageRoute(
             currentDateEvents = mainState.currentDateEvents,
             tomorrowEvents = mainState.tomorrowEvents,
             datesWithEvents = mainState.datesWithEvents,
+            calendarItems = mainState.calendarItems,
+            agendaItems = mainState.homeAgendaItems,
+            agendaFutureItems = mainState.homeAgendaFutureItems,
+            agendaFutureDays = mainState.homeAgendaFutureDays,
+            agendaReady = mainState.homeAgendaReady,
             settings = settingsOverride ?: mainState.settings,
             weatherData = mainState.weatherData,
         )
@@ -69,12 +79,13 @@ fun HomePageRoute(
         state = state,
         onAction = { action ->
             when (action) {
+                HomePageUiAction.LoadMoreAgenda -> viewModel.loadMoreFutureHomeAgenda()
                 is HomePageUiAction.SelectDate -> viewModel.updateSelectedDate(action.date)
                 is HomePageUiAction.RevealItem -> viewModel.onRevealItem(action.itemKey)
                 is HomePageUiAction.DeleteItem -> {
-                    action.item.eventId?.let { eventId -> viewModel.deleteEvent(eventId) }
+                    if (!demoModeEnabled) action.item.eventId?.let { eventId -> viewModel.deleteEvent(eventId) }
                 }
-                is HomePageUiAction.ArchiveItem -> viewModel.archiveItem(action.item.action)
+                is HomePageUiAction.ArchiveItem -> if (!demoModeEnabled) viewModel.archiveItem(action.item.action)
             }
         },
         scheduleContent = {
@@ -87,7 +98,9 @@ fun HomePageRoute(
                 totalWeeks = state.settings.totalWeeks,
                 maxNodes = maxNodes,
                 selectedDate = state.selectedDate,
-                onCourseClick = onEditItem,
+                embeddedInCalendarWorkspace = isTwoPane,
+                onSelectDate = viewModel::updateSelectedDate,
+                onCourseClick = { item -> if (!demoModeEnabled || isTwoPane) onEditItem(item) },
             )
         },
         allEventsContent = { searchQuery, extraBottomPadding ->
@@ -111,6 +124,8 @@ fun HomePageRoute(
                 uiSize = uiSize,
                 extraBottomPadding = extraBottomPadding,
                 twoPane = isTwoPane,
+                openMemoId = openQuickMemoId,
+                onMemoOpened = onQuickMemoOpened,
                 onOpenDetail = onOpenQuickMemoDetail,
                 onPendingDeleteChange = { memo -> memo?.let(onRequestDeleteQuickMemo) },
                 hapticEnabled = state.settings.hapticFeedbackEnabled,
@@ -131,9 +146,10 @@ fun HomePageRoute(
         isTwoPane = isTwoPane,
         onPageChange = onPageChange,
         onAddEventClick = onAddEventClick,
-        onEditItem = onEditItem,
-        onRequestDeleteItem = onRequestDeleteItem,
-        onRequestClearQuickMemos = onRequestClearQuickMemos,
+        onAddCourseClick = onAddCourseClick,
+        onEditItem = { item -> if (!demoModeEnabled || isTwoPane) onEditItem(item) },
+        onRequestDeleteItem = { item -> if (!demoModeEnabled) onRequestDeleteItem(item) },
+        onRequestClearQuickMemos = { if (!demoModeEnabled) onRequestClearQuickMemos() },
         quickMemoCount = quickMemoCount,
         onScheduleExpandedChange = onScheduleExpandedChange,
         onScheduleProgressChange = onScheduleProgressChange,

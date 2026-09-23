@@ -8,13 +8,16 @@ data class DebugBatchResult(val successCount: Int, val failedMessages: List<Stri
     val failedCount: Int get() = failedMessages.size
 }
 
-enum class DeveloperListKind { HOME, ALL_EVENTS, FLOATING, ARCHIVES }
+enum class DeveloperListKind { HOME, HOME_AGENDA, ALL_EVENTS, FLOATING, ARCHIVES }
 enum class DeveloperDragField { TITLE, TIME, LOCATION, DESCRIPTION }
 
 sealed interface DeveloperUiAction {
     data class SetEnabled(val enabled: Boolean) : DeveloperUiAction
     data class SetAutoRecordLogs(val enabled: Boolean) : DeveloperUiAction
     data class SetSimulateRoot(val enabled: Boolean) : DeveloperUiAction
+    data class SetCourseModule(val enabled: Boolean) : DeveloperUiAction
+    data class SetAgendaOnlyScheduled(val enabled: Boolean) : DeveloperUiAction
+    data class SetDemoMode(val enabled: Boolean) : DeveloperUiAction
     data class SetQuickMemoPinnedFixedTitle(val enabled: Boolean) : DeveloperUiAction
     data class SetScheduleIngestDedup(val enabled: Boolean) : DeveloperUiAction
     data class SetLiveTemplateMode(val mode: String) : DeveloperUiAction

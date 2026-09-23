@@ -14,6 +14,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.widget.Toast
+import com.antgskds.calendarassistant.shared.ui.material.component.DetailWorkspaceBody
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -306,29 +308,25 @@ fun MaterialQuickMemoDetailScreen(
         val pageContainerColor = if (backgroundMode) Color.Transparent else MaterialTheme.colorScheme.background
         AppPageScaffold(
             containerColor = pageContainerColor,
-            contentMaxWidth = 760.dp,
+            contentMaxWidth = if (embedded) Dp.Unspecified else 760.dp,
             edgeToEdgeContent = true,
             topBar = {
-                AppTopBar(
-                    title = "随口记详情",
-                    containerColor = pageContainerColor,
-                    navigationIcon = {
-                        if (!embedded) {
+                    AppTopBar(
+                        title = "随口记详情",
+                        containerColor = pageContainerColor,
+                        navigationIcon = {
                             AppTopBarBackButton(onClick = { haptics.click(); onBack() })
-                        }
-                    },
-                )
+                        },
+                    )
             }
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentAlignment = Alignment.TopCenter,
+                contentAlignment = if (embedded) Alignment.TopStart else Alignment.TopCenter,
             ) {
             Surface(
-                modifier = Modifier
-                    .widthIn(max = 760.dp)
-                    .fillMaxSize(),
+                modifier = if (embedded) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxSize(),
                 color = pageContainerColor
             ) {
                 if (memo == null) {
@@ -418,7 +416,8 @@ fun MaterialQuickMemoDetailScreen(
                     hapticEnabled = hapticEnabled,
                     backgroundMode = backgroundMode,
                     miuiBlurEnabled = miuiBlurEnabled,
-                    autoStopDurationMs = autoStopDurationMs
+                    autoStopDurationMs = autoStopDurationMs,
+                    wideLayout = embedded,
                 )
             }
             }
@@ -542,6 +541,7 @@ internal fun QuickMemoListItem(
         val voicePlayButtonAlpha = (1f - revealProgress * 1.35f).coerceIn(0f, 1f)
         Box(
             modifier = swipeModifier
+                .clip(RoundedCornerShape(12.dp))
                 .background(
                     if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
                 )
@@ -727,7 +727,8 @@ internal fun QuickMemoDetailContent(
     hapticEnabled: Boolean,
     backgroundMode: Boolean,
     miuiBlurEnabled: Boolean,
-    autoStopDurationMs: Long?
+    autoStopDurationMs: Long?,
+    wideLayout: Boolean = false,
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
     val context = LocalContext.current
@@ -875,20 +876,7 @@ internal fun QuickMemoDetailContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(bodyEditorBounds) {
-                    detectTapGestures { offset ->
-                        if (bodyEditorBounds?.contains(offset) != true) {
-                            focusManager.clearFocus(force = true)
-                        }
-                    }
-                }
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-        ) {
+    val voiceSection: @Composable () -> Unit = {
         if (isVoice) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Row(
@@ -918,6 +906,9 @@ internal fun QuickMemoDetailContent(
             }
         }
 
+
+    }
+    val imageSection: @Composable () -> Unit = {
         if (hasImage) {
             QuickMemoImagePreview(
                 imagePath = memo.imagePath,
@@ -949,121 +940,171 @@ internal fun QuickMemoDetailContent(
             Spacer(Modifier.height(24.dp))
         }
 
-        if (!recordAudioGranted) {
-            QuickMemoRecordPermissionCard(
-                onGrantClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-            )
-            Spacer(Modifier.height(20.dp))
-        }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "正文",
-                style = MaterialTheme.typography.titleMedium,
-                color = detailPrimaryTextColor,
-                fontWeight = FontWeight.Bold
-            )
-            if (isVoice) {
-                if (memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED) {
-                    QuickMemoTextButton(
-                        text = "重试转写",
-                        onClick = {
+    }
+        val bodySection: @Composable ColumnScope.() -> Unit = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "正文",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = detailPrimaryTextColor,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (isVoice) {
+                    if (memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED) {
+                        QuickMemoTextButton(text = "重试转写") {
                             haptics.confirm()
                             onRetryTranscription()
                         }
-                    )
-                } else {
-                    Text(
-                        text = quickMemoStatusText(memo),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = detailSecondaryTextColor
-                    )
-                }
-            }
-        }
-
-        BasicTextField(
-            value = draftBody,
-            onValueChange = {
-                draftBody = it
-                onSaveBody(it)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { coordinates ->
-                    bodyEditorBounds = coordinates.boundsInParent()
-                }
-                .defaultMinSize(minHeight = 100.dp),
-            textStyle = TextStyle(
-                color = if (isCompleted) detailPrimaryTextColor.copy(alpha = 0.58f) else detailPrimaryTextColor,
-                fontSize = metrics.detailBodyFontSize,
-                lineHeight = metrics.detailBodyLineHeight,
-                fontWeight = FontWeight.Medium,
-                textDecoration = if (isCompleted) TextDecoration.LineThrough else null
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            decorationBox = { innerTextField ->
-                Box(contentAlignment = Alignment.TopStart) {
-                    if (draftBody.isBlank()) {
+                    } else {
                         Text(
-                            text = "点击输入正文...",
-                            color = detailSecondaryTextColor.copy(alpha = 0.5f),
-                            fontSize = metrics.detailBodyFontSize
+                            text = quickMemoStatusText(memo),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = detailSecondaryTextColor,
                         )
                     }
-                    innerTextField()
                 }
             }
-        )
-
-        Spacer(Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+            BasicTextField(
+                value = draftBody,
+                onValueChange = {
+                    draftBody = it
+                    onSaveBody(it)
+                },
+                modifier = Modifier.fillMaxWidth()
+                    .onGloballyPositioned { coordinates -> bodyEditorBounds = coordinates.boundsInParent() }
+                    .defaultMinSize(minHeight = if (wideLayout) 180.dp else 100.dp),
+                textStyle = TextStyle(
+                    color = if (isCompleted) detailPrimaryTextColor.copy(alpha = 0.58f) else detailPrimaryTextColor,
+                    fontSize = metrics.detailBodyFontSize,
+                    lineHeight = metrics.detailBodyLineHeight,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.TopStart) {
+                        if (draftBody.isBlank()) {
+                            Text(
+                                text = "点击输入正文...",
+                                color = detailSecondaryTextColor.copy(alpha = 0.5f),
+                                fontSize = metrics.detailBodyFontSize,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = "${formatQuickMemoTime(memo.createdAt)} 创建",
                 style = MaterialTheme.typography.labelSmall,
-                color = detailSecondaryTextColor.copy(alpha = 0.6f)
+                color = detailSecondaryTextColor.copy(alpha = 0.6f),
             )
         }
-
-        Spacer(Modifier.height(24.dp))
-        QuickMemoReminderSection(
-            reminders = reminders,
-            onSaveReminder = onSaveReminder,
-            onDeleteReminder = onDeleteReminder,
-            uiSize = uiSize,
-            hapticEnabled = hapticEnabled
-        )
-
-        if (suggestions.isNotEmpty()) {
-            Spacer(Modifier.height(40.dp))
-            Text(
-                text = "日程待办",
-                modifier = Modifier.padding(bottom = 16.dp),
-                style = MaterialTheme.typography.titleMedium,
-                color = detailPrimaryTextColor,
-                fontWeight = FontWeight.Bold
+        val supportSection: @Composable ColumnScope.() -> Unit = {
+            if (!recordAudioGranted) {
+                QuickMemoRecordPermissionCard(
+                    onGrantClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+            if (wideLayout) {
+                QuickMemoMetadataCard(memo = memo)
+                Spacer(Modifier.height(16.dp))
+            }
+            QuickMemoReminderSection(
+                reminders = reminders,
+                onSaveReminder = onSaveReminder,
+                onDeleteReminder = onDeleteReminder,
+                uiSize = uiSize,
+                hapticEnabled = hapticEnabled,
             )
-            suggestions.forEach { suggestion ->
-                QuickMemoSuggestionItem(suggestion = suggestion, uiSize = uiSize) {
-                    haptics.confirm()
-                    onCreateSuggestion(suggestion)
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(if (wideLayout) 24.dp else 40.dp))
+                Text(
+                    text = "日程待办",
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = detailPrimaryTextColor,
+                    fontWeight = FontWeight.Bold,
+                )
+                suggestions.forEach { suggestion ->
+                    QuickMemoSuggestionItem(suggestion = suggestion, uiSize = uiSize) {
+                        haptics.confirm()
+                        onCreateSuggestion(suggestion)
+                    }
                 }
             }
         }
+
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (wideLayout) {
+            DetailWorkspaceBody(attachment = if (hasImage) imageSection else null) {
+                voiceSection()
+                bodySection()
+                Spacer(Modifier.height(24.dp))
+                supportSection()
+                Spacer(Modifier.height(112.dp))
+            }
+        } else {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(bodyEditorBounds) {
+                    detectTapGestures { offset ->
+                        if (bodyEditorBounds?.contains(offset) != true) {
+                            focusManager.clearFocus(force = true)
+                        }
+                    }
+                }
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = if (wideLayout) 32.dp else 24.dp, vertical = 16.dp)
+        ) {
+        voiceSection()
+        imageSection()
+
+            if (!recordAudioGranted) {
+                QuickMemoRecordPermissionCard(
+                    onGrantClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                )
+                Spacer(Modifier.height(20.dp))
+            }
+            bodySection()
+            Spacer(Modifier.height(24.dp))
+            QuickMemoReminderSection(
+                reminders = reminders,
+                onSaveReminder = onSaveReminder,
+                onDeleteReminder = onDeleteReminder,
+                uiSize = uiSize,
+                hapticEnabled = hapticEnabled,
+            )
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(40.dp))
+                Text(
+                    text = "日程待办",
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = detailPrimaryTextColor,
+                    fontWeight = FontWeight.Bold,
+                )
+                suggestions.forEach { suggestion ->
+                    QuickMemoSuggestionItem(suggestion = suggestion, uiSize = uiSize) {
+                        haptics.confirm()
+                        onCreateSuggestion(suggestion)
+                    }
+                }
+            }
 
         Spacer(Modifier.height(112.dp))
         Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
     }
+        }
 
         com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoDetailActionBar(
             isRecordingVoice = isRecordingVoice,
@@ -1134,6 +1175,58 @@ private fun QuickMemoRecordPermissionCard(onGrantClick: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun QuickMemoMetadataCard(memo: QuickMemoEntity) {
+    val typeText = when (memo.type) {
+        QuickMemoType.VOICE -> "语音"
+        QuickMemoType.IMAGE -> "图片"
+        else -> "文字"
+    }
+    val stateText = when (memo.todoState) {
+        QuickMemoTodoState.ACTIVE -> "待完成"
+        QuickMemoTodoState.COMPLETED -> "已完成"
+        else -> "普通记录"
+    }
+    val attachmentText = buildList {
+        if (!memo.imagePath.isNullOrBlank()) add("图片")
+        if (!memo.audioPath.isNullOrBlank()) add("语音")
+    }.joinToString("、").ifBlank { "无" }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("记录信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            QuickMemoMetadataRow("类型", typeText)
+            QuickMemoMetadataRow("状态", stateText)
+            QuickMemoMetadataRow("附件", attachmentText)
+            QuickMemoMetadataRow("创建", formatQuickMemoDateTime(memo.createdAt))
+            QuickMemoMetadataRow("更新", formatQuickMemoDateTime(memo.updatedAt))
+        }
+    }
+}
+
+@Composable
+private fun QuickMemoMetadataRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
+    }
+}
+
+private fun formatQuickMemoDateTime(timestamp: Long): String =
+    quickMemoDateTimeFormatter.format(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault()))
 
 @Composable
 private fun QuickMemoTextButton(text: String, onClick: () -> Unit) {

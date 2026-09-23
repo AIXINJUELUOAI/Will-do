@@ -11,4 +11,5 @@ data class WeatherDetailUiState(
 
 sealed interface WeatherDetailUiAction {
     data object NavigateBack : WeatherDetailUiAction
+    data object OpenSettings : WeatherDetailUiAction
 }

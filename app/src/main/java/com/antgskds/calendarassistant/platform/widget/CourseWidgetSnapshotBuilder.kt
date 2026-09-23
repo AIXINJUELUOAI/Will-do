@@ -17,7 +17,7 @@ object CourseWidgetSnapshotBuilder {
         val weekEnd = weekStart.plusDays(6)
         val nodes = resolveNodes(settings)
         val items = ScheduleDisplayHelper.buildDisplayItems(
-            events = events.filter { it.archivedAt == null && it.tag == EventTags.COURSE },
+            events = events.filter { it.archivedAt == null && it.tag == EventTags.COURSE && com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings) },
             from = weekStart,
             to = weekEnd
         ).map { item ->

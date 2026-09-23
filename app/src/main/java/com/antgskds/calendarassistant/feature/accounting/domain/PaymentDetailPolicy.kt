@@ -6,7 +6,8 @@ import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 class PaymentDetailPolicy {
     data class Candidate(val packageName: String, val windowId: Int, val visit: Long,
         val detectedAt: Long, val evidence: String, val contentFingerprint: String,
-        val isPaymentResult: Boolean = false)
+        val isPaymentResult: Boolean = false,
+        val notificationHint: AccountingNotificationPriorityPolicy.Hint? = null)
 
     private var sequence = 0L
     private var packageName = ""
@@ -134,7 +135,8 @@ class PaymentDetailPolicy {
     private fun claim(now: Long, evidence: String, texts: List<String>, isPaymentResult: Boolean = false): Candidate? {
         if (claimed != null) return null
         return Candidate(packageName, windowId, sequence, now, evidence,
-            AutomaticAccountingPolicy.fingerprint(texts.joinToString("\n")), isPaymentResult).also { claimed = it }
+            AutomaticAccountingPolicy.fingerprint(texts.joinToString("\n")), isPaymentResult,
+            if (isPaymentResult) AccountingNotificationPriorityPolicy.hint(texts) else null).also { claimed = it }
     }
 
     fun hasClaimed(pkg: String) = pkg == packageName && claimed != null

@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application
 
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import kotlinx.coroutines.ensureActive
@@ -40,10 +41,13 @@ class RecognitionOrchestrator(
     }
 
     override suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
-        sourcePackage: String, traceId: String, isDetailPage: Boolean): AnalysisResult<List<RecognitionDraft>> {
+        sourcePackage: String, traceId: String, isDetailPage: Boolean,
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?): AnalysisResult<List<RecognitionDraft>> {
         if (!automaticAccountingEnabled() || !com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.supports(sourcePackage))
             return AnalysisResult.Empty("自动记账已关闭或来源不支持")
-        val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context)
+        if (redPacketSent != null && (isDetailPage || sourcePackage != com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.WECHAT))
+            return AnalysisResult.Empty("红包成功上下文不适用于此来源")
+        val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context, redPacketSent)
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         if (!automaticAccountingEnabled()) return AnalysisResult.Empty("自动记账已关闭")
         if (isDetailPage && result is AnalysisResult.Success &&
@@ -51,7 +55,12 @@ class RecognitionOrchestrator(
             return AnalysisResult.Empty("详情页未识别到时间明确的单笔已完成交易，暂不入库")
         }
         // 识别结果中的日程不参与自动记账；支付完成现场缺时间才使用本次识别时间。
-        val billsOnly = if (result is AnalysisResult.Success) result.copy(data = emptyList()) else result
+        val billsOnly = if (result is AnalysisResult.Success && redPacketSent != null) {
+            if (result.billIssues.isNotEmpty()) return AnalysisResult.Empty("红包确认图解析不完整，暂不入库")
+            val bill = redPacketSent.complete(result.bills)
+                ?: return AnalysisResult.Empty("红包确认图未识别到明确的单笔支出，暂不入库")
+            result.copy(data = emptyList(), bills = listOf(bill))
+        } else if (result is AnalysisResult.Success) result.copy(data = emptyList()) else result
         return ingestImageBills(billsOnly, bitmap, context, "accounting.accessibility", sourcePackage, traceId,
             !isDetailPage, settings.isLiveCapsuleEnabled)
     }

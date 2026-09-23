@@ -41,7 +41,7 @@ fun AccountingCreateSheet(state: AccountingEditorState, onSave: (AccountingEntry
     var merchant by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
     var more by rememberSaveable { mutableStateOf(false) }
-    var date by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var date by rememberSaveable { mutableStateOf(state.initialDate.toString()) }
     var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0).toString()) }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
     var chooseTime by rememberSaveable { mutableStateOf(false) }
@@ -49,8 +49,11 @@ fun AccountingCreateSheet(state: AccountingEditorState, onSave: (AccountingEntry
     val validAmount = remember(amount) { runCatching { AccountingEntryEditor.amountMinor(amount) }.isSuccess }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val initialValues = remember { listOf(amount, direction, merchant, category, note, date, time) }
+    val close = rememberWorkspaceCloseRequest(listOf(amount, direction, merchant, category, note, date, time) != initialValues, onDismiss)
     val saving by rememberUpdatedState(state.saving)
 
+    val embedded = LocalDetailWorkspace.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true,
         confirmValueChange = { it != SheetValue.Hidden || !saving })
 
@@ -75,10 +78,11 @@ fun AccountingCreateSheet(state: AccountingEditorState, onSave: (AccountingEntry
         ))
     }
 
-    AppModalBottomSheet(
+    AppEditorSheet(
         title = "新建账单",
         sheetState = sheet,
-        onDismissRequest = onDismiss,
+        onDismissRequest = close,
+        closeEnabled = !state.saving,
         contentBottomPadding = 8.dp,
         actions = listOf(
             AppSheetAction(
@@ -119,7 +123,7 @@ fun AccountingCreateSheet(state: AccountingEditorState, onSave: (AccountingEntry
             }
 
             LaunchedEffect(Unit) {
-                snapshotFlow { sheet.currentValue }.first { it == SheetValue.Expanded }
+                if (!embedded) snapshotFlow { sheet.currentValue }.first { it == SheetValue.Expanded }
                 withFrameNanos { }
                 focusRequester.requestFocus()
                 keyboard?.show()

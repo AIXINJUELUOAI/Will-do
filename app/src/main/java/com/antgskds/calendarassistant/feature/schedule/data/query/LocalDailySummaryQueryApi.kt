@@ -23,7 +23,7 @@ class LocalDailySummaryQueryApi : DailySummaryQueryApi {
         val nowSeconds = System.currentTimeMillis() / 1000L
         val targetDate = if (isMorning) LocalDate.now() else LocalDate.now().plusDays(1)
         val summaryItems = ScheduleDisplayHelper.buildDisplayItems(events, targetDate, targetDate)
-            .filter { !it.isCompleted }
+            .filter { !it.isCompleted && com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsTag(it.tag, settings) }
             .filter { !isMorning || it.endTS > nowSeconds }
             .sortedWith(compareBy<ScheduleDisplayItem> { it.startTS }.thenBy { it.title })
         if (summaryItems.isEmpty()) return null

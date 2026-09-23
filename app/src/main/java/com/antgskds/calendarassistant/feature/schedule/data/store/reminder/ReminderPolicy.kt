@@ -7,6 +7,7 @@ import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 
 object ReminderPolicy {
     fun effectiveReminders(event: Event, settings: MySettings): List<Reminder> {
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(event, settings)) return emptyList()
         val reminders = linkedMapOf<Int, Reminder>()
 
         if (settings.isAdvanceReminderEnabled && settings.advanceReminderMinutes > 0) {

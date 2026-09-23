@@ -2,6 +2,7 @@ package com.antgskds.calendarassistant.feature.quickmemo.ui.connector
 
 import android.content.Context
 import android.widget.Toast
+import com.antgskds.calendarassistant.feature.quickmemo.application.audio.AudioPlaybackState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +36,8 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.render.QuickMemoScree
 import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoAutoStopPolicy
 import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import com.antgskds.calendarassistant.feature.settings.developer.application.DemoModeDataFactory
 
 private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
 
@@ -45,6 +48,8 @@ fun QuickMemoPage(
     uiSize: Int = 2,
     extraBottomPadding: Dp = 0.dp,
     twoPane: Boolean = false,
+    openMemoId: Long? = null,
+    onMemoOpened: () -> Unit = {},
     onOpenDetail: (Long) -> Unit = {},
     onPendingDeleteChange: (QuickMemoEntity?) -> Unit = {},
     hapticEnabled: Boolean = true
@@ -55,17 +60,31 @@ fun QuickMemoPage(
     val capsuleUiState by viewModel.capsuleUiState.collectAsState()
     val mainUiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val state = remember(quickMemos, suggestions, playbackState, capsuleUiState) {
+    val demoModeEnabled = mainUiState.settings.developerOptionsEnabled &&
+        mainUiState.settings.developerDemoModeEnabled
+    val displayedMemos = remember(quickMemos, demoModeEnabled, mainUiState.today) {
+        if (demoModeEnabled) DemoModeDataFactory.quickMemos(mainUiState.today) else quickMemos
+    }
+    var demoVoicePlaying by remember(demoModeEnabled) { mutableStateOf(true) }
+    val displayedPlayback = if (demoModeEnabled) AudioPlaybackState(DemoModeDataFactory.QUICK_MEMO_AUDIO_PATH, demoVoicePlaying) else playbackState
+    val state = remember(displayedMemos, suggestions, displayedPlayback, capsuleUiState, demoModeEnabled) {
         QuickMemoListUiState(
-            memos = quickMemos,
-            suggestions = suggestions,
-            playbackState = playbackState,
+            memos = displayedMemos,
+            suggestions = if (demoModeEnabled) emptyList() else suggestions,
+            playbackState = displayedPlayback,
             pinnedMemoId = activeTextQuickMemoId(capsuleUiState)
         )
     }
 
     var selectedMemoId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val memoIds = remember(quickMemos) { quickMemos.mapNotNull { it.id } }
+    val memoIds = remember(displayedMemos) { displayedMemos.mapNotNull { it.id } }
+
+    LaunchedEffect(twoPane, openMemoId, memoIds) {
+        if (twoPane && openMemoId != null && openMemoId in memoIds) {
+            selectedMemoId = openMemoId
+            onMemoOpened()
+        }
+    }
 
     LaunchedEffect(twoPane, memoIds) {
         if (!twoPane) {
@@ -85,6 +104,11 @@ fun QuickMemoPage(
             reserveFloatingBarSpace = !twoPane,
             hapticEnabled = hapticEnabled,
             onAction = { action ->
+                if (demoModeEnabled && action is QuickMemoUiAction.ToggleAudio) {
+                    demoVoicePlaying = !demoVoicePlaying
+                    return@QuickMemoScreen
+                }
+                if (demoModeEnabled && action !is QuickMemoUiAction.OpenDetail) return@QuickMemoScreen
                 handleQuickMemoAction(
                     action = action,
                     viewModel = viewModel,
@@ -104,7 +128,7 @@ fun QuickMemoPage(
     }
 
     AdaptiveTwoPaneLayout(
-        primaryFraction = 0.44f,
+        primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
         primary = listContent,
         secondary = {
             val memoId = selectedMemoId
@@ -152,25 +176,32 @@ fun QuickMemoDetailPage(
     val capsuleUiState by viewModel.capsuleUiState.collectAsState()
     val mainUiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val state = remember(memoId, quickMemos, reminders, suggestions, playbackState, capsuleUiState) {
-        val memo = quickMemos.firstOrNull { it.id == memoId }
+    val demoModeEnabled = mainUiState.settings.developerOptionsEnabled &&
+        mainUiState.settings.developerDemoModeEnabled
+    val displayedMemos = remember(quickMemos, demoModeEnabled, mainUiState.today) {
+        if (demoModeEnabled) DemoModeDataFactory.quickMemos(mainUiState.today) else quickMemos
+    }
+    var demoVoicePlaying by remember(demoModeEnabled) { mutableStateOf(true) }
+    val displayedPlayback = if (demoModeEnabled) AudioPlaybackState(DemoModeDataFactory.QUICK_MEMO_AUDIO_PATH, demoVoicePlaying) else playbackState
+    val state = remember(memoId, displayedMemos, reminders, suggestions, displayedPlayback, capsuleUiState, demoModeEnabled) {
+        val memo = displayedMemos.firstOrNull { it.id == memoId }
         QuickMemoDetailUiState(
             memo = memo,
-            reminders = reminders.filter { it.quickMemoId == memoId },
-            suggestions = suggestions.filter {
+            reminders = if (demoModeEnabled) emptyList() else reminders.filter { it.quickMemoId == memoId },
+            suggestions = if (demoModeEnabled) emptyList() else suggestions.filter {
                 it.quickMemoId == memoId &&
                     (it.status == QuickMemoSuggestionStatus.PENDING ||
                         it.status == QuickMemoSuggestionStatus.CREATED)
             },
-            playbackState = playbackState,
+            playbackState = displayedPlayback,
             isPinned = memo?.id?.let { it == activeTextQuickMemoId(capsuleUiState) } == true
         )
     }
 
-    DisposableEffect(memoId) {
+    DisposableEffect(memoId, demoModeEnabled) {
         onDispose {
             val latest = viewModel.quickMemos.value.firstOrNull { it.id == memoId }
-            if (latest != null && isBlankTextQuickMemo(latest)) {
+            if (!demoModeEnabled && latest != null && isBlankTextQuickMemo(latest)) {
                 viewModel.deleteQuickMemo(memoId)
             }
         }
@@ -187,6 +218,14 @@ fun QuickMemoDetailPage(
         embedded = embedded,
         autoStopDurationMs = QuickMemoAutoStopPolicy.durationMillis(mainUiState.settings),
         onAction = { action ->
+            if (demoModeEnabled && action is QuickMemoUiAction.ToggleAudio) {
+                demoVoicePlaying = !demoVoicePlaying
+                return@QuickMemoDetailScreen
+            }
+            if (demoModeEnabled) {
+                Toast.makeText(context, "演示模式不会保存修改，请关闭演示模式后操作真实记录", Toast.LENGTH_SHORT).show()
+                return@QuickMemoDetailScreen
+            }
             handleQuickMemoAction(
                 action = action,
                 viewModel = viewModel,

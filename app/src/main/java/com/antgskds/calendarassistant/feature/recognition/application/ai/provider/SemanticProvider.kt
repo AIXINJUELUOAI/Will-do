@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai.provider
 
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
@@ -16,6 +17,7 @@ interface SemanticProvider {
     suspend fun analyzeImage(
         bitmap: Bitmap,
         settings: MySettings,
-        context: Context
+        context: Context,
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null
     ): AnalysisResult<List<RecognitionDraft>>
 }

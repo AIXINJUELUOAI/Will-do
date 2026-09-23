@@ -123,6 +123,8 @@ data class MySettings(
 
     // 列表排序方向（true=倒序，false=正序）。默认值 = 各列表当前行为，保证零行为变化。
     val homeListReverseOrder: Boolean = false,        // 首页今日/明日，现状正序
+    val homeAgendaOnlyScheduled: Boolean = true,
+    val homeAgendaReverseOrder: Boolean = false, // 日程视图：最后日期默认在底部
     val allEventsListReverseOrder: Boolean = false,   // 全部日程页，现状正序
     val floatingListReverseOrder: Boolean = true,     // 悬浮窗，现状倒序
     val archivesListReverseOrder: Boolean = true,     // 归档页，现状倒序
@@ -177,7 +179,9 @@ data class MySettings(
     val archiveDaysThreshold: Int = 0, // 归档阈值天数（过期多少天后归档，0=立即归档）
 
     // 课表设置
-    val courseFeatureEnabled: Boolean = true,
+    val courseFeatureEnabled: Boolean = true, // 主页下滑入口，保留旧配置语义
+    val courseModuleEnabled: Boolean = true, // 开发者中的课表总开关
+    val courseRemindersResumeAtMillis: Long = 0L, // 恢复后的提醒截止线，不补发停用期间提醒
     val semesterStartDate: String = "",
     val totalWeeks: Int = 20, // 旧版默认为 20
     val timeTableJson: String = "",
@@ -318,6 +322,7 @@ data class MySettings(
     val developerOptionsEnabled: Boolean = false,
     val developerOptionsDisabledAtMillis: Long = 0L,
     val developerSimulateRootEnabled: Boolean = false,
+    val developerDemoModeEnabled: Boolean = false,
     val quickMemoPinnedFixedTitleEnabled: Boolean = false,
 
     // Agent API

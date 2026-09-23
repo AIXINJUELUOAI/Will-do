@@ -44,13 +44,17 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("演示数据生成", Chain.SUPPORT, "feature/settings/developer/application/DemoModeDataFactory", "按当天稳定生成只读日程、大学课表、随口记、账单和完整天气展示数据"),
         HelperEntry("财务消息正则", Chain.RECOGNITION, "feature/accounting/domain/AccountingMessageRules", "按通知包名或短信发件人匹配，命名分组抽取金额、名称、时间和单号，未知静默跳过"),
         HelperEntry("财务规则存储", Chain.RECOGNITION, "feature/accounting/data/AccountingMessageRulePrefs", "开发者编辑与运行时共用本地规则，不覆盖用户禁用和删除"),
         HelperEntry("财务规则编辑", Chain.SUPPORT, "feature/recognition/ui/connector/AccountingRulesEditor", "现有正则页内编辑、增删和测试财务规则，测试不入库"),
-        HelperEntry("无障碍诊断快照", Chain.SUPPORT, "platform/accessibility/AccessibilityDiagnosticSnapshot", "有界读取事件源及窗口节点并立即回收，输出不可变 JSON 与现有支付规则判断，遮蔽密码字段"),
+        HelperEntry("无障碍诊断快照", Chain.SUPPORT, "platform/accessibility/AccessibilityDiagnosticSnapshot", "有界读取事件源及窗口节点并立即回收，输出不可变 JSON 与现有支付规则判断，遮蔽密码字段；汇总服务配置及仅含状态的健康日志"),
         HelperEntry("支付消息解析", Chain.RECOGNITION, "feature/accounting/domain/PaymentMessageParser", "支付凭证、收款及到账退款本地解析；消息保留时效校验，不调用 AI"),
         HelperEntry("微信结构化支付解析", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentParser", "解析转账 XML、详情桥接响应及红包领取响应；按本人方向、实际金额与原始交易时间生成账单"),
         HelperEntry("自动记账跨进程接收", Chain.RECOGNITION, "platform/accounting/PaymentCaptureProvider", "Binder 校验支付应用 UID；检查开关、限制数据大小后调用识别契约，拒绝其他应用注入"),
+        HelperEntry("微信 Hook 上游适配", Chain.RECOGNITION, "platform/xposed/WechatHookAdaptation", "移植 AutoAccounting 版本与规则缓存；后台适配红包模型，匹配成功后下次正常启动安装，不重启宿主"),
+        HelperEntry("上游 DEX 规则扫描", Chain.RECOGNITION, "platform/xposed/upstream/dex/Dex", "AutoAccounting DEX 扫描源码及模型；完整构造函数和回调签名匹配，禁止全局类加载监听"),
+        HelperEntry("上游微信红包规则", Chain.RECOGNITION, "platform/xposed/upstream/LuckMoneyModel", "移植 AutoAccounting 包名、构造函数及 onGYNetEnd 签名规则"),
         HelperEntry("支付应用 Hook", Chain.RECOGNITION, "platform/xposed/PaymentCaptureHook", "微信支付/转账数据库、详情桥接、红包领取回调及支付宝同步消息；独立安装、有界后台转发，不改宿主参数"),
         HelperEntry("无障碍支付页面采样", Chain.RECOGNITION, "platform/accessibility/PaymentWindowReader", "有界采集可见根节点/事件源子树并立即回收；单独读取前台包与窗口身份，详情内容就绪后才触发截图，不引入 OCR"),
         HelperEntry("记账结果展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/AccountingRecognitionDisplay", "按实际入库账单汇总金额与收支，重复和待核对另计；小岛仅金额，展开显示明细汇总"),
@@ -73,6 +77,8 @@ object HelperCatalog {
 
         // —— 入库 / 日程 ——
         HelperEntry("课程事件映射", Chain.INGEST, "core/course/CourseEventMapper", "课程表数据 → Event"),
+        HelperEntry("首页日期共享选中块", Chain.SCHEDULE, "feature/home/ui/render/material/HomeDateSelectionTransition", "共用日历与日程视图选中背景的坐标过渡，圆角与主题色随目标连续变化"),
+        HelperEntry("首页日程分组", Chain.SCHEDULE, "feature/home/domain/HomeAgendaMapper", "仅保留有日程或账单的日期；按日期排序、搜索和选中日定位"),
         HelperEntry("日程展示助手", Chain.SCHEDULE, "feature/schedule/domain/ScheduleDisplayHelper", "日程展示字段拼装"),
         HelperEntry("WebDAV V2 编解码", Chain.SYNC, "feature/cloudsync/data/SyncV2Codec", "状态压缩加密、资产加密、HMAC 内容寻址和稳定哈希"),
         HelperEntry("Agent 协议编解码", Chain.SCHEDULE, "shared/api/AgentProtocolJson", "Agent API v2 请求、响应与业务 DTO 的 JSON 转换"),
@@ -103,7 +109,9 @@ object HelperCatalog {
         HelperEntry("公共设置分隔线", Chain.SUPPORT, "shared/ui/material/settings/AppSettingsDivider", "设置卡片内统一 16 dp 水平缩进、0.5 dp 线宽与主题分隔色；开发者相关页面暂不迁移"),
         HelperEntry("公共列表侧滑容器", Chain.SUPPORT, "shared/ui/material/component/AppSwipeReveal", "日程、课程和随口记共用单向拖动、动作区裁切、取消回弹与阈值触感，保留业务内容和既有展开参数"),
         HelperEntry("公共设置行", Chain.SUPPORT, "shared/ui/material/settings/SettingsRowComponents", "设置开关、点击项及滑块等统一展示入口；实验室四项开关复用 SwitchSettingItem"),
-        HelperEntry("统一页面顶部栏", Chain.SUPPORT, "shared/ui/material/component/AppTopBar", "标题固定居中，左右操作可选；统一顶部安全区及返回按钮，供页面骨架组合使用"),
+        HelperEntry("平板详情工作区", Chain.SUPPORT, "shared/ui/material/component/AppDetailWorkspace", "日程、课程、账单和随口记共用右侧内容与附件分区；保留手机弹层及既有保存入口"),
+        HelperEntry("日历像素布局", Chain.SUPPORT, "feature/schedule/ui/render/material/CalendarLayout", "周月日历及课表的表头、网格与事件复用整数像素边界，消除独立取整引起的错位；保留原半透明配色"),
+        HelperEntry("统一页面顶部栏", Chain.SUPPORT, "shared/ui/material/component/AppTopBar", "默认标题居中，平板设置页可左对齐；统一顶部安全区及返回按钮，供页面骨架组合使用"),
         HelperEntry("统一页面骨架", Chain.SUPPORT, "shared/ui/material/component/AppPageScaffold", "统一背景、系统栏安全区、键盘避让和内容限宽；支持整页滚动及列表自行滚动，供设置、首页、天气、随口记、便签和小组件配置使用"),
         HelperEntry("页面内容安全留白", Chain.SUPPORT, "shared/ui/material/component/AppPageInsets", "骨架向自行滚动的内容提供底部留白，供列表 contentPadding 和浮动操作避让使用，业务无需自行读取导航栏高度"),
         HelperEntry("背景模式样式支持", Chain.SUPPORT, "app/ui/theme/material/background/SettingsBackgroundStyleSupport", "背景壁纸模式下的页面颜色映射"),

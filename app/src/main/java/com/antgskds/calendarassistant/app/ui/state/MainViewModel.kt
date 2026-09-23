@@ -26,6 +26,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.feature.schedule.domain.model.*
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.settings.developer.application.DemoModeDataFactory
 import com.antgskds.calendarassistant.feature.recognition.application.ai.model.RemotePrompts
 import com.antgskds.calendarassistant.feature.update.model.RemoteAppUpdateInfo
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
@@ -65,6 +66,10 @@ data class MainUiState(
     val revealedItemKey: String? = null,
     val rawEvents: List<Event> = emptyList(),
     val allScheduleItems: List<ScheduleDisplayItem> = emptyList(),
+    val homeAgendaItems: List<ScheduleDisplayItem> = emptyList(),
+    val homeAgendaFutureItems: List<ScheduleDisplayItem> = emptyList(),
+    val homeAgendaFutureDays: Int = com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.HOME_AGENDA_PAGE_DAYS,
+    val homeAgendaReady: Boolean = false,
     val allEventsFutureDays: Int = 7,
     val allEventsFutureLimit: LocalDate = LocalDate.now().plusDays(7),
     val courseScheduleItems: List<ScheduleDisplayItem> = emptyList(),
@@ -72,6 +77,7 @@ data class MainUiState(
     val currentDateEvents: List<ScheduleDisplayItem> = emptyList(),
     val tomorrowEvents: List<ScheduleDisplayItem> = emptyList(),
     val datesWithEvents: Set<LocalDate> = emptySet(),
+    val calendarItems: List<ScheduleDisplayItem> = emptyList(),
     val weatherData: WeatherData? = null,
     val rawEventCount: Int = 0
 )
@@ -181,6 +187,7 @@ class MainViewModel(
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _today = MutableStateFlow(LocalDate.now())
     private val _revealedItemKey = MutableStateFlow<String?>(null)
+    private val _homeAgendaFutureDays = MutableStateFlow(com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.HOME_AGENDA_PAGE_DAYS)
     private val _allEventsFutureDays = MutableStateFlow(INITIAL_ALL_EVENTS_FUTURE_DAYS)
 
     val uiState: StateFlow<MainUiState> = combine(
@@ -191,7 +198,8 @@ class MainViewModel(
         weatherQueryApi.weatherData,
         _timeTrigger,
         _today,
-        _allEventsFutureDays
+        _allEventsFutureDays,
+        _homeAgendaFutureDays
     ) { values ->
         val date = values[0] as LocalDate
         val revealedKey = values[1] as String?
@@ -202,22 +210,29 @@ class MainViewModel(
         val timeRefreshToken = values[5] as Long
         val today = values[6] as LocalDate
         val allEventsFutureDays = values[7] as Int
+        val agendaFutureDays = values[8] as Int
+        val demoModeEnabled = settings.developerOptionsEnabled && settings.developerDemoModeEnabled
+        val displayEvents = (if (demoModeEnabled) DemoModeDataFactory.events(today) else activeEvents)
+            .filter { com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(it, settings) }
+        val agenda = ScheduleDisplayHelper.buildAgendaSnapshot(displayEvents, today.plusDays(agendaFutureDays.toLong()))
         val snapshot = homeQueryApi.buildSnapshot(
             selectedDate = date,
-            events = activeEvents,
+            events = displayEvents,
             settings = settings
         )
 
         // 为"全部日程"页展开所有历史日程到未来 7 天
-        val futureLimit = today.plusDays(allEventsFutureDays.toLong())
-        val allItemsStart = activeEvents.minOfOrNull { it.startDate } ?: today
-        val allItems = ScheduleDisplayHelper.buildDisplayItems(activeEvents, allItemsStart, futureLimit)
+        val effectiveFutureDays = if (demoModeEnabled) maxOf(allEventsFutureDays, 35) else allEventsFutureDays
+        val futureLimit = today.plusDays(effectiveFutureDays.toLong())
+        val allItemsStart = displayEvents.minOfOrNull { it.startDate } ?: today
+        val allItems = ScheduleDisplayHelper.buildDisplayItems(displayEvents, allItemsStart, futureLimit)
         val semesterStart = resolveSemesterAnchor(settings.semesterStartDate)
         val semesterEnd = semesterStart.plusWeeks(settings.totalWeeks.coerceAtLeast(1).toLong()).minusDays(1)
+        val demoWeekStart = today.minusDays((today.dayOfWeek.value - 1).toLong())
         val courseItems = ScheduleDisplayHelper.buildDisplayItems(
-            activeEvents.filter { it.tag == EventTags.COURSE },
-            semesterStart,
-            semesterEnd
+            displayEvents.filter { it.tag == EventTags.COURSE },
+            if (demoModeEnabled) demoWeekStart else semesterStart,
+            if (demoModeEnabled) demoWeekStart.plusDays(6) else semesterEnd
         )
 
         MainUiState(
@@ -225,17 +240,24 @@ class MainViewModel(
             today = today,
             timeRefreshToken = timeRefreshToken,
             revealedItemKey = revealedKey,
-            rawEvents = activeEvents,
+            rawEvents = displayEvents,
             allScheduleItems = allItems,
-            allEventsFutureDays = allEventsFutureDays,
+            homeAgendaItems = agenda.items,
+            homeAgendaFutureItems = agenda.futureItems,
+            homeAgendaFutureDays = agendaFutureDays,
+            homeAgendaReady = true,
+            allEventsFutureDays = effectiveFutureDays,
             allEventsFutureLimit = futureLimit,
             courseScheduleItems = courseItems,
             settings = settings,
             currentDateEvents = snapshot.currentDateEvents,
             tomorrowEvents = snapshot.tomorrowEvents,
             datesWithEvents = snapshot.datesWithEvents,
-            weatherData = if (settings.hasWeatherConfig()) weatherData else null,
-            rawEventCount = activeEvents.size
+            calendarItems = snapshot.calendarItems,
+            weatherData = if (demoModeEnabled) {
+                DemoModeDataFactory.weather(today)
+            } else if (settings.hasWeatherConfig()) weatherData else null,
+            rawEventCount = displayEvents.size
         )
     }.flowOn(Dispatchers.Default)
     .stateIn(
@@ -246,6 +268,10 @@ class MainViewModel(
 
     fun updateSelectedDate(date: LocalDate) { _selectedDate.value = date; _revealedItemKey.value = null }
     fun onRevealItem(key: String?) { _revealedItemKey.value = key }
+    fun loadMoreFutureHomeAgenda() {
+        _homeAgendaFutureDays.value += com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.HOME_AGENDA_PAGE_DAYS
+    }
+
     fun loadMoreFutureAllEvents() {
         _allEventsFutureDays.value += ALL_EVENTS_LOAD_MORE_DAYS
         _revealedItemKey.value = null
@@ -724,6 +750,7 @@ class MainViewModel(
     }
 
     fun addCourse(course: Course) = viewModelScope.launch {
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settingsQueryApi.settings.value)) return@launch
         scheduleCenter.addEvent(CourseEventMapper.toParentEvent(course, settingsQueryApi.settings.value))
     }
 

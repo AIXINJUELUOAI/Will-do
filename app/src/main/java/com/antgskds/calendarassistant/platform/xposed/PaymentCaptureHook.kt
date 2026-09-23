@@ -1,12 +1,19 @@
+/*
+ * Hook lifecycle and payment interception adapted from AutoAccounting 4e707980.
+ * Copyright (C) 2023-2025 ankio (ankio@ankio.net).
+ * See docs/third-party/autoaccounting/README.md and LICENSE for sources and integration changes.
+ */
 package com.antgskds.calendarassistant.platform.xposed
 
+import android.app.Instrumentation
 import android.app.Application
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.ValueCallback
-import dalvik.system.DexFile
+import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -19,7 +26,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
-/** 参考 AutoAccounting 的数据库、详情桥接、红包回调及同步消息入口；独立实现，只观察原始数据。 */
+/** 沿用上游主进程 onCreate 后安装、精确红包适配及固定支付入口；只观察并转发，不改宿主参数。 */
 class PaymentCaptureHook : IXposedHookLoadPackage {
     private val executor by lazy {
         ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
@@ -29,76 +36,55 @@ class PaymentCaptureHook : IXposedHookLoadPackage {
     }
     private val delivered = LinkedHashMap<String, Long>()
     private var installed = false
-    private val inspectedClasses = java.util.Collections.synchronizedSet(HashSet<Class<*>>())
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val pkg = lpparam.packageName
         if (pkg != "com.tencent.mm" && pkg != "com.eg.android.AlipayGphone") return
-        val mainProcess = lpparam.processName == pkg
-        val wechatWebProcess = pkg == "com.tencent.mm" && lpparam.processName in setOf("$pkg:tools", "$pkg:toolsmp")
-        if (!mainProcess && !wechatWebProcess) return
-        XposedHelpers.findAndHookMethod(Application::class.java, "attach", Context::class.java, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
-                if (installed) return
-                installed = true
-                val context = param.args[0] as? Context ?: return
-                val loader = context.classLoader
-                runCatching {
-                    when {
-                        wechatWebProcess -> installWechatDetail(context, loader)
-                        pkg == "com.tencent.mm" -> installWechat(context, loader)
-                        else -> installAlipay(context, loader)
+        // Upstream core/App.kt: only the manifest's main process, after Application.onCreate.
+        if (lpparam.processName != pkg) return
+        install(pkg + " lifecycle") {
+            XposedHelpers.findAndHookMethod(
+                Instrumentation::class.java, "callApplicationOnCreate", Application::class.java,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (installed || param.hasThrowable()) return
+                        val application = param.args[0] as? Application ?: return
+                        if (application.packageName != pkg) return
+                        installed = true
+                        install(pkg + " payment hooks version=" + version(application)) {
+                            if (pkg == "com.tencent.mm") installWechat(application, application.classLoader)
+                            else installAlipay(application, application.classLoader)
+                        }
                     }
-                }.onFailure { log("$pkg unavailable=${it.javaClass.simpleName}") }
-            }
-        })
+                },
+            )
+        }
     }
 
     private fun installWechat(context: Context, loader: ClassLoader) {
-        // 旧版 WCDB 与新版 compat 可同时存在；一个入口失败不能挡住其他入口。
-        for (name in listOf("com.tencent.wcdb.database.SQLiteDatabase", "com.tencent.wcdb.compat.SQLiteDatabase")) {
-            install("wechat database=$name") {
-                installWechatDatabase(context, XposedHelpers.findClass(name, loader))
-            }
+        // Upstream DatabaseHooker: the fixed WCDB insert entry. No extra compat/update hooks.
+        install("wechat database") {
+            installWechatDatabase(context, XposedHelpers.findClass("com.tencent.wcdb.database.SQLiteDatabase", loader))
         }
         installWechatDetail(context, loader)
-        install("wechat red_packet class observer") {
-            // 混淆类名不固定；只检查红包模型包及公开回调签名，新增 split/dex 加载也可接入。
-            val inspecting = ThreadLocal<Boolean>()
-            XposedBridge.hookAllMethods(ClassLoader::class.java, "loadClass", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    val name = param.args.firstOrNull() as? String ?: return
-                    if (!name.startsWith("com.tencent.mm.plugin.luckymoney.model.") || inspecting.get() == true) return
-                    val clazz = param.result as? Class<*> ?: return
-                    inspecting.set(true)
-                    try { installRedPacketClass(context, clazz) } finally { inspecting.remove() }
+        // Upstream AdaptationUtils + LuckMoneyModel: cached complete signature, never hook ClassLoader.
+        install("wechat red_packet adaptation") {
+            val adaptation = WechatHookAdaptation(context, loader) { message, error ->
+                log(message)
+                if (error != null) XposedBridge.log(error)
+            }
+            val model = adaptation.cachedClass()
+            if (model != null) {
+                try { installRedPacketClass(context, model) }
+                catch (error: Throwable) {
+                    adaptation.invalidate()
+                    log("wechat red_packet install failed")
+                    XposedBridge.log(error)
                 }
-            })
+            } else {
+                executor.execute { adaptation.adaptForNextLaunch() }
+            }
         }
-        // 已加载的模型未必再次经过 loadClass；从现有 dex 取候选名，不新开 dex 或添加依赖。
-        executor.execute {
-            runCatching {
-                var current: ClassLoader? = loader
-                var count = 0
-                while (current != null) {
-                    val pathList = runCatching { XposedHelpers.getObjectField(current, "pathList") }.getOrNull()
-                    val elements = pathList?.let { XposedHelpers.getObjectField(it, "dexElements") as? Array<*> }.orEmpty()
-                    for (element in elements) {
-                        val dex = element?.let { XposedHelpers.getObjectField(it, "dexFile") as? DexFile } ?: continue
-                        val entries = dex.entries()
-                        while (entries.hasMoreElements()) {
-                            val name = entries.nextElement()
-                            if (!name.startsWith("com.tencent.mm.plugin.luckymoney.model.")) continue
-                            if (++count > ConfigCatalog.AUTO_ACCOUNTING_HOOK_MAX_CLASSES) return@execute
-                            runCatching { installRedPacketClass(context, Class.forName(name, false, loader)) }
-                        }
-                    }
-                    current = current.parent
-                }
-                log("wechat red_packet scan completed candidates=$count")
-            }.onFailure { log("wechat red_packet scan unavailable=${it.javaClass.simpleName}") }
-        }
-        log("wechat installed version=${version(context)}")
     }
 
     private fun installWechatDetail(context: Context, loader: ClassLoader) = install("wechat detail") {
@@ -125,17 +111,17 @@ class PaymentCaptureHook : IXposedHookLoadPackage {
     }
 
     private fun installWechatDatabase(context: Context, database: Class<*>) {
-        fun callback(valuesIndex: Int, update: Boolean) = object : XC_MethodHook() {
+        fun callback() = object : XC_MethodHook() {
             override fun afterHookedMethod(param: MethodHookParam) {
                 runCatching {
                     if (param.hasThrowable()) return
                     val result = (param.result as? Number)?.toLong() ?: return
-                    if (result < 0 || (update && result == 0L)) return
+                    if (result < 0) return
                     val table = param.args[0] as? String ?: return
                     if (table != "message" && table != "AppMessage") return
-                    val values = param.args[valuesIndex] as? ContentValues ?: return
+                    val values = param.args[2] as? ContentValues ?: return
                     val type = values.getAsInteger("type") ?: return
-                    // 部分字段更新不回查数据库，只有本次写入已包含完整支付信息才处理。
+                    // 只读取本次插入包含的支付信息，不回查聊天库，不修改宿主 ContentValues。
                     val kind = when {
                         table == "message" && type == 318767153 -> "wechat_payment"
                         table == "message" && type == 419430449 -> "wechat_transfer"
@@ -154,37 +140,31 @@ class PaymentCaptureHook : IXposedHookLoadPackage {
         }
         install("wechat ${database.name} insert") {
             XposedHelpers.findAndHookMethod(database, "insertWithOnConflict", String::class.java, String::class.java,
-                ContentValues::class.java, Int::class.javaPrimitiveType, callback(2, false))
-        }
-        install("wechat ${database.name} update") {
-            XposedHelpers.findAndHookMethod(database, "updateWithOnConflict", String::class.java, ContentValues::class.java,
-                String::class.java, Array<String>::class.java, Int::class.javaPrimitiveType, callback(1, true))
+                ContentValues::class.java, Int::class.javaPrimitiveType, callback())
         }
     }
 
     private fun installRedPacketClass(context: Context, clazz: Class<*>) {
-        if (inspectedClasses.size >= ConfigCatalog.AUTO_ACCOUNTING_HOOK_MAX_CLASSES || !inspectedClasses.add(clazz)) return
-        runCatching {
-            val method = clazz.declaredMethods.firstOrNull { it.name == "onGYNetEnd" &&
-                it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType, String::class.java, JSONObject::class.java))
-            } ?: return
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    runCatching {
-                        if (param.args[0] != 0) return
-                        val data = param.args[2] as? JSONObject ?: return
-                        if (!data.has("receiveId") || !data.has("receiveStatus") || !data.has("record")) return
-                        // 复制原响应，既不补写宿主字段，也不采用上一次支付的缓存金额。
-                        val copy = JSONObject()
-                        for (key in listOf("retcode", "isSender", "receiveStatus", "changeWording", "receiveId", "amount", "record")) {
-                            copy.put(key, data.opt(key))
-                        }
-                        forward(context, "com.tencent.mm", JSONObject().put("kind", "wechat_red_packet").put("data", copy).toString())
-                    }.onFailure { log("wechat red_packet callback=${it.javaClass.simpleName}") }
-                }
-            })
-            log("wechat red_packet hook=${clazz.name}")
-        }.onFailure { log("wechat red_packet hook unavailable=${it.javaClass.simpleName}") }
+        // Upstream RedPackageHooker: hook only the class selected by LuckMoneyModel.
+        val method = clazz.getDeclaredMethod("onGYNetEnd",
+            Int::class.javaPrimitiveType!!, String::class.java, JSONObject::class.java)
+        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                runCatching {
+                    if (param.args[0] != 0) return
+                    val data = param.args[2] as? JSONObject ?: return
+                    if (!data.has("receiveId") || !data.has("receiveStatus") || !data.has("record")) return
+                    // 复制原响应，既不补写宿主字段，也不采用上一次支付的缓存金额。
+                    val copy = JSONObject()
+                    for (key in listOf("retcode", "isSender", "receiveStatus", "changeWording", "receiveId", "amount", "record")) {
+                        copy.put(key, data.opt(key))
+                    }
+                    forward(context, "com.tencent.mm", JSONObject().put("kind", "wechat_red_packet").put("data", copy).toString())
+                }.onFailure { log("wechat red_packet callback=${it.javaClass.simpleName}") }
+            }
+        })
+        log("wechat red_packet hook=${clazz.name}")
+
     }
 
     private fun installAlipay(context: Context, loader: ClassLoader) {
@@ -195,8 +175,12 @@ class PaymentCaptureHook : IXposedHookLoadPackage {
                     if (param.hasThrowable()) return
                     val data = param.result as? String ?: return
                     if (data.length > ConfigCatalog.AUTO_ACCOUNTING_MAX_PAYLOAD) return
-                    if (listOf("支付", "付款", "收款", "到账", "转账", "交易", "退款").none(data::contains)) return
-                    forward(context, "com.eg.android.AlipayGphone", data)
+                    // Upstream MessageBoxHooker: decode the sync array and dispatch each message.
+                    // Do not test raw Chinese keywords: JSON may contain escaped Unicode.
+                    val messages = Gson().fromJson(data, JsonArray::class.java)
+                    messages.forEach { item ->
+                        forward(context, "com.eg.android.AlipayGphone", JsonArray().apply { add(item) }.toString())
+                    }
                 }.onFailure { log("alipay callback=${it.javaClass.simpleName}") }
             }
         })
@@ -241,8 +225,11 @@ class PaymentCaptureHook : IXposedHookLoadPackage {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
     }.getOrDefault("unknown")
     private fun install(name: String, action: () -> Unit) {
-        runCatching { action(); log("$name installed") }
-            .onFailure { log("$name unavailable=${it.javaClass.simpleName}") }
+        runCatching { action(); log(name + " installed") }
+            .onFailure {
+                log(name + " unavailable=" + it.javaClass.simpleName)
+                XposedBridge.log(it) // Installation errors only; callback payment bodies stay out of logs.
+            }
     }
     private fun log(message: String) { XposedBridge.log("WillDoAccounting: $message") }
 }

@@ -14,6 +14,7 @@ data class SettingsDetailUiState(
     val confirmationPredictiveBackEnabled: Boolean,
     val courseCount: Int,
     val archiveCount: Int,
+    val courseModuleEnabled: Boolean = true,
 )
 
 sealed interface SettingsDetailUiAction {

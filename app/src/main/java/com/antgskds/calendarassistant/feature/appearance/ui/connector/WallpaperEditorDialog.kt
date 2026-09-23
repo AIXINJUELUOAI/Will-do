@@ -335,7 +335,7 @@ private fun BoxScope.WallpaperHomePreview(
         currentPageKey = selectedPageKey,
         pageOrder = previewPages,
         uiSize = settings.uiSize,
-        courseFeatureEnabled = settings.courseFeatureEnabled,
+        courseFeatureEnabled = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.swipeEnabled(settings),
         quickMemoCount = quickMemos.size,
         settingsOverride = settings
     )

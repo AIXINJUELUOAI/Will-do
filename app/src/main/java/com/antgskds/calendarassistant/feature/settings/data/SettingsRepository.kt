@@ -23,7 +23,8 @@ class SettingsRepository(context: Context) {
     }
 
     fun saveSettings(settings: MySettings) {
-        val migrated = settings.migrateToMultimodalConfig()
+        val migrated = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy
+            .onSettingsChanged(_settingsFlow.value, settings.migrateToMultimodalConfig(), System.currentTimeMillis())
         settingsSource.saveSettings(migrated)
         _settingsFlow.value = migrated
     }

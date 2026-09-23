@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,12 +26,41 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.antgskds.calendarassistant.shared.ui.material.component.AppTopBar
+
+@Composable
+fun AdaptiveTwoPaneTopBar(
+    primaryTitle: String,
+    secondaryTitle: String,
+    primaryWidth: Dp,
+    primaryNavigationIcon: @Composable () -> Unit = {},
+    primaryActions: @Composable RowScope.() -> Unit = {},
+    secondaryActions: @Composable RowScope.() -> Unit = {},
+) {
+    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(modifier = Modifier.width(primaryWidth)) {
+            AppTopBar(
+                title = primaryTitle,
+                navigationIcon = primaryNavigationIcon,
+                actions = primaryActions,
+            )
+        }
+        VerticalDivider(
+            modifier = Modifier.fillMaxHeight(),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            AppTopBar(title = secondaryTitle, actions = secondaryActions)
+        }
+    }
+}
 
 @Composable
 fun AdaptiveTwoPaneLayout(
     modifier: Modifier = Modifier,
     primaryFraction: Float = 0.45f,
     primaryMaxWidth: Dp? = null,
+    primaryWidth: Dp? = null,
     primary: @Composable () -> Unit,
     secondary: @Composable () -> Unit,
 ) {
@@ -103,7 +134,13 @@ fun AdaptiveTwoPaneLayout(
 
             else -> {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    if (primaryMaxWidth != null) {
+                    if (primaryWidth != null) {
+                        Box(
+                            modifier = Modifier
+                                .width(primaryWidth.coerceAtMost(availableWidth * 0.75f))
+                                .fillMaxHeight(),
+                        ) { primary() }
+                    } else if (primaryMaxWidth != null) {
                         Box(
                             modifier = Modifier
                                 .width(
@@ -126,7 +163,7 @@ fun AdaptiveTwoPaneLayout(
                     Box(
                         modifier = Modifier
                             .weight(
-                                if (primaryMaxWidth == null) {
+                                if (primaryWidth == null && primaryMaxWidth == null) {
                                     (1f - primaryFraction).coerceIn(0.25f, 0.75f)
                                 } else {
                                     1f

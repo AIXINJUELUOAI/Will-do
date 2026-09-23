@@ -22,10 +22,18 @@ class AdaptiveLayoutTest {
 
     @Test
     fun expandedWidthUsesRailAndTwoPane() {
-        val info = AdaptiveLayoutInfo(widthClass = AppWindowWidthClass.EXPANDED)
+        val info = AdaptiveLayoutInfo(widthClass = AppWindowWidthClass.EXPANDED, windowWidthDp = 1115f)
 
         assertEquals(true, info.useNavigationRail)
         assertEquals(true, info.useTwoPaneContent)
+        assertEquals(false, info.canExpandNavigation)
+    }
+
+    @Test
+    fun extraWideWindowAllowsExpandedNavigation() {
+        val info = AdaptiveLayoutInfo(widthClass = AppWindowWidthClass.EXPANDED, windowWidthDp = 1116f)
+
+        assertEquals(true, info.canExpandNavigation)
     }
 
     @Test

@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 156
+        versionCode = 167
         versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -195,6 +195,8 @@ dependencies {
     // === MIUI 超级岛 (LSPosed/Xposed) ===
     implementation("io.github.d4viddf:hyperisland_kit:0.4.3")
     compileOnly("de.robv.android.xposed:api:82")
+    // AutoAccounting upstream DEX adaptation engine (same dependency/version).
+    implementation("org.smali:dexlib2:2.5.2")
 
     // === Room 数据库 ===
     implementation(libs.androidx.room.runtime)

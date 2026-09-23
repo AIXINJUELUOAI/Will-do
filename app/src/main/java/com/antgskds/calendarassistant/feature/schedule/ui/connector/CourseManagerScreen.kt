@@ -6,6 +6,10 @@ import com.antgskds.calendarassistant.shared.ui.material.component.AppFloatingAc
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 
 import android.content.ClipboardManager
+import com.antgskds.calendarassistant.shared.ui.material.component.DetailWorkspaceOverlay
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailWorkspaceContent
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -273,6 +277,30 @@ fun MaterialCourseManagerScreen(
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
     val bottomInset = LocalAppPageBottomPadding.current
 
+    val wide = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
+    val editorContent: @Composable () -> Unit = {
+    if (showEditDialog) {
+        CourseEditDialog(
+            course = courseToEdit,
+            maxNodes = maxNodes,
+            timeTableJson = state.timeTableJson,
+            hapticEnabled = state.hapticEnabled,
+            predictiveBackEnabled = state.predictiveBackEnabled,
+            onDismiss = { showEditDialog = false; courseToEdit = null },
+            onConfirm = { course ->
+                if (courseToEdit == null) {
+                    onAction(CourseManagerUiAction.AddCourse(course))
+                } else {
+                    onAction(CourseManagerUiAction.UpdateCourse(course))
+                }
+                showEditDialog = false
+                courseToEdit = null
+            }
+        )
+    }
+    }
+    CompositionLocalProvider(LocalDetailWorkspaceContent provides if (wide && showEditDialog) editorContent else null) {
+    DetailWorkspaceOverlay {
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -332,23 +360,8 @@ fun MaterialCourseManagerScreen(
         }
     }
 
-    if (showEditDialog) {
-        CourseEditDialog(
-            course = courseToEdit,
-            maxNodes = maxNodes,
-            timeTableJson = state.timeTableJson,
-            hapticEnabled = state.hapticEnabled,
-            predictiveBackEnabled = state.predictiveBackEnabled,
-            onDismiss = { showEditDialog = false; courseToEdit = null },
-            onConfirm = { course ->
-                if (courseToEdit == null) {
-                    onAction(CourseManagerUiAction.AddCourse(course))
-                } else {
-                    onAction(CourseManagerUiAction.UpdateCourse(course))
-                }
-                showEditDialog = false
-                courseToEdit = null
-            }
-        )
     }
+    }
+    if (!wide) editorContent()
+
 }

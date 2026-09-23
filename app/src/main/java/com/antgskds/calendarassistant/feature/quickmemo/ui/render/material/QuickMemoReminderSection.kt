@@ -4,6 +4,7 @@ package com.antgskds.calendarassistant.feature.quickmemo.ui.render.material
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,104 +74,25 @@ internal fun QuickMemoReminderSection(
     var showSheet by remember { mutableStateOf(false) }
     var editingReminder by remember { mutableStateOf<QuickMemoReminderEntity?>(null) }
     val haptics = rememberAppHaptics(hapticEnabled)
-    val usesWallpaperText = LocalAppBackgroundStyleEnabled.current
-    val primaryTextColor = if (usesWallpaperText) {
-        MaterialTheme.colorScheme.onBackground
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val secondaryTextColor = if (usesWallpaperText) {
-        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = if (uiSize <= 1) 8.dp else 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(5.dp)
-                    .height(if (uiSize <= 1) 44.dp else 52.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "提醒",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = primaryTextColor
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = if (reminders.isEmpty()) "未设置提醒" else "已设置 ${reminders.size} 个提醒",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = secondaryTextColor
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Surface(
-                onClick = {
-                    haptics.click()
-                    editingReminder = null
-                    showSheet = true
-                },
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = "添加",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         reminders.sortedWith(compareBy<QuickMemoReminderEntity> { it.triggerAt }.thenBy { it.id }).forEach { reminder ->
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                onClick = {
-                    haptics.click()
-                    editingReminder = reminder
-                    showSheet = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = formatReminderTime(reminder.triggerAt),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = primaryTextColor
-                        )
-                        Text(
-                            text = RepeatSpec.fromRRule(reminder.rrule)?.summary() ?: "不重复",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryTextColor
-                        )
-                    }
-                    Text(
-                        text = "›",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = secondaryTextColor
-                    )
-                }
+            androidx.compose.runtime.key(reminder.id) {
+                QuickMemoReminderRow(
+                    title = formatReminderTime(reminder.triggerAt),
+                    subtitle = RepeatSpec.fromRRule(reminder.rrule)?.summary()?.let { "· $it" },
+                    actionLabel = "修改",
+                    uiSize = uiSize,
+                    onClick = { haptics.click(); editingReminder = reminder; showSheet = true },
+                )
             }
         }
+        QuickMemoReminderRow(
+            title = "提醒",
+            subtitle = null,
+            actionLabel = "添加",
+            uiSize = uiSize,
+            onClick = { haptics.click(); editingReminder = null; showSheet = true },
+        )
     }
 
     if (showSheet) {
@@ -185,6 +108,64 @@ internal fun QuickMemoReminderSection(
                 showSheet = false
             }
         )
+    }
+}
+
+/** 摘要和底部添加入口共用一行，不再叠加单独的提醒框。 */
+@Composable
+private fun QuickMemoReminderRow(
+    title: String,
+    subtitle: String?,
+    actionLabel: String,
+    uiSize: Int,
+    onClick: () -> Unit,
+) {
+    val wallpaper = LocalAppBackgroundStyleEnabled.current
+    val scheme = MaterialTheme.colorScheme
+    val primaryText = if (wallpaper) scheme.onBackground else scheme.onSurface
+    val secondaryText = if (wallpaper) primaryText.copy(alpha = 0.68f) else scheme.onSurfaceVariant
+    val accent = if (wallpaper) primaryText.copy(alpha = 0.78f) else scheme.primary
+    val buttonColor = if (wallpaper) primaryText else scheme.primary.copy(alpha = 0.12f)
+    val buttonText = if (wallpaper) {
+        if (primaryText.luminance() > 0.5f) Color.Black else Color.White
+    } else scheme.primary
+
+    // 与下方日程待办相同的无底色行，不经过会自动叠加壁纸材质的 AppCard。
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick)
+            .padding(vertical = when (uiSize) { 1 -> 10.dp; 3 -> 14.dp; else -> 12.dp }),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(5.dp).height(when (uiSize) { 1 -> 34.dp; 3 -> 44.dp; else -> 40.dp })
+            .clip(RoundedCornerShape(3.dp)).background(accent))
+        Spacer(Modifier.width(16.dp))
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                title, modifier = Modifier.weight(1f, fill = false).alignByBaseline(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold, color = primaryText,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle, modifier = Modifier.alignByBaseline(),
+                    style = MaterialTheme.typography.bodyMedium, color = secondaryText,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(999.dp),
+            color = buttonColor,
+            contentColor = buttonText,
+        ) {
+            Text(
+                actionLabel, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

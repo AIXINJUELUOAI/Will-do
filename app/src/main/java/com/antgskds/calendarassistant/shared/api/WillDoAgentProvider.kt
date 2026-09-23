@@ -1,6 +1,14 @@
 package com.antgskds.calendarassistant.shared.api
 
 import android.content.ContentProvider
+import com.antgskds.calendarassistant.shared.operation.AgentBill
+import com.antgskds.calendarassistant.shared.operation.AgentBillDraft
+import com.antgskds.calendarassistant.shared.operation.AgentBillPatch
+import com.antgskds.calendarassistant.shared.operation.AgentBillFilter
+import com.antgskds.calendarassistant.shared.operation.AgentBillQuery
+import com.antgskds.calendarassistant.shared.operation.AgentBillPage
+import com.antgskds.calendarassistant.shared.operation.AgentBillCreation
+import com.antgskds.calendarassistant.shared.operation.AgentBillSummary
 import android.content.ContentValues
 import android.content.UriMatcher
 import android.database.Cursor
@@ -147,6 +155,29 @@ class WillDoAgentProvider : ContentProvider() {
         isThirdPartyTransport: Boolean
     ): JsonElement = when (method) {
         WillDoAgentContract.GET_CAPABILITIES -> capabilities(isThirdPartyTransport)
+
+        WillDoAgentContract.CREATE_BILL -> encode(
+            service.createBill(payload.decode("bill", AgentBillDraft.serializer())).getOrThrow(),
+            AgentBillCreation.serializer()
+        )
+        WillDoAgentContract.GET_BILL -> encode(
+            service.getBill(payload.requiredString("id")).getOrThrow(), AgentBill.serializer()
+        )
+        WillDoAgentContract.QUERY_BILLS -> encode(
+            service.queryBills(AgentProtocolJson.json.decodeFromJsonElement<AgentBillQuery>(payload)).getOrThrow(),
+            AgentBillPage.serializer()
+        )
+        WillDoAgentContract.UPDATE_BILL -> encode(
+            service.updateBill(payload.requiredString("id"), payload.decode("patch", AgentBillPatch.serializer())).getOrThrow(),
+            AgentBill.serializer()
+        )
+        WillDoAgentContract.DELETE_BILL -> completed {
+            service.deleteBill(payload.requiredString("id")).getOrThrow()
+        }
+        WillDoAgentContract.GET_BILL_SUMMARY -> encode(
+            service.getBillSummary(AgentProtocolJson.json.decodeFromJsonElement<AgentBillFilter>(payload)).getOrThrow(),
+            ListSerializer(AgentBillSummary.serializer())
+        )
 
         WillDoAgentContract.CREATE_EVENT -> idResult(
             service.createEvent(payload.decode("event", AgentEventDraft.serializer())).getOrThrow()
@@ -419,6 +450,8 @@ class WillDoAgentProvider : ContentProvider() {
         put("protocolVersion", WillDoAgentContract.PROTOCOL_VERSION)
         put("maxBatchSize", WillDoAgentContract.MAX_BATCH_SIZE)
         put("maxQueryLimit", WillDoAgentContract.MAX_QUERY_LIMIT)
+        put("billTimeUnit", "milliseconds")
+        put("billAmountUnit", "minor")
         put("supportsContentUriFiles", !isThirdPartyTransport)
         put("supportsOccurrenceAttachments", !isThirdPartyTransport)
         put("accessEnabled", access.accessEnabled)
@@ -542,6 +575,13 @@ class WillDoAgentProvider : ContentProvider() {
         }
 
         val ALL_METHODS = listOf(
+            WillDoAgentContract.CREATE_BILL,
+            WillDoAgentContract.GET_BILL,
+            WillDoAgentContract.QUERY_BILLS,
+            WillDoAgentContract.UPDATE_BILL,
+            WillDoAgentContract.DELETE_BILL,
+            WillDoAgentContract.GET_BILL_SUMMARY,
+
             WillDoAgentContract.GET_CAPABILITIES,
             WillDoAgentContract.CREATE_EVENT,
             WillDoAgentContract.BATCH_CREATE_EVENTS,
@@ -592,6 +632,9 @@ class WillDoAgentProvider : ContentProvider() {
         )
 
         val MUTATING_METHODS = ALL_METHODS.toSet() - setOf(
+            WillDoAgentContract.GET_BILL,
+            WillDoAgentContract.QUERY_BILLS,
+            WillDoAgentContract.GET_BILL_SUMMARY,
             WillDoAgentContract.GET_CAPABILITIES,
             WillDoAgentContract.GET_EVENT,
             WillDoAgentContract.QUERY_EVENTS,
