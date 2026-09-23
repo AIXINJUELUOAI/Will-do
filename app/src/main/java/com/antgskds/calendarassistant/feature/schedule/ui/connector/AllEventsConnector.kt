@@ -34,6 +34,8 @@ fun AllEventsRoute(
     onOpenAccounting: (LocalDate, Boolean) -> Unit = { _, _ -> },
 ) {
     val mainState by viewModel.uiState.collectAsState()
+    val demoModeEnabled = mainState.settings.developerOptionsEnabled &&
+        mainState.settings.developerDemoModeEnabled
     val reverseOrderEnabled = mainState.settings.allEventsListReverseOrder
     val connection = remember(
         mainState.allScheduleItems,
@@ -72,21 +74,21 @@ fun AllEventsRoute(
                 is AllEventsUiAction.RevealItem -> viewModel.onRevealItem(action.itemKey)
                 AllEventsUiAction.CollapseItem -> viewModel.onRevealItem(null)
                 is AllEventsUiAction.DeleteItem -> {
-                    connection.itemsByKey[action.itemKey]?.eventId?.let { eventId ->
+                    if (!demoModeEnabled) connection.itemsByKey[action.itemKey]?.eventId?.let { eventId ->
                         viewModel.deleteEvent(eventId)
                     }
                 }
 
                 is AllEventsUiAction.EditItem -> {
-                    connection.itemsByKey[action.itemKey]?.let(onEditItem)
+                    if (!demoModeEnabled || twoPane) connection.itemsByKey[action.itemKey]?.let(onEditItem)
                 }
 
                 is AllEventsUiAction.RequestDeleteItem -> {
-                    connection.itemsByKey[action.itemKey]?.let(onRequestDeleteItem)
+                    if (!demoModeEnabled) connection.itemsByKey[action.itemKey]?.let(onRequestDeleteItem)
                 }
 
                 is AllEventsUiAction.ArchiveItem -> {
-                    connection.itemsByKey[action.itemKey]?.let { item ->
+                    if (!demoModeEnabled) connection.itemsByKey[action.itemKey]?.let { item ->
                         viewModel.archiveItem(item.action)
                     }
                 }

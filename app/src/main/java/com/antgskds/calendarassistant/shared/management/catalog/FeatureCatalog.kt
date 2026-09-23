@@ -44,6 +44,7 @@ object FeatureCatalog {
     val features: List<FeatureEntry> = listOf(
         FeatureEntry("通知与短信记账", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", "双权限子开关控制；可编辑正则提取账单，仅返回入库结果，不调用 AI"),
         FeatureEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", "两分钟一次性实验：即时事件、多窗口和延迟节点采样、独立截图，自动导出本地 ZIP，不调用 AI"),
+        FeatureEntry("界面演示模式", Chain.SUPPORT, "feature/settings/developer/application/DemoModeDataFactory", "开发者开关以只读内存数据替换日程、课表、随口记、账单和天气展示，不写库、不同步、不通知"),
         FeatureEntry("自动记账", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "偏好设置单一默认关闭开关；无障碍支付完成/单笔详情截图与微信支付宝 Xposed 消息采集，共用去重入库及结果反馈"),
         FeatureEntry("主动账单识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", "图文一次识别日程与账单；正常账单自动入账并在岛上展示金额，重复暂不入库，异常信息留待核对"),
         // —— 识别 ——
@@ -73,7 +74,8 @@ object FeatureCatalog {
         FeatureEntry("随口记多提醒", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", "维护单条随口记的多个提醒及重复规则，统一调用通知入口"),
         FeatureEntry("悬浮媒体查看", Chain.SUPPORT, "platform/floating/ui/connector/FloatingMediaCardConnector", "从胶囊查看日程二维码、图片附件或随口记图片，失败时返回详情"),
         FeatureEntry("便签笔记", Chain.SCHEDULE, "feature/note/application/NoteService", "普通便签已下线；保留旧数据存储及历史数据迁移兼容能力，首页不再提供编辑入口"),
-        FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记数据"),
+        FeatureEntry("首页日程视图", Chain.SCHEDULE, "feature/home/ui/render/material/HomeAgendaList", "日期侧栏、每日支出与连续日程；全局搜索、重复日程按七天加载"),
+        FeatureEntry("Agent API", Chain.SCHEDULE, "shared/api/WillDoAgentProvider", "外部 Agent 应用跨进程访问日程/课程/随口记/账单数据"),
 
         // —— 横切支撑 ——
         FeatureEntry("账单持久化", Chain.SUPPORT, "feature/accounting/data/AccountingEntry", "沿用兼容表与索引，文件导入经统一入库接口写入；不升级数据库结构"),

@@ -202,6 +202,10 @@ class App : Application() {
             weatherOperationApi = weatherOperationApi,
             diagnosticLogExporter = diagnosticLogCenter,
             backupCoordinator = backupCenter,
+            accountingService = com.antgskds.calendarassistant.shared.api.AgentAccountingService(
+                accounting = accountingApi,
+                ingest = ingestCommandApi,
+            ),
         )
     }
 
@@ -298,8 +302,12 @@ class App : Application() {
             capsuleProvider = { capsuleCommandApi }, automaticAccountingEnabled = { settingsQueryApi.settings.value.automaticAccountingEnabled })
     }
 
+    val accountingNotificationPriority by lazy {
+        com.antgskds.calendarassistant.feature.accounting.domain.AccountingNotificationPriorityPolicy()
+    }
+
     val accountingMessageCoordinator by lazy {
-        com.antgskds.calendarassistant.feature.accounting.application.AccountingMessageCoordinator(this) { recognitionApi }
+        com.antgskds.calendarassistant.feature.accounting.application.AccountingMessageCoordinator(this, accountingNotificationPriority) { recognitionApi }
     }
 
     val recognitionApi: com.antgskds.calendarassistant.shared.operation.RecognitionApi get() = recognitionCenter

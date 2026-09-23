@@ -14,12 +14,14 @@ fun AddEventDialog(
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),
     visible: Boolean = true,
+    initialDate: java.time.LocalDate? = null,
     attachments: List<EventAttachment> = emptyList(),
     onAddAttachment: (Uri) -> Unit = {},
     onAddPendingAttachment: (Uri, String) -> Unit = { _, _ -> },
     onOpenAttachment: (EventAttachment) -> Unit = {},
     onDeleteAttachment: (EventAttachment) -> Unit = {},
     onShowMessage: (String) -> Unit = {},
+    onSwitchType: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (EventPatch) -> Unit
 ) {
@@ -28,12 +30,14 @@ fun AddEventDialog(
         currentEventsCount = currentEventsCount,
         settings = settings,
         visible = visible,
+        initialDate = initialDate,
         attachments = attachments,
         onAddAttachment = onAddAttachment,
         onAddPendingAttachment = onAddPendingAttachment,
         onOpenAttachment = onOpenAttachment,
         onDeleteAttachment = onDeleteAttachment,
         onShowMessage = onShowMessage,
+        onSwitchType = onSwitchType,
         onDismiss = onDismiss,
         onConfirm = onConfirm
     )

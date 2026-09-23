@@ -925,15 +925,12 @@ private fun WeatherLocationPickerSheet(
         )),
     ) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TabRow(selectedTabIndex = selectedTab) {
-                listOf("省份", "城市", "区县").forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { haptics.selection(); selectedTab = index },
-                        text = { Text(title) }
-                    )
-                }
-            }
+            com.antgskds.calendarassistant.shared.ui.material.component.AppSegmentedControl(
+                options = listOf(0, 1, 2),
+                selectedOption = selectedTab,
+                onSelected = { selectedTab = it },
+                label = { listOf("省份", "城市", "区县")[it] },
+            )
 
             when (selectedTab) {
                 0 -> WeatherPickerList(

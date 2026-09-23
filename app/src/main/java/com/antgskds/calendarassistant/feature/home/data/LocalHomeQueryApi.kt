@@ -61,6 +61,7 @@ class LocalHomeQueryApi : HomeQueryApi {
             currentDateEvents = todayMerged,
             tomorrowEvents = tomorrowMerged,
             datesWithEvents = datesWithEvents,
+            calendarItems = monthDisplayItems.distinctBy { it.stableKey },
         )
     }
 

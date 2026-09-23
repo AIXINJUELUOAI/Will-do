@@ -14,6 +14,8 @@ fun ScheduleView(
     maxNodes: Int,
     selectedDate: LocalDate,
     modifier: Modifier = Modifier,
+    embeddedInCalendarWorkspace: Boolean = false,
+    onSelectDate: (LocalDate) -> Unit = {},
     onCourseClick: (ScheduleDisplayItem) -> Unit = {}
 ) {
     MaterialScheduleView(
@@ -23,6 +25,8 @@ fun ScheduleView(
         maxNodes = maxNodes,
         selectedDate = selectedDate,
         modifier = modifier,
+        embeddedInCalendarWorkspace = embeddedInCalendarWorkspace,
+        onSelectDate = onSelectDate,
         onCourseClick = onCourseClick
     )
 }

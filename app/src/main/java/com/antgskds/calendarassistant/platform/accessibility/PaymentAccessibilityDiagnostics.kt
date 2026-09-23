@@ -23,7 +23,7 @@ import kotlin.coroutines.resumeWithException
 
 /** 一次性诊断旁路：不依赖支付文字规则，不调用识别/入库 API。所有系统节点在主线程当场读取。 */
 class PaymentAccessibilityDiagnostics(
-    private val service: AccessibilityService,
+    private val service: TextAccessibilityService,
     private val onFlagsChanged: () -> Unit,
 ) {
     private class Session(val directory: File) {
@@ -50,6 +50,7 @@ class PaymentAccessibilityDiagnostics(
         lateinit var writer: Job
         lateinit var timer: Job
         lateinit var screenshotLoop: Job
+        lateinit var healthLoop: Job
         var finishing: Deferred<String>? = null
     }
 
@@ -58,17 +59,21 @@ class PaymentAccessibilityDiagnostics(
 
     suspend fun start() {
         check(session?.let { it.active || it.finishing?.isActive == true } != true) { "诊断正在运行或导出，请稍后再试" }
+        val stateBeforeConfiguration = service.diagnosticServiceState()
         val directory = withContext(Dispatchers.IO) {
             val root = File(service.filesDir, "payment_diagnostics").apply { mkdirs() }
             // 只清理本诊断器自己生成的目录；公共下载中的已导出 ZIP 不自动删除。
             root.listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("payment-diagnostic-") }
                 .sortedByDescending { it.lastModified() }
                 .drop(ConfigCatalog.PAYMENT_DIAGNOSTIC_RETAIN_SESSIONS - 1).forEach { it.deleteRecursively() }
-            File(root, "payment-diagnostic-${System.currentTimeMillis()}-${UUID.randomUUID()}").apply { check(mkdirs()) }
+            File(root, "payment-diagnostic-${System.currentTimeMillis()}-${UUID.randomUUID()}").apply {
+                check(mkdirs())
+                writeHealthHistory(this, "service-health-before.log")
+            }
         }
+        check(TextAccessibilityService.instance === service) { "无障碍连接已变化，请重新开始诊断" }
         val s = Session(directory)
         session = s
-        onFlagsChanged() // active 已置为 true，刷新为诊断所需窗口/资源 ID 标记。
         s.writer = s.scope.launch(Dispatchers.IO) {
             try { File(directory, "events.jsonl").bufferedWriter().use { writer ->
                 var bytes = 0L
@@ -96,8 +101,16 @@ class PaymentAccessibilityDiagnostics(
             .put("wechatVersion", version(AutomaticAccountingPolicy.WECHAT))
             .put("alipayVersion", version(AutomaticAccountingPolicy.ALIPAY))
             .put("capturePackages", JSONArray(AutomaticAccountingPolicy.diagnosticPackages.toList()))
-            .put("serviceFlags", service.serviceInfo?.flags)
+            .put("serviceBeforeConfiguration", stateBeforeConfiguration)
             .put("durationMs", ConfigCatalog.PAYMENT_DIAGNOSTIC_DURATION_MS))
+        record(s, "service_health", stateBeforeConfiguration.put("phase", "before_diagnostic_configuration"))
+        onFlagsChanged() // 先保存原配置，再启用诊断临时标记，避免丢失故障现场。
+        s.healthLoop = s.scope.launch {
+            while (s.active) {
+                sampleHealth(s)
+                delay(ConfigCatalog.PAYMENT_DIAGNOSTIC_HEALTH_INTERVAL_MS.toLong())
+            }
+        }
         s.timer = s.scope.launch {
             delay(ConfigCatalog.PAYMENT_DIAGNOSTIC_DURATION_MS.toLong())
             finish("timeout")
@@ -111,6 +124,47 @@ class PaymentAccessibilityDiagnostics(
             }
         }
         AppLogger.i(TAG, "session=${directory.name} started durationMs=${ConfigCatalog.PAYMENT_DIAGNOSTIC_DURATION_MS}")
+    }
+
+    /** 独立于事件和截图循环；只读取身份/状态，不抓取非支付应用正文。 */
+    @Suppress("DEPRECATION")
+    private fun sampleHealth(s: Session) {
+        val data = attempt { service.diagnosticServiceState() }
+        data.put("phase", "periodic")
+        data.put("activeWindow", attempt {
+            val identity = PaymentWindowReader.readIdentity(service.rootInActiveWindow)
+            JSONObject().put("available", identity != null)
+                .put("package", identity?.packageName ?: JSONObject.NULL)
+                .put("windowId", identity?.windowId ?: JSONObject.NULL)
+        })
+        data.put("windows", attempt {
+            val windows = service.windows
+            try {
+                JSONObject().put("count", windows.size)
+                    .put("truncated", windows.size > ConfigCatalog.PAYMENT_DIAGNOSTIC_MAX_WINDOWS)
+                    .put("items", JSONArray(windows.take(ConfigCatalog.PAYMENT_DIAGNOSTIC_MAX_WINDOWS).map {
+                        JSONObject().put("id", it.id).put("type", it.type)
+                            .put("active", it.isActive).put("focused", it.isFocused)
+                    }))
+            } finally { windows.forEach { it.recycle() } }
+        })
+        data.put("systemServiceStatus", attempt {
+            val manager = service.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+                as android.view.accessibility.AccessibilityManager
+            val component = android.content.ComponentName(service, TextAccessibilityService::class.java)
+            val listed = manager.getEnabledAccessibilityServiceList(
+                android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+            ).any { android.content.ComponentName.unflattenFromString(it.id) == component }
+            JSONObject().put("accessibilityEnabled", manager.isEnabled).put("serviceListed", listed)
+        })
+        record(s, "service_health", data)
+    }
+
+    private fun writeHealthHistory(directory: File, name: String) {
+        // 基础日志读取失败不应阻止本次详细诊断及导出。
+        val history = runCatching { AccessibilityDiagnosticSnapshot.healthHistory(AppLogger.readText()) }
+            .getOrElse { "health_history_unavailable error=${it.javaClass.simpleName}" }
+        File(directory, name).writeText(history)
     }
 
     /** 必须在 onAccessibilityEvent 当场调用；不把 event/source 放到协程中延迟读取。 */
@@ -301,16 +355,19 @@ class PaymentAccessibilityDiagnostics(
     fun finish(reason: String): Deferred<String>? {
         val s = session ?: return null
         s.finishing?.let { return it }
+        record(s, "service_health", attempt { service.diagnosticServiceState() }.put("phase", "finishing").put("reason", reason))
         s.active = false
         onFlagsChanged()
         return s.scope.async {
             s.timer.cancel()
+            s.healthLoop.cancelAndJoin()
             s.delayed?.cancelAndJoin()
             s.screenshotLoop.cancelAndJoin()
             // 生产者已停止，排空队列后再导出，避免生成缺少最后一张图片/日志的 ZIP。
             s.records.close()
             s.writer.join()
             withContext(Dispatchers.IO) {
+                writeHealthHistory(s.directory, "service-health-final.log")
                 File(s.directory, "summary.json").writeText(JSONObject().put("reason", reason)
                     .put("writerError", s.writerError ?: JSONObject.NULL)
                     .put("events", s.events).put("eventsLimited", s.eventLimited)
@@ -325,6 +382,11 @@ class PaymentAccessibilityDiagnostics(
                     支付采集诊断（本地实验，无 AI 调用）
                     采集微信、支付宝、拼多多、淘宝和京东的事件正文、source、多窗口与截图，包含购物 App 内嵌支付页。
                     events.jsonl：按行 JSON；event 为当场事件和 source；windows 为活动根及多窗口。
+                    service_health 独立定时检查服务状态、实际监听配置、事件间隔与窗口身份，即使事件/截图为零也会记录。
+                    session_start.serviceBeforeConfiguration 保存诊断修改标记前的状态；instanceRegistered 仅为应用内引用，不证明系统连接健康。
+                    systemServiceStatus.serviceListed 仅表示系统已启用服务，不证明微信正在投递事件。
+                    service-health-before/final.log 附带本应用留存的基础状态日志（仅 WillDoAccessHealth），不包含支付正文。
+                    自动记录日志关闭或超过既有保留/容量限制时，历史状态可能为空；本会话 service_health 不依赖该开关。
                     节点树以 treeId 引用同文件中的 tree_snapshot，重复的树只写一次；null treeId 表示容量/队列限制。
                     phase=immediate / delay_100ms / delay_700ms / delay_1500ms，通过 anchorEventId 对照。
                     source 只即时读取，延迟样本重新读取根/窗口，不复用过期事件或节点。

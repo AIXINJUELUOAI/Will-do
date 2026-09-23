@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowMetricsCalculator
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 
 enum class AppWindowWidthClass {
     COMPACT,
@@ -22,6 +23,7 @@ enum class AppWindowWidthClass {
 @Immutable
 data class AdaptiveLayoutInfo(
     val widthClass: AppWindowWidthClass = AppWindowWidthClass.COMPACT,
+    val windowWidthDp: Float = 0f,
     val hasVerticalSeparatingHinge: Boolean = false,
     val isTabletop: Boolean = false,
     val verticalHingeBounds: IntRect? = null,
@@ -32,6 +34,9 @@ data class AdaptiveLayoutInfo(
 
     val useTwoPaneContent: Boolean
         get() = widthClass == AppWindowWidthClass.EXPANDED || hasVerticalSeparatingHinge || isTabletop
+
+    val canExpandNavigation: Boolean
+        get() = windowWidthDp >= ConfigCatalog.ADAPTIVE_NAVIGATION_EXPAND_MIN_WIDTH_DP
 }
 
 val LocalAdaptiveLayoutInfo = compositionLocalOf { AdaptiveLayoutInfo() }
@@ -93,6 +98,7 @@ fun rememberAdaptiveLayoutInfo(activity: Activity): AdaptiveLayoutInfo {
     ) {
         AdaptiveLayoutInfo(
             widthClass = widthClass,
+            windowWidthDp = physicalWindowWidthDp,
             hasVerticalSeparatingHinge = hasVerticalSeparatingHinge,
             isTabletop = isTabletop,
             verticalHingeBounds = verticalHingeBounds,

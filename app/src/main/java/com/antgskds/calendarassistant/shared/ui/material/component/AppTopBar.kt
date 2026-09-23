@@ -32,9 +32,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundStyleEnabled
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 
 /**
- * 所有窗口尺寸下标题均位于栏的中央，左右操作可以独立省略。
+ * 手机标题居中，平板可沿内容边界左对齐，左右操作可以独立省略。
  * 标题两侧预留较宽操作区的同等空间；长标题省略，不能被单侧按钮推偏。
  * 顶部安全区由这里消费，页面内容交给 AppPageScaffold 处理。
  */
@@ -50,6 +51,7 @@ fun AppTopBar(
         MaterialTheme.colorScheme.background
     },
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
+    centered: Boolean = true,
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
         .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
 ) {
@@ -57,7 +59,7 @@ fun AppTopBar(
         Layout(
             modifier = Modifier
                 .windowInsetsPadding(windowInsets)
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = if (centered) 4.dp else ConfigCatalog.ADAPTIVE_CONTENT_PADDING_DP.dp)
                 .fillMaxWidth()
                 .heightIn(min = 64.dp),
             content = {
@@ -78,7 +80,9 @@ fun AppTopBar(
             val trailing = measurables[2].measure(sideConstraints)
             val sideWidth = maxOf(leading.width, trailing.width)
             val titleGap = if (sideWidth > 0) 8.dp.roundToPx() else 0
-            val titleWidth = (width - 2 * (sideWidth + titleGap)).coerceAtLeast(0)
+            val titleStart = leading.width + if (leading.width > 0) titleGap else 0
+            val titleWidth = (if (centered) width - 2 * (sideWidth + titleGap)
+                else width - titleStart - trailing.width - titleGap).coerceAtLeast(0)
             val titlePlaceable = measurables[1].measure(
                 constraints.copy(minWidth = 0, minHeight = 0, maxWidth = titleWidth)
             )
@@ -86,7 +90,7 @@ fun AppTopBar(
                 .coerceAtMost(constraints.maxHeight)
             layout(width, height) {
                 leading.placeRelative(0, (height - leading.height) / 2)
-                titlePlaceable.placeRelative((width - titlePlaceable.width) / 2, (height - titlePlaceable.height) / 2)
+                titlePlaceable.placeRelative(if (centered) (width - titlePlaceable.width) / 2 else titleStart, (height - titlePlaceable.height) / 2)
                 trailing.placeRelative(width - trailing.width, (height - trailing.height) / 2)
             }
         }

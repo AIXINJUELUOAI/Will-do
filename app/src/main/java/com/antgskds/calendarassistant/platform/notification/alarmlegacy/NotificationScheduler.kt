@@ -53,6 +53,7 @@ object NotificationScheduler {
             ?.settings
             ?.value
             ?: MySettings()
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(event.tag, event.startTS * 1000L, settings)) return
         if (event.isRecurring) {
             Log.d("NotificationScheduler", "跳过重复日程父事件提醒: ${event.id}")
             return

@@ -13,6 +13,7 @@ fun CourseEditDialog(
     timeTableJson: String = "",
     hapticEnabled: Boolean = true,
     predictiveBackEnabled: Boolean = true,
+    onSwitchType: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (Course) -> Unit
 ) {
@@ -22,6 +23,7 @@ fun CourseEditDialog(
         timeTableJson = timeTableJson,
         hapticEnabled = hapticEnabled,
         predictiveBackEnabled = predictiveBackEnabled,
+        onSwitchType = onSwitchType,
         onDismiss = onDismiss,
         onConfirm = onConfirm
     )

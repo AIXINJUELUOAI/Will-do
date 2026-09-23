@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application.node
 
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
@@ -11,8 +12,9 @@ internal object RecognitionMultimodalNode {
     suspend fun analyzeImage(
         bitmap: Bitmap,
         settings: MySettings,
-        context: Context
+        context: Context,
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null
     ): AnalysisResult<List<RecognitionDraft>> {
-        return RecognitionProviderFactory.semanticProvider(settings).analyzeImage(bitmap, settings, context)
+        return RecognitionProviderFactory.semanticProvider(settings).analyzeImage(bitmap, settings, context, redPacketSent)
     }
 }

@@ -244,6 +244,7 @@ class ReminderStoreNode(context: Context) {
         now: Long
     ): List<AlarmSpec> {
         val currentSettings = settings()
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(item.tag, item.startTS * 1000L, currentSettings)) return emptyList()
         val startMillis = item.startTS * 1000L
         val endMillis = item.endTS * 1000L
         if (endMillis <= now) return emptyList()

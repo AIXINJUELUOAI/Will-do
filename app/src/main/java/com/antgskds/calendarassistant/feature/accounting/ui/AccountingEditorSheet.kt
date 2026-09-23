@@ -47,12 +47,16 @@ fun AccountingEditorSheet(
     var validationError by remember { mutableStateOf<String?>(null) }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
     var chooseTime by rememberSaveable { mutableStateOf(false) }
+    val initialValues = remember { listOf(amount, direction, merchant, category, note, date, time, currency, channel, transactionId, paymentConfirmed, allowDuplicate) }
+    val close = rememberWorkspaceCloseRequest(listOf(amount, direction, merchant, category, note, date, time, currency, channel, transactionId, paymentConfirmed, allowDuplicate) != initialValues, onDismiss)
     val saving by rememberUpdatedState(state.saving)
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true,
         confirmValueChange = { it != SheetValue.Hidden || !saving })
-    AppModalBottomSheet(title = if (draft != null) "确认识别账单" else if (entry == null) "新建账单" else "编辑账单", sheetState = sheet,
-        onDismissRequest = onDismiss, actions = listOf(
-            AppSheetAction("取消", onDismiss, AppSheetActionRole.Secondary, enabled = !state.saving),
+    AppEditorSheet(title = if (draft != null) "确认识别账单" else if (entry == null) "新建账单" else "编辑账单", sheetState = sheet,
+        attachment = (draft?.sourceImagePath ?: entry?.sourceImagePath)?.takeIf { it.isNotBlank() }?.let { path -> ({ AccountingSourceImage(path) }) },
+        onDismissRequest = close,
+        closeEnabled = !state.saving, actions = listOf(
+            AppSheetAction("取消", close, AppSheetActionRole.Secondary, enabled = !state.saving),
             AppSheetAction(if (state.saving) "保存中…" else "保存", {
                 val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
                 val parsedTime = runCatching { LocalTime.parse(time) }.getOrNull()
@@ -113,7 +117,6 @@ fun AccountingEditorSheet(
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.error?.let { Text(it, Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.error) }
         validationError?.let { Text(it, Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.error) }
-        AccountingSourceImage(draft?.sourceImagePath ?: entry?.sourceImagePath)
     }
     if (chooseDate) WheelDatePickerDialog(runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now()), onDismiss = { chooseDate = false }) {
         date = it.toString(); chooseDate = false

@@ -388,7 +388,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 // 根据悬浮窗日程范围设置过滤事件
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
-                val scheduleEvents = events.filter { it.archivedAt == null }
+                val scheduleEvents = events.filter { it.archivedAt == null && com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(it, settings) }
                 val (displayFrom, displayTo) = when (settings.floatingEventRange) {
                     1 -> today to today
                     2 -> today to tomorrow

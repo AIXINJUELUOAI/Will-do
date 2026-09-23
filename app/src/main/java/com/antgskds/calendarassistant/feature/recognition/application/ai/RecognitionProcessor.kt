@@ -1,5 +1,6 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.shared.util.AppLogger as Log
@@ -191,8 +192,9 @@ object RecognitionProcessor {
     }
 
     /** 图片直接交给多模态模型，二维码仍由本地条码扫描补全。 */
-    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context): AnalysisResult<List<RecognitionDraft>> {
-        val result = analyzeImageWithMultimodal(bitmap, settings, context.applicationContext)
+    suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context,
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null): AnalysisResult<List<RecognitionDraft>> {
+        val result = analyzeImageWithMultimodal(bitmap, settings, context.applicationContext, redPacketSent)
         return attachQrPayloads(result, scanQrPayloadsSafely(bitmap))
     }
 
@@ -276,7 +278,8 @@ object RecognitionProcessor {
     private suspend fun analyzeImageWithMultimodal(
         bitmap: Bitmap,
         settings: MySettings,
-        context: Context
+        context: Context,
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?
     ): AnalysisResult<List<RecognitionDraft>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
@@ -308,7 +311,7 @@ object RecognitionProcessor {
 
         return try {
             when (val response = ApiModelProvider.generateWithImage(
-                prompt = prompt,
+                prompt = prompt + (redPacketSent?.let { "\n\n" + it.promptContext() } ?: ""),
                 imageBytes = imageBytes,
                 mimeType = "image/jpeg",
                 apiKey = modelConfig.key,

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.*
@@ -46,6 +47,11 @@ import com.antgskds.calendarassistant.app.ui.theme.material.SectionTitleTextStyl
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.app.ui.theme.material.background.rememberAppBackgroundStylePalette
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.accounting.data.AccountingEntry
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneTopBar
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import java.time.LocalDate
 
 /** 真实账单展示与文件导入入口，沿用已确认的页面布局。 */
@@ -53,9 +59,11 @@ import java.time.LocalDate
 @Composable
 fun AccountingPreviewScreen(
     viewModel: AccountingViewModel,
+    entriesOverride: List<AccountingEntry>? = null,
     initialDate: LocalDate,
     initialMonthly: Boolean,
     onBack: () -> Unit,
+    showBack: Boolean = true,
     hapticEnabled: Boolean = true,
     uiSize: Int = 2,
     predictiveBackEnabled: Boolean = true,
@@ -73,7 +81,11 @@ fun AccountingPreviewScreen(
             val deleteState by viewModel.deleteState.collectAsState()
             val savedDate by viewModel.savedDate.collectAsState()
             val exportBills = rememberAccountingExportAction(viewModel)
-            val bills = remember(dataState.entries) { AccountingPreviewData.bills(dataState.entries) }
+            val readOnly = entriesOverride != null
+            val displayedEntries = entriesOverride ?: dataState.entries
+            val bills = remember(displayedEntries) { AccountingPreviewData.bills(displayedEntries) }
+            val dataLoading = !readOnly && dataState.loading
+            val dataError = dataState.error.takeUnless { readOnly }
             var anchorText by rememberSaveable { mutableStateOf(initialDate.toString()) }
             var periodName by rememberSaveable { mutableStateOf(if (initialMonthly) "MONTH" else "DAY") }
             val anchor = LocalDate.parse(anchorText)
@@ -84,11 +96,14 @@ fun AccountingPreviewScreen(
             }
             var suggestionId by rememberSaveable(anchorText, periodName) { mutableStateOf<String?>(null) }
             val suggestionIndex = suggestions.indexOfFirst { it.id == suggestionId }.coerceAtLeast(0)
-            val canCycleSuggestions = !dataState.loading && dataState.error == null && suggestions.size > 1
+            val canCycleSuggestions = !dataLoading && dataError == null && suggestions.size > 1
             val trendPeriod = if (period == PreviewPeriod.MONTH) PreviewPeriod.MONTH else PreviewPeriod.WEEK
             val trendRange = AccountingPreviewData.range(anchor, trendPeriod)
             val visible = remember(bills, range) { bills.filter { it.date in range }
                 .sortedWith(compareByDescending<PreviewBill> { it.date }.thenByDescending { it.time }) }
+            val analyticsBills = remember(bills, trendRange) {
+                bills.filter { it.date in trendRange }
+            }
             val expense = AccountingPreviewData.sum(bills, range)
             val income = AccountingPreviewData.sum(bills, range, income = true)
             val average = AccountingPreviewData.dailyAverage(bills, trendRange, today)
@@ -112,6 +127,7 @@ fun AccountingPreviewScreen(
             }
             LaunchedEffect(anchorText, periodName) { revealedId = null }
             var detailId by rememberSaveable { mutableStateOf<String?>(null) }
+            val useTwoPane = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
             LaunchedEffect(importState.result) {
                 if (importState.result != null) {
                     importState.preview?.entries?.maxByOrNull { it.occurredAt }?.let { latest ->
@@ -130,49 +146,70 @@ fun AccountingPreviewScreen(
                 periodName = value.name
             }
             val cycleTitle = AccountingPreviewData.billTitle(anchor, period, today)
-            AppPageScaffold(
-                edgeToEdgeContent = true,
-                contentMaxWidth = 720.dp,
-                topBar = {
-                    AppTopBar("记账", navigationIcon = { AppTopBarBackButton(onBack) }, actions = {
-                        Box {
-                            Box(
-                                Modifier.size(48.dp).combinedClickable(
-                                    onClick = { changePeriod(PreviewPeriod.entries[(period.ordinal + 1) % 3]) },
-                                    onLongClick = { haptics.longPress(); modeMenu = true },
-                                    onClickLabel = "切换日周月视图", onLongClickLabel = "选择账单视图",
-                                    hapticFeedbackEnabled = false,
-                                ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Icons.Rounded.SwapHoriz,
-                                    "当前${period.label}视图，切换到${PreviewPeriod.entries[(period.ordinal + 1) % 3].label}视图",
-                                    Modifier.size(28.dp))
-                            }
-                            AppDropdownMenu(
-                                expanded = modeMenu,
-                                onDismissRequest = { modeMenu = false },
-                                containerColor = menuContainer,
-                                selectionColor = if (backgroundMode) menuPalette.accent else MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = if (backgroundMode) menuPalette.content else MaterialTheme.colorScheme.onSurfaceVariant,
-                                items = PreviewPeriod.entries.map { mode ->
-                                    AppMenuItem("${mode.label}视图", { changePeriod(mode) }, selected = mode == period,
-                                        icon = when (mode) {
-                                            PreviewPeriod.DAY -> Icons.Outlined.CalendarViewDay
-                                            PreviewPeriod.WEEK -> Icons.Outlined.CalendarViewWeek
-                                            PreviewPeriod.MONTH -> Icons.Outlined.CalendarViewMonth
-                                        })
+            val periodActions: @Composable RowScope.() -> Unit = {
+                Box {
+                    Box(
+                        Modifier.size(48.dp).combinedClickable(
+                            onClick = { changePeriod(PreviewPeriod.entries[(period.ordinal + 1) % 3]) },
+                            onLongClick = { haptics.longPress(); modeMenu = true },
+                            onClickLabel = "切换日周月视图", onLongClickLabel = "选择账单视图",
+                            hapticFeedbackEnabled = false,
+                        ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.SwapHoriz,
+                            "当前${period.label}视图，切换到${PreviewPeriod.entries[(period.ordinal + 1) % 3].label}视图",
+                            Modifier.size(28.dp),
+                        )
+                    }
+                    AppDropdownMenu(
+                        expanded = modeMenu,
+                        onDismissRequest = { modeMenu = false },
+                        containerColor = menuContainer,
+                        selectionColor = if (backgroundMode) menuPalette.accent else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (backgroundMode) menuPalette.content else MaterialTheme.colorScheme.onSurfaceVariant,
+                        items = PreviewPeriod.entries.map { mode ->
+                            AppMenuItem(
+                                "${mode.label}视图",
+                                { changePeriod(mode) },
+                                selected = mode == period,
+                                icon = when (mode) {
+                                    PreviewPeriod.DAY -> Icons.Outlined.CalendarViewDay
+                                    PreviewPeriod.WEEK -> Icons.Outlined.CalendarViewWeek
+                                    PreviewPeriod.MONTH -> Icons.Outlined.CalendarViewMonth
                                 },
                             )
-                        }
-                    })
+                        },
+                    )
+                }
+            }
+            AppPageScaffold(
+                edgeToEdgeContent = true,
+                contentMaxWidth = if (useTwoPane) Dp.Unspecified else 720.dp,
+                topBar = {
+                    if (useTwoPane) {
+                        AdaptiveTwoPaneTopBar(
+                            primaryTitle = "记账",
+                            secondaryTitle = "收支概览",
+                            primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
+                        )
+                    } else {
+                        AppTopBar(
+                            "记账",
+                            navigationIcon = { if (showBack) AppTopBarBackButton(onBack) },
+                            actions = periodActions,
+                        )
+                    }
                 },
                 floatingActionButton = {
-                    AppFloatingActionButton(
-                        onClick = { haptics.click(); revealedId = null; viewModel.openEditor(anchor) },
-                        onLongClick = { haptics.longPress(); transferMenu = true },
-                        onLongClickLabel = "账单管理",
-                    ) { Icon(Icons.Default.Add, "新建账单", Modifier.size(AppFloatingActionButtonDefaults.IconSize)) }
+                    if (!readOnly && !(useTwoPane && editorState.open)) {
+                        AppFloatingActionButton(
+                            onClick = { haptics.click(); revealedId = null; viewModel.openEditor(anchor) },
+                            onLongClick = { haptics.longPress(); transferMenu = true },
+                            onLongClickLabel = "账单管理",
+                        ) { Icon(Icons.Default.Add, "新建账单", Modifier.size(AppFloatingActionButtonDefaults.IconSize)) }
+                    }
                 },
             ) {
                 val bottomPadding = LocalAppPageBottomPadding.current
@@ -180,13 +217,14 @@ fun AccountingPreviewScreen(
                 LaunchedEffect(anchorText, periodName) {
                     if (listState.firstVisibleItemIndex > 0) listState.animateScrollToItem(0)
                 }
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    state = listState,
-                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = bottomPadding + 112.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    item(key = "suggestion") {
+                val billList: @Composable () -> Unit = {
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = bottomPadding + 112.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                    if (!useTwoPane) item(key = "suggestion") {
                         AppCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
                             onClick = if (canCycleSuggestions) ({
                                 haptics.selection()
@@ -194,12 +232,12 @@ fun AccountingPreviewScreen(
                             }) else null,
                             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 24.dp)) {
                             val summaryTitle = when {
-                                dataState.loading -> "正在读取账单"
-                                dataState.error != null -> "账单读取失败"
+                                dataLoading -> "正在读取账单"
+                                dataError != null -> "账单读取失败"
                                 else -> "收支建议"
                             }
-                            val summaryDetail = if (dataState.error != null) "请重试读取，当前统计可能尚未更新。"
-                                else if (dataState.loading) "收支统计即将显示。"
+                            val summaryDetail = if (dataError != null) "请重试读取，当前统计可能尚未更新。"
+                                else if (dataLoading) "收支统计即将显示。"
                                 else suggestions[suggestionIndex].text
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Insights, null, tint = MaterialTheme.colorScheme.primary,
@@ -217,15 +255,15 @@ fun AccountingPreviewScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    if (recognitionState.drafts.isNotEmpty()) item(key = "recognition_drafts") {
+                    if (!readOnly && recognitionState.drafts.isNotEmpty()) item(key = "recognition_drafts") {
                         OutlinedButton(onClick = viewModel::openRecognition, modifier = Modifier.fillMaxWidth()) {
                             Text("${recognitionState.drafts.size} 条识别账单待确认")
                         }
                     }
-                    if (dataState.error != null && visible.isNotEmpty()) item(key = "load_error") {
+                    if (dataError != null && visible.isNotEmpty()) item(key = "load_error") {
                         TextButton(onClick = viewModel::reload) { Text("重试读取账单") }
                     }
-                    item(key = "summary") {
+                    if (!useTwoPane) item(key = "summary") {
                         PreviewSummaryCards(expense, income, average, trendPeriod, series) { haptics.click(); analysis = true }
                     }
                     item(key = "bill_header") {
@@ -266,12 +304,12 @@ fun AccountingPreviewScreen(
                         Box(Modifier.animateItem().fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(when {
-                                    dataState.loading -> "正在读取账单…"
-                                    dataState.error != null -> dataState.error.orEmpty()
+                                    dataLoading -> "正在读取账单…"
+                                    dataError != null -> dataError.orEmpty()
                                     else -> "这个周期暂无账单"
                                 }, color = pageSecondary)
-                                TextButton(onClick = { if (dataState.error != null) viewModel.reload() else viewModel.openImport() }) {
-                                    Text(if (dataState.error != null) "重试" else "导入账单")
+                                if (!readOnly) TextButton(onClick = { if (dataError != null) viewModel.reload() else viewModel.openImport() }) {
+                                    Text(if (dataError != null) "重试" else "导入账单")
                                 }
                             }
                         }
@@ -286,7 +324,7 @@ fun AccountingPreviewScreen(
                                 modifier = Modifier.animateItem(), identity = bill.id,
                                 isRevealed = revealedId == bill.id, actionWidth = actionMenuWidth,
                                 hapticEnabled = hapticEnabled,
-                                onRevealedChange = { revealedId = if (it) bill.id else null },
+                                onRevealedChange = { if (!readOnly && (!useTwoPane || !editorState.open)) revealedId = if (it) bill.id else null },
                                 actions = { close ->
                                     Row(Modifier.width(actionMenuWidth).padding(horizontal = 8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,11 +341,12 @@ fun AccountingPreviewScreen(
                                 },
                             ) { swipeModifier, progress, close ->
                                 Row(swipeModifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).semantics {
-                                    customActions = listOf(
+                                    customActions = if (readOnly || (useTwoPane && editorState.open)) emptyList() else listOf(
                                         CustomAccessibilityAction("编辑账单") { close(); viewModel.openEditor(bill.date, bill.id); true },
                                         CustomAccessibilityAction("删除账单") { close(); viewModel.requestDelete(bill.id); true },
                                     )
                                 }.combinedClickable(
+                                    enabled = !useTwoPane || !editorState.open,
                                     onClick = { haptics.click(); if (progress > 0f) close() else detailId = bill.id },
                                     onLongClick = { haptics.longPress(); close(); detailId = bill.id },
                                     hapticFeedbackEnabled = false,
@@ -331,22 +370,79 @@ fun AccountingPreviewScreen(
                             }
                         }
                     }
+                    }
+                }
+                if (useTwoPane) {
+                    AdaptiveTwoPaneLayout(
+                        primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
+                        primary = billList,
+                        secondary = {
+                            val selectedBill = bills.firstOrNull { it.id == detailId }
+                            val detailContent: (@Composable () -> Unit)? = when {
+                                !readOnly && editorState.open && editorState.draft == null -> ({
+                                    key(editorState.entry?.id ?: "new") {
+                                        AccountingEditorSheet(editorState, viewModel::saveEntry, viewModel::closeEditor)
+                                    }
+                                })
+                                selectedBill != null -> ({
+                                    AccountingEntrySheet(selectedBill,
+                                        onEdit = if (readOnly) null else ({
+                                            detailId = null
+                                            viewModel.openEditor(selectedBill.date, selectedBill.id)
+                                        }),
+                                        onDismiss = { detailId = null })
+                                })
+                                else -> null
+                            }
+                            CompositionLocalProvider(LocalDetailWorkspaceContent provides detailContent) {
+                            DetailWorkspaceOverlay {
+                            AccountingWidePane(
+                                suggestion = when {
+                                    dataLoading -> "正在读取账单"
+                                    dataError != null -> "账单读取失败，请重试。"
+                                    else -> suggestions[suggestionIndex].text
+                                },
+                                expense = expense,
+                                income = income,
+                                average = average,
+                                billCount = visible.size,
+                                period = period,
+                                periodLabel = AccountingPreviewData.dateLabel(range, period),
+                                trendPeriod = trendPeriod,
+                                trendRange = trendRange,
+                                series = series,
+                                analyticsBills = analyticsBills,
+                                selectedBill = null,
+                                bottomPadding = bottomPadding,
+                                onPeriodChange = ::changePeriod,
+                                onEdit = if (readOnly) null else { bill -> detailId = null; viewModel.openEditor(bill.date, bill.id) },
+                            )
+                            }
+                            }
+                        },
+                    )
+                } else {
+                    billList()
                 }
             }
             if (analysis) PreviewAnalysisSheet(visible, series, anchor, trendRange, range, period, average) { analysis = false }
-            bills.firstOrNull { it.id == detailId }?.let { bill ->
-                AccountingEntrySheet(bill, onEdit = {
-                    detailId = null; viewModel.openEditor(bill.date, bill.id)
-                }, onDismiss = { detailId = null })
+            if (!useTwoPane) bills.firstOrNull { it.id == detailId }?.let { bill ->
+                AccountingEntrySheet(
+                    bill,
+                    onEdit = if (readOnly) null else {
+                        { detailId = null; viewModel.openEditor(bill.date, bill.id) }
+                    },
+                    onDismiss = { detailId = null },
+                )
             }
-            PredictiveFloatingActionCard(
+            if (!readOnly) PredictiveFloatingActionCard(
                 visible = transferMenu, title = "账单管理", content = "导出本机账单，或导入账单备份、微信和支付宝账单。",
                 confirmText = "导入", dismissText = "导出", predictiveBackEnabled = predictiveBackEnabled,
                 onConfirm = { transferMenu = false; viewModel.openImport() },
                 onDismiss = { transferMenu = false; exportBills() }, onDismissRequest = { transferMenu = false },
                 modifier = Modifier.padding(bottom = 24.dp),
             )
-            PredictiveFloatingActionCard(
+            if (!readOnly) PredictiveFloatingActionCard(
                 visible = deleteState.entry != null,
                 title = "删除账单",
                 content = deleteState.error ?: "确定删除「${deleteState.entry?.merchant.orEmpty()}」？删除后将从列表和统计中移除。",
@@ -355,10 +451,204 @@ fun AccountingPreviewScreen(
                 onConfirm = viewModel::confirmDelete, onDismiss = viewModel::closeDelete,
                 onDismissRequest = viewModel::closeDelete, modifier = Modifier.padding(bottom = 24.dp),
             )
-            if (editorState.open && editorState.draft == null) AccountingEditorSheet(editorState, viewModel::saveEntry, viewModel::closeEditor)
-            if (importState.open) AccountingImportSheet(importState, viewModel::selectSource,
+            if (!useTwoPane && !readOnly && editorState.open && editorState.draft == null) AccountingEditorSheet(editorState, viewModel::saveEntry, viewModel::closeEditor)
+            if (!readOnly && importState.open) AccountingImportSheet(importState, viewModel::selectSource,
                 viewModel::readFile, viewModel::confirmImport, viewModel::closeImport)
         }
+    }
+}
+
+@Composable
+private fun AccountingWidePane(
+    suggestion: String,
+    expense: Long,
+    income: Long,
+    average: Long,
+    billCount: Int,
+    period: PreviewPeriod,
+    periodLabel: String,
+    trendPeriod: PreviewPeriod,
+    trendRange: PreviewRange,
+    series: List<Pair<LocalDate, Long?>>,
+    analyticsBills: List<PreviewBill>,
+    selectedBill: PreviewBill?,
+    bottomPadding: Dp,
+    onPeriodChange: (PreviewPeriod) -> Unit,
+    onEdit: ((PreviewBill) -> Unit)?,
+) {
+    var selectedTrendDate by remember(series) {
+        mutableStateOf(series.lastOrNull { it.second != null }?.first)
+    }
+    var structureIncome by remember { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = bottomPadding + 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            AppSegmentedControl(
+                options = PreviewPeriod.entries,
+                selectedOption = period,
+                onSelected = onPeriodChange,
+                label = { it.label },
+            )
+        }
+        item {
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Insights, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Text("收支建议", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(suggestion, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(periodLabel, style = SectionTitleTextStyle, color = MaterialTheme.colorScheme.onBackground)
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth >= ConfigCatalog.ADAPTIVE_CHART_PAIR_MIN_WIDTH_DP.dp) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            AccountingKpiCard("净支出", expense - income, Modifier.weight(1f))
+                            AccountingKpiCard("支出", expense, Modifier.weight(1f))
+                            AccountingKpiCard("入账", income, Modifier.weight(1f), income = true)
+                            AccountingKpiCard("账单", billCount.toLong(), Modifier.weight(1f), money = false)
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                AccountingKpiCard("净支出", expense - income, Modifier.weight(1f))
+                                AccountingKpiCard("支出", expense, Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                AccountingKpiCard("入账", income, Modifier.weight(1f), income = true)
+                                AccountingKpiCard("账单", billCount.toLong(), Modifier.weight(1f), money = false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            BoxWithConstraints {
+                val trendCard: @Composable (Modifier) -> Unit = { modifier ->
+                    AppCard(
+                        modifier = modifier.heightIn(min = 360.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(20.dp),
+                    ) {
+                        Text(
+                            if (trendPeriod == PreviewPeriod.MONTH) "本月支出趋势" else "本周支出趋势",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("日均 ${AccountingPreviewData.money(average)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "最高 ${AccountingPreviewData.money(series.mapNotNull { it.second }.maxOrNull() ?: 0L)}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        val selectedAmount = series.firstOrNull { it.first == selectedTrendDate }?.second
+                        Text(
+                            selectedTrendDate?.let { date ->
+                                "${date.monthValue}月${date.dayOfMonth}日 · ${selectedAmount?.let(AccountingPreviewData::money) ?: "暂无数据"}"
+                            } ?: "点击折线查看日期金额",
+                            modifier = Modifier.padding(top = 10.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        PreviewLineChart(
+                            series = series,
+                            modifier = Modifier.fillMaxWidth().height(210.dp),
+                            selectedDate = selectedTrendDate,
+                            onSelect = { selectedTrendDate = it },
+                            detailed = true,
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${trendRange.start.monthValue}/${trendRange.start.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
+                            Text("${trendRange.end.monthValue}/${trendRange.end.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                val structureCard: @Composable (Modifier) -> Unit = { modifier ->
+                    AppCard(
+                        modifier = modifier.heightIn(min = 360.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(20.dp),
+                    ) {
+                        Text(
+                            if (trendPeriod == PreviewPeriod.MONTH) "本月收支分类" else "本周收支分类",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        AppSegmentedControl(
+                            options = listOf(false, true),
+                            selectedOption = structureIncome,
+                            onSelected = { structureIncome = it },
+                            label = { if (it) "入账" else "支出" },
+                        )
+                        PreviewStructureChart(analyticsBills, structureIncome)
+                    }
+                }
+                if (maxWidth >= ConfigCatalog.ADAPTIVE_CHART_PAIR_MIN_WIDTH_DP.dp) {
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        trendCard(Modifier.weight(1f).fillMaxHeight())
+                        structureCard(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        trendCard(Modifier.fillMaxWidth())
+                        structureCard(Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        if (selectedBill != null) item {
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(20.dp),
+            ) {
+                Text("账单详情", style = SectionTitleTextStyle, color = MaterialTheme.colorScheme.onBackground)
+                Spacer(Modifier.height(12.dp))
+                AccountingEntryContent(selectedBill)
+                Spacer(Modifier.height(16.dp))
+                if (onEdit != null) FilledTonalButton(onClick = { onEdit(selectedBill) }) { Text("编辑账单") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountingKpiCard(
+    label: String,
+    value: Long,
+    modifier: Modifier = Modifier,
+    income: Boolean = false,
+    money: Boolean = true,
+) {
+    AppCard(
+        modifier = modifier.height(112.dp),
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = PaddingValues(16.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.weight(1f))
+        Text(
+            if (money) AccountingPreviewData.money(value) else "$value 笔",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (income) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
     }
 }
 
@@ -484,20 +774,34 @@ private fun billAmount(bill: PreviewBill): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AccountingEntrySheet(bill: PreviewBill, onEdit: () -> Unit, onDismiss: () -> Unit) {
-    AppModalBottomSheet(title = "账单详情", subtitle = "${bill.date} ${bill.time}",
-        onDismissRequest = onDismiss, actions = listOf(
-            AppSheetAction("关闭", onDismiss, AppSheetActionRole.Secondary), AppSheetAction("编辑", onEdit))) {
-        Text(billAmount(bill), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        Text(bill.title, style = MaterialTheme.typography.titleMedium)
-        Text("分类：${bill.category}", Modifier.padding(top = 8.dp))
-        Text("来源：${bill.channel.ifBlank { "其他" }}", Modifier.padding(top = 8.dp))
-        if (bill.transactionId.isNotBlank()) Text("交易号：${bill.transactionId}", Modifier.padding(top = 8.dp))
-        if (bill.note.isNotBlank()) Text(bill.note, Modifier.padding(top = 8.dp))
-        AccountingSourceImage(bill.sourceImagePath)
-        if (!bill.counted) Text(if (bill.status != "CONFIRMED")
-            "此记录待核对，暂不计入统计。本版暂不支持手动核对；退款未自动抵扣，外币未折算人民币。"
-            else "此记录不计入支出或入账统计。", Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun AccountingEntrySheet(bill: PreviewBill, onEdit: (() -> Unit)?, onDismiss: () -> Unit) {
+    AppEditorSheet(title = "账单详情", subtitle = "${bill.date} ${bill.time}",
+        attachment = bill.sourceImagePath?.takeIf { it.isNotBlank() }?.let { path -> ({ AccountingSourceImage(path) }) },
+        onDismissRequest = onDismiss, actions = buildList {
+            add(AppSheetAction("关闭", onDismiss, AppSheetActionRole.Secondary))
+            onEdit?.let { add(AppSheetAction("编辑", it)) }
+        }) {
+        AccountingEntryContent(bill, showImage = false)
     }
+}
+
+@Composable
+private fun AccountingEntryContent(bill: PreviewBill, showImage: Boolean = true) {
+    Text(billAmount(bill), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(16.dp))
+    Text(bill.title, style = MaterialTheme.typography.titleMedium)
+    Text("分类：${bill.category}", Modifier.padding(top = 8.dp))
+    Text("来源：${bill.channel.ifBlank { "其他" }}", Modifier.padding(top = 8.dp))
+    if (bill.transactionId.isNotBlank()) Text("交易号：${bill.transactionId}", Modifier.padding(top = 8.dp))
+    if (bill.note.isNotBlank()) Text(bill.note, Modifier.padding(top = 8.dp))
+    if (showImage) AccountingSourceImage(bill.sourceImagePath)
+    if (!bill.counted) Text(
+        if (bill.status != "CONFIRMED") {
+            "此记录待核对，暂不计入统计。本版暂不支持手动核对；退款未自动抵扣，外币未折算人民币。"
+        } else {
+            "此记录不计入支出或入账统计。"
+        },
+        Modifier.padding(top = 16.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

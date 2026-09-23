@@ -84,6 +84,23 @@ class ConfigItem(
 )
 
 object ConfigCatalog {
+    // 平板三栏：导航栏只在右侧仍有足够空间时展开，中间栏始终保持手机内容宽度。
+    const val ADAPTIVE_NAVIGATION_EXPAND_MIN_WIDTH_DP = 1116
+    const val ADAPTIVE_COMPACT_PANE_WIDTH_DP = 400
+    const val ADAPTIVE_CONTENT_PADDING_DP = 24
+    const val ADAPTIVE_FORM_MAX_WIDTH_DP = 840
+    const val ADAPTIVE_CHART_PAIR_MIN_WIDTH_DP = 800
+    const val ADAPTIVE_WEATHER_TABLE_MIN_WIDTH_DP = 640
+
+    // 右侧详情工作区：只按实际可用宽度分栏，无附件时正文限宽居中。
+    const val DETAIL_WORKSPACE_SPLIT_MIN_WIDTH_DP = 760
+    const val DETAIL_WORKSPACE_FORM_MAX_WIDTH_DP = 560
+
+    // 首页日程视图：无限重复展开窗口、切换动效与末端加载手势阈值。
+    const val HOME_AGENDA_PAGE_DAYS = 7
+    const val HOME_AGENDA_MOTION_MS = 420
+    const val HOME_AGENDA_PULL_DP = 64
+
     // 通知与短信正则资源上限及成功投递凭据数量。
     const val ACCOUNTING_MESSAGE_MAX_TEXT = 8192
     const val ACCOUNTING_MESSAGE_MAX_RULES = 128
@@ -91,8 +108,13 @@ object ConfigCatalog {
 
     // 自动记账资源及调用策略；对用户只暴露总开关。
     const val AUTO_ACCOUNTING_DEBOUNCE_MS = 700
+    // 支付截图先保留，再给本地通知入库短暂优先期；仅关联本次现场，不抑制历史详情。
+    const val AUTO_ACCOUNTING_NOTIFICATION_WAIT_MS = 1_500
+    const val AUTO_ACCOUNTING_NOTIFICATION_MATCH_MS = 3_000
     // 微信支付窗口上下文只在短会话内有效；成功事件过期后不再补拍其他页面。
     const val AUTO_ACCOUNTING_WECHAT_SESSION_MS = 120_000
+    // 红包确认页等转场稳定后只缓存一次截图，不调用模型；会话沿用微信支付有效期。
+    const val AUTO_ACCOUNTING_RED_PACKET_CAPTURE_DELAY_MS = 500
     const val AUTO_ACCOUNTING_SUCCESS_EVENT_MS = 5_000
     // 详情信号只用于当前页面短时间内截图；不保留到稍后的其他页面。
     const val AUTO_ACCOUNTING_DETAIL_SIGNAL_MS = 5_000
@@ -102,7 +124,6 @@ object ConfigCatalog {
     const val AUTO_ACCOUNTING_MAX_TEXT = 16_000
     const val AUTO_ACCOUNTING_MAX_PAYLOAD = 64_000
     // 微信混淆模型仅扫描指定包，限制候选类数量与结构遍历深度。
-    const val AUTO_ACCOUNTING_HOOK_MAX_CLASSES = 512
     const val AUTO_ACCOUNTING_MESSAGE_MAX_DEPTH = 16
     const val AUTO_ACCOUNTING_QUEUE_SIZE = 8
     const val AUTO_ACCOUNTING_PROVIDER_TIMEOUT_MS = 8_000
@@ -112,6 +133,8 @@ object ConfigCatalog {
     const val AUTO_ACCOUNTING_DIAGNOSTIC_INTERVAL_MS = 5_000
     // 一次性支付诊断的时间和资源上限；不改变正式支付触发条件。
     const val PAYMENT_DIAGNOSTIC_DURATION_MS = 120_000
+    // 手动诊断会话的独立健康采样，不受截图耗时/次数上限影响。
+    const val PAYMENT_DIAGNOSTIC_HEALTH_INTERVAL_MS = 1_500
     const val PAYMENT_DIAGNOSTIC_TREE_INTERVAL_MS = 300
     const val PAYMENT_DIAGNOSTIC_DELAY_FIRST_MS = 100
     const val PAYMENT_DIAGNOSTIC_DELAY_SECOND_MS = 700
@@ -160,6 +183,61 @@ object ConfigCatalog {
     const val LOG_MAX_BYTES = 4 * 1024 * 1024L
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "course.module_enabled", "启用课表功能",
+            "课表总开关：隐藏课程入口和展示，暂停课程提醒；保留数据和下滑偏好。", ConfigExposure.DEVELOPER_ONLY,
+            ConfigControl.Toggle, { if (it.courseModuleEnabled) 1 else 0 },
+            { s, v -> s.copy(courseModuleEnabled = v != 0) }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.agenda_only_scheduled", "日程视图显示模式",
+            "默认仅日程；完整模式在已加载范围内补齐空日期，不影响其他日历视图。", ConfigExposure.DEVELOPER_ONLY,
+            ConfigControl.IntOptions(listOf(ConfigControl.IntOptions.Option(0, "完整"), ConfigControl.IntOptions.Option(1, "仅日程"))),
+            { if (it.homeAgendaOnlyScheduled) 1 else 0 }, { s, v -> s.copy(homeAgendaOnlyScheduled = v != 0) }),
+        // courseRemindersResumeAtMillis 是总开关恢复时记录的运行状态，不是可调参数。
+
+        ConfigItem(
+            domain = ConfigDomain.DIAGNOSTICS,
+            kind = ConfigKind.USER_SETTING,
+            key = "developer.demo_mode.enabled",
+            label = "界面演示模式",
+            description = "使用本地只读示例数据预览主要页面，不写入数据库、不参与同步和通知。",
+            exposure = ConfigExposure.DEVELOPER_ONLY,
+            control = ConfigControl.Toggle,
+            get = { if (it.developerDemoModeEnabled) 1 else 0 },
+            set = { s, v -> s.copy(developerDemoModeEnabled = v != 0) },
+            agentAccess = AgentConfigAccess.NONE,
+        ),
+        *listOf(
+            Triple("navigation_expand_min_width_dp", ADAPTIVE_NAVIGATION_EXPAND_MIN_WIDTH_DP, "允许一级导航栏展开的最小窗口宽度。"),
+            Triple("compact_pane_width_dp", ADAPTIVE_COMPACT_PANE_WIDTH_DP, "平板三栏中承载手机页面的固定中间栏宽度。"),
+            Triple("content_padding_dp", ADAPTIVE_CONTENT_PADDING_DP, "平板右侧内容与左对齐标题的水平留白。"),
+            Triple("form_max_width_dp", ADAPTIVE_FORM_MAX_WIDTH_DP, "平板设置表单最大阅读宽度。"),
+            Triple("chart_pair_min_width_dp", ADAPTIVE_CHART_PAIR_MIN_WIDTH_DP, "右侧分析内容可用宽度达到此值时并排展示图表。"),
+            Triple("weather_table_min_width_dp", ADAPTIVE_WEATHER_TABLE_MIN_WIDTH_DP, "平板预报列表展开降水、风力列所需的最小内容宽度。"),
+        ).map { (key, value, description) -> ConfigItem(
+            ConfigDomain.APPEARANCE,
+            ConfigKind.POLICY,
+            "adaptive.$key",
+            "平板布局 $key",
+            description,
+            ConfigExposure.SYSTEM_INTERNAL,
+            ConfigControl.IntInput(value, value),
+            { value },
+            { s, _ -> s },
+            agentAccess = AgentConfigAccess.NONE,
+        ) }.toTypedArray(),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.agenda_reverse", "日程视图排列方向",
+            "只反转日期组；同日仍按时间先后。", ConfigExposure.DEVELOPER_ONLY,
+            ConfigControl.IntOptions(listOf(ConfigControl.IntOptions.Option(0, "向下排列"), ConfigControl.IntOptions.Option(1, "向上排列"))),
+            { if (it.homeAgendaReverseOrder) 1 else 0 }, { s, v -> s.copy(homeAgendaReverseOrder = v != 0) }),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "home.agenda_page_days", "日程展开天数", "首次及每次追加的未来天数。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(HOME_AGENDA_PAGE_DAYS, HOME_AGENDA_PAGE_DAYS),
+            { HOME_AGENDA_PAGE_DAYS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "home.agenda_motion_ms", "日程视图过渡时长", "日期与日程视图使用一致的过渡时长。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(HOME_AGENDA_MOTION_MS, HOME_AGENDA_MOTION_MS),
+            { HOME_AGENDA_MOTION_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "home.agenda_pull_dp", "日程末端加载距离", "仅手动越过末端并松手时加载。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(HOME_AGENDA_PULL_DP, HOME_AGENDA_PULL_DP),
+            { HOME_AGENDA_PULL_DP }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+
         ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "accounting.messages_enabled", "通知与短信记账", "通过本地正则自动捕获通知和短信中的账单", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.accountingMessagesEnabled) 1 else 0 }, { s, v -> s.copy(accountingMessagesEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
         *listOf("max_text" to ACCOUNTING_MESSAGE_MAX_TEXT, "max_rules" to ACCOUNTING_MESSAGE_MAX_RULES, "receipts" to ACCOUNTING_MESSAGE_RECEIPTS).map { (key, value) ->
             ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "accounting.message_$key", "财务消息 $key", "限制本地正则输入、规则数量和重复投递凭据。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(value, value), { value }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE)
@@ -178,6 +256,7 @@ object ConfigCatalog {
         }.toTypedArray(),
         *listOf(
             "duration_ms" to PAYMENT_DIAGNOSTIC_DURATION_MS,
+            "health_interval_ms" to PAYMENT_DIAGNOSTIC_HEALTH_INTERVAL_MS,
             "tree_interval_ms" to PAYMENT_DIAGNOSTIC_TREE_INTERVAL_MS,
             "delay_first_ms" to PAYMENT_DIAGNOSTIC_DELAY_FIRST_MS,
             "delay_second_ms" to PAYMENT_DIAGNOSTIC_DELAY_SECOND_MS,
@@ -194,9 +273,12 @@ object ConfigCatalog {
             "queue_size" to PAYMENT_DIAGNOSTIC_QUEUE_SIZE,
             "retain_sessions" to PAYMENT_DIAGNOSTIC_RETAIN_SESSIONS,
         ).map { (key, value) -> ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "diagnostics.payment_$key", "支付诊断 $key", "限制一次性支付诊断的时长、读取量和本地文件体积。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(value, value), { value }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE) }.toTypedArray(),
-        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "accounting.automatic_enabled", "自动记账", "自动捕获支付信息", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.automaticAccountingEnabled) 1 else 0 }, { s, v -> s.copy(automaticAccountingEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "accounting.automatic_enabled", "自动记账（Beta）", "自动捕获支付信息", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.automaticAccountingEnabled) 1 else 0 }, { s, v -> s.copy(automaticAccountingEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
         *listOf(
+            Triple("notification_wait_ms", "支付通知优先等待", AUTO_ACCOUNTING_NOTIFICATION_WAIT_MS),
+            Triple("notification_match_ms", "支付通知关联时间窗", AUTO_ACCOUNTING_NOTIFICATION_MATCH_MS),
             Triple("debounce_ms", "支付页面稳定等待", AUTO_ACCOUNTING_DEBOUNCE_MS),
+            Triple("red_packet_capture_delay_ms", "红包确认页截图等待", AUTO_ACCOUNTING_RED_PACKET_CAPTURE_DELAY_MS),
             Triple("wechat_session_ms", "微信支付上下文有效期", AUTO_ACCOUNTING_WECHAT_SESSION_MS),
             Triple("success_event_ms", "支付成功事件截图有效期", AUTO_ACCOUNTING_SUCCESS_EVENT_MS),
             Triple("detail_signal_ms", "账单详情信号截图有效期", AUTO_ACCOUNTING_DETAIL_SIGNAL_MS),
@@ -205,7 +287,6 @@ object ConfigCatalog {
             Triple("max_nodes", "支付页面节点上限", AUTO_ACCOUNTING_MAX_NODES),
             Triple("max_text", "支付页面文本上限", AUTO_ACCOUNTING_MAX_TEXT),
             Triple("max_payload", "Hook 消息长度上限", AUTO_ACCOUNTING_MAX_PAYLOAD),
-            Triple("hook_max_classes", "微信支付模型候选类上限", AUTO_ACCOUNTING_HOOK_MAX_CLASSES),
             Triple("message_max_depth", "支付消息结构深度上限", AUTO_ACCOUNTING_MESSAGE_MAX_DEPTH),
             Triple("queue_size", "Hook 转发队列上限", AUTO_ACCOUNTING_QUEUE_SIZE),
             Triple("provider_timeout_ms", "支付消息处理超时", AUTO_ACCOUNTING_PROVIDER_TIMEOUT_MS),

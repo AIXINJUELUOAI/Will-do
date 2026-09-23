@@ -41,6 +41,7 @@ import com.antgskds.calendarassistant.app.ui.navigation.SettingsDestination
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarVisualHeight
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -52,6 +53,7 @@ fun SettingsSidebar(
     isDarkMode: Boolean = false,
     glassMode: Boolean = false,
     hasAppUpdate: Boolean = false,
+    courseModuleEnabled: Boolean,
     reserveFloatingBarSpace: Boolean = true,
     selectedDestination: SettingsDestination? = null,
     onThemeToggle: (Boolean) -> Unit = {},
@@ -152,10 +154,15 @@ fun SettingsSidebar(
                 .offset { IntOffset(0, rubberBandOffset.roundToInt()) }
                 .padding(horizontal = 16.dp)
                 .statusBarsPadding()
-                .padding(top = 16.dp)
+                .padding(top = if (reserveFloatingBarSpace) 16.dp else 0.dp)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            if (!reserveFloatingBarSpace) {
+                Box(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
+                    Text("设置与管理", style = MaterialTheme.typography.titleLarge)
+                }
+            }
             // 第一块：顶部操作卡片（退出、主题切换、关于）
             SidebarTopActionsCard(
                 isDarkMode = isDarkMode,
@@ -168,7 +175,7 @@ fun SettingsSidebar(
             )
 
             // 第二块：课表管理卡片
-            SidebarScheduleCard(glassMode, selectedDestination, onNavigate)
+            if (courseModuleEnabled) SidebarScheduleCard(glassMode, selectedDestination, onNavigate)
 
             // 第三块：其他设置卡片
             SidebarOtherSettingsCard(glassMode, selectedDestination, onNavigate)
@@ -236,6 +243,10 @@ private fun SidebarGlassCard(
     glassMode: Boolean,
     content: @Composable () -> Unit
 ) {
+    if (LocalAdaptiveLayoutInfo.current.useTwoPaneContent) {
+        Column(Modifier.fillMaxWidth()) { content() }
+        return
+    }
     val shape = RoundedCornerShape(16.dp)
     AppCard(
         containerColor = if (glassMode) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceVariant,
@@ -264,6 +275,7 @@ private fun SidebarActionItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
             .clickable(interactionSource = interactionSource, indication = null) {
                 haptics.click()
                 onClick()

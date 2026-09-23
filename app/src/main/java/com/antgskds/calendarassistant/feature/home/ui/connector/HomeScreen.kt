@@ -1,6 +1,10 @@
 package com.antgskds.calendarassistant.feature.home.ui.connector
 
 import com.antgskds.calendarassistant.feature.schedule.presentation.RecurringEventUtils
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailWorkspaceContent
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailReadOnly
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailDirtyChanged
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +27,7 @@ import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.feature.schedule.domain.course.CourseEventMapper
 import com.antgskds.calendarassistant.feature.schedule.domain.course.TimeTableLayoutUtils
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
+import com.antgskds.calendarassistant.feature.settings.developer.application.DemoModeDataFactory
 import kotlinx.coroutines.launch
 import com.antgskds.calendarassistant.feature.schedule.domain.model.EventTags
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
@@ -104,7 +109,13 @@ fun HomeScreen(
     val uiState by mainViewModel.uiState.collectAsState()
     val appUpdateUiState by mainViewModel.appUpdateUiState.collectAsState()
     val quickMemos by mainViewModel.quickMemos.collectAsState()
-    val quickMemoCount = quickMemos.size
+    val demoModeEnabled = uiState.settings.developerOptionsEnabled &&
+        uiState.settings.developerDemoModeEnabled
+    val quickMemoCount = if (demoModeEnabled) {
+        DemoModeDataFactory.quickMemos(uiState.today).size
+    } else {
+        quickMemos.size
+    }
 
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
@@ -214,6 +225,9 @@ fun HomeScreen(
     }
 
     // 弹窗状态管理
+    var detailDirty by remember { mutableStateOf(false) }
+    var openedQuickMemoId by remember { mutableStateOf<Long?>(null) }
+    var showAddCourse by remember { mutableStateOf(false) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     var editDraft by remember { mutableStateOf<com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft?>(null) }
     var editContext by remember { mutableStateOf<EditContext?>(null) }
@@ -247,6 +261,7 @@ fun HomeScreen(
     }
 
     fun beginEdit(event: Event) {
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(event, settings)) { showToast("课表功能已关闭"); return }
         pendingAddDialog = false
         draftEventToAdd = null
         if (event.tag == "__removed_course__") {
@@ -329,6 +344,26 @@ fun HomeScreen(
      * RecurringOccurrence → 加载母事件，设置 recurringEditSession
      */
     fun beginEditItem(item: ScheduleDisplayItem) {
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsTag(item.tag, settings)) { showToast("课表功能已关闭"); return }
+        if (detailDirty) { showToast("请先保存或返回，处理当前未保存的内容"); return }
+        courseItemToEdit = null
+        showAddCourse = false
+        showAddEventDialog = false
+        editDraft = null
+        dialogAttachments = emptyList()
+        currentDialogSessionId = System.nanoTime()
+        if (demoModeEnabled) {
+            if (item.tag == EventTags.COURSE) courseItemToEdit = item
+            else {
+                editDraft = com.antgskds.calendarassistant.feature.schedule.application.model.EditDraft(
+                    title = item.title, startDate = item.startDate, startTime = item.startLocalTime,
+                    endDate = item.endDate, endTime = item.endLocalTime, location = item.location,
+                    description = item.description, tag = item.tag, color = item.color,
+                )
+                showAddEventDialog = true
+            }
+            return
+        }
         pendingAddDialog = false
         draftEventToAdd = null
         recurringEditCommitSession = null
@@ -405,10 +440,14 @@ fun HomeScreen(
     }
 
     fun openPrimaryCreateDialog() {
+        if (demoModeEnabled) { showToast("演示模式仅供查看，请关闭演示模式后新建"); return }
+        if (detailDirty) { showToast("请先保存或返回，处理当前未保存的内容"); return }
+        showAddCourse = false
+        courseItemToEdit = null
         isActionExpanded = false
         if (effectiveSelectedPageKey == HomeEntryKey.NOTE) {
             mainViewModel.createTextQuickMemo("") { id ->
-                onOpenQuickMemoDetail(id)
+                if (adaptiveLayoutInfo.useTwoPaneContent) openedQuickMemoId = id else onOpenQuickMemoDetail(id)
             }
         } else {
             openAddEventDialog()
@@ -435,6 +474,153 @@ fun HomeScreen(
         }
     val hasAppBackground = settings.appBackgroundImagePath.isNotBlank()
 
+    val editorContent: @Composable () -> Unit = {
+        if (showAddCourse) {
+            com.antgskds.calendarassistant.feature.schedule.ui.render.CourseEditDialog(
+                course = null,
+                maxNodes = TimeTableLayoutUtils.nodeCountFromJson(settings.timeTableJson),
+                timeTableJson = settings.timeTableJson,
+                hapticEnabled = settings.hapticFeedbackEnabled,
+                predictiveBackEnabled = settings.predictiveBackEnabled,
+                onSwitchType = { showAddCourse = false; openAddEventDialog() },
+                onDismiss = { showAddCourse = false },
+                onConfirm = { course -> mainViewModel.addCourse(course); showAddCourse = false },
+            )
+        }
+    // 1. 普通日程编辑/添加
+    val isDialogVisible = showAddEventDialog || editDraft != null
+    val dialogKey = editDraft?.hashCode() ?: "add_$addDialogRequestId"
+    key(dialogKey) {
+        AddEventDialog(
+            visible = isDialogVisible,
+            initialDate = uiState.selectedDate.takeIf { adaptiveLayoutInfo.useTwoPaneContent },
+            editDraft = editDraft,
+            currentEventsCount = uiState.rawEventCount,
+            settings = settings,
+            attachments = dialogAttachments,
+            onSwitchType = if (com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings)) ({ showAddEventDialog = false; editDraft = null; showAddCourse = true }) else null,
+            onAddAttachment = { uri ->
+                if (demoModeEnabled) return@AddEventDialog
+                val eventId = editDraft?.eventId ?: return@AddEventDialog
+                scope.launch {
+                    runCatching { mainViewModel.addAttachmentToEvent(eventId, uri) }
+                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
+                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
+            onAddPendingAttachment = { uri, eventKey ->
+                if (demoModeEnabled) return@AddEventDialog
+                scope.launch {
+                    runCatching { mainViewModel.addPendingAttachment(eventKey, uri) }
+                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
+                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
+            onOpenAttachment = { attachment ->
+                scope.launch {
+                    val opened = mainViewModel.openAttachment(attachment)
+                    if (!opened) showToast("无法打开附件", ToastType.ERROR)
+                }
+            },
+            onDeleteAttachment = { attachment ->
+                if (demoModeEnabled) return@AddEventDialog
+                scope.launch {
+                    runCatching { mainViewModel.deleteAttachment(attachment) }
+                        .onSuccess { dialogAttachments = dialogAttachments.filterNot { it.id == attachment.id } }
+                        .onFailure { showToast("附件删除失败: ${it.message}", ToastType.ERROR) }
+                }
+            },
+            onShowMessage = { message -> showToast(message, ToastType.INFO) },
+            onDismiss = {
+                pendingAddDialog = false
+                showAddEventDialog = false
+                editDraft = null
+                dialogAttachments.filter { it.eventId == null && it.eventKey.isNotBlank() }
+                    .map { it.eventKey }.distinct().forEach { pendingKey ->
+                        scope.launch { mainViewModel.deletePendingAttachments(pendingKey) }
+                    }
+                dialogAttachments = emptyList()
+                editContext = null
+                recurringEditCommitSession = null
+                draftEventToAdd = null
+            },
+            onConfirm = { patch ->
+                if (demoModeEnabled) { showToast("演示模式不会保存修改"); return@AddEventDialog }
+                val ctx = editContext
+                var nextRecurringCommit: RecurringEditCommitSession? = null
+                when (ctx) {
+                    is EditContext.SingleEvent -> {
+                        mainViewModel.updateSingleFromPatch(ctx.eventId, patch)
+                        scope.launch { mainViewModel.refreshAttachmentKey(ctx.eventId) }
+                        patch.pendingAttachmentUris.forEach { uri ->
+                            scope.launch {
+                                runCatching { mainViewModel.addAttachmentToEvent(ctx.eventId, uri) }
+                                    .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
+                            }
+                        }
+                    }
+                    is EditContext.RecurringOccurrence -> {
+                        nextRecurringCommit = RecurringEditCommitSession(
+                            parentId = ctx.parentId,
+                            occurrenceTs = ctx.occurrenceTs,
+                            patch = patch,
+                            attachments = dialogAttachments
+                        )
+                    }
+                    is EditContext.NewEvent, null -> {
+                        scope.launch {
+                            val eventId = mainViewModel.addEventFromPatchWithResult(patch)
+                            mainViewModel.bindPendingAttachmentsToEvent(eventId, patch.pendingAttachmentKey)
+                        }
+                    }
+                }
+                pendingAddDialog = false
+                showAddEventDialog = false
+                editDraft = null
+                dialogAttachments = emptyList()
+                editContext = null
+                recurringEditCommitSession = nextRecurringCommit
+                draftEventToAdd = null
+            }
+        )
+    }
+
+    courseItemToEdit?.let { item ->
+        val meta = CourseEventMapper.parseMeta(item.description)
+        val maxNodes = TimeTableLayoutUtils.nodeCountFromJson(settings.timeTableJson)
+        if (meta != null) {
+            key(item.stableKey) {
+            CourseSingleEditDialog(
+                initialName = item.title,
+                initialLocation = item.location,
+                initialStartNode = meta.startNode,
+                initialEndNode = meta.endNode,
+                initialDate = item.startDate,
+                maxNodes = maxNodes,
+                predictiveBackEnabled = settings.predictiveBackEnabled,
+                onDismiss = { courseItemToEdit = null },
+                onDelete = {
+                    if (demoModeEnabled) { showToast("演示模式不会保存修改"); return@CourseSingleEditDialog }
+                    mainViewModel.deleteCourseOccurrence(item)
+                    courseItemToEdit = null
+                },
+                onConfirm = { name, location, startNode, endNode, date ->
+                    if (demoModeEnabled) { showToast("演示模式不会保存修改"); return@CourseSingleEditDialog }
+                    mainViewModel.updateCourseOccurrence(item, name, location, startNode, endNode, date)
+                    courseItemToEdit = null
+                }
+            )
+            }
+        } else {
+            LaunchedEffect(item.stableKey) { courseItemToEdit = null }
+        }
+    }
+    }
+    CompositionLocalProvider(
+        LocalDetailReadOnly provides demoModeEnabled,
+        LocalDetailDirtyChanged provides { detailDirty = it },
+        LocalDetailWorkspaceContent provides
+        if (adaptiveLayoutInfo.useTwoPaneContent && (showAddCourse || showAddEventDialog || editDraft != null || courseItemToEdit != null)) editorContent else null) {
     HomeScreenContent(
         state = HomeShellUiState(
             backgroundEnabled = hasAppBackground,
@@ -451,6 +637,7 @@ fun HomeScreen(
         },
         sidebar = {
             SettingsSidebar(
+                courseModuleEnabled = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings),
                 isDarkMode = settings.isDarkMode,
                 glassMode = hasAppBackground,
                 hasAppUpdate = appUpdateUiState.hasUpdate,
@@ -471,7 +658,7 @@ fun HomeScreen(
                 uiSize = settings.uiSize,
                 pickupTimestamp = pickupTimestamp,
                 openCourseRequestId = openCourseRequestId,
-                courseFeatureEnabled = settings.courseFeatureEnabled,
+                courseFeatureEnabled = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.swipeEnabled(settings),
                 isActionExpanded = isActionExpanded,
                 onActionExpandedChange = { isActionExpanded = it },
                 searchRequestId = searchRequestId,
@@ -479,8 +666,18 @@ fun HomeScreen(
                 isSidebarOpen = !useNavigationRail && isSidebarOpen,
                 isWideNavigation = useNavigationRail,
                 isTwoPane = adaptiveLayoutInfo.useTwoPaneContent,
-                onPageChange = onSelectedPageKeyChange,
+                onPageChange = { page ->
+                    if (detailDirty) showToast("请先保存或返回，处理当前未保存的内容")
+                    else { editDraft = null; showAddEventDialog = false; showAddCourse = false; courseItemToEdit = null; onSelectedPageKeyChange(page) }
+                },
                 onAddEventClick = { openPrimaryCreateDialog() },
+                onAddCourseClick = {
+                    if (demoModeEnabled) showToast("演示模式仅供查看，请关闭演示模式后新建")
+                    else if (detailDirty) showToast("请先保存或返回，处理当前未保存的内容")
+                    else { editDraft = null; showAddEventDialog = false; courseItemToEdit = null; showAddCourse = true }
+                },
+                openQuickMemoId = openedQuickMemoId,
+                onQuickMemoOpened = { openedQuickMemoId = null },
                 onEditItem = { item -> beginEditItem(item) },
                 onRequestDeleteItem = { item -> requestDeleteItem(item) },
                 onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
@@ -685,126 +882,12 @@ fun HomeScreen(
         },
     )
 
+    }
+
     // --- 全局弹窗处理 (仅保留日常操作) ---
 
-    // 1. 普通日程编辑/添加
-    val isDialogVisible = showAddEventDialog || editDraft != null
-    val dialogKey = editDraft?.hashCode() ?: "add_$addDialogRequestId"
-    key(dialogKey) {
-        AddEventDialog(
-            visible = isDialogVisible,
-            editDraft = editDraft,
-            currentEventsCount = uiState.rawEventCount,
-            settings = settings,
-            attachments = dialogAttachments,
-            onAddAttachment = { uri ->
-                val eventId = editDraft?.eventId ?: return@AddEventDialog
-                scope.launch {
-                    runCatching { mainViewModel.addAttachmentToEvent(eventId, uri) }
-                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
-                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
-                }
-            },
-            onAddPendingAttachment = { uri, eventKey ->
-                scope.launch {
-                    runCatching { mainViewModel.addPendingAttachment(eventKey, uri) }
-                        .onSuccess { attachment -> dialogAttachments = dialogAttachments + attachment }
-                        .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
-                }
-            },
-            onOpenAttachment = { attachment ->
-                scope.launch {
-                    val opened = mainViewModel.openAttachment(attachment)
-                    if (!opened) showToast("无法打开附件", ToastType.ERROR)
-                }
-            },
-            onDeleteAttachment = { attachment ->
-                scope.launch {
-                    runCatching { mainViewModel.deleteAttachment(attachment) }
-                        .onSuccess { dialogAttachments = dialogAttachments.filterNot { it.id == attachment.id } }
-                        .onFailure { showToast("附件删除失败: ${it.message}", ToastType.ERROR) }
-                }
-            },
-            onShowMessage = { message -> showToast(message, ToastType.INFO) },
-            onDismiss = {
-                pendingAddDialog = false
-                showAddEventDialog = false
-                editDraft = null
-                dialogAttachments.filter { it.eventId == null && it.eventKey.isNotBlank() }
-                    .map { it.eventKey }.distinct().forEach { pendingKey ->
-                        scope.launch { mainViewModel.deletePendingAttachments(pendingKey) }
-                    }
-                dialogAttachments = emptyList()
-                editContext = null
-                recurringEditCommitSession = null
-                draftEventToAdd = null
-            },
-            onConfirm = { patch ->
-                val ctx = editContext
-                var nextRecurringCommit: RecurringEditCommitSession? = null
-                when (ctx) {
-                    is EditContext.SingleEvent -> {
-                        mainViewModel.updateSingleFromPatch(ctx.eventId, patch)
-                        scope.launch { mainViewModel.refreshAttachmentKey(ctx.eventId) }
-                        patch.pendingAttachmentUris.forEach { uri ->
-                            scope.launch {
-                                runCatching { mainViewModel.addAttachmentToEvent(ctx.eventId, uri) }
-                                    .onFailure { showToast("附件添加失败: ${it.message}", ToastType.ERROR) }
-                            }
-                        }
-                    }
-                    is EditContext.RecurringOccurrence -> {
-                        nextRecurringCommit = RecurringEditCommitSession(
-                            parentId = ctx.parentId,
-                            occurrenceTs = ctx.occurrenceTs,
-                            patch = patch,
-                            attachments = dialogAttachments
-                        )
-                    }
-                    is EditContext.NewEvent, null -> {
-                        scope.launch {
-                            val eventId = mainViewModel.addEventFromPatchWithResult(patch)
-                            mainViewModel.bindPendingAttachmentsToEvent(eventId, patch.pendingAttachmentKey)
-                        }
-                    }
-                }
-                pendingAddDialog = false
-                showAddEventDialog = false
-                editDraft = null
-                dialogAttachments = emptyList()
-                editContext = null
-                recurringEditCommitSession = nextRecurringCommit
-                draftEventToAdd = null
-            }
-        )
-    }
+    if (!adaptiveLayoutInfo.useTwoPaneContent) editorContent()
 
-    courseItemToEdit?.let { item ->
-        val meta = CourseEventMapper.parseMeta(item.description)
-        val maxNodes = TimeTableLayoutUtils.nodeCountFromJson(settings.timeTableJson)
-        if (meta != null) {
-            CourseSingleEditDialog(
-                initialName = item.title,
-                initialLocation = item.location,
-                initialStartNode = meta.startNode,
-                initialEndNode = meta.endNode,
-                initialDate = item.startDate,
-                maxNodes = maxNodes,
-                predictiveBackEnabled = settings.predictiveBackEnabled,
-                onDismiss = { courseItemToEdit = null },
-                onDelete = {
-                    mainViewModel.deleteCourseOccurrence(item)
-                    courseItemToEdit = null
-                },
-                onConfirm = { name, location, startNode, endNode, date ->
-                    mainViewModel.updateCourseOccurrence(item, name, location, startNode, endNode, date)
-                    courseItemToEdit = null
-                }
-            )
-        } else {
-            LaunchedEffect(item.stableKey) { courseItemToEdit = null }
-        }
-    }
 }
 
 @Composable

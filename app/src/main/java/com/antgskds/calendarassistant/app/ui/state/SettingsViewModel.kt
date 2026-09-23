@@ -307,6 +307,7 @@ class SettingsViewModel(
     fun updateListSortOrder(
         homeListReverseOrder: Boolean? = null,
         allEventsListReverseOrder: Boolean? = null,
+        homeAgendaReverseOrder: Boolean? = null,
         floatingListReverseOrder: Boolean? = null,
         archivesListReverseOrder: Boolean? = null
     ) {
@@ -316,6 +317,7 @@ class SettingsViewModel(
                 current.copy(
                     homeListReverseOrder = homeListReverseOrder ?: current.homeListReverseOrder,
                     allEventsListReverseOrder = allEventsListReverseOrder ?: current.allEventsListReverseOrder,
+                    homeAgendaReverseOrder = homeAgendaReverseOrder ?: current.homeAgendaReverseOrder,
                     floatingListReverseOrder = floatingListReverseOrder ?: current.floatingListReverseOrder,
                     archivesListReverseOrder = archivesListReverseOrder ?: current.archivesListReverseOrder
                 )
@@ -386,6 +388,7 @@ class SettingsViewModel(
                 current.copy(
                     homeListReverseOrder = defaults.homeListReverseOrder,
                     allEventsListReverseOrder = defaults.allEventsListReverseOrder,
+                    homeAgendaReverseOrder = defaults.homeAgendaReverseOrder,
                     floatingListReverseOrder = defaults.floatingListReverseOrder,
                     archivesListReverseOrder = defaults.archivesListReverseOrder
                 )
@@ -411,10 +414,14 @@ class SettingsViewModel(
         )
     }
 
-    fun setDeveloperOptionsEnabled(enabled: Boolean) {
-        updatePreference(
-            developerOptionsEnabled = enabled,
-            developerOptionsDisabledAtMillis = if (enabled) 0L else System.currentTimeMillis()
+    fun setDeveloperOptionsEnabled(enabled: Boolean) = viewModelScope.launch {
+        val current = settings.value
+        settingsOperationApi.updateSettings(
+            current.copy(
+                developerOptionsEnabled = enabled,
+                developerOptionsDisabledAtMillis = if (enabled) 0L else System.currentTimeMillis(),
+                developerDemoModeEnabled = current.developerDemoModeEnabled && enabled,
+            )
         )
     }
 
@@ -429,17 +436,32 @@ class SettingsViewModel(
         settingsOperationApi.updateSettings(settings.value.copy(autoRecordLogs = enabled))
     }
 
+    fun setCourseModuleEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(settings.value.copy(courseModuleEnabled = enabled))
+    }
+
+    fun setHomeAgendaOnlyScheduled(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(settings.value.copy(homeAgendaOnlyScheduled = enabled))
+    }
+
+    fun setDemoModeEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(settings.value.copy(developerDemoModeEnabled = enabled))
+    }
+
     fun setScheduleIngestDedupEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsOperationApi.updateSettings(
             settings.value.copy(scheduleIngestDedupEnabled = enabled)
         )
     }
 
-    fun expireDeveloperOptionsUnlock() {
-        updatePreference(
-            developerOptionsUnlocked = false,
-            developerOptionsEnabled = false,
-            developerOptionsDisabledAtMillis = 0L
+    fun expireDeveloperOptionsUnlock() = viewModelScope.launch {
+        settingsOperationApi.updateSettings(
+            settings.value.copy(
+                developerOptionsUnlocked = false,
+                developerOptionsEnabled = false,
+                developerOptionsDisabledAtMillis = 0L,
+                developerDemoModeEnabled = false,
+            )
         )
     }
 

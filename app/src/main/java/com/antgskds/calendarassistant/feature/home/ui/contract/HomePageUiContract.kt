@@ -14,11 +14,17 @@ data class HomePageUiState(
     val currentDateEvents: List<ScheduleDisplayItem> = emptyList(),
     val tomorrowEvents: List<ScheduleDisplayItem> = emptyList(),
     val datesWithEvents: Set<LocalDate> = emptySet(),
+    val calendarItems: List<ScheduleDisplayItem> = emptyList(),
+    val agendaItems: List<ScheduleDisplayItem> = emptyList(),
+    val agendaFutureItems: List<ScheduleDisplayItem> = emptyList(),
+    val agendaFutureDays: Int = com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.HOME_AGENDA_PAGE_DAYS,
+    val agendaReady: Boolean = false,
     val settings: MySettings = MySettings(),
     val weatherData: WeatherData? = null,
 )
 
 sealed interface HomePageUiAction {
+    data object LoadMoreAgenda : HomePageUiAction
     data class SelectDate(val date: LocalDate) : HomePageUiAction
     data class RevealItem(val itemKey: String?) : HomePageUiAction
     data class DeleteItem(val item: ScheduleDisplayItem) : HomePageUiAction

@@ -23,7 +23,35 @@ import java.time.format.DateTimeFormatter
  * - 已有子事件（exception instance）→ Single 展示项（它有自己的 DB id）
  * - Event 对象不会传给 UI，只在此处读取
  */
+data class ScheduleAgendaSnapshot(
+    val items: List<ScheduleDisplayItem>,
+    val futureItems: List<ScheduleDisplayItem>,
+)
+
 object ScheduleDisplayHelper {
+    /** 单次和有限重复显示到实际末尾；无限重复受显式加载窗口限制。 */
+    fun buildAgendaSnapshot(events: List<Event>, futureLimit: LocalDate): ScheduleAgendaSnapshot {
+        val active = events.filter { it.archivedAt == null && it.id != null }
+        val children = active.filter { !it.isRecurring && it.parentId != 0L }.groupBy { it.parentId }
+        val items = mutableListOf<ScheduleDisplayItem>()
+        val future = mutableListOf<ScheduleDisplayItem>()
+        active.forEach { event ->
+            if (!event.isRecurring) {
+                items += eventToSingleItem(event)
+            } else {
+                val rule = parseRRule(event.rrule)
+                val infinite = rule.count == null && rule.until == null
+                val end = if (infinite) futureLimit else rule.until ?: LocalDate.MAX
+                val exceptions = children[event.id] ?: emptyList()
+                items += expandRecurring(event, LocalDate.MIN, end, exceptions)
+                if (infinite) {
+                    future += expandRecurring(event, futureLimit.plusDays(1), LocalDate.MAX, exceptions, stopAfter = 1)
+                }
+            }
+        }
+        return ScheduleAgendaSnapshot(items.distinctBy { it.stableKey }, future)
+    }
+
 
     /**
      * 将事件列表转换为展示列表。
@@ -102,7 +130,8 @@ object ScheduleDisplayHelper {
         parent: Event,
         from: LocalDate,
         to: LocalDate,
-        existingChildren: List<Event>
+        existingChildren: List<Event>,
+        stopAfter: Int = Int.MAX_VALUE,
     ): List<ScheduleDisplayItem> {
         val rrule = parseRRule(parent.rrule)
         if (rrule.freq == null) return emptyList()
@@ -152,6 +181,7 @@ object ScheduleDisplayHelper {
                         )
                     }
                 }
+                if (items.size >= stopAfter) break
                 emittedCount++
             }
 

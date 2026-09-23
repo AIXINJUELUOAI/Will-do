@@ -10,6 +10,7 @@ data class HomeSnapshot(
     val currentDateEvents: List<ScheduleDisplayItem>,     // 日程改用展示模型
     val tomorrowEvents: List<ScheduleDisplayItem>,
     val datesWithEvents: Set<LocalDate> = emptySet(),
+    val calendarItems: List<ScheduleDisplayItem> = emptyList(),
 )
 
 interface HomeQueryApi {

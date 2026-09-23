@@ -89,7 +89,7 @@ class WidgetController(
         if (appWidgetIds.isEmpty()) return
         appScope.launch(Dispatchers.IO) {
             val settings = settingsQueryApi.settings.value
-            val events by lazy { calendarQueryApi.getEvents() }
+            val events by lazy { calendarQueryApi.getEvents().filter { com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(it, settings) } }
             val scheduleSnapshot by lazy { widgetScheduleQueryApi.buildSnapshot(events) }
             val weatherSnapshot by lazy { WeatherWidgetSnapshot(if (settings.hasWeatherConfig()) weatherQueryApi.weatherData.value else null) }
             val courseSnapshot by lazy { CourseWidgetSnapshotBuilder.build(events, settings) }

@@ -81,6 +81,7 @@ import com.antgskds.calendarassistant.feature.accounting.ui.LocalAccountingEntri
 import com.antgskds.calendarassistant.feature.home.ui.connector.HomeScreen
 import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoDetailPage
 import com.antgskds.calendarassistant.feature.settings.data.SettingsDataSource
+import com.antgskds.calendarassistant.feature.settings.developer.application.DemoModeDataFactory
 import com.antgskds.calendarassistant.feature.settings.onboarding.ui.connector.OnboardingGuidePage
 import com.antgskds.calendarassistant.feature.settings.shell.ui.connector.SettingsDetailRoute
 import com.antgskds.calendarassistant.app.ui.theme.material.background.LocalAppBackgroundRootSize
@@ -252,6 +253,14 @@ class MainActivity : ComponentActivity() {
                 AccountingViewModel.Factory(app.accountingApi, app.ingestCommandApi, applicationContext.contentResolver, applicationContext.filesDir)
             })
             val accountingEntries by accountingViewModel.entries.collectAsState()
+            val demoModeEnabled = settings.developerOptionsEnabled && settings.developerDemoModeEnabled
+            val displayedAccountingEntries = remember(accountingEntries.entries, demoModeEnabled) {
+                if (demoModeEnabled) {
+                    DemoModeDataFactory.accountingEntries(java.time.LocalDate.now())
+                } else {
+                    accountingEntries.entries
+                }
+            }
             val accountingRecognition by accountingViewModel.recognitionState.collectAsState()
             val accountingEditor by accountingViewModel.editorState.collectAsState()
             val promptUpdateDialogState by mainViewModel.promptUpdateDialogState.collectAsState()
@@ -314,6 +323,9 @@ class MainActivity : ComponentActivity() {
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val predictiveBackEnabled = settings.predictiveBackEnabled
                 val adaptiveLayoutInfo = rememberAdaptiveLayoutInfo(this@MainActivity)
+                var preferExpandedPrimaryNavigation by rememberSaveable { mutableStateOf(false) }
+                val expandedPrimaryNavigation = adaptiveLayoutInfo.canExpandNavigation &&
+                    preferExpandedPrimaryNavigation
                 val homeBottomItems = remember(settings.homeBottomItems, settings.voiceInputEnabled) {
                     editionHomeEntries(
                         visibleHomeBottomItems(
@@ -464,7 +476,7 @@ class MainActivity : ComponentActivity() {
                             if (HomeEntryKey.TODAY in homeBottomItems) {
                                 selectedHomePageKey = HomeEntryKey.TODAY
                             }
-                            if (settings.courseFeatureEnabled) {
+                            if (com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings)) {
                                 openCourseRequestId++
                             }
                         }
@@ -525,12 +537,14 @@ class MainActivity : ComponentActivity() {
                         AppRoutes.Home,
                         AppRoutes.SettingsPattern,
                         AppRoutes.QuickMemoDetailPattern,
+                        AppRoutes.AccountingPreview,
                         AppRoutes.WeatherDetail,
                     )
                 val adaptiveSettingsSelected = currentRoute == AppRoutes.SettingsPattern
+                val adaptiveAccountingSelected = currentRoute == AppRoutes.AccountingPreview
+                val adaptiveWeatherSelected = currentRoute == AppRoutes.WeatherDetail
                 val adaptiveSelectedPageKey = when (currentRoute) {
                     AppRoutes.QuickMemoDetailPattern -> HomeEntryKey.NOTE
-                    AppRoutes.WeatherDetail -> HomeEntryKey.TODAY
                     else -> selectedHomePageKey
                 }
                 val appGlassBackdrop = rememberAppWindowBackdrop()
@@ -551,7 +565,7 @@ class MainActivity : ComponentActivity() {
                         LocalAppBackgroundRootSize provides appBackgroundRootSize,
                         LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance,
                         LocalAdaptiveLayoutInfo provides adaptiveLayoutInfo,
-                        LocalAccountingEntries provides accountingEntries.entries,
+                        LocalAccountingEntries provides displayedAccountingEntries,
                         com.antgskds.calendarassistant.feature.accounting.ui.LocalAccountingViewModel provides accountingViewModel,
                     ) {
                     // 最外层容器（包裹 NavHost 和所有弹窗）
@@ -590,9 +604,14 @@ class MainActivity : ComponentActivity() {
                                 AdaptiveHomeNavigationRail(
                                     navItems = homeBottomItems,
                                     selectedPageKey = adaptiveSelectedPageKey,
+                                    accountingSelected = adaptiveAccountingSelected,
+                                    weatherSelected = adaptiveWeatherSelected,
                                     settingsSelected = adaptiveSettingsSelected,
+                                    expanded = expandedPrimaryNavigation,
+                                    canExpand = adaptiveLayoutInfo.canExpandNavigation,
                                     backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
                                     miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
+                                    onExpandedChange = { preferExpandedPrimaryNavigation = it },
                                     onPageClick = { pageKey ->
                                         selectedHomePageKey = if (pageKey in homeBottomItems) {
                                             pageKey
@@ -606,12 +625,31 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     },
+                                    onAccountingClick = {
+                                        if (currentRoute != AppRoutes.AccountingPreview) {
+                                            navController.navigate(
+                                                AppRoutes.accountingPreview(java.time.LocalDate.now(), false),
+                                            ) {
+                                                launchSingleTop = true
+                                                popUpTo(AppRoutes.Home) { inclusive = false }
+                                            }
+                                        }
+                                    },
+                                    onWeatherClick = {
+                                        if (currentRoute != AppRoutes.WeatherDetail) {
+                                            navController.navigate(AppRoutes.WeatherDetail) {
+                                                launchSingleTop = true
+                                                popUpTo(AppRoutes.Home) { inclusive = false }
+                                            }
+                                        }
+                                    },
                                     onSettingsClick = {
                                         if (currentRoute != AppRoutes.SettingsPattern) {
                                             navController.navigate(
                                                 AppRoutes.settings(SettingsDestination.Preference.name),
                                             ) {
                                                 launchSingleTop = true
+                                                popUpTo(AppRoutes.Home) { inclusive = false }
                                             }
                                         }
                                     },
@@ -744,11 +782,13 @@ class MainActivity : ComponentActivity() {
                             BackHandler(enabled = !predictiveBackEnabled) { navController.popBackStack() }
                             AccountingPreviewScreen(
                                 viewModel = accountingViewModel,
+                                entriesOverride = displayedAccountingEntries.takeIf { demoModeEnabled },
                                 uiSize = settings.uiSize,
                                 initialDate = runCatching { java.time.LocalDate.parse(entry.arguments?.getString("date")) }
                                     .getOrDefault(java.time.LocalDate.now()),
                                 initialMonthly = entry.arguments?.getString("period") == "MONTH",
                                 onBack = { navController.popBackStack() },
+                                showBack = !adaptiveLayoutInfo.useNavigationRail,
                                 hapticEnabled = settings.hapticFeedbackEnabled,
                                 predictiveBackEnabled = predictiveBackEnabled,
                                 backgroundMode = settings.appBackgroundImagePath.isNotBlank(),
@@ -769,6 +809,13 @@ class MainActivity : ComponentActivity() {
                             }
                             WeatherDetailScreen(
                                 uiSize = settings.uiSize,
+                                showBack = !adaptiveLayoutInfo.useNavigationRail,
+                                showSettings = adaptiveLayoutInfo.useNavigationRail,
+                                onOpenSettings = {
+                                    navController.navigate(AppRoutes.settings(SettingsDestination.Weather.name)) {
+                                        launchSingleTop = true
+                                    }
+                                },
                                 onBack = { navController.popBackStack() }
                             )
                         }

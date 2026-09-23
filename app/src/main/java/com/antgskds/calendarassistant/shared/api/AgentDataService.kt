@@ -1,6 +1,14 @@
 package com.antgskds.calendarassistant.shared.api
 
 import android.Manifest
+import com.antgskds.calendarassistant.shared.operation.AgentBill
+import com.antgskds.calendarassistant.shared.operation.AgentBillDraft
+import com.antgskds.calendarassistant.shared.operation.AgentBillPatch
+import com.antgskds.calendarassistant.shared.operation.AgentBillFilter
+import com.antgskds.calendarassistant.shared.operation.AgentBillQuery
+import com.antgskds.calendarassistant.shared.operation.AgentBillPage
+import com.antgskds.calendarassistant.shared.operation.AgentBillCreation
+import com.antgskds.calendarassistant.shared.operation.AgentBillSummary
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -108,6 +116,7 @@ class AgentDataService(
     private val weatherOperationApi: WeatherOperationApi,
     private val diagnosticLogExporter: DiagnosticLogExporter,
     private val backupCoordinator: BackupCoordinator,
+    private val accountingService: AgentAccountingService,
 ) : AgentDataApi {
     private val attachmentMutationMutex = Mutex()
 
@@ -126,6 +135,30 @@ class AgentDataService(
         Result.success(block())
     } catch (error: Throwable) {
         Result.failure(error)
+    }
+
+    override suspend fun createBill(draft: AgentBillDraft): Result<AgentBillCreation> = withPermissionCheck {
+        accountingService.create(draft)
+    }
+
+    override suspend fun getBill(id: String): Result<AgentBill> = withPermissionCheck {
+        accountingService.get(id)
+    }
+
+    override suspend fun queryBills(query: AgentBillQuery): Result<AgentBillPage> = withPermissionCheck {
+        accountingService.query(query)
+    }
+
+    override suspend fun updateBill(id: String, patch: AgentBillPatch): Result<AgentBill> = withPermissionCheck {
+        accountingService.update(id, patch)
+    }
+
+    override suspend fun deleteBill(id: String): Result<Unit> = withPermissionCheck {
+        accountingService.delete(id)
+    }
+
+    override suspend fun getBillSummary(filter: AgentBillFilter): Result<List<AgentBillSummary>> = withPermissionCheck {
+        accountingService.summary(filter)
     }
 
     override suspend fun createEvent(draft: AgentEventDraft): Result<Long> = withPermissionCheck {

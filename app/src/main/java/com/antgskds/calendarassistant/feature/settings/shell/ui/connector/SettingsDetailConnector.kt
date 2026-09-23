@@ -66,6 +66,7 @@ fun SettingsDetailRoute(
         state = SettingsDetailUiState(
             initialRoute = initialRoute,
             uiSize = uiSize,
+            courseModuleEnabled = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings),
             backgroundEnabled = settings.appBackgroundImagePath.isNotBlank(),
             backgroundMiuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
             backgroundCardAlphaPercent = settings.appBackgroundCardAlphaPercent,
@@ -115,6 +116,13 @@ private fun SettingsPageRouteContent(
     onNavigateTo: (SettingsDestination) -> Unit,
     onNavigateRoute: (String) -> Unit,
 ) {
+    val currentSettings by settingsViewModel.settings.collectAsState()
+    if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(currentSettings) &&
+        destination in setOf(SettingsDestination.Schedule, SettingsDestination.SemesterConfig,
+            SettingsDestination.CourseManage, SettingsDestination.TimeTableManage)) {
+        androidx.compose.material3.Text("课表功能已关闭，可在开发者设置中重新开启")
+        return
+    }
     when (destination) {
         SettingsDestination.AI -> AiSettingsPage(
             viewModel = settingsViewModel,

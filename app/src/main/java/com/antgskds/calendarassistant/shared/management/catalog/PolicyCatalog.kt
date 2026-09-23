@@ -51,6 +51,11 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("课表功能开关", Chain.SCHEDULE, "feature/schedule/domain/course/CourseFeaturePolicy", Maturity.ACTIVE,
+            "统一课程入口、展示和提醒判断；独立保留下滑偏好，恢复后不补发停用期间的课程提醒"),
+
+        PolicyEntry("支付通知优先", Chain.RECOGNITION, "feature/accounting/domain/AccountingNotificationPriorityPolicy", Maturity.ACTIVE, "通知实际入库回执与支付现场按来源、短时窗口、方向及可读金额关联；一份回执仅抑制一次识图，历史详情、短信、待核对或失败不抑制"),
+        PolicyEntry("微信发红包会话", Chain.RECOGNITION, "feature/accounting/domain/WechatRedPacketSessionPolicy", Maturity.ACTIVE, "准备页提交后缓存支付确认截图，仅同会话已发送 Toast 授权识别；取消、离页、过期清理，发送时刻与默认名称由成功证据补齐"),
         PolicyEntry("财务消息权限", Chain.RECOGNITION, "platform/receiver/AccountingMessageAccessPolicy", Maturity.ACTIVE, "总开关、子开关、通知使用权和两项短信权限共同控制消息记账"),
         PolicyEntry("自动记账触发", Chain.RECOGNITION, "feature/accounting/domain/AutomaticAccountingPolicy", Maturity.ACTIVE, "统一开关、支付包白名单、成功页面匹配、频率限制及重复内容抑制；诊断另覆盖拼多多、淘宝和京东，不扩大自动识别范围"),
         PolicyEntry("微信支付事件会话", Chain.RECOGNITION, "feature/accounting/domain/WechatPaymentSessionPolicy", Maturity.ACTIVE, "统一接收微信支付承载页的成功事件，不依赖好友转账入口；每窗口会话只消费一次，截图前后校验前台与有效期"),

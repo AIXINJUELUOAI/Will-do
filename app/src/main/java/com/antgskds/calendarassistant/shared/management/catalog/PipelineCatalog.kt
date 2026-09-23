@@ -55,7 +55,8 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
-        PipelineEntry("财务消息采集", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", Maturity.PIPELINE, "通知和短信串行提交 RecognitionApi，本地规则识别后复用统一去重入库和结果通知"),
+        PipelineEntry("微信红包发送识别", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService", Maturity.PIPELINE, "原生截图暂存支付确认页，同次已发送后走统一多模态、入库、附件与结果反馈；缓存期不调用 AI"),
+        PipelineEntry("财务消息采集", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", Maturity.PIPELINE, "通知和短信串行提交 RecognitionApi，本地规则识别后复用统一去重入库和结果通知；通知实际入库回执供无障碍现场在模型请求前让行"),
         PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理微信、支付宝、拼多多、淘宝和京东的诊断会话、即时/延迟采样、独立截图与限量导出，结束恢复服务配置"),
         PipelineEntry("自动支付识别", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator", Maturity.PIPELINE, "自动截图仅提取账单，详情入口要求单笔及真实时间；Hook 消息本地解析，开关二次校验后复用入库与反馈"),
         PipelineEntry("账单识别入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "识别账单事务内逐条校验并自动入账，明确重复不写入，疑似重复与缺失字段暂存待核对；成功后经独立短时胶囊反馈实际金额"),
@@ -112,6 +113,11 @@ object PipelineCatalog {
             "本地存储分流", Chain.SCHEDULE, "store/StoreDispatcher",
             Maturity.TRANSITION,
             "日程写入主链路 ScheduleFacade → ScheduleStoreGateway → StoreDispatcher → StoreRootNode 的分流节点",
+        ),
+        PipelineEntry(
+            "Agent 记账", Chain.INGEST, "shared/api/AgentAccountingService",
+            Maturity.PIPELINE,
+            "官方工具与第三方 skill 查询账单、按币种统计；新增复用去重入库，修改删除经 IngestCommandApi",
         ),
         PipelineEntry(
             "Agent 数据库维护", Chain.SUPPORT, "shared/api/AgentDatabaseService",

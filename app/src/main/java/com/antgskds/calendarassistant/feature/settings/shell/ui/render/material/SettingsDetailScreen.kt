@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ import com.antgskds.calendarassistant.app.ui.navigation.navForwardExitTransition
 import com.antgskds.calendarassistant.app.ui.theme.material.background.AppBackgroundStyleTheme
 import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 
 private fun NavGraphBuilder.settingsPageComposable(
     route: String,
@@ -77,6 +79,9 @@ fun MaterialSettingsDetailScreen(
         onNavigateRoute: (String) -> Unit,
     ) -> Unit,
 ) {
+    val latestState by rememberUpdatedState(state)
+    val latestAction by rememberUpdatedState(onAction)
+    val latestPageContent by rememberUpdatedState(pageContent)
     val settingsNavController = rememberNavController()
     val backStackEntry by settingsNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: state.initialRoute
@@ -103,7 +108,7 @@ fun MaterialSettingsDetailScreen(
         }
 
         val targetRoute = PageCatalog.routeFor(target) ?: return
-        if (targetRoute == currentRoute) {
+        if (targetRoute == settingsNavController.currentDestination?.route) {
             isSidebarOpen = false
             return
         }
@@ -115,7 +120,7 @@ fun MaterialSettingsDetailScreen(
     }
 
     fun navigateToRoute(targetRoute: String) {
-        if (targetRoute == currentRoute) return
+        if (targetRoute == settingsNavController.currentDestination?.route) return
         settingsNavController.navigate(targetRoute) {
             launchSingleTop = true
         }
@@ -152,11 +157,11 @@ fun MaterialSettingsDetailScreen(
                                 route = route,
                                 destination = page.destination,
                                 title = page.title,
-                                state = state,
+                                state = latestState,
                                 onBack = ::handleBackNavigation,
-                                onAction = onAction,
+                                onAction = latestAction,
                             ) {
-                                pageContent(
+                                latestPageContent(
                                     route,
                                     page.destination,
                                     ::navigateToDestination,
@@ -172,11 +177,11 @@ fun MaterialSettingsDetailScreen(
                                 route = page.route,
                                 destination = page.parentDestination,
                                 title = page.title,
-                                state = state,
+                                state = latestState,
                                 onBack = ::handleBackNavigation,
-                                onAction = onAction,
+                                onAction = latestAction,
                             ) {
-                                pageContent(
+                                latestPageContent(
                                     page.route,
                                     page.parentDestination,
                                     ::navigateToDestination,
@@ -191,14 +196,14 @@ fun MaterialSettingsDetailScreen(
 
         if (usePersistentSidebar) {
             AdaptiveTwoPaneLayout(
-                primaryFraction = 0.42f,
-                primaryMaxWidth = 320.dp,
+                primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
                 primary = {
                     SettingsSidebar(
                         modifier = Modifier.fillMaxSize(),
                         isDarkMode = state.isDarkMode,
                         glassMode = state.backgroundEnabled,
                         hasAppUpdate = state.hasAppUpdate,
+                        courseModuleEnabled = state.courseModuleEnabled,
                         reserveFloatingBarSpace = false,
                         selectedDestination = selectedDestination,
                         onThemeToggle = { isDark ->
@@ -224,6 +229,7 @@ fun MaterialSettingsDetailScreen(
                         isDarkMode = state.isDarkMode,
                         glassMode = state.backgroundEnabled,
                         hasAppUpdate = state.hasAppUpdate,
+                        courseModuleEnabled = state.courseModuleEnabled,
                         selectedDestination = selectedDestination,
                         onThemeToggle = { isDark ->
                             onAction(SettingsDetailUiAction.SetDarkMode(isDark))
@@ -267,6 +273,7 @@ private fun MaterialSettingsPage(
     Box(modifier = Modifier.fillMaxSize()) {
         AppPageScaffold(
             containerColor = pageContainerColor,
+            contentMaxWidth = if (LocalAdaptiveLayoutInfo.current.useTwoPaneContent) ConfigCatalog.ADAPTIVE_FORM_MAX_WIDTH_DP.dp else 960.dp,
             scrollState = if (scrollWholePage) rememberScrollState() else null,
             edgeToEdgeContent = !scrollWholePage,
             topBar = {
@@ -307,6 +314,7 @@ private fun MaterialSettingsPage(
                 }
                 AppTopBar(
                     title = title,
+                    centered = !LocalAdaptiveLayoutInfo.current.useTwoPaneContent,
                     containerColor = pageContainerColor,
                     navigationIcon = navigationContent,
                     actions = actionsContent,

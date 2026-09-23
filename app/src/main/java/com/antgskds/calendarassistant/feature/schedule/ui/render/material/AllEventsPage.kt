@@ -14,26 +14,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notes
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.feature.home.ui.render.material.component.IntegratedFloatingBarBottomSpacing
@@ -41,7 +32,6 @@ import com.antgskds.calendarassistant.feature.home.ui.render.material.component.
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.AllEventsUiAction
 import com.antgskds.calendarassistant.feature.schedule.ui.contract.AllEventsUiState
 import com.antgskds.calendarassistant.feature.schedule.ui.render.material.component.SwipeableEventItem
-import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,64 +44,15 @@ fun MaterialAllEventsScreen(
     hapticEnabled: Boolean = true,
     onAction: (AllEventsUiAction) -> Unit
 ) {
-    var selectedItemKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val allItems = remember(state.groups) { state.groups.flatMap { it.items } }
-    val allItemKeys = remember(allItems) { allItems.map { it.stableKey } }
-
-    LaunchedEffect(twoPane, allItemKeys) {
-        if (!twoPane) {
-            selectedItemKey = null
-        } else if (selectedItemKey !in allItemKeys) {
-            selectedItemKey = allItemKeys.firstOrNull()
-        }
-    }
-
-    if (!twoPane) {
-        AllEventsListPane(
-            state = state,
-            uiSize = uiSize,
-            extraBottomPadding = extraBottomPadding,
-            hapticEnabled = hapticEnabled,
-            reserveFloatingBarSpace = true,
-            selectedItemKey = null,
-            onSelectItem = null,
-            onAction = onAction,
-        )
-        return
-    }
-
-    AdaptiveTwoPaneLayout(
-        primaryFraction = 0.46f,
-        primary = {
-            AllEventsListPane(
-                state = state,
-                uiSize = uiSize,
-                extraBottomPadding = extraBottomPadding,
-                hapticEnabled = hapticEnabled,
-                reserveFloatingBarSpace = false,
-                selectedItemKey = selectedItemKey,
-                onSelectItem = { selectedItemKey = it.stableKey },
-                onAction = onAction,
-            )
-        },
-        secondary = {
-            val selectedItem = allItems.firstOrNull { it.stableKey == selectedItemKey }
-            if (selectedItem == null) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Text(
-                        text = "选择一条日程查看详情",
-                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                AllEventDetailPane(
-                    item = selectedItem,
-                    onEdit = { onAction(AllEventsUiAction.EditItem(selectedItem.stableKey)) },
-                    onArchive = { onAction(AllEventsUiAction.ArchiveItem(selectedItem.stableKey)) },
-                )
-            }
-        },
+    AllEventsListPane(
+        state = state,
+        uiSize = uiSize,
+        extraBottomPadding = extraBottomPadding,
+        hapticEnabled = hapticEnabled,
+        reserveFloatingBarSpace = !twoPane,
+        selectedItemKey = null,
+        onSelectItem = null,
+        onAction = onAction,
     )
 }
 
@@ -263,99 +204,6 @@ private fun AllEventsListPane(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun AllEventDetailPane(
-    item: com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem,
-    onEdit: () -> Unit,
-    onArchive: () -> Unit,
-) {
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", java.util.Locale.CHINA) }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .width(6.dp)
-                    .height(48.dp)
-                    .background(item.composeColor, RoundedCornerShape(3.dp)),
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-
-        EventDetailRow(
-            icon = Icons.Default.CalendarMonth,
-            text = if (item.startDate == item.endDate) {
-                item.startDate.format(dateFormatter)
-            } else {
-                "${item.startDate.format(dateFormatter)} - ${item.endDate.format(dateFormatter)}"
-            },
-        )
-        EventDetailRow(
-            icon = Icons.Default.Schedule,
-            text = if (item.isAllDay) "全天" else "${item.startTime} - ${item.endTime}",
-        )
-        if (item.location.isNotBlank()) {
-            EventDetailRow(icon = Icons.Default.LocationOn, text = item.location)
-        }
-        if (item.description.isNotBlank()) {
-            EventDetailRow(icon = Icons.Default.Notes, text = item.description)
-        }
-        if (item.isRecurringInstance) {
-            Text(
-                text = "重复日程实例",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onArchive) { Text("归档") }
-            Spacer(modifier = Modifier.width(12.dp))
-            Button(onClick = onEdit) { Text("编辑") }
-        }
-    }
-}
-
-@Composable
-private fun EventDetailRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp),
-        )
-        Text(
-            text = text,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
     }
 }
 

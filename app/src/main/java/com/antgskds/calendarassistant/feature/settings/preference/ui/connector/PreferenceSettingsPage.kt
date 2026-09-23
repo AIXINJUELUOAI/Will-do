@@ -425,51 +425,6 @@ fun MaterialPreferenceSettingsScreen(
                 .padding(bottom = 80.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (PreferenceSection.ACCOUNTING in visibleSections) {
-                Text("记账", style = sectionTitleStyle)
-                SettingsCard {
-                    SwitchSettingItem(
-                        title = "自动记账",
-                        subtitle = "自动捕获支付信息",
-                        checked = settings.automaticAccountingEnabled,
-                        onCheckedChange = {
-                            requestingAccountingPermission = false
-                            controller.updateAutomaticAccounting(it)
-                        },
-                        cardTitleStyle = cardTitleStyle,
-                        cardSubtitleStyle = cardSubtitleStyle,
-                    )
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = settings.automaticAccountingEnabled,
-                        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
-                    ) {
-                        Column {
-                            AppSettingsDivider()
-                            SwitchSettingItem(
-                                title = "通知与短信记账",
-                                subtitle = "自动捕获通知和短信中的账单",
-                                checked = settings.accountingMessagesEnabled && accountingPermissionsGranted,
-                                onCheckedChange = { enabled ->
-                                    if (!enabled) controller.updateAccountingMessages(false)
-                                    else if (!requestingAccountingPermission) {
-                                        requestingAccountingPermission = true
-                                        when {
-                                            !SmsNotificationListenerService.isEnabled(context) ->
-                                                accountingNotificationLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                                            !hasSmsPermission() -> accountingSmsLauncher.launch(
-                                                arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
-                                            else -> finishAccountingPermissionRequest()
-                                        }
-                                    }
-                                },
-                                cardTitleStyle = cardTitleStyle,
-                                cardSubtitleStyle = cardSubtitleStyle,
-                            )
-                        }
-                    }
-                }
-            }
             // ================== 显示板块 ==================
             if (PreferenceSection.DISPLAY in visibleSections) {
             Text("显示", style = sectionTitleStyle)
@@ -943,6 +898,51 @@ fun MaterialPreferenceSettingsScreen(
 
             }
 
+            if (PreferenceSection.ACCOUNTING in visibleSections) {
+                Text("记账", style = sectionTitleStyle)
+                SettingsCard {
+                    SwitchSettingItem(
+                        title = "自动记账（Beta）",
+                        subtitle = "自动捕获支付信息",
+                        checked = settings.automaticAccountingEnabled,
+                        onCheckedChange = {
+                            requestingAccountingPermission = false
+                            controller.updateAutomaticAccounting(it)
+                        },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                    )
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = settings.automaticAccountingEnabled,
+                        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+                    ) {
+                        Column {
+                            AppSettingsDivider()
+                            SwitchSettingItem(
+                                title = "通知与短信记账",
+                                subtitle = "自动捕获通知和短信中的账单",
+                                checked = settings.accountingMessagesEnabled && accountingPermissionsGranted,
+                                onCheckedChange = { enabled ->
+                                    if (!enabled) controller.updateAccountingMessages(false)
+                                    else if (!requestingAccountingPermission) {
+                                        requestingAccountingPermission = true
+                                        when {
+                                            !SmsNotificationListenerService.isEnabled(context) ->
+                                                accountingNotificationLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                                            !hasSmsPermission() -> accountingSmsLauncher.launch(
+                                                arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
+                                            else -> finishAccountingPermissionRequest()
+                                        }
+                                    }
+                                },
+                                cardTitleStyle = cardTitleStyle,
+                                cardSubtitleStyle = cardSubtitleStyle,
+                            )
+                        }
+                    }
+                }
+            }
             // ================== 随口记板块 ==================
             if (PreferenceSection.QUICK_MEMO in visibleSections) {
             Text("随口记", style = sectionTitleStyle)
@@ -1414,7 +1414,7 @@ fun MaterialPreferenceSettingsScreen(
             }
 
             // ================== 课表板块 ==================
-            if (PreferenceSection.COURSE in visibleSections) {
+            if (PreferenceSection.COURSE in visibleSections && com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(settings)) {
             Text("课表", style = sectionTitleStyle)
             SettingsCard {
                     SwitchSettingItem(

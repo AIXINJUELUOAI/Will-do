@@ -18,6 +18,7 @@ import java.util.UUID
 /** 只负责投递与重复回调抑制；识别、去重入库、结果通知仍由 RecognitionApi 编排。 */
 class AccountingMessageCoordinator(
     private val context: Context,
+    private val notificationPriority: com.antgskds.calendarassistant.feature.accounting.domain.AccountingNotificationPriorityPolicy,
     private val recognition: () -> RecognitionApi,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -50,6 +51,8 @@ class AccountingMessageCoordinator(
         try {
             val result = recognition().analyzeAccountingMessage(message, context, "accounting-message:$key")
             if (result is AnalysisResult.Success) {
+                if (AccountingMessageAccessPolicy.enabled(context))
+                    notificationPriority.record(message, result.accountingResult, System.currentTimeMillis())
                 prefs.edit().putString("processed", Json.encodeToString(
                     (receipts + key).takeLast(ConfigCatalog.ACCOUNTING_MESSAGE_RECEIPTS))).commit()
                 Log.i("AccountingMessage", "本地规则处理完成 source=${message.kind}")

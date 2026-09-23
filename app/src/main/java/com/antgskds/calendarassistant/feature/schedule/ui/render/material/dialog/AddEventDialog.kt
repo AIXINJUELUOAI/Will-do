@@ -1,5 +1,9 @@
 package com.antgskds.calendarassistant.feature.schedule.ui.render.material.dialog
 
+import com.antgskds.calendarassistant.shared.ui.material.component.AppDetailWorkspace
+import com.antgskds.calendarassistant.shared.ui.material.component.rememberWorkspaceCloseRequest
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailReadOnly
+import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailWorkspace
 import android.net.Uri
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -222,12 +226,14 @@ fun MaterialAddEventDialog(
     currentEventsCount: Int = 0,
     settings: MySettings = MySettings(),
     visible: Boolean = true,
+    initialDate: java.time.LocalDate? = null,
     attachments: List<EventAttachment> = emptyList(),
     onAddAttachment: (Uri) -> Unit = {},
     onAddPendingAttachment: (Uri, String) -> Unit = { _, _ -> },
     onOpenAttachment: (EventAttachment) -> Unit = {},
     onDeleteAttachment: (EventAttachment) -> Unit = {},
     onShowMessage: (String) -> Unit = {},
+    onSwitchType: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (EventPatch) -> Unit
 ) {
@@ -238,8 +244,12 @@ fun MaterialAddEventDialog(
     val draftKey = editDraft?.hashCode() ?: 0
     val eventColors = remember(settings.eventColorPaletteHex) { resolveEventColors(settings.eventColorPaletteHex) }
 
-    val initialStart = editDraft?.let { LocalDateTime.of(it.startDate, it.startTime) }
-        ?: LocalDateTime.now().withSecond(0).withNano(0)
+    val initialStart = remember(draftKey, initialDate) {
+        editDraft?.let { LocalDateTime.of(it.startDate, it.startTime) }
+            ?: LocalDateTime.now().withSecond(0).withNano(0).let { now ->
+                if (initialDate != null) LocalDateTime.of(initialDate, now.toLocalTime()) else now
+            }
+    }
     val initialEnd = editDraft?.let { LocalDateTime.of(it.endDate, it.endTime) }
         ?: initialStart.plusHours(1)
     val pendingAttachmentKey = remember(draftKey) {
@@ -349,54 +359,67 @@ fun MaterialAddEventDialog(
 
     if (!visible) return
 
-    val glassSettings = LocalAppGlassSettings.current
-    val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
-    CompositionLocalProvider(
-        LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
-    ) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnBackPress = false,
-                decorFitsSystemWindows = false
-            )
-        ) {
-            DialogEdgeToEdgeEffect(isDarkTheme = settings.isDarkMode)
-            if (glassSettings.active) DisableDialogWindowDimEffect()
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
-            ) {
-                CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
-                    PredictiveBottomDialogHost(
-                        visible = visible,
-                        onDismiss = onDismiss,
-                        predictiveBackEnabled = settings.predictiveBackEnabled && !isChildDialogVisible,
-                        backHandlerEnabled = !isChildDialogVisible,
-                        scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
-                        contentAlignment = Alignment.Center,
-                        contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
-                    ) {
-                        AppOverlayCard(
-                            modifier = Modifier
-                                .padding(horizontal = 24.dp)
-                                .widthIn(max = 720.dp)
-                                .fillMaxWidth()
-                                .heightIn(max = 670.dp),
-                            shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text(if (!isEditing) "新增日程" else "编辑日程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                }
+    val embedded = LocalDetailWorkspace.current
+    var editing by remember(draftKey) { mutableStateOf(!isEditing) }
+    val dirty = title != (editDraft?.title ?: "") || location != (editDraft?.location ?: "") ||
+        desc != stripSourceImageMarkers(initialDescription) || eventTag != (editDraft?.tag ?: EventTags.GENERAL) ||
+        startDate != initialStart.toLocalDate() || endDate != initialEnd.toLocalDate() ||
+        startTime != initialStart.toLocalTime().format(timeFormatter) || endTime != initialEnd.toLocalTime().format(timeFormatter) ||
+        reminders.toList() != (editDraft?.reminders ?: emptyList<Int>()) || repeatSpec?.toRRule().orEmpty() != editDraft?.rrule.orEmpty() || structuredEditingTag != null || attachments.any { it.eventId == null }
+    val close = rememberWorkspaceCloseRequest(editing && dirty, onDismiss)
+    val editorActions: @Composable RowScope.() -> Unit = {
+                    TextButton(onClick = { haptics.click(); close() }) { Text("取消") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (applyStructuredFields()) {
+                            haptics.confirm()
+                            return@Button
+                        }
+                        if (title.isNotBlank()) {
+                            val finalStart = parseDateTimeValue(startDate, startTime, timeFormatter)
+                            val finalEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
 
-                Column(
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                            if (finalStart == null || finalEnd == null) {
+                                haptics.error()
+                                onShowMessage("时间格式无效，请重新选择")
+                                return@Button
+                            }
+
+                            if (!finalEnd.isAfter(finalStart)) {
+                                haptics.error()
+                                onShowMessage("结束时间必须晚于开始时间")
+                                return@Button
+                            }
+
+                            val zone = java.time.ZoneId.systemDefault()
+                            val startEpoch = finalStart.atZone(zone).toEpochSecond()
+                            val endEpoch = finalEnd.atZone(zone).toEpochSecond()
+                            val reminderList = reminders.toList()
+                            val nextColor = if (eventColors.isNotEmpty()) eventColors[currentEventsCount % eventColors.size] else Color.Gray
+                            val patch = EventPatch(
+                                title = title,
+                                startTS = startEpoch,
+                                endTS = endEpoch,
+                                location = location,
+                                description = stripSourceImageMarkers(desc),
+                                color = editDraft?.color ?: nextColor.toArgb(),
+                                tag = eventTag,
+                                rrule = repeatSpec?.toRRule().orEmpty(),
+                                reminder1Minutes = reminderList.getOrElse(0) { -1 },
+                                reminder2Minutes = reminderList.getOrElse(1) { -1 },
+                                reminder3Minutes = reminderList.getOrElse(2) { -1 },
+                                pendingAttachmentKey = pendingAttachmentKey,
+                                pendingAttachmentUris = emptyList()
+                            )
+                            haptics.confirm()
+                            onConfirm(patch)
+                        } else {
+                            haptics.error()
+                        }
+                    }) { Text(if (activeStructuredSpec != null) "完成" else if (embedded) "保存" else "确定") }
+    }
+    val editorFields: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
+        if (embedded && !isEditing && onSwitchType != null) TextButton(onClick = onSwitchType, enabled = !dirty) { Text("改为新建课程") }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
@@ -534,7 +557,7 @@ fun MaterialAddEventDialog(
                     OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
                 }
 
-                    AttachmentSection(
+                    if (!embedded || attachments.isEmpty()) AttachmentSection(
                         attachments = attachments,
                         onAddClick = { haptics.click(); attachmentPickerLauncher.launch(arrayOf("*/*")) },
                         onOpenAttachment = onOpenAttachment,
@@ -542,60 +565,91 @@ fun MaterialAddEventDialog(
                         hapticEnabled = settings.hapticFeedbackEnabled,
                     )
 
+    }
+    val editorForm: @Composable () -> Unit = {
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (!embedded) Column(modifier = Modifier.padding(24.dp)) {
+                    Text(if (!isEditing) "新增日程" else "编辑日程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
 
-                Row(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { haptics.click(); onDismiss() }) { Text("取消") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = {
-                        if (applyStructuredFields()) {
-                            haptics.confirm()
-                            return@Button
-                        }
-                        if (title.isNotBlank()) {
-                            val finalStart = parseDateTimeValue(startDate, startTime, timeFormatter)
-                            val finalEnd = parseDateTimeValue(endDate, endTime, timeFormatter)
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    editorFields()
+                }
 
-                            if (finalStart == null || finalEnd == null) {
-                                haptics.error()
-                                onShowMessage("时间格式无效，请重新选择")
-                                return@Button
-                            }
+                if (!embedded) Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End, content = editorActions)
+            }
+    }
 
-                            if (!finalEnd.isAfter(finalStart)) {
-                                haptics.error()
-                                onShowMessage("结束时间必须晚于开始时间")
-                                return@Button
-                            }
-
-                            val zone = java.time.ZoneId.systemDefault()
-                            val startEpoch = finalStart.atZone(zone).toEpochSecond()
-                            val endEpoch = finalEnd.atZone(zone).toEpochSecond()
-                            val reminderList = reminders.toList()
-                            val nextColor = if (eventColors.isNotEmpty()) eventColors[currentEventsCount % eventColors.size] else Color.Gray
-                            val patch = EventPatch(
-                                title = title,
-                                startTS = startEpoch,
-                                endTS = endEpoch,
-                                location = location,
-                                description = stripSourceImageMarkers(desc),
-                                color = editDraft?.color ?: nextColor.toArgb(),
-                                tag = eventTag,
-                                rrule = repeatSpec?.toRRule().orEmpty(),
-                                reminder1Minutes = reminderList.getOrElse(0) { -1 },
-                                reminder2Minutes = reminderList.getOrElse(1) { -1 },
-                                reminder3Minutes = reminderList.getOrElse(2) { -1 },
-                                pendingAttachmentKey = pendingAttachmentKey,
-                                pendingAttachmentUris = emptyList()
-                            )
-                            haptics.confirm()
-                            onConfirm(patch)
-                        } else {
-                            haptics.error()
-                        }
-                    }) { Text(if (activeStructuredSpec != null) "完成" else "确定") }
+    val glassSettings = LocalAppGlassSettings.current
+    val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
+    CompositionLocalProvider(
+        LocalAppGlassSettings provides glassSettings.copy(overlayBackdrop = childDialogBackdrop)
+    ) {
+        if (embedded) {
+            AppDetailWorkspace(
+                title = if (!editing) "日程详情" else if (isEditing) "编辑日程" else "新建日程",
+                onClose = close,
+                scrollState = rememberScrollState(),
+                actions = {
+                    if (editing) editorActions()
+                    else if (!LocalDetailReadOnly.current) TextButton(onClick = { editing = true }) { Text("编辑") }
+                },
+                attachment = if (attachments.isEmpty()) null else ({
+                    AttachmentSection(attachments,
+                        onAddClick = { attachmentPickerLauncher.launch(arrayOf("*/*")) },
+                        onOpenAttachment = onOpenAttachment, onDeleteAttachment = onDeleteAttachment,
+                        hapticEnabled = settings.hapticFeedbackEnabled)
+                }),
+            ) {
+                if (editing) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { editorFields() } else {
+                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(24.dp))
+                    Text("$startDate  $startTime — $endDate  $endTime", style = MaterialTheme.typography.bodyLarge)
+                    if (location.isNotBlank()) Text(location, Modifier.padding(top = 20.dp))
+                    Text("提醒：" + if (reminders.isEmpty()) "无" else reminders.joinToString { "${it}分钟前" }, Modifier.padding(top = 20.dp))
+                    repeatSpec?.let { Text(it.summary(), Modifier.padding(top = 12.dp)) }
+                    if (desc.isNotBlank()) Text(desc, Modifier.padding(top = 24.dp))
+                    editDraft?.editHint?.let { Text(it, Modifier.padding(top = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
+        } else Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            DialogEdgeToEdgeEffect(isDarkTheme = settings.isDarkMode)
+            if (glassSettings.active) DisableDialogWindowDimEffect()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
+            ) {
+                CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
+                    PredictiveBottomDialogHost(
+                        visible = visible,
+                        onDismiss = onDismiss,
+                        predictiveBackEnabled = settings.predictiveBackEnabled && !isChildDialogVisible,
+                        backHandlerEnabled = !isChildDialogVisible,
+                        scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
+                        contentAlignment = Alignment.Center,
+                        contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues()
+                    ) {
+                        AppOverlayCard(
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .widthIn(max = 720.dp)
+                                .fillMaxWidth()
+                                .heightIn(max = 670.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+            editorForm()
                         }
                         }
                     }

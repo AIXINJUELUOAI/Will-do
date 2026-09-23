@@ -14,8 +14,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,8 +42,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -70,10 +77,15 @@ import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherData
 import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherHourlyForecast
 import com.antgskds.calendarassistant.feature.weather.domain.model.WeatherRiskAlert
 import com.antgskds.calendarassistant.feature.weather.domain.model.displayLocationName
+import com.antgskds.calendarassistant.feature.settings.developer.application.DemoModeDataFactory
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
 import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiAction
 import com.antgskds.calendarassistant.feature.weather.ui.contract.WeatherDetailUiState
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneLayout
+import com.antgskds.calendarassistant.shared.ui.adaptive.AdaptiveTwoPaneTopBar
+import com.antgskds.calendarassistant.shared.ui.adaptive.LocalAdaptiveLayoutInfo
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -83,9 +95,13 @@ import java.util.Locale
 fun WeatherDetailPage(uiSize: Int = 2) {
     val app = LocalContext.current.applicationContext as App
     val weatherData by app.weatherQueryApi.weatherData.collectAsState()
+    val settings by app.settingsQueryApi.settings.collectAsState()
+    val displayedWeather = if (settings.developerOptionsEnabled && settings.developerDemoModeEnabled) {
+        DemoModeDataFactory.weather(LocalDate.now())
+    } else weatherData
     MaterialWeatherDetailPage(
         state = WeatherDetailUiState(
-            weatherData = weatherData,
+            weatherData = displayedWeather,
             hasAppBackground = false,
             miuiBlurEnabled = false,
             cardAlphaPercent = 100
@@ -98,8 +114,23 @@ fun WeatherDetailPage(uiSize: Int = 2) {
 fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
     val weatherData = state.weatherData
     val bottomInset = LocalAppPageBottomPadding.current
+    val useTwoPane = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    if (useTwoPane) {
+        AdaptiveTwoPaneLayout(
+            primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
+            primary = {
+                WeatherScrollablePane(bottomInset) {
+                    WeatherCurrentContent(weatherData, expanded = true)
+                }
+            },
+            secondary = {
+                WeatherScrollablePane(bottomInset, horizontalPadding = ConfigCatalog.ADAPTIVE_CONTENT_PADDING_DP.dp) {
+                    WeatherForecastContent(weatherData, expanded = true)
+                }
+            },
+        )
+    } else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier
                 .widthIn(max = 960.dp)
@@ -108,32 +139,76 @@ fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            WeatherDetailCurrentCard(weatherData)
-
-            if (weatherData?.alerts?.isNotEmpty() == true || weatherData?.riskAlerts?.isNotEmpty() == true) {
-                SectionTitle("预警与风险")
-                WeatherWarningsCard(
-                    alerts = weatherData?.alerts.orEmpty(),
-                    risks = weatherData?.riskAlerts.orEmpty()
-                )
-            }
-
-            SectionTitle("未来24小时")
-            HourlyTemperatureChart(weatherData?.hourlyForecast.orEmpty())
-
-            SectionTitle("未来一周")
-            DailyForecastList(weatherData?.dailyForecast.orEmpty())
-
-            if (weatherData == null) {
-                Text(
-                    text = "暂无天气缓存，请先在天气设置页保存并刷新。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
+            WeatherCurrentContent(weatherData, expanded = false)
+            WeatherForecastContent(weatherData, expanded = false)
             Spacer(modifier = Modifier.height(bottomInset + 24.dp))
         }
+    }
+}
+
+@Composable
+private fun WeatherScrollablePane(
+    bottomInset: Dp,
+    horizontalPadding: Dp = 16.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        content()
+        Spacer(modifier = Modifier.height(bottomInset + 24.dp))
+    }
+}
+
+@Composable
+private fun ColumnScope.WeatherCurrentContent(weatherData: WeatherData?, expanded: Boolean) {
+    WeatherDetailCurrentCard(weatherData)
+    if (expanded && weatherData != null) {
+        SectionTitle("今日概况")
+        WeatherTodayOverview(weatherData)
+    }
+    if (weatherData?.alerts?.isNotEmpty() == true || weatherData?.riskAlerts?.isNotEmpty() == true) {
+        SectionTitle("预警与风险")
+        WeatherWarningsCard(
+            alerts = weatherData?.alerts.orEmpty(),
+            risks = weatherData?.riskAlerts.orEmpty(),
+        )
+    }
+}
+
+@Composable
+private fun ColumnScope.WeatherForecastContent(weatherData: WeatherData?, expanded: Boolean) {
+    if (expanded) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionTitle("未来24小时")
+            WeatherHourlySummary(weatherData?.hourlyForecast.orEmpty())
+            HourlyTemperatureChart(weatherData?.hourlyForecast.orEmpty())
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionTitle("未来一周")
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                DailyForecastList(
+                    weatherData?.dailyForecast.orEmpty(),
+                    showDetails = maxWidth >= ConfigCatalog.ADAPTIVE_WEATHER_TABLE_MIN_WIDTH_DP.dp,
+                )
+            }
+        }
+    } else {
+        SectionTitle("未来24小时")
+        HourlyTemperatureChart(weatherData?.hourlyForecast.orEmpty())
+        SectionTitle("未来一周")
+        DailyForecastList(weatherData?.dailyForecast.orEmpty())
+    }
+    if (weatherData == null) {
+        Text(
+            text = "暂无天气缓存，请先在天气设置页保存并刷新。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -141,22 +216,31 @@ fun MaterialWeatherDetailPage(state: WeatherDetailUiState, uiSize: Int = 2) {
 @Composable
 fun WeatherDetailScreen(
     uiSize: Int = 2,
+    showBack: Boolean = true,
+    showSettings: Boolean = false,
+    onOpenSettings: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val app = LocalContext.current.applicationContext as App
     val weatherData by app.weatherQueryApi.weatherData.collectAsState()
     val settings by app.settingsQueryApi.settings.collectAsState()
+    val displayedWeather = if (settings.developerOptionsEnabled && settings.developerDemoModeEnabled) {
+        DemoModeDataFactory.weather(LocalDate.now())
+    } else weatherData
     MaterialWeatherDetailScreen(
         state = WeatherDetailUiState(
-            weatherData = weatherData,
+            weatherData = displayedWeather,
             hasAppBackground = settings.appBackgroundImagePath.isNotBlank(),
             miuiBlurEnabled = settings.appBackgroundMiuiBlurTestEnabled,
             cardAlphaPercent = settings.appBackgroundCardAlphaPercent
         ),
         uiSize = uiSize,
+        showBack = showBack,
+        showSettings = showSettings,
         onAction = { action ->
             when (action) {
                 WeatherDetailUiAction.NavigateBack -> onBack()
+                WeatherDetailUiAction.OpenSettings -> onOpenSettings()
             }
         }
     )
@@ -167,10 +251,23 @@ fun WeatherDetailScreen(
 fun MaterialWeatherDetailScreen(
     state: WeatherDetailUiState,
     uiSize: Int = 2,
+    showBack: Boolean = true,
+    showSettings: Boolean = false,
     onAction: (WeatherDetailUiAction) -> Unit
 ) {
     val pageContainerColor = if (state.hasAppBackground) Color.Transparent else MaterialTheme.colorScheme.background
     val haptics = rememberAppHaptics()
+    val useTwoPane = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
+    val settingsAction: @Composable RowScope.() -> Unit = {
+        if (showSettings) {
+            IconButton(onClick = {
+                haptics.click()
+                onAction(WeatherDetailUiAction.OpenSettings)
+            }) {
+                Icon(Icons.Default.Settings, contentDescription = "天气设置")
+            }
+        }
+    }
     AppBackgroundStyleTheme(
         enabled = state.hasAppBackground,
         miuiBlurEnabled = state.miuiBlurEnabled,
@@ -178,15 +275,28 @@ fun MaterialWeatherDetailScreen(
     ) {
     AppPageScaffold(
         edgeToEdgeContent = true,
+        contentMaxWidth = if (useTwoPane) Dp.Unspecified else 960.dp,
         containerColor = pageContainerColor,
         topBar = {
-            AppTopBar(
-                title = "天气详情",
-                containerColor = pageContainerColor,
-                navigationIcon = {
-                    AppTopBarBackButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) })
-                },
-            )
+            if (useTwoPane) {
+                AdaptiveTwoPaneTopBar(
+                    primaryTitle = "天气",
+                    secondaryTitle = "天气预报",
+                    primaryWidth = ConfigCatalog.ADAPTIVE_COMPACT_PANE_WIDTH_DP.dp,
+                    secondaryActions = settingsAction,
+                )
+            } else {
+                AppTopBar(
+                    title = "天气详情",
+                    containerColor = pageContainerColor,
+                    navigationIcon = {
+                        if (showBack) {
+                            AppTopBarBackButton(onClick = { haptics.click(); onAction(WeatherDetailUiAction.NavigateBack) })
+                        }
+                    },
+                    actions = settingsAction,
+                )
+            }
         },
     ) {
         MaterialWeatherDetailPage(state = state, uiSize = uiSize)
@@ -279,6 +389,80 @@ private fun CurrentMetric(label: String, value: String, modifier: Modifier = Mod
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun WeatherTodayOverview(data: WeatherData) {
+    val today = data.dailyForecast.firstOrNull()
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WeatherOverviewMetric("降水", data.precip.takeIf { it.isNotBlank() }?.let { "${it}mm" } ?: "--", Modifier.weight(1f))
+                WeatherOverviewMetric("气压", data.pressure.takeIf { it.isNotBlank() }?.let { "${it}hPa" } ?: "--", Modifier.weight(1f))
+                WeatherOverviewMetric("风速", data.windSpeed.takeIf { it.isNotBlank() }?.let { "${it}km/h" } ?: "--", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WeatherOverviewMetric("紫外线", today?.uvIndex.orEmpty().ifBlank { "--" }, Modifier.weight(1f))
+                WeatherOverviewMetric("日出", today?.sunrise.orEmpty().ifBlank { "--" }, Modifier.weight(1f))
+                WeatherOverviewMetric("日落", today?.sunset.orEmpty().ifBlank { "--" }, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherHourlySummary(hours: List<WeatherHourlyForecast>) {
+    if (hours.isEmpty()) return
+    val values = hours.take(24)
+    val temperatures = values.mapNotNull { it.temp.toIntOrNull() }
+    val precipitation = values.mapNotNull { it.pop.toIntOrNull() }.maxOrNull()
+    val humidity = values.mapNotNull { it.humidity.toIntOrNull() }.let { list ->
+        if (list.isEmpty()) null else list.average().toInt()
+    }
+    val windSpeed = values.mapNotNull { it.windSpeed.toIntOrNull() }.maxOrNull()
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
+    ) {
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            WeatherOverviewMetric(
+                "温度范围",
+                if (temperatures.isEmpty()) "--" else "${temperatures.min()}° / ${temperatures.max()}°",
+                Modifier.weight(1f).fillMaxHeight(),
+            )
+            WeatherOverviewMetric("最高降水", precipitation?.let { "$it%" } ?: "--", Modifier.weight(1f).fillMaxHeight())
+            WeatherOverviewMetric("平均湿度", humidity?.let { "$it%" } ?: "--", Modifier.weight(1f).fillMaxHeight())
+            WeatherOverviewMetric("最大风速", windSpeed?.let { "${it}km/h" } ?: "--", Modifier.weight(1f).fillMaxHeight())
+        }
+    }
+}
+
+@Composable
+private fun WeatherOverviewMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -619,7 +803,7 @@ private fun HourlyChartMarker(
 }
 
 @Composable
-private fun DailyForecastList(days: List<WeatherDailyForecast>) {
+private fun DailyForecastList(days: List<WeatherDailyForecast>, showDetails: Boolean = false) {
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -637,7 +821,7 @@ private fun DailyForecastList(days: List<WeatherDailyForecast>) {
 
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             days.take(7).forEachIndexed { index, day ->
-                DailyForecastRow(day = day)
+                DailyForecastRow(day = day, showDetails = showDetails)
                 if (index != days.take(7).lastIndex) CompactDivider()
             }
         }
@@ -645,7 +829,7 @@ private fun DailyForecastList(days: List<WeatherDailyForecast>) {
 }
 
 @Composable
-private fun DailyForecastRow(day: WeatherDailyForecast) {
+private fun DailyForecastRow(day: WeatherDailyForecast, showDetails: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val haptics = rememberAppHaptics()
     Column(
@@ -677,7 +861,23 @@ private fun DailyForecastRow(day: WeatherDailyForecast) {
                 modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(10.dp))
+            if (showDetails) {
+                Column(Modifier.width(88.dp), horizontalAlignment = Alignment.End) {
+                    Text(day.precip.takeIf { it.isNotBlank() }?.let { "${it}mm" } ?: "--",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("降水", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.width(116.dp), horizontalAlignment = Alignment.End) {
+                    Text("${day.windDirDay.ifBlank { "--" }} ${day.windScaleDay.ifBlank { "--" }}级",
+                        style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("风力", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(16.dp))
+            }
             Text(
+                modifier = if (showDetails) Modifier.width(100.dp) else Modifier,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
                 text = "${day.tempMin.ifBlank { "--" }}°/${day.tempMax.ifBlank { "--" }}°",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface

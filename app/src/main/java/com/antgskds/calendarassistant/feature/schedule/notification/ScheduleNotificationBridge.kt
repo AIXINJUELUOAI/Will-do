@@ -63,7 +63,9 @@ class ScheduleNotificationBridge(
                     .map { it.minutes }
                     .distinct()
                     .forEach { offsetMinutes ->
-                        desiredKeys.add(NotificationKey.scheduleReminder(instanceKey, offsetMinutes).value)
+                        if (com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(event.tag, (event.startTS - offsetMinutes * 60L) * 1000L, settings)) {
+                            desiredKeys.add(NotificationKey.scheduleReminder(instanceKey, offsetMinutes).value)
+                        }
                     }
             }
             submitEventNotifications(
@@ -102,7 +104,7 @@ class ScheduleNotificationBridge(
             if (cancelInactive) cancelKnownScheduleNotifications(instanceKey, eventId)
             return
         }
-        if (event.state != STATE_PENDING || event.archivedAt != null || event.endTS <= nowEpochSeconds()) {
+        if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(event, settings) || event.state != STATE_PENDING || event.archivedAt != null || event.endTS <= nowEpochSeconds()) {
             if (cancelInactive) cancelKnownScheduleNotifications(instanceKey, eventId)
             return
         }
@@ -115,6 +117,7 @@ class ScheduleNotificationBridge(
         val reminders = ReminderPolicy.effectiveReminders(event, settings).map { it.minutes }.distinct()
         reminders.forEach { offsetMinutes ->
             val triggerAtMillis = (event.startTS - offsetMinutes * 60L) * 1000L
+            if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(event.tag, triggerAtMillis, settings)) return@forEach
             val request = buildScheduleReminderRequest(
                 event = event,
                 eventId = eventId,
@@ -253,8 +256,9 @@ class ScheduleNotificationBridge(
             val offsets = ReminderPolicy.effectiveReminders(parent, settings).map { it.minutes }.distinct()
             for (offsetMinutes in offsets) {
                 val key = NotificationKey.scheduleReminder(instanceKey, offsetMinutes)
-                desiredKeys.add(key.value)
                 val triggerAtMillis = (item.startTS - offsetMinutes * 60L) * 1000L
+                if (!com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(item.tag, triggerAtMillis, settings)) continue
+                desiredKeys.add(key.value)
                 val request = buildOccurrenceReminderRequest(item, parent, instanceKey, offsetMinutes, triggerAtMillis)
                 val existing = notificationApi.get(key)
                 val action = when {
