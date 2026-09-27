@@ -132,9 +132,11 @@ class CapsuleStateManager(
         val textQuickMemo: OcrCapsuleState?,
         val quickMemoRecording: OcrCapsuleState?,
         val accounting: OcrCapsuleState? = null,
+        val imagePin: OcrCapsuleState? = null,
     )
 
     private val ocrCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
+    private val imagePinCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
     private val accountingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
     private var accountingAutoClearJob: Job? = null
     private val modelLoadingCapsuleState = MutableStateFlow<OcrCapsuleState?>(null)
@@ -281,6 +283,20 @@ class CapsuleStateManager(
         )
         scheduleVoiceTranscriptionAutoClear(effectiveDurationMs)
     }
+
+    fun showImagePin(id: Long, count: Int) {
+        val now = System.currentTimeMillis()
+        val display = CapsuleDisplayModel.imagePin(id, count,
+            endAction = CapsuleActionSpec("结束挂起", com.antgskds.calendarassistant.platform.receiver.EventActionReceiver.ACTION_CLEAR_IMAGE_PIN,
+                "image_pin_id", id))
+        imagePinCapsuleState.value = OcrCapsuleState(id = "IMAGE_PIN_" + id,
+            notifId = NotificationIds.IMAGE_PIN, type = CapsuleType.IMAGE_PIN, eventType = "image_pin",
+            title = display.primaryText, content = display.secondaryText.orEmpty(), description = display.expandedText.orEmpty(),
+            color = android.graphics.Color.parseColor("#7C4DFF"), startMillis = now, endMillis = Long.MAX_VALUE,
+            display = display, expiresAt = null)
+    }
+
+    fun clearImagePin() { imagePinCapsuleState.value = null }
 
     fun showTextQuickMemo(memoId: Long, title: String, durationMs: Long = 0L) {
         val cleanTitle = title.trim().takeIf { it.isNotEmpty() } ?: return
@@ -551,8 +567,9 @@ class CapsuleStateManager(
             baseTransientCombine,
             quickMemoRecordingCapsuleState,
             accountingCapsuleState,
-        ) { transient, quickMemoRecording, accounting ->
-            transient.copy(quickMemoRecording = quickMemoRecording, accounting = accounting)
+            imagePinCapsuleState,
+        ) { transient, quickMemoRecording, accounting, imagePin ->
+            transient.copy(quickMemoRecording = quickMemoRecording, accounting = accounting, imagePin = imagePin)
         }
 
         return combine(baseCombine, networkSpeedState, capsuleTransientCombine) { (events, settings), networkSpeed, transient ->
@@ -631,8 +648,10 @@ class CapsuleStateManager(
         }
 
         val activeAccounting = transient.accounting?.takeIf { it.expiresAt == null || nowMillis < it.expiresAt }
-        if ((activeAccounting != null || activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null || activeQuickMemoRecordingCapsule != null) && settings.isLiveCapsuleEnabled) {
+        val activeImagePin = transient.imagePin?.takeIf { com.antgskds.calendarassistant.feature.imagepin.ImagePinPolicy.canPublish(settings) }
+        if ((activeImagePin != null || activeAccounting != null || activeOcrCapsule != null || activeModelLoadingCapsule != null || activeWeatherCapsules.isNotEmpty() || activeVoiceTranscriptionCapsule != null || activeTextQuickMemoCapsule != null || activeQuickMemoRecordingCapsule != null) && settings.isLiveCapsuleEnabled) {
             val transientItems = buildList {
+                activeImagePin?.let { add(createTransientCapsuleItem(it)) }
                 activeAccounting?.let { add(createTransientCapsuleItem(it)) }
                 activeQuickMemoRecordingCapsule?.let { state ->
                     add(createTransientCapsuleItem(state))

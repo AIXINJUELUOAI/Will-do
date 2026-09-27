@@ -167,7 +167,7 @@ object MiuiIslandManager {
             CapsuleType.MODEL_LOADING,
             CapsuleType.QUICK_MEMO_RECORDING,
             CapsuleType.TEXT_QUICK_MEMO,
-            CapsuleType.QUICK_MEMO_REMINDER -> true
+            CapsuleType.IMAGE_PIN, CapsuleType.QUICK_MEMO_REMINDER -> true
             else -> false
         }
     }
@@ -253,6 +253,9 @@ object MiuiIslandManager {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): PendingIntent {
+        item.display.tapImagePinId?.let { id ->
+            return com.antgskds.calendarassistant.platform.entry.image.ImagePinHandleActivity.viewPendingIntent(context, id)
+        }
         val tapEventId = item.display.tapEventId?.toLongOrNull()
         val tapQuickMemoId = item.display.tapQuickMemoId?.toLongOrNull()
         val tapIntent = Intent(context, if (tapEventId != null || tapQuickMemoId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
@@ -280,7 +283,7 @@ object MiuiIslandManager {
     private fun computeTimeout(item: CapsuleUiState.Active.CapsuleItem): Int {
         val remaining = (item.endMillis - System.currentTimeMillis()) / 1000
         if (remaining <= 0) return MIN_TIMEOUT_SECS
-        return remaining.toInt().coerceIn(MIN_TIMEOUT_SECS, MAX_TIMEOUT_SECS)
+        return remaining.coerceIn(MIN_TIMEOUT_SECS.toLong(), MAX_TIMEOUT_SECS.toLong()).toInt()
     }
 
     private fun formatHighlightColor(color: Int): String {
@@ -311,6 +314,7 @@ object MiuiIslandManager {
             CapsuleType.OCR_RESULT -> "已完成"
             CapsuleType.WEATHER_ALERT -> "天气提醒"
             CapsuleType.VOICE_TRANSCRIPTION -> "语音转写"
+            CapsuleType.IMAGE_PIN -> "图片挂起"
             CapsuleType.TEXT_QUICK_MEMO -> "随口记"
             CapsuleType.QUICK_MEMO_REMINDER -> "随口记提醒"
             CapsuleType.QUICK_MEMO_RECORDING -> "录音中"

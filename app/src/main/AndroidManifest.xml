@@ -135,10 +135,11 @@
             android:taskAffinity=""
             android:exported="false" />
 
-        <!-- 系统图片分享入口：由 activity-alias 暴露两个 Sharesheet 目标，入口内不再弹二级菜单 -->
+        <!-- 系统图片分享入口：由 activity-alias 暴露 Sharesheet 目标，入口内不再弹二级菜单 -->
         <activity
             android:name=".core.service.image.ImageShareHandleActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.CalendarAssistant.ShareRelay"
+            android:resizeableActivity="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity=""
@@ -169,7 +170,7 @@
             android:name=".core.service.image.ImageShareQuickMemoActivity"
             android:targetActivity=".core.service.image.ImageShareHandleActivity"
             android:label="@string/share_target_create_image_memo"
-            android:icon="@drawable/ic_stat_quickmemo"
+            android:icon="@drawable/ic_share_image_memo"
             android:exported="true">
             <meta-data
                 android:name="com.antgskds.calendarassistant.meta.SHARE_MODE"
@@ -180,6 +181,22 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
             <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity android:name=".platform.entry.image.ImagePinHandleActivity"
+            android:theme="@style/Theme.CalendarAssistant.ShareRelay"
+            android:resizeableActivity="false"
+            android:excludeFromRecents="true" android:taskAffinity="" android:exported="false" />
+        <activity-alias android:name=".platform.entry.image.ImagePinShareActivity"
+            android:targetActivity=".platform.entry.image.ImagePinHandleActivity"
+            android:label="图片挂起" android:icon="@drawable/ic_share_image_pin"
+            android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
@@ -238,6 +255,18 @@
             android:name=".platform.tile.CaptureTileService"
             android:icon="@drawable/ic_qs_recognition"
             android:label="识别日程"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- 用户主动截图并追加到图片挂起，不调用识别。 -->
+        <service
+            android:name=".platform.tile.ImagePinTileService"
+            android:icon="@drawable/ic_stat_image_pin"
+            android:label="截图挂起"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
             <intent-filter>

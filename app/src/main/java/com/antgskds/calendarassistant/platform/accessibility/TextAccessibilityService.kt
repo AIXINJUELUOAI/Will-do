@@ -17,6 +17,7 @@ import android.view.Display
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.antgskds.calendarassistant.App
+import com.antgskds.calendarassistant.feature.imagepin.ImagePinPolicy
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
 import com.antgskds.calendarassistant.feature.recognition.application.ai.RecognitionFailureMessageMapper
 import com.antgskds.calendarassistant.feature.recognition.application.ai.isRecognitionConfigReady
@@ -60,6 +61,7 @@ class TextAccessibilityService : AccessibilityService() {
                 "task_failed task=${context[CoroutineName]?.name ?: "service"} error=${error.javaClass.simpleName}")
         })
     private var analysisJob: Job? = null
+    private var imagePinJob: Job? = null
     private var automaticTriggerJob: Job? = null
     private var wechatTriggerJob: Job? = null
     private var detailTriggerJob: Job? = null
@@ -153,7 +155,7 @@ class TextAccessibilityService : AccessibilityService() {
             logServiceHealth("event_received_after_gap", gap)
         }
     }
-    private val paymentDiagnostics by lazy { PaymentAccessibilityDiagnostics(this) { refreshKeyEventFiltering() } }
+    private val paymentDiagnostics by lazy { PaymentAccessibilityDiagnostics(this) }
 
     suspend fun startPaymentDiagnostics() {
         logServiceHealth("diagnostic_requested")
@@ -561,9 +563,8 @@ class TextAccessibilityService : AccessibilityService() {
                 isVolumeUpPressed = false
                 baseFlags
             }
-            val nextFlags = if (paymentDiagnostics.isActive) keyFlags or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            else keyFlags
+            // 窗口能力固定启用；诊断开始和结束不再重新配置系统连接。
+            val nextFlags = keyFlags
 
             if (info.flags != nextFlags) {
                 logServiceHealth("configuration_before_update")
@@ -839,6 +840,7 @@ class TextAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        imagePinJob?.cancel()
         logServiceHealth("unbound")
         paymentDiagnostics.finish("service_unbound")
         logAutomatic("service", "state=unbound")
@@ -960,6 +962,49 @@ class TextAccessibilityService : AccessibilityService() {
         }, 180) // 微调至 180ms，避开部分设备 150ms 时的动画临界态
 
         return syncSuccess
+    }
+
+    /** 磁贴主动截图；复用截图互斥和系统回调，结果只进入图片挂起。 */
+    fun startImagePinCapture() {
+        fun hint(message: String) = android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+        if (instance !== this || !serviceScope.isActive) { hint("无障碍服务暂不可用"); return }
+        ImagePinPolicy.captureBlockReason(this, settingsQueryApi.settings.value)?.let { hint(it); return }
+        if (paymentDiagnostics.isActive) { hint("请先结束支付诊断，再截图挂起"); return }
+        if (!isAnalyzing.compareAndSet(false, true)) { hint("当前截图或识别尚未结束，请稍后重试"); return }
+        imagePinJob = serviceScope.launch(CoroutineName("image_pin_capture"), start = CoroutineStart.UNDISPATCHED) {
+            try {
+                closeNotificationPanel()
+                delay(MySettings.normalizeScreenshotDelayMs(settingsQueryApi.settings.value.screenshotDelayMs))
+                ImagePinPolicy.captureBlockReason(this@TextAccessibilityService, settingsQueryApi.settings.value)?.let { error(it) }
+                val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+                check(!keyguard.isKeyguardLocked) { "请解锁后重新点击截图挂起" }
+                val root = rootInActiveWindow
+                val panelVisible = try { root?.packageName?.toString()?.endsWith(".systemui") == true }
+                    finally { root?.recycle() }
+                check(!panelVisible) { "控制中心尚未收起，请稍后重试" }
+                val screenshot = captureScreenshot()
+                try {
+                    check(!keyguard.isKeyguardLocked) { "请解锁后重新点击截图挂起" }
+                    withContext(Dispatchers.IO) {
+                        val hardware = checkNotNull(Bitmap.wrapHardwareBuffer(screenshot.hardwareBuffer, screenshot.colorSpace)) {
+                            "截图无法读取"
+                        }
+                        val bitmap = try { checkNotNull(hardware.copy(Bitmap.Config.ARGB_8888, false)) }
+                            finally { hardware.recycle() }
+                        try { app.imagePinController.pinScreenshot(bitmap) } finally { bitmap.recycle() }
+                    }
+                } finally { screenshot.hardwareBuffer.close() }
+                hint("截图已挂起")
+            } catch (e: TimeoutCancellationException) {
+                hint("截图超时，请重试")
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                hint(if (e is IllegalStateException && e.message?.startsWith("screenshot:") == false)
+                    e.message ?: "截图挂起失败" else "当前页面无法截图，请稍后重试或换个页面")
+            } finally {
+                isAnalyzing.set(false)
+            }
+        }
     }
 
     fun startAnalysis(delayDuration: Duration = 500.milliseconds, fromShortcut: Boolean = false) {

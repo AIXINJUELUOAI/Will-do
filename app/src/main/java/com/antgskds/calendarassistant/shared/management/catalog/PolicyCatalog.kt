@@ -51,6 +51,7 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("图片挂起开关", Chain.NOTIFICATION, "feature/imagepin/ImagePinPolicy", Maturity.ACTIVE, "实验室开关控制入口和生命周期；发布还需要实况通知开启，截图磁贴在采集前后核实通知、渠道和悬浮窗权限"),
         PolicyEntry("课表功能开关", Chain.SCHEDULE, "feature/schedule/domain/course/CourseFeaturePolicy", Maturity.ACTIVE,
             "统一课程入口、展示和提醒判断；独立保留下滑偏好，恢复后不补发停用期间的课程提醒"),
 

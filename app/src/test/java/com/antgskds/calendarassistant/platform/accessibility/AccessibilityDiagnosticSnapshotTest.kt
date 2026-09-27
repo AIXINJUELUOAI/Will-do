@@ -5,20 +5,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AccessibilityDiagnosticSnapshotTest {
-    @Test fun firstConnectionOnlyRemovesTheManagedKeyFlag() {
+    @Test fun firstConnectionEnablesWindowCapabilitiesAndRemovesTheManagedKeyFlag() {
         val original = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
             AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        assertEquals(original, AccessibilityDiagnosticSnapshot.connectionBaseFlags(
+        assertEquals(original or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS,
+            AccessibilityDiagnosticSnapshot.connectionBaseFlags(
             null, original or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS,
         ))
     }
 
-    @Test fun reconnectDuringDiagnosticsDoesNotPromoteTemporaryFlagsToBaseline() {
+    @Test fun reconnectPreservesBaselineAndKeepsWindowCapabilitiesEnabled() {
         val original = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         val diagnostic = original or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
             AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
-        assertEquals(original, AccessibilityDiagnosticSnapshot.connectionBaseFlags(original, diagnostic))
-        assertEquals(0, AccessibilityDiagnosticSnapshot.connectionBaseFlags(0, diagnostic))
+        val windowFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        assertEquals(original or windowFlags, AccessibilityDiagnosticSnapshot.connectionBaseFlags(original, diagnostic))
+        assertEquals(windowFlags, AccessibilityDiagnosticSnapshot.connectionBaseFlags(0, diagnostic))
     }
 
     @Test fun historyOnlyIncludesDedicatedHealthRecords() {

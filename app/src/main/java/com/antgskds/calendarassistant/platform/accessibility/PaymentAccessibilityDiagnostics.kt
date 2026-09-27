@@ -24,7 +24,6 @@ import kotlin.coroutines.resumeWithException
 /** 一次性诊断旁路：不依赖支付文字规则，不调用识别/入库 API。所有系统节点在主线程当场读取。 */
 class PaymentAccessibilityDiagnostics(
     private val service: TextAccessibilityService,
-    private val onFlagsChanged: () -> Unit,
 ) {
     private class Session(val directory: File) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -103,8 +102,7 @@ class PaymentAccessibilityDiagnostics(
             .put("capturePackages", JSONArray(AutomaticAccountingPolicy.diagnosticPackages.toList()))
             .put("serviceBeforeConfiguration", stateBeforeConfiguration)
             .put("durationMs", ConfigCatalog.PAYMENT_DIAGNOSTIC_DURATION_MS))
-        record(s, "service_health", stateBeforeConfiguration.put("phase", "before_diagnostic_configuration"))
-        onFlagsChanged() // 先保存原配置，再启用诊断临时标记，避免丢失故障现场。
+        record(s, "service_health", stateBeforeConfiguration.put("phase", "before_diagnostic_start"))
         s.healthLoop = s.scope.launch {
             while (s.active) {
                 sampleHealth(s)
@@ -357,7 +355,6 @@ class PaymentAccessibilityDiagnostics(
         s.finishing?.let { return it }
         record(s, "service_health", attempt { service.diagnosticServiceState() }.put("phase", "finishing").put("reason", reason))
         s.active = false
-        onFlagsChanged()
         return s.scope.async {
             s.timer.cancel()
             s.healthLoop.cancelAndJoin()
@@ -383,7 +380,7 @@ class PaymentAccessibilityDiagnostics(
                     采集微信、支付宝、拼多多、淘宝和京东的事件正文、source、多窗口与截图，包含购物 App 内嵌支付页。
                     events.jsonl：按行 JSON；event 为当场事件和 source；windows 为活动根及多窗口。
                     service_health 独立定时检查服务状态、实际监听配置、事件间隔与窗口身份，即使事件/截图为零也会记录。
-                    session_start.serviceBeforeConfiguration 保存诊断修改标记前的状态；instanceRegistered 仅为应用内引用，不证明系统连接健康。
+                    session_start.serviceBeforeConfiguration 保存诊断开始前的状态；instanceRegistered 仅为应用内引用，不证明系统连接健康。
                     systemServiceStatus.serviceListed 仅表示系统已启用服务，不证明微信正在投递事件。
                     service-health-before/final.log 附带本应用留存的基础状态日志（仅 WillDoAccessHealth），不包含支付正文。
                     自动记录日志关闭或超过既有保留/容量限制时，历史状态可能为空；本会话 service_health 不依赖该开关。
@@ -395,7 +392,7 @@ class PaymentAccessibilityDiagnostics(
                     screenshot_request/result 记录图片、对应时间/窗口、错误码；PNG 必须人工查看是否黑屏或区域缺失。
                     定时截图不依赖成功文字，采集范围内 App 的操作过程均可能被保存；无目标前台信号时不截图。
                     summary.json 标明采样及资源上限情况；没有图片不能直接断言系统禁止截图。
-                    自动结束和导出后会恢复无障碍配置与原有自动记账；Xposed 链路独立运行。
+                    诊断不切换无障碍配置，结束后恢复自动记账，导出失败也不保持暂停；Xposed 链路独立运行。
                 """.trimIndent())
                 exportDirectory(service, s.directory)
             }.also { path -> android.widget.Toast.makeText(service.applicationContext, "支付诊断已结束，已导出：$path", android.widget.Toast.LENGTH_LONG).show() }

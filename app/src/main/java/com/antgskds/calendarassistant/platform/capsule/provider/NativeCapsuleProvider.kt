@@ -97,6 +97,9 @@ class NativeCapsuleProvider : ICapsuleProvider {
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem
     ): PendingIntent {
+        item.display.tapImagePinId?.let { id ->
+            return com.antgskds.calendarassistant.platform.entry.image.ImagePinHandleActivity.viewPendingIntent(context, id)
+        }
         val tapEventId = item.display.tapEventId?.toLongOrNull()
         val tapQuickMemoId = item.display.tapQuickMemoId?.toLongOrNull()
         val tapIntent = Intent(context, if (tapEventId != null || tapQuickMemoId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {

@@ -280,7 +280,7 @@ class MainActivity : ComponentActivity() {
                     recreate()
                 }
             }
-            LaunchedEffect(settings.themeMode) {
+            LaunchedEffect(settings.themeMode, settings.imagePinEnabled) {
                 setupDynamicShortcuts()
             }
 
@@ -1015,10 +1015,15 @@ class MainActivity : ComponentActivity() {
             .setRank(3)
             .build()
 
-        val shortcuts = listOf(quickCaptureShortcut, floatingShortcut, quickMemoShortcut, startQuickMemoVoiceShortcut)
+        val shortcuts = buildList {
+            add(quickCaptureShortcut)
+            if (com.antgskds.calendarassistant.feature.imagepin.ImagePinPolicy.enabled(settings))
+                add(com.antgskds.calendarassistant.platform.entry.image.ImagePinHandleActivity.shortcut(this@MainActivity))
+            add(floatingShortcut); add(quickMemoShortcut); add(startQuickMemoVoiceShortcut)
+        }.take(ShortcutManagerCompat.getMaxShortcutCountPerActivity(this))
         ShortcutManagerCompat.removeDynamicShortcuts(
             this,
-            listOf("quick_capture", "open_floating", "open_floating_quick_memo", "start_quick_memo_voice")
+            listOf("quick_capture", "open_floating", "open_floating_quick_memo", "start_quick_memo_voice", "image_pin")
         )
         ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
         ShortcutManagerCompat.updateShortcuts(this, shortcuts)

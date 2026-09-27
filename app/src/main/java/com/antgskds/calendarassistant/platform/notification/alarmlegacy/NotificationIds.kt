@@ -16,6 +16,7 @@ object NotificationIds {
     const val IMAGE_SHARE_RECOGNITION_STATUS = 0x51A17
     const val QUICK_MEMO_RECORDING_CAPSULE = 0x51A18
     const val QUICK_MEMO_TRANSCRIPTION_SERVICE = 0x51A19
+    const val IMAGE_PIN = 0x51A1A
 
     private const val STANDARD_REMINDER_NAMESPACE = "standard-reminder"
     private const val LIVE_CAPSULE_NAMESPACE = "live-capsule"

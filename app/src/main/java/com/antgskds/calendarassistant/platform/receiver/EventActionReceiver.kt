@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
  */
 class EventActionReceiver : BroadcastReceiver() {
     companion object {
+        const val ACTION_CLEAR_IMAGE_PIN = "com.antgskds.calendarassistant.action.CLEAR_IMAGE_PIN"
         const val ACTION_COMPLETE = "com.antgskds.calendarassistant.action.COMPLETE"
         const val ACTION_COMPLETE_SCHEDULE = "com.antgskds.calendarassistant.action.COMPLETE_SCHEDULE"
         const val ACTION_CHECKIN = "com.antgskds.calendarassistant.action.CHECKIN"
@@ -54,6 +55,15 @@ class EventActionReceiver : BroadcastReceiver() {
         Log.d(TAG, "receive action=${intent.action} eventId=${intent.getStringExtra(EXTRA_EVENT_ID)}")
 
         when (intent.action) {
+            ACTION_CLEAR_IMAGE_PIN -> {
+                val id = intent.getLongExtra("image_pin_id", -1L).takeIf { it > 0 } ?: return
+                val pending = goAsync()
+                scope.launch {
+                    try { app.imagePinController.clear(id) }
+                    catch (error: Exception) { Log.e(TAG, "image pin clear failed", error) }
+                    finally { pending.finish() }
+                }
+            }
             ACTION_CLEAR_QUICK_MEMO_REMINDER -> {
                 val reminderId = intent.getLongExtra(EXTRA_QUICK_MEMO_REMINDER_ID, -1L).takeIf { it > 0L } ?: return
                 val pendingResult = goAsync()

@@ -91,6 +91,7 @@ fun LaboratoryPage(
         uiSize = uiSize,
         onAction = { action ->
             when (action) {
+                is LaboratoryUiAction.SetImagePin -> settingsViewModel?.updatePreference(imagePinEnabled = action.enabled)
                 is LaboratoryUiAction.SetBraceletMode -> settingsViewModel?.updatePreference(braceletModeEnabled = action.enabled)
                 is LaboratoryUiAction.SetForceInstantCodeTime -> settingsViewModel?.updatePreference(forceInstantCodeTimeToNow = action.enabled)
                 is LaboratoryUiAction.SetPredictiveBack -> settingsViewModel?.updatePreference(predictiveBackEnabled = action.enabled)
@@ -205,6 +206,13 @@ fun LaboratorySettingsContent(
                 text = "实验功能",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
+            )
+
+            LaboratorySwitchCard(
+                title = "图片挂起",
+                subtitle = "将多张图片挂起在岛上，点击后左右滑动查看",
+                checked = settings.imagePinEnabled,
+                onCheckedChange = { onAction(LaboratoryUiAction.SetImagePin(it)) }
             )
 
             if (itemVisibility.showForceInstantCodeTime) LaboratorySwitchCard(

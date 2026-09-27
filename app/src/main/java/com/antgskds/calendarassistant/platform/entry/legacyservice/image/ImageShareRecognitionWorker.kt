@@ -45,7 +45,7 @@ class ImageShareRecognitionWorker(
             val imageFile = File(imagePath)
             bitmap = ImageImportUtils.decodeSampledBitmapFromFile(imageFile)
             val decodedBitmap = bitmap ?: error("图片解码失败")
-            when (val result = app.recognitionCenter.analyzeImage(
+            when (val result = app.recognitionApi.analyzeImage(
                 bitmap = decodedBitmap,
                 settings = app.settingsQueryApi.settings.value,
                 context = applicationContext,

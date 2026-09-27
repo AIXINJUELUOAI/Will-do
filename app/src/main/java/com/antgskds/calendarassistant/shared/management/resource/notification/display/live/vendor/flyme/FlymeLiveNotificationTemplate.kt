@@ -97,6 +97,7 @@ object FlymeLiveNotificationTemplate {
             CapsuleType.OCR_RESULT -> R.drawable.ic_stat_success
             CapsuleType.MODEL_LOADING -> R.drawable.ic_model_loading
             CapsuleType.VOICE_TRANSCRIPTION -> R.drawable.ic_stat_quickmemo
+            CapsuleType.IMAGE_PIN -> R.drawable.ic_stat_image_pin
             CapsuleType.TEXT_QUICK_MEMO -> R.drawable.ic_stat_quickmemo
             CapsuleType.QUICK_MEMO_REMINDER -> R.drawable.ic_stat_quickmemo
             CapsuleType.QUICK_MEMO_RECORDING -> R.drawable.ic_stat_recording

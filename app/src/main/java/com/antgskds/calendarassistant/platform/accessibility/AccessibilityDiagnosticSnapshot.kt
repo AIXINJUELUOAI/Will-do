@@ -12,9 +12,10 @@ import org.json.JSONObject
 object AccessibilityDiagnosticSnapshot {
     const val HEALTH_LOG_TAG = "WillDoAccessHealth"
 
-    /** 同一实例重复连接时不能把诊断临时标记保存成正式配置。 */
+    /** 固定窗口能力与 XML 一致，更新后旧系统配置也能补齐；按键过滤独立管理。 */
     internal fun connectionBaseFlags(previous: Int?, current: Int): Int =
-        previous ?: (current and AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv())
+        ((previous ?: current) and AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv()) or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
 
     fun serviceConfiguration(info: AccessibilityServiceInfo?): JSONObject {
         if (info == null) return JSONObject().put("available", false)

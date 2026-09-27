@@ -23,4 +23,5 @@ object CapsuleType {
     const val TEXT_QUICK_MEMO = 10
     const val QUICK_MEMO_RECORDING = 11
     const val QUICK_MEMO_REMINDER = 12
+    const val IMAGE_PIN = 13
 }

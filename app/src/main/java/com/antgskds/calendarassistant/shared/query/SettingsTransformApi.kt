@@ -48,6 +48,7 @@ interface SettingsTransformApi {
         forceInstantCodeTimeToNow: Boolean? = null,
         predictiveBackEnabled: Boolean? = null,
         clipboardCodeRecognitionEnabled: Boolean? = null,
+        imagePinEnabled: Boolean? = null,
         voiceInputEnabled: Boolean? = null,
         floatingVoiceLongPressEnabled: Boolean? = null,
         floatingTextQuickMemoAutoPinEnabled: Boolean? = null,

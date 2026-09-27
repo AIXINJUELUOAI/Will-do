@@ -55,6 +55,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         forceInstantCodeTimeToNow: Boolean?,
         predictiveBackEnabled: Boolean?,
         clipboardCodeRecognitionEnabled: Boolean?,
+        imagePinEnabled: Boolean?,
         voiceInputEnabled: Boolean?,
         floatingVoiceLongPressEnabled: Boolean?,
         floatingTextQuickMemoAutoPinEnabled: Boolean?,
@@ -148,6 +149,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (smsMonitoring != null) updated = updated.copy(isSmsMonitoringEnabled = smsMonitoring)
         if (forceInstantCodeTimeToNow != null) updated = updated.copy(forceInstantCodeTimeToNow = forceInstantCodeTimeToNow)
         if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
+        if (imagePinEnabled != null) updated = updated.copy(imagePinEnabled = imagePinEnabled)
         if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
         if (voiceInputEnabled != null) updated = updated.copy(voiceInputEnabled = voiceInputEnabled)
         if (floatingVoiceLongPressEnabled != null) updated = updated.copy(floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled)

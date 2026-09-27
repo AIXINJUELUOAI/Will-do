@@ -33,6 +33,18 @@ fun EventMediaFloatingCardRoute(
 }
 
 @Composable
+fun ImagePinMediaFloatingCardRoute(imagePaths: List<String>, onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val state = remember(imagePaths) { FloatingMediaCardUiState(typeLabel = "图片挂起", title = "图片挂起",
+        pages = imagePaths.mapIndexed { index, path -> FloatingMediaPage.ImageFile(path, "挂起图片 ${index + 1}") }) }
+    FloatingMediaCardContent(state = state, onAction = { action ->
+        if (action == FloatingMediaCardUiAction.MediaUnavailable)
+            android.widget.Toast.makeText(context, "图片无法打开，请重新分享", android.widget.Toast.LENGTH_SHORT).show()
+        onClose()
+    })
+}
+
+@Composable
 fun QuickMemoMediaFloatingCardRoute(
     memoId: Long,
     bodyText: String,

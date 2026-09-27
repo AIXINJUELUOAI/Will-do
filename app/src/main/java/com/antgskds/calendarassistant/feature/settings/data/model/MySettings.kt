@@ -156,6 +156,7 @@ data class MySettings(
 
     // 【实验室】剪贴板取件类识别
     val clipboardCodeRecognitionEnabled: Boolean = false,
+    val imagePinEnabled: Boolean = false,
 
     // 【实验室】随口记总开关
     val voiceInputEnabled: Boolean = false,

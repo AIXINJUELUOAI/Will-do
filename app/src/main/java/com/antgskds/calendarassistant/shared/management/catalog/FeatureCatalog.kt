@@ -42,6 +42,8 @@ object FeatureCatalog {
     )
 
     val features: List<FeatureEntry> = listOf(
+        FeatureEntry("截图挂起磁贴", Chain.NOTIFICATION, "platform/tile/ImagePinTileService", "点击后收起控制中心，复用无障碍截图并追加图片挂起；需要实验室图片挂起、实况通知及权限，不调用 AI"),
+        FeatureEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", "实验室默认关闭；分享或快捷多选追加到同一胶囊，单图显示图片挂起、多图显示共 X 张，点击媒体弹窗翻页；不调用识别或创建日程/随口记"),
         FeatureEntry("通知与短信记账", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", "双权限子开关控制；可编辑正则提取账单，仅返回入库结果，不调用 AI"),
         FeatureEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", "两分钟一次性实验：即时事件、多窗口和延迟节点采样、独立截图，自动导出本地 ZIP，不调用 AI"),
         FeatureEntry("界面演示模式", Chain.SUPPORT, "feature/settings/developer/application/DemoModeDataFactory", "开发者开关以只读内存数据替换日程、课表、随口记、账单和天气展示，不写库、不同步、不通知"),

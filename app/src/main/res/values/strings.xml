@@ -13,6 +13,6 @@
     <string name="shortcut_start_quick_memo_voice">开始随口记</string>
     <string name="shortcut_start_quick_memo_voice_long">开始语音随口记</string>
     <string name="shortcut_disabled">无障碍服务未开启</string>
-    <string name="share_target_recognize_schedule">识别为日程</string>
+    <string name="share_target_recognize_schedule">识别信息</string>
     <string name="share_target_create_image_memo">创建图片随口记</string>
 </resources>

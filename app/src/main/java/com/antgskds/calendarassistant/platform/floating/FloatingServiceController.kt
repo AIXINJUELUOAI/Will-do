@@ -89,6 +89,18 @@ class FloatingServiceController(
         }
     }
 
+    fun startImagePinMediaCard(id: Long, imagePaths: List<String>): Boolean {
+        if (id <= 0 || imagePaths.isEmpty() || imagePaths.any { it.isBlank() } || !canDrawOverlays()) return false
+        return runCatching {
+            appContext.startService(Intent(appContext, FloatingScheduleService::class.java).apply {
+                action = FloatingScheduleService.ACTION_SHOW_IMAGE_PIN
+                putExtra("image_pin_id", id)
+                putStringArrayListExtra(FloatingScheduleService.EXTRA_MEDIA_IMAGE_PATHS, ArrayList(imagePaths))
+            })
+            true
+        }.getOrDefault(false)
+    }
+
     fun startQuickMemoMediaCard(memoId: Long, imagePath: String, bodyText: String): Boolean {
         if (memoId <= 0L || imagePath.isBlank() || !canDrawOverlays()) return false
         return try {

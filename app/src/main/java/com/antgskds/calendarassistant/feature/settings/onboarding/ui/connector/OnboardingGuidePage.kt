@@ -380,6 +380,7 @@ fun OnboardingGuidePage(
 
     fun handleLaboratoryAction(action: LaboratoryUiAction) {
         when (action) {
+            is LaboratoryUiAction.SetImagePin -> settingsViewModel.updatePreference(imagePinEnabled = action.enabled)
             is LaboratoryUiAction.SetBraceletMode -> {
                 settingsViewModel.updatePreference(braceletModeEnabled = action.enabled)
             }

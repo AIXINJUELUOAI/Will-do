@@ -182,7 +182,25 @@ object ConfigCatalog {
     const val LOG_RETENTION_DAYS = 3L
     const val LOG_MAX_BYTES = 4 * 1024 * 1024L
 
+    const val IMAGE_PIN_MAX_BYTES = 16 * 1024 * 1024
+    // 多图追加的整体边界，避免长期挂起无限占用私有存储。
+    const val IMAGE_PIN_MAX_COUNT = 20
+    const val IMAGE_PIN_MAX_TOTAL_BYTES = 128 * 1024 * 1024
+
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_bytes", "图片挂起文件上限", "限定外部分享图片副本大小。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(IMAGE_PIN_MAX_BYTES, IMAGE_PIN_MAX_BYTES),
+            { IMAGE_PIN_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_count", "图片挂起数量上限", "同一胶囊允许追加的图片总数。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(IMAGE_PIN_MAX_COUNT, IMAGE_PIN_MAX_COUNT),
+            { IMAGE_PIN_MAX_COUNT }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_total_bytes", "图片挂起总大小上限", "已有图片与本批追加副本的总大小边界。",
+            ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(IMAGE_PIN_MAX_TOTAL_BYTES, IMAGE_PIN_MAX_TOTAL_BYTES),
+            { IMAGE_PIN_MAX_TOTAL_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "laboratory.image_pin_enabled", "图片挂起",
+            "将图片挂起在岛上，并允许点击查看", ConfigExposure.DEVELOPER_ONLY,
+            ConfigControl.Toggle, { if (it.imagePinEnabled) 1 else 0 },
+            { s, v -> s.copy(imagePinEnabled = v != 0) }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "course.module_enabled", "启用课表功能",
             "课表总开关：隐藏课程入口和展示，暂停课程提醒；保留数据和下滑偏好。", ConfigExposure.DEVELOPER_ONLY,
             ConfigControl.Toggle, { if (it.courseModuleEnabled) 1 else 0 },

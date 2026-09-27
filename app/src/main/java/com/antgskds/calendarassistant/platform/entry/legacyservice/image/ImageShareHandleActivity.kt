@@ -19,7 +19,15 @@ class ImageShareHandleActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
         handleShareIntent(intent)
+    }
+
+    override fun finish() {
+        super.finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 
     override fun onNewIntent(intent: Intent) {

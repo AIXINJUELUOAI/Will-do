@@ -119,6 +119,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         const val ACTION_START_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.START_VOICE_CAPTURE"
         const val ACTION_STOP_VOICE_CAPTURE = "com.antgskds.calendarassistant.floating.action.STOP_VOICE_CAPTURE"
         const val ACTION_SHOW_PICKUP_QR_CARD = "com.antgskds.calendarassistant.floating.action.SHOW_PICKUP_QR_CARD"
+        const val ACTION_SHOW_IMAGE_PIN = "com.antgskds.calendarassistant.SHOW_IMAGE_PIN"
         const val ACTION_SHOW_QUICK_MEMO_MEDIA_CARD = "com.antgskds.calendarassistant.floating.action.SHOW_QUICK_MEMO_MEDIA_CARD"
         const val ACTION_VOICE_CAPTURE_RECORDING = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_RECORDING"
         const val ACTION_VOICE_CAPTURE_COMPLETED = "com.antgskds.calendarassistant.floating.action.VOICE_CAPTURE_COMPLETED"
@@ -181,6 +182,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     private data class FloatingMediaRequest(
         val eventId: Long? = null,
         val quickMemoId: Long? = null,
+        val imagePinId: Long? = null,
         val imagePaths: List<String> = emptyList(),
         val title: String = ""
     )
@@ -415,7 +417,15 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     val activeMediaRequest = currentMediaRequest
                     val activeQuickMemoId = activeMediaRequest?.quickMemoId
                     val floatingContent: @androidx.compose.runtime.Composable () -> Unit = {
-                        if (mediaEvent != null && activeMediaRequest != null) {
+                        if (activeMediaRequest?.imagePinId != null) {
+                            androidx.compose.runtime.LaunchedEffect(settings.imagePinEnabled) {
+                                if (!settings.imagePinEnabled) requestClose()
+                            }
+                            com.antgskds.calendarassistant.platform.floating.ui.connector.ImagePinMediaFloatingCardRoute(
+                                imagePaths = activeMediaRequest.imagePaths,
+                                onClose = { requestClose() }
+                            )
+                        } else if (mediaEvent != null && activeMediaRequest != null) {
                             EventMediaFloatingCardRoute(
                                 event = mediaEvent,
                                 imagePaths = activeMediaRequest.imagePaths,
@@ -1554,6 +1564,17 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                     eventId = eventId,
                     imagePaths = intent.getStringArrayListExtra(EXTRA_MEDIA_IMAGE_PATHS).orEmpty()
                 )
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                showFloatingWindow()
+                return START_NOT_STICKY
+            }
+            ACTION_SHOW_IMAGE_PIN -> {
+                if (!com.antgskds.calendarassistant.feature.imagepin.ImagePinPolicy.enabled(settings)) return START_NOT_STICKY
+                val id = intent.getLongExtra("image_pin_id", 0).takeIf { it > 0 } ?: return START_NOT_STICKY
+                val paths = intent.getStringArrayListExtra(EXTRA_MEDIA_IMAGE_PATHS).orEmpty().filter { it.isNotBlank() }
+                if (paths.isEmpty()) return START_NOT_STICKY
+                mediaFallbackInProgress = false
+                mediaRequest.value = FloatingMediaRequest(imagePinId = id, imagePaths = paths, title = "图片挂起")
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
                 showFloatingWindow()
                 return START_NOT_STICKY

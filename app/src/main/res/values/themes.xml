@@ -8,4 +8,17 @@
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
+
+    <!-- 分享中转只接收 URI / 请求权限，不显示预览窗口或窗口背景。 -->
+    <style name="Theme.CalendarAssistant.ShareRelay" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>

@@ -10,6 +10,8 @@ import com.antgskds.calendarassistant.platform.capsule.network.NetworkSpeedMonit
 class CapsuleStateManagerCommandApi(
     private val capsuleStateManager: CapsuleStateManager
 ) : CapsuleCommandApi {
+    override fun showImagePin(id: Long, count: Int) = capsuleStateManager.showImagePin(id, count)
+    override fun clearImagePin() = capsuleStateManager.clearImagePin()
     override fun showAccountingResult(display: com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel) {
         capsuleStateManager.showAccountingResult(display)
     }

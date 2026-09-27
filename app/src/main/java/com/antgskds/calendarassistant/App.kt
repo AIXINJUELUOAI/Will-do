@@ -306,6 +306,10 @@ class App : Application() {
         com.antgskds.calendarassistant.feature.accounting.domain.AccountingNotificationPriorityPolicy()
     }
 
+    val imagePinController by lazy {
+        com.antgskds.calendarassistant.feature.imagepin.ImagePinController(this, settingsQueryApi, capsuleCommandApi, appScope)
+    }
+
     val accountingMessageCoordinator by lazy {
         com.antgskds.calendarassistant.feature.accounting.application.AccountingMessageCoordinator(this, accountingNotificationPriority) { recognitionApi }
     }
@@ -539,6 +543,7 @@ class App : Application() {
         CrashHandler.init(this)
         AnrMonitor.start(this)
         createNotificationChannels()
+        imagePinController.start()
         calendarCenter.attachDomainEventBus(domainEventBus)
 
         // 首启自动迁移旧底层数据（Room/JSON）到新 events.db

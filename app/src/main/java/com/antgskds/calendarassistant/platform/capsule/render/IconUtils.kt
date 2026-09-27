@@ -29,6 +29,7 @@ object IconUtils {
             CapsuleType.OCR_RESULT -> return R.drawable.ic_stat_success
             CapsuleType.MODEL_LOADING -> return R.drawable.ic_model_loading
             CapsuleType.VOICE_TRANSCRIPTION -> return R.drawable.ic_stat_quickmemo
+            CapsuleType.IMAGE_PIN -> return R.drawable.ic_stat_image_pin
             CapsuleType.TEXT_QUICK_MEMO -> return R.drawable.ic_stat_quickmemo
             CapsuleType.QUICK_MEMO_REMINDER -> return R.drawable.ic_stat_quickmemo
             CapsuleType.QUICK_MEMO_RECORDING -> return R.drawable.ic_stat_recording
