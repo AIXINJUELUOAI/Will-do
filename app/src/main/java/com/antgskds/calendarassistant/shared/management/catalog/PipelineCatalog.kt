@@ -55,6 +55,7 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("自动记账截图排队", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService.enqueueAutomatic", Maturity.PIPELINE, "命中即截图，前后核实归属后写入临时缓存；各笔独立通知、顺序模型识别及统一入库，结束清理缓存"),
         PipelineEntry("截图挂起", Chain.NOTIFICATION, "platform/accessibility/TextAccessibilityService.startImagePinCapture", Maturity.PIPELINE, "磁贴主动触发，检查权限和截图占用、复用截图延迟后采集，PNG 临时文件经 ImagePinController 统一追加并清理；失败保留已有图片"),
         PipelineEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", Maturity.PIPELINE, "受控多图分享/选图、整批校验后追加本地副本、共用胶囊和翻页弹窗；兼容旧单图，失败保留原图，关闭或结束清理全部副本"),
         PipelineEntry("微信红包发送识别", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService", Maturity.PIPELINE, "原生截图暂存支付确认页，同次已发送后走统一多模态、入库、附件与结果反馈；缓存期不调用 AI"),

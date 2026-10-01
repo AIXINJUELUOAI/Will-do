@@ -205,6 +205,14 @@ class NotificationOrchestrator(
             Log.i("WillDoNotify", "quick memo dispatch result key=${key.value} result=$result")
             return result
         }
+        val accountingRoute = com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy
+            .route(snapshot.kind, snapshot.key, liveCapsuleEnabled)
+        if (accountingRoute != null) {
+            // 每笔记账主动发布自己的胶囊，不能落入“胶囊另行负责”的旧日程门控。
+            if (accountingRoute == NotificationRoute.NORMAL) livePublisherProvider()?.cancel(key)
+            Log.i("WillDoNotify", "accounting dispatch key=${key.value} route=$accountingRoute")
+            return publishSnapshot(snapshot.copy(route = accountingRoute))
+        }
         val courseSettings = (appContext as? App)?.settingsQueryApi?.settings?.value
         if (courseSettings != null && !com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allowsReminder(
                 snapshot.metadata["tag"].orEmpty(),

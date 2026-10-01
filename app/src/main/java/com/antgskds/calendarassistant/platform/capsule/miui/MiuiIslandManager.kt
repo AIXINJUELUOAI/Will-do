@@ -173,6 +173,7 @@ object MiuiIslandManager {
     }
 
     private fun useTextIconOnlyTemplate(item: CapsuleUiState.Active.CapsuleItem): Boolean {
+        if (item.display.tapOpensAccounting && item.display.effectiveActions.isNotEmpty()) return false
         return when (item.type) {
             CapsuleType.OCR_PROGRESS,
             CapsuleType.OCR_RESULT -> true
@@ -223,6 +224,7 @@ object MiuiIslandManager {
         val actions = actionSpecs.mapIndexed { index, action ->
             val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
                 this.action = action.receiverAction
+                action.stringExtras.forEach { (key, value) -> putExtra(key, value) }
                 if (action.extraLongKey != null && action.extraLongValue != null) {
                     putExtra(action.extraLongKey, action.extraLongValue)
                 } else {

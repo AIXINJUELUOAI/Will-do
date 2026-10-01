@@ -2,31 +2,10 @@ package com.antgskds.calendarassistant.feature.accounting.domain
 
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
 import com.antgskds.calendarassistant.feature.accounting.data.AccountingDraft
-import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import java.security.MessageDigest
 
-/** 只决定是否允许触发；使用完整交易文本指纹，保留金额，避免吞掉下一笔付款。 */
+/** 自动记账开关、来源与页面规则；页面任务去重由 PaymentDetailPolicy 统一维护。 */
 class AutomaticAccountingPolicy {
-    private val attempts = LinkedHashMap<String, Long>()
-    private var lastAttempt: Long? = null
-
-    enum class Reservation { ACCEPTED, REPEATED_PAGE, MIN_INTERVAL }
-
-    fun reserve(packageName: String, text: String, now: Long): Boolean =
-        reserveWithReason(packageName, text, now) == Reservation.ACCEPTED
-
-    @Synchronized
-    fun reserveWithReason(packageName: String, text: String, now: Long): Reservation {
-        attempts.entries.removeAll { now - it.value >= ConfigCatalog.AUTO_ACCOUNTING_REPEAT_MS }
-        val key = fingerprint("$packageName|${text.trim()}")
-        if (attempts.containsKey(key)) return Reservation.REPEATED_PAGE
-        if (lastAttempt?.let { now - it < ConfigCatalog.AUTO_ACCOUNTING_MIN_INTERVAL_MS } == true) return Reservation.MIN_INTERVAL
-        while (attempts.size >= ConfigCatalog.AUTO_ACCOUNTING_MAX_NODES) attempts.remove(attempts.keys.first())
-        attempts[key] = now
-        lastAttempt = now
-        return Reservation.ACCEPTED
-    }
-
     /** 仅保留规则判断，不含页面原文，供日常诊断日志使用。 */
     data class ScreenCheck(val supported: Boolean, val editable: Boolean, val excludedMarker: String?, val success: Boolean, val amount: Boolean) {
         val eligible get() = supported && !editable && excludedMarker == null && success && amount

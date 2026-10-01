@@ -7,6 +7,18 @@ import java.math.BigInteger
 
 /** 仅统计实际成功入库的人民币记录；BigInteger 避免多笔大额累计溢出。 */
 object AccountingRecognitionDisplay {
+    /** 同一笔普通通知快照映射到实况模板；不参与发布、入库或任务调度。 */
+    fun notification(
+        display: com.antgskds.calendarassistant.feature.notification.model.NotificationDisplaySnapshot,
+        actions: List<com.antgskds.calendarassistant.feature.notification.model.NotificationAction>,
+    ) = CapsuleDisplayModel(
+        shortText = display.shortText, primaryText = display.primaryText,
+        secondaryText = display.secondaryText, tertiaryText = display.tertiaryText,
+        expandedText = display.expandedText, tapOpensAccounting = true,
+        actions = actions.map { com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec(
+            label = it.label, receiverAction = it.key, stringExtras = it.payload) },
+    )
+
     fun create(result: AccountingRecognitionResult): CapsuleDisplayModel {
         fun sum(direction: String) = result.saved.filter { it.currency == "CNY" && it.direction == direction }
             .fold(BigInteger.ZERO) { total, entry -> total + BigInteger.valueOf(entry.amountMinor) }

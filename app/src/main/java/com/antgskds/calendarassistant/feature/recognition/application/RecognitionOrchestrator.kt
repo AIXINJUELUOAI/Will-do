@@ -42,7 +42,7 @@ class RecognitionOrchestrator(
 
     override suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String, isDetailPage: Boolean,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?): AnalysisResult<List<RecognitionDraft>> {
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?, publishFeedback: Boolean, capturedAt: Long): AnalysisResult<List<RecognitionDraft>> {
         if (!automaticAccountingEnabled() || !com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.supports(sourcePackage))
             return AnalysisResult.Empty("自动记账已关闭或来源不支持")
         if (redPacketSent != null && (isDetailPage || sourcePackage != com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.WECHAT))
@@ -60,9 +60,10 @@ class RecognitionOrchestrator(
             val bill = redPacketSent.complete(result.bills)
                 ?: return AnalysisResult.Empty("红包确认图未识别到明确的单笔支出，暂不入库")
             result.copy(data = emptyList(), bills = listOf(bill))
-        } else if (result is AnalysisResult.Success) result.copy(data = emptyList()) else result
+        } else if (result is AnalysisResult.Success) result.copy(data = emptyList(),
+            bills = result.bills.map { it.copy(createdAt = capturedAt) }) else result
         return ingestImageBills(billsOnly, bitmap, context, "accounting.accessibility", sourcePackage, traceId,
-            !isDetailPage, settings.isLiveCapsuleEnabled)
+            !isDetailPage, settings.isLiveCapsuleEnabled, publishFeedback)
     }
 
     override suspend fun analyzeAutomaticPaymentMessage(sourcePackage: String, payload: String, receivedAt: Long,
@@ -275,6 +276,7 @@ class RecognitionOrchestrator(
     private suspend fun ingestImageBills(
         result: AnalysisResult<List<RecognitionDraft>>, bitmap: Bitmap, context: Context,
         sourceType: String, sourceId: String, traceId: String, useCurrentTimeForMissing: Boolean, liveEnabled: Boolean,
+        publishFeedback: Boolean = true,
     ): AnalysisResult<List<RecognitionDraft>> {
         if (result !is AnalysisResult.Success || result.bills.isEmpty()) return result
         val image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -285,7 +287,7 @@ class RecognitionOrchestrator(
                 } catch (e: Exception) { file.delete(); throw e }
             }
         }
-        val outcome = ingestBills(result, sourceType, sourceId, traceId, useCurrentTimeForMissing, liveEnabled, image.absolutePath)
+        val outcome = ingestBills(result, sourceType, sourceId, traceId, useCurrentTimeForMissing, liveEnabled, image.absolutePath, publishFeedback)
         val saved = (outcome as? AnalysisResult.Success)?.accountingResult
         if (saved != null && saved.saved.isEmpty() && saved.pending == 0 && saved.suspectedDuplicates == 0) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { image.delete() }
@@ -295,7 +297,7 @@ class RecognitionOrchestrator(
 
     private suspend fun ingestBills(
         result: AnalysisResult<List<RecognitionDraft>>, sourceType: String, sourceId: String, traceId: String,
-        useCurrentTimeForMissing: Boolean, liveEnabled: Boolean, sourceImagePath: String? = null,
+        useCurrentTimeForMissing: Boolean, liveEnabled: Boolean, sourceImagePath: String? = null, publishFeedback: Boolean = true,
     ): AnalysisResult<List<RecognitionDraft>> {
         if (result !is AnalysisResult.Success || result.bills.isEmpty()) return result
         val drafts = result.bills.mapIndexed { index, draft ->
@@ -311,6 +313,7 @@ class RecognitionOrchestrator(
                 com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisFailure("账单保存失败", "本次账单未能入库，请重试"))
             return result.copy(bills = emptyList(), billIssues = result.billIssues + "账单未能入库，请重试；日程继续保存")
         }
+        if (!publishFeedback) return result.copy(bills = drafts, accountingResult = accounting)
         // 事务完成后才展示成功金额；胶囊与普通通知均使用同一份实际入库汇总。
         try {
             val display = com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.AccountingRecognitionDisplay.create(accounting)

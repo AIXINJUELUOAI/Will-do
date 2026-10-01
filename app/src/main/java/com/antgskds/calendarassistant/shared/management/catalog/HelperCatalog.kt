@@ -44,6 +44,7 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("自动记账截图队列", Chain.RECOGNITION, "feature/accounting/application/AccountingScreenshotQueue", "已确认截图先进先出调用统一识别入口；独立取消、反馈和资源释放，模型处理不占用截图入口"),
         HelperEntry("演示数据生成", Chain.SUPPORT, "feature/settings/developer/application/DemoModeDataFactory", "按当天稳定生成只读日程、大学课表、随口记、账单和完整天气展示数据"),
         HelperEntry("财务消息正则", Chain.RECOGNITION, "feature/accounting/domain/AccountingMessageRules", "按通知包名或短信发件人匹配，命名分组抽取金额、名称、时间和单号，未知静默跳过"),
         HelperEntry("财务规则存储", Chain.RECOGNITION, "feature/accounting/data/AccountingMessageRulePrefs", "开发者编辑与运行时共用本地规则，不覆盖用户禁用和删除"),
@@ -57,7 +58,7 @@ object HelperCatalog {
         HelperEntry("上游微信红包规则", Chain.RECOGNITION, "platform/xposed/upstream/LuckMoneyModel", "移植 AutoAccounting 包名、构造函数及 onGYNetEnd 签名规则"),
         HelperEntry("支付应用 Hook", Chain.RECOGNITION, "platform/xposed/PaymentCaptureHook", "微信支付/转账数据库、详情桥接、红包领取回调及支付宝同步消息；独立安装、有界后台转发，不改宿主参数"),
         HelperEntry("无障碍支付页面采样", Chain.RECOGNITION, "platform/accessibility/PaymentWindowReader", "有界采集可见根节点/事件源子树并立即回收；单独读取前台包与窗口身份，详情内容就绪后才触发截图，不引入 OCR"),
-        HelperEntry("记账结果展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/AccountingRecognitionDisplay", "按实际入库账单汇总金额与收支，重复和待核对另计；小岛仅金额，展开显示明细汇总"),
+        HelperEntry("记账结果展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/AccountingRecognitionDisplay", "按实际入库账单汇总金额与收支；独立任务显示适配普通快照与实况模板，保留金额短文案、取消参数及账单跳转"),
         HelperEntry("统一识别结果解析", Chain.RECOGNITION, "feature/recognition/application/ai/RecognitionJsonParser", "分别解析 events 与 bills，坏条目隔离；旧响应兼容，账单缺失字段留待确认"),
         HelperEntry("账单识别转换", Chain.INGEST, "feature/accounting/domain/AccountingRecognitionMapper", "同金额同一分钟独立拦截疑似重复；时间仅接近时结合名称，同类交易号明确不同可放行，支付交易号精确排重兜底"),
         HelperEntry("账单识别待确认列表", Chain.SUPPORT, "feature/accounting/ui/AccountingRecognitionSheet", "展示持久化识别草稿，逐条编辑确认或丢弃，未确认不计入收支"),

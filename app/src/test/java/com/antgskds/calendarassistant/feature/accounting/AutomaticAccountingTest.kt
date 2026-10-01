@@ -51,14 +51,6 @@ class AutomaticAccountingTest {
         assertFalse(AutomaticAccountingPolicy.supportsDiagnostics("com.example.unrelated"))
     }
 
-    @Test fun debounceGateRetainsAmountAndLimitsRepeatedRequests() {
-        val policy = AutomaticAccountingPolicy()
-        assertTrue(policy.reserve(wechat, "支付成功35元", 0))
-        assertFalse(policy.reserve(wechat, "支付成功36元", 1_000))
-        assertFalse(policy.reserve(wechat, "支付成功35元", 20_000))
-        assertTrue(policy.reserve(wechat, "支付成功36元", 20_000))
-        assertTrue(policy.reserve(wechat, "支付成功35元", 300_000))
-    }
 
     @Test fun screenDiagnosticsRetainAllBlockersWithoutChangingEligibility() {
         val check = AutomaticAccountingPolicy.inspectScreen(wechat, listOf("交易详情", "等待对方收款", "0.01元"), true)
@@ -74,13 +66,6 @@ class AutomaticAccountingTest {
         assertFalse(imageOnly.eligible)
     }
 
-    @Test fun reservationDiagnosticsDistinguishCooldownFromRepeatedPage() {
-        val policy = AutomaticAccountingPolicy()
-        assertEquals(AutomaticAccountingPolicy.Reservation.ACCEPTED, policy.reserveWithReason(wechat, "页面 A", 0))
-        assertEquals(AutomaticAccountingPolicy.Reservation.MIN_INTERVAL, policy.reserveWithReason(wechat, "页面 B", 1_000))
-        assertEquals(AutomaticAccountingPolicy.Reservation.REPEATED_PAGE, policy.reserveWithReason(wechat, "页面 A", 20_000))
-        assertEquals(AutomaticAccountingPolicy.Reservation.ACCEPTED, policy.reserveWithReason(wechat, "页面 B", 20_000))
-    }
 
     @Test fun paymentServiceMessageUsesExactAmountAndMessageTimestamp() {
         val bill = PaymentMessageParser.parse(wechat, envelope(plainXml()), now).single()

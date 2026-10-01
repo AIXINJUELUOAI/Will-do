@@ -46,8 +46,8 @@ class CapsuleDispatcher(
     private val settingsQueryApi: SettingsQueryApi,
     private val uiStateProvider: () -> CapsuleUiState
 ) : PlatformPublisher {
-    private val reminderCapsules = linkedMapOf<String, CapsuleUiState.Active.CapsuleItem>()
-    private val reminderExpiryJobs = mutableMapOf<String, Job>()
+    private val publishedCapsules = linkedMapOf<String, CapsuleUiState.Active.CapsuleItem>()
+    private val publishedExpiryJobs = mutableMapOf<String, Job>()
     private var baseState: CapsuleUiState = CapsuleUiState.None
 
     override suspend fun publish(payload: PlatformNotificationPayload): NotificationResult = synchronized(this) {
@@ -63,61 +63,79 @@ class CapsuleDispatcher(
         }
         val now = System.currentTimeMillis()
         val settings = settingsQueryApi.settings.value
-        val duration = QuickMemoCapsuleDurationPolicy.durationMillis(settings.defaultEventDurationMinutes)
-        val memoId = payload.tapTarget?.payload?.get("quickMemoId")?.toLongOrNull()
-            ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少随口记 ID")
-        val reminderId = payload.key.value.removePrefix("quick-memo:reminder:").toLongOrNull()
-            ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少提醒 ID")
-        val display = CapsuleMessageComposer.composeTextQuickMemo(
-            title = payload.display.secondaryText.orEmpty().ifBlank { "随口记提醒" },
-            memoId = memoId,
-            fixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
-            removeAction = CapsuleActionSpec(
-                label = "移除",
-                receiverAction = EventActionReceiver.ACTION_CLEAR_QUICK_MEMO_REMINDER,
-                extraLongKey = EventActionReceiver.EXTRA_QUICK_MEMO_REMINDER_ID,
-                extraLongValue = reminderId,
-            ),
-        )
-        val item = CapsuleUiState.Active.CapsuleItem(
-            id = payload.key.value,
-            notifId = payload.notificationId,
-            type = CapsuleType.QUICK_MEMO_REMINDER,
-            eventType = "quick_memo_reminder",
-            title = display.primaryText,
-            content = payload.display.secondaryText.orEmpty(),
-            description = payload.display.expandedText.orEmpty(),
-            color = android.graphics.Color.parseColor("#7C4DFF"),
-            startMillis = now,
-            endMillis = now + duration,
-            display = display,
-        )
+        val accounting = com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.owns(payload.key)
+        val duration = if (accounting) {
+            if (payload.behavior.ongoing) null else payload.behavior.timeoutAfterMillis
+                ?: com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.timeout(false, settings)
+        } else QuickMemoCapsuleDurationPolicy.durationMillis(settings.defaultEventDurationMinutes)
+        val item = if (accounting) {
+            val display = com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.AccountingRecognitionDisplay
+                .notification(payload.display, payload.actions)
+            CapsuleUiState.Active.CapsuleItem(
+                id = payload.key.value, notifId = payload.notificationId,
+                type = if (payload.behavior.ongoing) CapsuleType.OCR_PROGRESS else CapsuleType.OCR_RESULT,
+                eventType = "accounting_recognition", title = display.primaryText,
+                content = display.secondaryText.orEmpty(), description = display.expandedText.orEmpty(),
+                color = 0xFF4CAF50.toInt(), startMillis = now, endMillis = duration?.let { now + it } ?: Long.MAX_VALUE,
+                display = display,
+            )
+        } else {
+            val memoId = payload.tapTarget?.payload?.get("quickMemoId")?.toLongOrNull()
+                ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少随口记 ID")
+            val reminderId = payload.key.value.removePrefix("quick-memo:reminder:").toLongOrNull()
+                ?: return@synchronized NotificationResult.Failure(payload.key, NotificationFailureReason.VALIDATION_FAILED, "缺少提醒 ID")
+            val display = CapsuleMessageComposer.composeTextQuickMemo(
+                title = payload.display.secondaryText.orEmpty().ifBlank { "随口记提醒" },
+                memoId = memoId,
+                fixedTitleEnabled = settings.quickMemoPinnedFixedTitleEnabled,
+                removeAction = CapsuleActionSpec(
+                    label = "移除",
+                    receiverAction = EventActionReceiver.ACTION_CLEAR_QUICK_MEMO_REMINDER,
+                    extraLongKey = EventActionReceiver.EXTRA_QUICK_MEMO_REMINDER_ID,
+                    extraLongValue = reminderId,
+                ),
+            )
+            CapsuleUiState.Active.CapsuleItem(
+                id = payload.key.value,
+                notifId = payload.notificationId,
+                type = CapsuleType.QUICK_MEMO_REMINDER,
+                eventType = "quick_memo_reminder",
+                title = display.primaryText,
+                content = payload.display.secondaryText.orEmpty(),
+                description = payload.display.expandedText.orEmpty(),
+                color = android.graphics.Color.parseColor("#7C4DFF"),
+                startMillis = now,
+                endMillis = now + requireNotNull(duration),
+                display = display,
+            )
+        }
         try {
-            reminderCapsules[payload.key.value] = item
+            publishedCapsules[payload.key.value] = item
             dispatch(baseState)
-            check(reminderCapsules[payload.key.value] === item) { "胶囊开关在发布期间变更" }
-            reminderExpiryJobs.remove(payload.key.value)?.cancel()
-            reminderExpiryJobs[payload.key.value] = appScope.launch {
+            check(publishedCapsules[payload.key.value] === item) { "胶囊开关在发布期间变更" }
+            publishedExpiryJobs.remove(payload.key.value)?.cancel()
+            if (duration != null) publishedExpiryJobs[payload.key.value] = appScope.launch {
                 kotlinx.coroutines.delay(duration)
                 synchronized(this@CapsuleDispatcher) {
-                    reminderCapsules.remove(payload.key.value)
-                    reminderExpiryJobs.remove(payload.key.value)
+                    if (publishedCapsules[payload.key.value] !== item) return@synchronized
+                    publishedCapsules.remove(payload.key.value)
+                    publishedExpiryJobs.remove(payload.key.value)
                     runCatching { dispatch(baseState) }
                         .onFailure { Log.e(TAG, "expire reminder capsule failed key=${payload.key.value}", it) }
                 }
             }
-            Log.i(TAG, "published reminder capsule key=${payload.key.value} id=${payload.notificationId}")
+            Log.i(TAG, "published api capsule key=${payload.key.value} id=${payload.notificationId}")
             NotificationResult.Success(payload.key, NotificationState.POSTED)
         } catch (error: Exception) {
-            reminderCapsules.remove(payload.key.value)
-            Log.e(TAG, "publish reminder capsule failed key=${payload.key.value}", error)
+            publishedCapsules.remove(payload.key.value)
+            Log.e(TAG, "publish api capsule failed key=${payload.key.value}", error)
             NotificationResult.Failure(payload.key, NotificationFailureReason.PUBLISH_FAILED, error.message, error)
         }
     }
 
     override suspend fun cancel(key: NotificationKey): NotificationResult = synchronized(this) {
-        reminderCapsules.remove(key.value)
-        reminderExpiryJobs.remove(key.value)?.cancel()
+        if (publishedCapsules.remove(key.value) == null) return@synchronized NotificationResult.Success(key, NotificationState.CANCELLED)
+        publishedExpiryJobs.remove(key.value)?.cancel()
         dispatch(baseState)
         NotificationResult.Success(key, NotificationState.CANCELLED)
     }
@@ -135,11 +153,11 @@ class CapsuleDispatcher(
         baseState = state
         val settings = settingsQueryApi.settings.value
         if (!settings.isLiveCapsuleEnabled) {
-            reminderCapsules.clear()
-            reminderExpiryJobs.values.forEach { it.cancel() }
-            reminderExpiryJobs.clear()
+            publishedCapsules.clear()
+            publishedExpiryJobs.values.forEach { it.cancel() }
+            publishedExpiryJobs.clear()
         }
-        val combined = (state as? CapsuleUiState.Active)?.capsules.orEmpty() + reminderCapsules.values
+        val combined = (state as? CapsuleUiState.Active)?.capsules.orEmpty() + publishedCapsules.values
         val effectiveState = if (combined.isEmpty()) CapsuleUiState.None else CapsuleUiState.Active(combined)
         val useMiuiIsland = isMiuiIslandMode(settings)
         when (effectiveState) {
@@ -218,7 +236,7 @@ class CapsuleDispatcher(
                     val state = uiStateProvider()
                     if (state is CapsuleUiState.Active) {
                         val stillValid = state.capsules.any { it.notifId == notificationId } ||
-                            synchronized(this) { reminderCapsules.values.any { it.notifId == notificationId } }
+                            synchronized(this) { publishedCapsules.values.any { it.notifId == notificationId } }
                         if (!stillValid) {
                             notificationManager.cancel(notificationId)
                             activeNotifIds.remove(notificationId)

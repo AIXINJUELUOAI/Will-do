@@ -28,7 +28,8 @@ interface RecognitionApi {
     /** 自动入口仅处理账单；详情/收款汇总必须输出单笔及明确时间（汇总可用统计日期零点），不回填当前时间。 */
     suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String = EventIdentity.newTraceId(), isDetailPage: Boolean = false,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null): AnalysisResult<List<RecognitionDraft>>
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null,
+        publishFeedback: Boolean = true, capturedAt: Long = System.currentTimeMillis()): AnalysisResult<List<RecognitionDraft>>
 
     /** 支付应用 Hook 消息只做本地解析，不自动调用付费模型。 */
     suspend fun analyzeAutomaticPaymentMessage(sourcePackage: String, payload: String, receivedAt: Long,

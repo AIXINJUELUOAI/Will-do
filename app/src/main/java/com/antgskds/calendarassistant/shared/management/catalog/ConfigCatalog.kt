@@ -108,6 +108,12 @@ object ConfigCatalog {
 
     // 自动记账资源及调用策略；对用户只暴露总开关。
     const val AUTO_ACCOUNTING_DEBOUNCE_MS = 700
+    // 原生截图接口返回请求过快时重试；仅在仍有效的截图候选内等待，不限制模型/账单间隔。
+    const val AUTO_ACCOUNTING_SCREENSHOT_RETRY_MS = 350
+    // 排除系统栏后粗检纯色/黑屏，不做 OCR，也不宣称内容一定可识别。
+    const val AUTO_ACCOUNTING_IMAGE_SAMPLE_SIDE = 64
+    const val AUTO_ACCOUNTING_IMAGE_BORDER_DIVISOR = 8
+    const val AUTO_ACCOUNTING_IMAGE_MIN_RANGE = 12
     // 支付截图先保留，再给本地通知入库短暂优先期；仅关联本次现场，不抑制历史详情。
     const val AUTO_ACCOUNTING_NOTIFICATION_WAIT_MS = 1_500
     const val AUTO_ACCOUNTING_NOTIFICATION_MATCH_MS = 3_000
@@ -118,7 +124,6 @@ object ConfigCatalog {
     const val AUTO_ACCOUNTING_SUCCESS_EVENT_MS = 5_000
     // 详情信号只用于当前页面短时间内截图；不保留到稍后的其他页面。
     const val AUTO_ACCOUNTING_DETAIL_SIGNAL_MS = 5_000
-    const val AUTO_ACCOUNTING_MIN_INTERVAL_MS = 15_000
     const val AUTO_ACCOUNTING_REPEAT_MS = 300_000
     const val AUTO_ACCOUNTING_MAX_NODES = 512
     const val AUTO_ACCOUNTING_MAX_TEXT = 16_000
@@ -295,12 +300,15 @@ object ConfigCatalog {
         *listOf(
             Triple("notification_wait_ms", "支付通知优先等待", AUTO_ACCOUNTING_NOTIFICATION_WAIT_MS),
             Triple("notification_match_ms", "支付通知关联时间窗", AUTO_ACCOUNTING_NOTIFICATION_MATCH_MS),
+            Triple("screenshot_retry_ms", "原生截图限频重试等待", AUTO_ACCOUNTING_SCREENSHOT_RETRY_MS),
+            Triple("image_sample_side", "截图内容采样边长", AUTO_ACCOUNTING_IMAGE_SAMPLE_SIDE),
+            Triple("image_border_divisor", "截图系统栏排除比例分母", AUTO_ACCOUNTING_IMAGE_BORDER_DIVISOR),
+            Triple("image_min_range", "截图非纯色最小亮度差", AUTO_ACCOUNTING_IMAGE_MIN_RANGE),
             Triple("debounce_ms", "支付页面稳定等待", AUTO_ACCOUNTING_DEBOUNCE_MS),
             Triple("red_packet_capture_delay_ms", "红包确认页截图等待", AUTO_ACCOUNTING_RED_PACKET_CAPTURE_DELAY_MS),
             Triple("wechat_session_ms", "微信支付上下文有效期", AUTO_ACCOUNTING_WECHAT_SESSION_MS),
             Triple("success_event_ms", "支付成功事件截图有效期", AUTO_ACCOUNTING_SUCCESS_EVENT_MS),
             Triple("detail_signal_ms", "账单详情信号截图有效期", AUTO_ACCOUNTING_DETAIL_SIGNAL_MS),
-            Triple("min_interval_ms", "自动截图最短间隔", AUTO_ACCOUNTING_MIN_INTERVAL_MS),
             Triple("repeat_ms", "自动采集重复抑制", AUTO_ACCOUNTING_REPEAT_MS),
             Triple("max_nodes", "支付页面节点上限", AUTO_ACCOUNTING_MAX_NODES),
             Triple("max_text", "支付页面文本上限", AUTO_ACCOUNTING_MAX_TEXT),

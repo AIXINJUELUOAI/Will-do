@@ -7,7 +7,8 @@ class PaymentDetailPolicy {
     data class Candidate(val packageName: String, val windowId: Int, val visit: Long,
         val detectedAt: Long, val evidence: String, val contentFingerprint: String,
         val isPaymentResult: Boolean = false,
-        val notificationHint: AccountingNotificationPriorityPolicy.Hint? = null)
+        val notificationHint: AccountingNotificationPriorityPolicy.Hint? = null,
+        val identity: PaymentPageIdentity = PaymentPageIdentity.from(emptyList()))
 
     private var sequence = 0L
     private var packageName = ""
@@ -16,6 +17,19 @@ class PaymentDetailPolicy {
     private var pageWindowId = -1
     private var wechatCheckoutAt: Long? = null
     private var claimed: Candidate? = null
+    private var currentIdentity = PaymentPageIdentity.from(emptyList())
+    // 已截图的任务跨页面存活；当前页完成后仍保留 claimed，防止刷新重复入队。
+    private val captured = mutableMapOf<Pair<String, Long>, PaymentPageIdentity>()
+
+    fun captured(candidate: Candidate) {
+        captured[candidate.packageName to candidate.visit] =
+            if (claimed?.visit == candidate.visit) currentIdentity else candidate.identity
+    }
+    fun finished(candidate: Candidate) { captured.remove(candidate.packageName to candidate.visit) }
+    fun release(candidate: Candidate) {
+        if (claimed?.visit == candidate.visit && claimed?.packageName == candidate.packageName) { claimed = null; sequence++ }
+    }
+    fun clearTasks() { captured.clear(); reset() }
     private var treeBlocked = false
     private var detailContext = false
     private var contentLoading = false
@@ -121,6 +135,13 @@ class PaymentDetailPolicy {
             texts.any { it.startsWith("付款方式") }) {
             if (wechatCheckoutAt == null) wechatCheckoutAt = now
         }
+        if (claimed?.isPaymentResult == true && !editable &&
+            texts.any { it == "确认付款" || it == "输入密码" || it.startsWith("付款方式") } &&
+            !AutomaticAccountingPolicy.matchesScreen(pkg, texts, editable)) {
+            sequence++
+            claimed = null
+            wechatCheckoutAt = now.takeIf { pkg == AutomaticAccountingPolicy.WECHAT }
+        }
         val checkout = hasWechatCheckout(now)
         if (hasPageDetailMarker(texts)) detailContext = true
         if (isLoading(texts)) contentLoading = true
@@ -132,11 +153,28 @@ class PaymentDetailPolicy {
         return claim(now, if (checkout) "wechat_checkout_source" else "payment_source", texts, isPaymentResult = true)
     }
 
+    fun claimScreen(pkg: String, window: Int, texts: List<String>, editable: Boolean, now: Long): Candidate? {
+        if (pkg != packageName || window != windowId || detailContext || blockedPage() ||
+            !AutomaticAccountingPolicy.matchesScreen(pkg, texts, editable)) return null
+        return claim(now, "screen", texts, isPaymentResult = true)
+    }
+
     private fun claim(now: Long, evidence: String, texts: List<String>, isPaymentResult: Boolean = false): Candidate? {
-        if (claimed != null) return null
-        return Candidate(packageName, windowId, sequence, now, evidence,
+        val identity = PaymentPageIdentity.from(texts)
+        val previous = claimed
+        if (previous != null && previous.isPaymentResult == isPaymentResult && !currentIdentity.conflicts(identity)) {
+            currentIdentity = currentIdentity.enrich(identity)
+            if ((packageName to previous.visit) in captured) captured[packageName to previous.visit] = currentIdentity
+            return null
+        }
+        if (previous != null) sequence++
+        currentIdentity = identity
+        val alreadyCaptured = captured.any { (key, value) -> key.first == packageName && value.sameTransaction(identity) }
+        val candidate = Candidate(packageName, windowId, sequence, now, evidence,
             AutomaticAccountingPolicy.fingerprint(texts.joinToString("\n")), isPaymentResult,
-            if (isPaymentResult) AccountingNotificationPriorityPolicy.hint(texts) else null).also { claimed = it }
+            if (isPaymentResult) AccountingNotificationPriorityPolicy.hint(texts) else null, identity)
+        claimed = candidate
+        return candidate.takeUnless { alreadyCaptured }
     }
 
     fun hasClaimed(pkg: String) = pkg == packageName && claimed != null
@@ -146,7 +184,7 @@ class PaymentDetailPolicy {
         window < 0 || blockedTexts(texts, editable) || (pkg == packageName && blockedPage())
 
     fun isValid(candidate: Candidate, pkg: String, window: Int, texts: List<String>, editable: Boolean, now: Long): Boolean =
-        candidate == claimed && candidate.visit == sequence && pkg == packageName && window == windowId &&
+        candidate == claimed && !currentIdentity.conflicts(PaymentPageIdentity.from(texts)) && candidate.visit == sequence && pkg == packageName && window == windowId &&
             window >= 0 && !blockedTexts(texts, editable) &&
             (!blockedPage() || (candidate.isPaymentResult && hasWechatCheckout(now))) &&
             (candidate.evidence != "wechat_checkout_source" || hasWechatCheckout(now)) &&

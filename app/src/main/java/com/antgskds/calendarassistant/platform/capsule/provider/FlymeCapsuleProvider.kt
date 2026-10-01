@@ -102,6 +102,9 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             addAction(builder, context, item.id, action, index)
         }
 
+        if (item.eventType == "accounting_recognition" && item.type == CapsuleType.OCR_RESULT) {
+            builder.setTimeoutAfter((item.endMillis - System.currentTimeMillis()).coerceAtLeast(1L))
+        }
         if (item.type == CapsuleType.QUICK_MEMO_REMINDER) {
             builder.setCategory(Notification.CATEGORY_REMINDER)
                 .setTimeoutAfter((item.endMillis - System.currentTimeMillis()).coerceAtLeast(1L))
@@ -150,6 +153,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
     ) {
         val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
             this.action = action.receiverAction
+            action.stringExtras.forEach { (key, value) -> putExtra(key, value) }
             if (action.extraLongKey != null && action.extraLongValue != null) {
                 putExtra(action.extraLongKey, action.extraLongValue)
             } else {

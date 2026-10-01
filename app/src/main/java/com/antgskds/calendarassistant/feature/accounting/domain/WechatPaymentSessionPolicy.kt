@@ -38,6 +38,16 @@ class WechatPaymentSessionPolicy {
         }
     }
 
+    fun observePaymentContent(packageName: String, windowId: Int, texts: List<String>, editable: Boolean, now: Long) {
+        if (packageName != AutomaticAccountingPolicy.WECHAT || paymentWindowId != windowId || claimed == null || editable) return
+        if (texts.none { it.trim() in SUCCESS_TEXTS } &&
+            texts.any { it == "确认付款" || it == "输入密码" || it.startsWith("付款方式") }) {
+            sessionId = ++sequence
+            startedAt = now
+            claimed = null
+        }
+    }
+
     fun claimSuccess(packageName: String, windowId: Int, texts: List<String>, now: Long): Candidate? {
         if (packageName != AutomaticAccountingPolicy.WECHAT || !sessionFresh(now) || claimed != null) return null
         if (windowId < 0 || paymentWindowId != windowId) return null
@@ -45,8 +55,11 @@ class WechatPaymentSessionPolicy {
         return Candidate(sessionId ?: return null, windowId, now).also { claimed = it }
     }
 
+    fun release(candidate: Candidate) { if (claimed == candidate) claimed = null }
+
     /** 已消费的成功信号也抑制同一会话的旧 UI 树路径，不能再请求一次模型。 */
-    fun hasClaimedSuccess(): Boolean = claimed != null
+    fun hasClaimedSuccess(packageName: String = AutomaticAccountingPolicy.WECHAT): Boolean =
+        packageName == AutomaticAccountingPolicy.WECHAT && claimed != null
 
     fun isValid(candidate: Candidate, foregroundPackage: String, foregroundWindow: Int, now: Long): Boolean =
         foregroundPackage == AutomaticAccountingPolicy.WECHAT && foregroundWindow == candidate.windowId &&

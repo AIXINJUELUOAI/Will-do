@@ -4,7 +4,8 @@ data class CapsuleActionSpec(
     val label: String,
     val receiverAction: String,
     val extraLongKey: String? = null,
-    val extraLongValue: Long? = null
+    val extraLongValue: Long? = null,
+    val stringExtras: Map<String, String> = emptyMap()
 )
 
 data class CapsuleDisplayModel(
