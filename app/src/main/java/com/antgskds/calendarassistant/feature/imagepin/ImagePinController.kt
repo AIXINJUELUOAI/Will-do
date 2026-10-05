@@ -65,6 +65,20 @@ class ImagePinController(private val context: Context, private val settings: Set
         }
     }
 
+    /** 接管已打开的分享流，任务不依赖中转 Activity 的生命周期。 */
+    fun pinOpenedImages(streams: List<InputStream>, onResult: (Result<Long>) -> Unit): Job =
+        launchImagePinImport(scope, streams) {
+            val result = try {
+                require(streams.isNotEmpty()) { "未找到图片" }
+                Result.success(append(streams.size) { streams[it] })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            withContext(Dispatchers.Main) { onResult(result) }
+        }
+
     /** 截图与外部分享共用追加、容量限制和回滚；临时 PNG 无论成功与否都清理。 */
     suspend fun pinScreenshot(bitmap: Bitmap): Long = withContext(Dispatchers.IO) {
         val temporary = File.createTempFile("image_pin_capture_", ".png", context.cacheDir)
@@ -138,6 +152,26 @@ class ImagePinController(private val context: Context, private val settings: Set
         }
     }
 
+    /** 只移除当前批次中的指定副本；保留批次 id，旧弹窗不能修改后来追加的图片。 */
+    suspend fun removeImage(expectedId: Long, imagePath: String): List<File>? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (!ImagePinPolicy.enabled(settings.settings.value)) return@withLock null
+            val id = prefs.getLong("id", 0)
+            val previousEncoded = prefs.getString("ids", null)
+            val remaining = removeImagePinCopy(id, expectedId, imageIds().associateWith(::file), imagePath) { ids ->
+                val editor = prefs.edit()
+                if (ids.isEmpty()) editor.remove("id").remove("ids")
+                else editor.putString("ids", ids.joinToString(","))
+                val saved = editor.commit()
+                if (!saved) prefs.edit().putLong("id", id).putString("ids", previousEncoded).commit()
+                saved
+            } ?: return@withLock null
+            if (remaining.isEmpty() || !ImagePinPolicy.canPublish(settings.settings.value)) capsules.clearImagePin()
+            else capsules.showImagePin(id, remaining.size)
+            remaining.map(::file)
+        }
+    }
+
     suspend fun clear(expectedId: Long? = null) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val id = prefs.getLong("id", 0)
@@ -147,6 +181,34 @@ class ImagePinController(private val context: Context, private val settings: Set
             directory.listFiles().orEmpty().forEach { it.delete() }
         }
     }
+}
+
+/** 先进入 finally 再调度后台任务；成功、异常或取消均关闭整批流，包括尚未读取的图片。 */
+internal fun launchImagePinImport(
+    scope: CoroutineScope, streams: List<InputStream>, importImages: suspend () -> Unit,
+): Job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+    try {
+        ensureActive()
+        // UNDISPATCHED 先接管资源；yield 再把复制切到应用 scope 的 IO 调度线程。
+        yield()
+        importImages()
+    } finally {
+        streams.forEach { runCatching { it.close() } }
+    }
+}
+
+/** 先持久化索引，再删除副本；拒绝旧批次和列表外路径，失败时保留全部文件。 */
+internal fun removeImagePinCopy(
+    currentId: Long, expectedId: Long, images: Map<Long, File>, imagePath: String,
+    persist: (List<Long>) -> Boolean,
+): List<Long>? {
+    if (expectedId <= 0 || currentId != expectedId) return null
+    val target = images.entries.firstOrNull { it.value.absolutePath == imagePath } ?: return null
+    val remaining = images.keys.filter { it != target.key }
+    check(persist(remaining)) { "取消图片挂起失败" }
+    // 索引已提交；删除失败的孤立副本由已有启动清理回收。
+    target.value.delete()
+    return remaining
 }
 
 /** 无列表索引的旧版本以 id 作为唯一图片；新索引保留追加顺序。 */

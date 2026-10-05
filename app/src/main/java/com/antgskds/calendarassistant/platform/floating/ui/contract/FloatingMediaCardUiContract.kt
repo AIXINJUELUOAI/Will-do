@@ -17,11 +17,14 @@ data class FloatingMediaCardUiState(
     val title: String,
     val detailText: String = "",
     val pages: List<FloatingMediaPage>,
-    val completeLabel: String? = null
+    val completeLabel: String? = null,
+    val removeImageLabel: String? = null,
+    val isRemovingImage: Boolean = false
 )
 
 sealed interface FloatingMediaCardUiAction {
     data object Dismiss : FloatingMediaCardUiAction
     data object Complete : FloatingMediaCardUiAction
     data object MediaUnavailable : FloatingMediaCardUiAction
+    data class RemoveImage(val path: String) : FloatingMediaCardUiAction
 }

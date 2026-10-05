@@ -423,7 +423,8 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                             }
                             com.antgskds.calendarassistant.platform.floating.ui.connector.ImagePinMediaFloatingCardRoute(
                                 imagePaths = activeMediaRequest.imagePaths,
-                                onClose = { requestClose() }
+                                onClose = { requestClose() },
+                                onRemoveImage = { path -> removeImagePin(activeMediaRequest, path) }
                             )
                         } else if (mediaEvent != null && activeMediaRequest != null) {
                             EventMediaFloatingCardRoute(
@@ -1717,6 +1718,20 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private suspend fun removeImagePin(request: FloatingMediaRequest, path: String) {
+        val id = request.imagePinId ?: return
+        val remaining = app.imagePinController.removeImage(id, path)
+        if (mediaRequest.value != request) return
+        if (remaining == null) {
+            Toast.makeText(applicationContext, "图片挂起已更新，请重新打开", Toast.LENGTH_SHORT).show()
+            requestClose()
+        } else if (remaining.isEmpty()) {
+            requestClose()
+        } else {
+            mediaRequest.value = request.copy(imagePaths = remaining.map { it.absolutePath })
+        }
+    }
 
     private fun requestClose() {
         if (voiceCaptureState.value.status == QuickMemoVoiceCaptureStatus.CONFIRMING) {

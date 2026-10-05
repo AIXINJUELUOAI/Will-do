@@ -19,11 +19,14 @@ import androidx.lifecycle.lifecycleScope
 import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.imagepin.ImagePinPolicy
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** 分享、选图、岛上点击共用的透明入口，权限返回后再次检查，不拉起应用主页面。 */
-class ImagePinHandleActivity : ComponentActivity() {
+/** 已授权分享使用无窗口入口；选图、权限申请和岛上点击保留透明入口，不拉起主页面。 */
+open class ImagePinHandleActivity : ComponentActivity() {
+    protected open val receivesSharesWithoutWindow = false
     private val app get() = application as App
     private var imageUris: List<Uri> = emptyList()
     private var running = false
@@ -48,8 +51,28 @@ class ImagePinHandleActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        overridePendingTransition(0, 0)
+        if (receivesSharesWithoutWindow) {
+            val ready = intent.action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE) &&
+                ImagePinPolicy.captureBlockReason(this, app.settingsQueryApi.settings.value) == null &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            // Manifest 已声明 NoDisplay；必须在 onResume 前结束，不能等待复制或权限返回。
+            if (ready) receiveSharedImagesWithoutWindow()
+            else {
+                try {
+                    // 保留原始 ClipData 和 URI 授权，权限交互交给已有可见入口。
+                    startActivity(Intent(intent).setClass(this, ImagePinHandleActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+                } finally { finish() }
+            }
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
         if (!ImagePinPolicy.enabled(app.settingsQueryApi.settings.value)) { stop("请先在实验室开启图片挂起"); return }
         imageUris = savedInstanceState?.getParcelableArrayList<Uri>("image_uris").orEmpty()
         awaitingResult = savedInstanceState?.getBoolean("awaiting_result") == true
@@ -59,15 +82,46 @@ class ImagePinHandleActivity : ComponentActivity() {
             ACTION_PICK -> { awaitingResult = true; picker.launch("image/*") }
             ACTION_VIEW -> proceed()
             Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
-                val streams = if (intent.action == Intent.ACTION_SEND_MULTIPLE)
-                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
-                else listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
-                imageUris = streams.ifEmpty {
-                    intent.clipData?.let { clip -> (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri } }.orEmpty()
-                }.distinct()
+                imageUris = sharedImageUris()
                 if (imageUris.isEmpty()) stop("未找到图片") else proceed()
             }
             else -> finish()
+        }
+    }
+
+    private fun sharedImageUris(): List<Uri> {
+        val streams = if (intent.action == Intent.ACTION_SEND_MULTIPLE)
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+        else listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+        return streams.ifEmpty {
+            intent.clipData?.let { clip -> (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri } }.orEmpty()
+        }.distinct()
+    }
+
+    private fun receiveSharedImagesWithoutWindow() {
+        val streams = mutableListOf<InputStream>()
+        var handedOff = false
+        try {
+            val uris = sharedImageUris()
+            require(uris.isNotEmpty()) { "未找到图片" }
+            require(uris.size <= ConfigCatalog.IMAGE_PIN_MAX_COUNT) {
+                "最多挂起 ${ConfigCatalog.IMAGE_PIN_MAX_COUNT} 张图片，请先结束当前挂起"
+            }
+            require(uris.all { it.scheme == "content" }) { "不支持此图片来源" }
+            // 临时 URI 授权会随入口退出而失效；先打开流，后台只使用已打开的句柄。
+            uris.forEach { streams += checkNotNull(contentResolver.openInputStream(it)) { "图片无法读取" } }
+            val notificationContext = applicationContext
+            app.imagePinController.pinOpenedImages(streams) { result ->
+                Toast.makeText(notificationContext,
+                    if (result.isSuccess) "图片已挂起" else result.exceptionOrNull()?.message ?: "图片挂起失败",
+                    Toast.LENGTH_SHORT).show()
+            }
+            handedOff = true
+        } catch (e: Exception) {
+            Toast.makeText(this, e.message ?: "图片挂起失败", Toast.LENGTH_LONG).show()
+        } finally {
+            if (!handedOff) streams.forEach { runCatching { it.close() } }
+            finish()
         }
     }
 
@@ -78,9 +132,13 @@ class ImagePinHandleActivity : ComponentActivity() {
     }
 
     override fun finish() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
         super.finish()
-        @Suppress("DEPRECATION")
-        overridePendingTransition(0, 0)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 
     private fun proceed() {
@@ -141,4 +199,9 @@ class ImagePinHandleActivity : ComponentActivity() {
                 .setData(Uri.parse("willdo-image-pin:" + id)).putExtra(EXTRA_ID, id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
+}
+
+/** 系统分享专用入口；Manifest 的 NoDisplay 在系统创建窗口前生效。 */
+class ImagePinShareHandleActivity : ImagePinHandleActivity() {
+    override val receivesSharesWithoutWindow = true
 }

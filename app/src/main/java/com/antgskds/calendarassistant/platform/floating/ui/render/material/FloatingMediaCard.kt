@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +73,9 @@ fun MaterialFloatingMediaCard(
         return
     }
     val pagerState = rememberPagerState(pageCount = { state.pages.size })
+    LaunchedEffect(state.pages) {
+        if (pagerState.currentPage > state.pages.lastIndex) pagerState.scrollToPage(state.pages.lastIndex)
+    }
 
     Box(
         modifier = modifier
@@ -120,15 +125,17 @@ fun MaterialFloatingMediaCard(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = listOf(state.typeLabel, state.detailText)
-                                .filter { it.isNotBlank() }
-                                .joinToString(" · "),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        val subtitle = listOf(state.typeLabel, state.detailText)
+                            .filter { it.isNotBlank() }.joinToString(" · ")
+                        if (subtitle.isNotBlank()) {
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                     IconButton(
                         onClick = {
@@ -155,6 +162,11 @@ fun MaterialFloatingMediaCard(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
+                        userScrollEnabled = !state.isRemovingImage,
+                        key = { index ->
+                            val page = state.pages[index]
+                            if (state.removeImageLabel != null && page is FloatingMediaPage.ImageFile) page.path else index
+                        },
                         verticalAlignment = Alignment.CenterVertically
                     ) { pageIndex ->
                         when (val page = state.pages[pageIndex]) {
@@ -166,7 +178,7 @@ fun MaterialFloatingMediaCard(
                         }
                     }
 
-                    if (state.pages.size > 1) {
+                    if (state.pages.size > 1 && state.removeImageLabel == null) {
                         Text(
                             text = "${pagerState.currentPage + 1} / ${state.pages.size}",
                             modifier = Modifier
@@ -183,7 +195,29 @@ fun MaterialFloatingMediaCard(
                     }
                 }
 
-                state.completeLabel?.let { label ->
+                if (state.removeImageLabel != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${pagerState.currentPage.coerceAtMost(state.pages.lastIndex) + 1} / ${state.pages.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        val currentImage = state.pages.getOrNull(pagerState.currentPage) as? FloatingMediaPage.ImageFile
+                        TextButton(
+                            enabled = !state.isRemovingImage && !pagerState.isScrollInProgress && currentImage != null,
+                            onClick = {
+                                currentImage?.let {
+                                    haptics.confirm()
+                                    onAction(FloatingMediaCardUiAction.RemoveImage(it.path))
+                                }
+                            }
+                        ) { Text(state.removeImageLabel) }
+                    }
+                } else state.completeLabel?.let { label ->
                     Button(
                         onClick = {
                             haptics.confirm()

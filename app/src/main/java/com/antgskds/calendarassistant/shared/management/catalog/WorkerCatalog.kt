@@ -71,6 +71,13 @@ object WorkerCatalog {
             "系统图片分享选择识别日程后，在后台完成图片识别并交给入库链路",
         ),
 
+        // —— 通知 ——
+        WorkerEntry(
+            "图片挂起分享导入", Chain.NOTIFICATION, "feature/imagepin/ImagePinController.pinOpenedImages",
+            Trigger.ONE_TIME, Maturity.ACTIVE,
+            "无窗口分享入口交接已打开的流，由应用级协程完成复制、挂起与反馈；退出入口不取消导入，结束或取消均关闭整批流，无 WorkManager",
+        ),
+
         // —— 天气 ——
         WorkerEntry(
             "天气同步任务", Chain.WEATHER, "feature/weather/domain/WeatherSyncWorker",

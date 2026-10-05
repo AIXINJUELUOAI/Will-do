@@ -55,9 +55,10 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("图片挂起无窗口分享", Chain.NOTIFICATION, "platform/entry/image/ImagePinShareHandleActivity", Maturity.PIPELINE, "权限齐全的分享在 NoDisplay 入口同步打开读取流，应用级任务接管复制、反馈与资源关闭；入口在 onCreate 结束，缺权限和选图保留原有可见流程"),
         PipelineEntry("自动记账截图排队", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService.enqueueAutomatic", Maturity.PIPELINE, "命中即截图，前后核实归属后写入临时缓存；各笔独立通知、顺序模型识别及统一入库，结束清理缓存"),
         PipelineEntry("截图挂起", Chain.NOTIFICATION, "platform/accessibility/TextAccessibilityService.startImagePinCapture", Maturity.PIPELINE, "磁贴主动触发，检查权限和截图占用、复用截图延迟后采集，PNG 临时文件经 ImagePinController 统一追加并清理；失败保留已有图片"),
-        PipelineEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", Maturity.PIPELINE, "受控多图分享/选图、整批校验后追加本地副本、共用胶囊和翻页弹窗；兼容旧单图，失败保留原图，关闭或结束清理全部副本"),
+        PipelineEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", Maturity.PIPELINE, "受控多图分享/选图、整批校验后追加本地副本、共用胶囊和翻页弹窗；兼容旧单图，失败保留原图，取消本张先保存索引再清理副本并刷新数量；关闭弹窗保留挂起，结束挂起清理全部副本"),
         PipelineEntry("微信红包发送识别", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService", Maturity.PIPELINE, "原生截图暂存支付确认页，同次已发送后走统一多模态、入库、附件与结果反馈；缓存期不调用 AI"),
         PipelineEntry("财务消息采集", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", Maturity.PIPELINE, "通知和短信串行提交 RecognitionApi，本地规则识别后复用统一去重入库和结果通知；通知实际入库回执供无障碍现场在模型请求前让行"),
         PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理微信、支付宝、拼多多、淘宝和京东的诊断会话、即时/延迟采样、独立截图与限量导出；不切换服务配置，结束或导出失败后恢复自动记账"),

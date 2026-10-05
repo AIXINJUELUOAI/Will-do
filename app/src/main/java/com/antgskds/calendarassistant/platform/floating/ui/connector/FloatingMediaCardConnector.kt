@@ -2,6 +2,12 @@ package com.antgskds.calendarassistant.platform.floating.ui.connector
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import com.antgskds.calendarassistant.feature.schedule.domain.model.Event
 import com.antgskds.calendarassistant.platform.floating.ui.contract.FloatingMediaCardUiAction
@@ -26,6 +32,7 @@ fun EventMediaFloatingCardRoute(
                 FloatingMediaCardUiAction.Dismiss -> onClose()
                 FloatingMediaCardUiAction.Complete -> onComplete()
                 FloatingMediaCardUiAction.MediaUnavailable -> onMediaUnavailable()
+                is FloatingMediaCardUiAction.RemoveImage -> Unit
             }
         },
         modifier = modifier
@@ -33,14 +40,36 @@ fun EventMediaFloatingCardRoute(
 }
 
 @Composable
-fun ImagePinMediaFloatingCardRoute(imagePaths: List<String>, onClose: () -> Unit) {
+fun ImagePinMediaFloatingCardRoute(
+    imagePaths: List<String>, onClose: () -> Unit, onRemoveImage: suspend (String) -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val state = remember(imagePaths) { FloatingMediaCardUiState(typeLabel = "图片挂起", title = "图片挂起",
-        pages = imagePaths.mapIndexed { index, path -> FloatingMediaPage.ImageFile(path, "挂起图片 ${index + 1}") }) }
+    val scope = rememberCoroutineScope()
+    var removing by remember { mutableStateOf(false) }
+    val state = remember(imagePaths, removing) {
+        FloatingMediaCardUiState(typeLabel = "", title = "图片挂起",
+            pages = imagePaths.mapIndexed { index, path -> FloatingMediaPage.ImageFile(path, "挂起图片 ${index + 1}") },
+            removeImageLabel = "取消本张挂起", isRemovingImage = removing)
+    }
     FloatingMediaCardContent(state = state, onAction = { action ->
-        if (action == FloatingMediaCardUiAction.MediaUnavailable)
-            android.widget.Toast.makeText(context, "图片无法打开，请重新分享", android.widget.Toast.LENGTH_SHORT).show()
-        onClose()
+        when (action) {
+            FloatingMediaCardUiAction.Dismiss -> onClose()
+            FloatingMediaCardUiAction.MediaUnavailable -> if (!removing) {
+                android.widget.Toast.makeText(context, "图片无法打开，请重新分享", android.widget.Toast.LENGTH_SHORT).show()
+                onClose()
+            }
+            is FloatingMediaCardUiAction.RemoveImage -> if (!removing) {
+                removing = true
+                scope.launch {
+                    try { onRemoveImage(action.path) }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: Exception) {
+                        android.widget.Toast.makeText(context, e.message ?: "取消图片挂起失败", android.widget.Toast.LENGTH_SHORT).show()
+                    } finally { removing = false }
+                }
+            }
+            FloatingMediaCardUiAction.Complete -> Unit
+        }
     })
 }
 
@@ -67,6 +96,7 @@ fun QuickMemoMediaFloatingCardRoute(
                 FloatingMediaCardUiAction.Dismiss -> onClose()
                 FloatingMediaCardUiAction.MediaUnavailable -> onMediaUnavailable()
                 FloatingMediaCardUiAction.Complete -> Unit
+                is FloatingMediaCardUiAction.RemoveImage -> Unit
             }
         },
         modifier = modifier

@@ -191,8 +191,12 @@
             android:theme="@style/Theme.CalendarAssistant.ShareRelay"
             android:resizeableActivity="false"
             android:excludeFromRecents="true" android:taskAffinity="" android:exported="false" />
+        <activity android:name=".platform.entry.image.ImagePinShareHandleActivity"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true" android:noHistory="true"
+            android:taskAffinity="" android:exported="false" />
         <activity-alias android:name=".platform.entry.image.ImagePinShareActivity"
-            android:targetActivity=".platform.entry.image.ImagePinHandleActivity"
+            android:targetActivity=".platform.entry.image.ImagePinShareHandleActivity"
             android:label="图片挂起" android:icon="@drawable/ic_share_image_pin"
             android:enabled="false" android:exported="true">
             <intent-filter>
