@@ -8,6 +8,7 @@ import com.antgskds.calendarassistant.shared.ui.material.component.LocalDetailWo
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,6 +74,7 @@ import com.antgskds.calendarassistant.shared.ui.material.component.CenteredDialo
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelDatePickerDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.AppAlertDialog
 import com.antgskds.calendarassistant.shared.ui.material.component.AppOverlayCard
+import com.antgskds.calendarassistant.shared.ui.material.component.AppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppGlassSettings
 import com.antgskds.calendarassistant.shared.ui.material.component.WheelPicker
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
@@ -165,7 +169,7 @@ fun MaterialCourseEditDialog(
                                 )
                             )
                         }
-                    }) { Text(if (embedded) "保存" else "确定") }
+                    }, enabled = name.isNotBlank()) { Text("保存") }
     }
     val editorFields: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
         if (embedded && course == null && onSwitchType != null) TextButton(onClick = onSwitchType, enabled = !dirty) { Text("改为新建日程") }
@@ -212,34 +216,6 @@ fun MaterialCourseEditDialog(
                         meta = previewMeta
                     )
     }
-    val editorForm: @Composable () -> Unit = {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (!embedded) Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (course == null) "添加课程" else "编辑课程",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    editorFields()
-                }
-
-                if (!embedded) Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End, content = editorActions)
-            }
-    }
     val glassSettings = LocalAppGlassSettings.current
     val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
     androidx.compose.runtime.CompositionLocalProvider(
@@ -261,46 +237,13 @@ fun MaterialCourseEditDialog(
                 Text(previewMeta, Modifier.padding(top = 16.dp))
             }
         }
-    } else Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        DialogEdgeToEdgeEffect(isDarkTheme = false)
-        if (glassSettings.active) DisableDialogWindowDimEffect()
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
-        ) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
-            PredictiveBottomDialogHost(
-                visible = true,
-                onDismiss = onDismiss,
-                predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
-                backHandlerEnabled = !isChildDialogVisible,
-                scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
-                contentAlignment = Alignment.Center,
-                contentPadding = WindowInsets.navigationBars.asPaddingValues()
-            ) {
-            AppOverlayCard(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .widthIn(max = 720.dp)
-                    .fillMaxWidth()
-                    .heightIn(max = 670.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-            editorForm()
-            }
-            }
-            }
-        }
-    }
+    } else CourseEditorDialogHost(
+        title = if (course == null) "新建课程" else "编辑课程",
+        glassSettings = glassSettings,
+        windowBackdrop = if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier,
+        onDismiss = close, predictiveBackEnabled = predictiveBackEnabled,
+        childDialogVisible = isChildDialogVisible, actions = editorActions, fields = editorFields,
+    )
 
     if (showDayPicker) {
         val days = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
@@ -414,15 +357,19 @@ fun MaterialCourseSingleEditDialog(
     initialEndNode: Int,
     initialDate: LocalDate,
     maxNodes: Int = 12,
+    timeTableJson: String = "",
+    initialColor: Int? = null,
+    initialTeacher: String = "",
     predictiveBackEnabled: Boolean = true,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
-    onConfirm: (String, String, Int, Int, LocalDate) -> Unit
+    onConfirm: (String, String, String, Int, Int, LocalDate) -> Unit
 ) {
     val haptics = rememberAppHaptics()
     val safeMaxNodes = maxNodes.coerceAtLeast(1)
     var name by remember(initialName) { mutableStateOf(initialName) }
     var location by remember(initialLocation) { mutableStateOf(initialLocation) }
+    var teacher by remember(initialTeacher) { mutableStateOf(initialTeacher) }
     var startNode by remember(initialStartNode, safeMaxNodes) { mutableIntStateOf(initialStartNode.coerceIn(1, safeMaxNodes)) }
     var endNode by remember(initialEndNode, safeMaxNodes) { mutableIntStateOf(initialEndNode.coerceIn(1, safeMaxNodes)) }
     var date by remember(initialDate) { mutableStateOf(initialDate) }
@@ -431,53 +378,40 @@ fun MaterialCourseSingleEditDialog(
     val isChildDialogVisible = showDatePicker || showNodeRangePicker
     val embedded = LocalDetailWorkspace.current
     var editing by remember { mutableStateOf(false) }
-    val dirty = name != initialName || location != initialLocation || startNode != initialStartNode || endNode != initialEndNode || date != initialDate
+    val dirty = name != initialName || location != initialLocation || teacher != initialTeacher || startNode != initialStartNode || endNode != initialEndNode || date != initialDate
     val close = rememberWorkspaceCloseRequest(editing && dirty, onDismiss)
     val editorActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-                    TextButton(onClick = { haptics.warning(); onDelete() }) { Text("本节停课/删除", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { haptics.warning(); onDelete() }) { Text("本节停课", color = MaterialTheme.colorScheme.error) }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = { haptics.click(); close() }) { Text("取消") }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { haptics.confirm(); onConfirm(name, location, startNode, endNode, date) }) { Text(if (embedded) "保存" else "确定") }
+                    Button(onClick = { haptics.confirm(); onConfirm(name, location, teacher, startNode, endNode, date) }, enabled = name.isNotBlank()) { Text("保存") }
     }
     val editorFields: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
                     Text("此修改仅对本次生效，并会脱离重复课程。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("课程名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("地点") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
-                            onValueChange = {},
-                            label = { Text("日期") },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = false,
-                            readOnly = true
-                        )
-                        Box(modifier = Modifier.matchParentSize().clickable { haptics.click(); showDatePicker = true })
+                    OutlinedTextField(value = teacher, onValueChange = { teacher = it }, label = { Text("教师") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    val sectionLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                    HorizontalDivider(color = sectionLineColor)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ButtonSelector(date.format(DateTimeFormatter.ofPattern("M月d日")), Modifier.weight(1f)) { haptics.click(); showDatePicker = true }
+                        ButtonSelector("第 $startNode - $endNode 节", Modifier.weight(1.2f)) { haptics.click(); showNodeRangePicker = true }
                     }
-                    HorizontalDivider()
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("节次调整")
-                        OutlinedButton(onClick = { haptics.click(); showNodeRangePicker = true }) { Text("第 $startNode - $endNode 节") }
+                    HorizontalDivider(color = sectionLineColor)
+                    val timeNodes = remember(timeTableJson) {
+                        TimeTableLayoutUtils.parseNodes(timeTableJson).takeIf { it.isNotEmpty() }
+                            ?: TimeTableLayoutUtils.generateNodes(TimeTableLayoutUtils.defaultConfig())
                     }
-    }
-    val editorForm: @Composable () -> Unit = {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (!embedded) Column(modifier = Modifier.padding(24.dp)) {
-                    Text("编辑单次课程", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                }
-                Column(
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    editorFields()
-                }
-                if (!embedded) Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End, content = editorActions)
-            }
+                    val startTime = timeNodes.firstOrNull { it.index == startNode }?.startTime ?: "--:--"
+                    val endTime = timeNodes.firstOrNull { it.index == endNode }?.endTime ?: "--:--"
+                    CoursePreviewCard(
+                        color = initialColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary,
+                        borderColor = sectionLineColor,
+                        title = name.ifBlank { "课程名称" } + if (location.isBlank()) "" else " · $location",
+                        schedule = "${date.format(DateTimeFormatter.ofPattern("M月d日"))} 第${startNode}-${endNode}节",
+                        time = "$startTime - $endTime", meta = listOf("仅修改本次课程", teacher).filter(String::isNotBlank).joinToString(" · "),
+                    )
     }
     val glassSettings = LocalAppGlassSettings.current
     val childDialogBackdrop = rememberAppWindowBackdrop(parent = glassSettings.overlayBackdrop)
@@ -514,49 +448,64 @@ fun MaterialCourseSingleEditDialog(
                 Text("$date · 第 $startNode–$endNode 节",
                     style = MaterialTheme.typography.bodyLarge)
                 if (location.isNotBlank()) Text(location, Modifier.padding(top = 20.dp))
+                if (teacher.isNotBlank()) Text(teacher, Modifier.padding(top = 16.dp))
                 Text("编辑仅影响本次课程。", Modifier.padding(top = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-    } else Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        DialogEdgeToEdgeEffect(isDarkTheme = false)
-        if (glassSettings.active) DisableDialogWindowDimEffect()
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier)
-        ) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
-        PredictiveBottomDialogHost(
-            visible = true,
-            onDismiss = onDismiss,
-            predictiveBackEnabled = predictiveBackEnabled && !isChildDialogVisible,
-            backHandlerEnabled = !isChildDialogVisible,
-            scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
-            contentAlignment = Alignment.Center,
-            contentPadding = WindowInsets.navigationBars.asPaddingValues()
-        ) {
-            AppOverlayCard(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .widthIn(max = 720.dp)
-                    .fillMaxWidth()
-                    .heightIn(max = 670.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-            editorForm()
-        }
-        }
-        }
-        }
+    } else CourseEditorDialogHost(
+        title = "编辑单次课程", glassSettings = glassSettings,
+        windowBackdrop = if (glassSettings.active) Modifier.appWindowBackdrop(childDialogBackdrop) else Modifier,
+        onDismiss = close, predictiveBackEnabled = predictiveBackEnabled,
+        childDialogVisible = isChildDialogVisible, actions = editorActions, fields = editorFields,
+    )
     }
+}
+
+
+/** 手机上的课程新建与编辑共用同一个弹窗壳；平板继续使用原有详情工作区。 */
+@Composable
+private fun CourseEditorDialogHost(
+    title: String,
+    glassSettings: AppGlassSettings,
+    windowBackdrop: Modifier,
+    onDismiss: () -> Unit,
+    predictiveBackEnabled: Boolean,
+    childDialogVisible: Boolean,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+    fields: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
+        usePlatformDefaultWidth = false, dismissOnBackPress = false, decorFitsSystemWindows = false,
+    )) {
+        DialogEdgeToEdgeEffect(isDarkTheme = glassSettings.darkTheme)
+        if (glassSettings.active) DisableDialogWindowDimEffect()
+        Box(Modifier.fillMaxSize().then(windowBackdrop)) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalAppGlassSettings provides glassSettings) {
+                PredictiveBottomDialogHost(
+                    visible = true, onDismiss = onDismiss,
+                    predictiveBackEnabled = predictiveBackEnabled && !childDialogVisible,
+                    backHandlerEnabled = !childDialogVisible,
+                    scrimColor = if (glassSettings.active) Color.Transparent else Color.Black.copy(alpha = 0.4f),
+                    contentAlignment = Alignment.Center,
+                    contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
+                ) {
+                    AppOverlayCard(
+                        modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = 720.dp)
+                            .fillMaxWidth().heightIn(max = 670.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        Column(Modifier.fillMaxSize()) {
+                            Text(title, Modifier.fillMaxWidth().padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 8.dp),
+                                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp), content = fields)
+                            Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.End, content = actions)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -600,7 +549,7 @@ fun WheelRangePickerDialog(
 }
 
 @Composable
-fun CourseItem(course: Course, onDelete: () -> Unit, onClick: () -> Unit, uiSize: Int = 2) {
+fun CourseItem(course: Course, onDelete: () -> Unit, onClick: () -> Unit, onLongPress: () -> Unit, uiSize: Int = 2) {
     var isRevealed by remember { mutableStateOf(false) }
     SwipeableCourseItem(
         course = course,
@@ -609,6 +558,7 @@ fun CourseItem(course: Course, onDelete: () -> Unit, onClick: () -> Unit, uiSize
         onCollapse = { isRevealed = false },
         onDelete = onDelete,
         onClick = onClick,
+        onLongPress = onLongPress,
         uiSize = uiSize
     )
 }
@@ -621,6 +571,7 @@ private fun SwipeableCourseItem(
     onCollapse: () -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit,
+    onLongPress: () -> Unit,
     uiSize: Int = 2
 ) {
     val actionButtonSize = when (uiSize) { 1 -> 48.dp; 2 -> 52.dp; else -> 56.dp }
@@ -646,7 +597,11 @@ private fun SwipeableCourseItem(
     ) { swipeModifier, _, close ->
         Surface(
             modifier = swipeModifier
-                .clickable { haptics.click(); if (isRevealed) close() else onClick() },
+                .combinedClickable(
+                    onClick = { haptics.click(); if (isRevealed) close() else onClick() },
+                    onLongClick = { haptics.longPress(); close(); onLongPress() },
+                    onLongClickLabel = "删除课程", hapticFeedbackEnabled = false,
+                ),
             color = Color.Transparent,
             shadowElevation = 0.dp
         ) {

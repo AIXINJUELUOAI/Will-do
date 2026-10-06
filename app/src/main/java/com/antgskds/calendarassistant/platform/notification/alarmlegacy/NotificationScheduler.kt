@@ -177,6 +177,7 @@ object NotificationScheduler {
     private fun scheduleAlarmExact(
         context: Context, triggerTime: Long, intent: Intent, requestCode: Int, alarmManager: AlarmManager
     ) {
+        if ((context.applicationContext as? App)?.reminderWindowStore?.allows(triggerTime) != true) return
         val pendingIntent = PendingIntent.getBroadcast(
             context, requestCode, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT

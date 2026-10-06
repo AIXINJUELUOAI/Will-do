@@ -1,6 +1,8 @@
 package com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template
 
 import com.antgskds.calendarassistant.feature.accounting.domain.AccountingRecognitionResult
+import com.antgskds.calendarassistant.feature.accounting.domain.AccountingDuplicateAction
+import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleActionSpec
 import com.antgskds.calendarassistant.feature.capsule.domain.CapsuleDisplayModel
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -46,6 +48,9 @@ object AccountingRecognitionDisplay {
         }
         return CapsuleDisplayModel(shortText = short, primaryText = title,
             secondaryText = lines.firstOrNull(), tertiaryText = lines.getOrNull(1),
-            expandedText = lines.joinToString("\n"), tapOpensAccounting = true)
+            expandedText = lines.joinToString("\n"), tapOpensAccounting = true,
+            actions = listOfNotNull(AccountingDuplicateAction.create(result.suspectedDraftIds)).map {
+                CapsuleActionSpec(label = it.label, receiverAction = it.key, stringExtras = it.payload)
+            })
     }
 }

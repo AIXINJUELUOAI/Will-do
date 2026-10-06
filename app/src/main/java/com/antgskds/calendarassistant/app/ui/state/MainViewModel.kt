@@ -790,6 +790,7 @@ class MainViewModel(
         item: ScheduleDisplayItem,
         newName: String,
         newLocation: String,
+        newTeacher: String,
         newStartNode: Int,
         newEndNode: Int,
         newDate: LocalDate
@@ -820,7 +821,8 @@ class MainViewModel(
                         endNode = newEndNode,
                         originalOccurrenceTs = target.occurrenceTs,
                         originalWeek = originalWeek,
-                        originalDate = originalDate
+                        originalDate = originalDate,
+                        teacher = newTeacher,
                     ),
                     parentId = target.parentId,
                     rrule = "",
@@ -859,7 +861,8 @@ class MainViewModel(
                             endNode = newEndNode,
                             originalOccurrenceTs = originalTs,
                             originalWeek = originalWeek,
-                            originalDate = originalDate
+                            originalDate = originalDate,
+                            teacher = newTeacher,
                         )
                     )
                 )

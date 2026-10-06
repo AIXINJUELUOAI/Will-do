@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
 class ScheduleReminderCoordinator(
@@ -54,9 +55,20 @@ class ScheduleReminderCoordinator(
     private var reminderReconcileJob: Job? = null
     private var eventSubscriptionsStarted = false
     private val fullReconcileMutex = Mutex()
-    @Volatile
-    private var rerunFullReminderReconcile = false
     private val reminderNode = ReminderStoreNode(appContext)
+
+    fun onForeground() {
+        val app = appContext.applicationContext as com.antgskds.calendarassistant.App
+        val reset = app.reminderWindowStore.enterForeground()
+        appScope.launch {
+            if (reset) {
+                app.runtimeCenter.restoreAfterBoot()
+                com.antgskds.calendarassistant.feature.schedule.data.sync.SystemCalendarSyncManager(appContext)
+                    .scheduleCalDAVSync(app.syncCenter.getSyncStatus().isEnabled)
+            }
+            reconcileAllNow()
+        }
+    }
 
     fun reconcileAll() {
         appScope.launch {
@@ -64,22 +76,9 @@ class ScheduleReminderCoordinator(
         }
     }
 
-    suspend fun reconcileAllNow() {
-        if (!fullReconcileMutex.tryLock()) {
-            rerunFullReminderReconcile = true
-            Log.d(TAG, "full reminder reconcile already running; request coalesced")
-            return
-        }
-
-        try {
-            do {
-                rerunFullReminderReconcile = false
-                runFullReminderReconcile()
-                refreshCapsuleState()
-            } while (rerunFullReminderReconcile)
-        } finally {
-            fullReconcileMutex.unlock()
-        }
+    suspend fun reconcileAllNow() = fullReconcileMutex.withLock {
+        runFullReminderReconcile()
+        refreshCapsuleState()
     }
 
     fun startEventSubscriptions() {
@@ -256,23 +255,42 @@ class ScheduleReminderCoordinator(
         storedEvents.filterNot { com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(it, settings) }
             .forEach { cancelEvent(it, it.id) }
         val activeEvents = storedEvents.filter { com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.allows(it, settings) }
-        val now = LocalDate.now()
-        val displayItems = ScheduleDisplayHelper.buildDisplayItems(
-            activeEvents,
-            now,
-            now.plusDays(NOTIFICATION_WINDOW_DAYS)
-        )
-        val parentMap = activeEvents.filter { it.isRecurring }.associateBy { it.id ?: 0L }
+        val app = appContext.applicationContext as com.antgskds.calendarassistant.App
+        val window = app.reminderWindowStore
+        val nowMillis = System.currentTimeMillis()
+        val zone = java.time.ZoneId.systemDefault()
+        val maxDuration = activeEvents.maxOfOrNull { (it.endTS - it.startTS).coerceAtLeast(0L) } ?: 0L
+        val maxAdvance = activeEvents.maxOfOrNull {
+            com.antgskds.calendarassistant.feature.schedule.data.store.reminder.ReminderPolicy
+                .effectiveReminders(it, settings).maxOfOrNull { reminder -> reminder.minutes.toLong() } ?: 0L
+        } ?: 0L
+        // Expand boundary-crossing occurrences too; actual alarm times are filtered by the saved window.
+        val from = java.time.Instant.ofEpochMilli(nowMillis - maxDuration * 1000L).atZone(zone).toLocalDate().minusDays(1)
+        val to = java.time.Instant.ofEpochMilli(window.endExclusive + maxAdvance * 60_000L).atZone(zone).toLocalDate().plusDays(1)
+        val displayItems = if (window.endExclusive > nowMillis) ScheduleDisplayHelper.buildDisplayItems(activeEvents, from, to) else emptyList()
+        val parentMap = activeEvents.associateBy { it.id ?: 0L }
         val liveIds = activeEvents.mapNotNull { it.id }.toSet()
-
-        val singleEvents = activeEvents
-            .filterNot { it.isRecurring }
-        singleEvents.forEach(::reconcileEvent)
-
-        scheduleCenter.submitSingleEvents(singleEvents)
-        scheduleCenter.submitRecurringWindow(displayItems, parentMap)
-        reminderNode.refreshForWindow(displayItems, parentMap)
-        reminderNode.cancelStaleEvents(liveIds)
+        val singleEvents = activeEvents.filterNot { it.isRecurring }
+        // Retire old per-event capsule identities. New single and recurring capsules share the tracked window path.
+        singleEvents.forEach {
+            NotificationScheduler.cancelScheduledAlarms(appContext, it)
+            it.id?.let(reminderNode::cancelForEvent)
+        }
+        suspend fun syncWindow() {
+            scheduleCenter.submitSingleEvents(singleEvents)
+            scheduleCenter.submitRecurringWindow(displayItems, parentMap)
+            reminderNode.refreshForWindow(displayItems, parentMap)
+        }
+        // Include memo alarms in both passes so stale slots in any reminder chain are freed first.
+        window.cleaning {
+            syncWindow()
+            reminderNode.cancelStaleEvents(liveIds)
+            app.quickMemoCenter.rescheduleReminders()
+        }
+        if (window.canRegister) {
+            syncWindow()
+            app.quickMemoCenter.rescheduleReminders()
+        }
     }
 
     private fun reconcileEvent(event: Event) {
@@ -318,7 +336,6 @@ class ScheduleReminderCoordinator(
 
     companion object {
         private const val TAG = "ScheduleReminder"
-        private const val NOTIFICATION_WINDOW_DAYS = 7L
     }
 
     private data class ReminderSettingsKey(

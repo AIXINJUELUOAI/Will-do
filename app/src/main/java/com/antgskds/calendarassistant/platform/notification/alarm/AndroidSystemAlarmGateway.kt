@@ -22,6 +22,11 @@ class AndroidSystemAlarmGateway(context: Context) : SystemAlarmGateway {
         triggerAtEpochMillis: Long,
         allowWhileIdle: Boolean
     ): NotificationResult {
+        if (key.value.startsWith("schedule:") &&
+            (appContext as? com.antgskds.calendarassistant.App)?.reminderWindowStore?.allows(triggerAtEpochMillis) != true
+        ) {
+            return NotificationResult.Failure(key, NotificationFailureReason.SCHEDULE_FAILED, "Outside foreground reminder window")
+        }
         val pendingIntent = createSchedulePendingIntent(key)
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && allowWhileIdle) {

@@ -20,6 +20,7 @@ class AccountingRepository(private val database: EventsDatabase) : AccountingApi
 
     override suspend fun ingestRecognizedBills(drafts: List<AccountingDraft>, useCurrentTimeForMissing: Boolean): AccountingRecognitionResult = database.withTransaction {
         val saved = mutableListOf<AccountingEntry>()
+        val suspectedDraftIds = mutableListOf<String>()
         var duplicates = 0
         var suspected = 0
         var pending = 0
@@ -51,13 +52,14 @@ class AccountingRepository(private val database: EventsDatabase) : AccountingApi
                 dao.insertDraft(draft.copy(occurredAt = actualTime.toString().replace('T', ' '),
                     note = listOf(draft.note, AccountingRecognitionMapper.POSSIBLE_DUPLICATE_NOTE).filter(String::isNotBlank).joinToString(" · ")))
                 suspected++
+                suspectedDraftIds += draft.id
             } else {
                 dao.insert(entry)
                 dao.deleteDraft(draft.id)
                 saved += entry
             }
         }
-        AccountingRecognitionResult(saved, duplicates, suspected, pending)
+        AccountingRecognitionResult(saved, duplicates, suspected, pending, suspectedDraftIds)
     }
 
     override suspend fun stageDrafts(drafts: List<AccountingDraft>) = database.withTransaction {

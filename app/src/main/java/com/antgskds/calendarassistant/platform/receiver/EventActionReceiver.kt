@@ -22,6 +22,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import com.antgskds.calendarassistant.feature.accounting.domain.AccountingDuplicateAction
+import com.antgskds.calendarassistant.feature.accounting.application.AccountingDuplicateConfirmation
+import com.antgskds.calendarassistant.shared.ui.material.component.UniversalToastUtil
 
 /**
  * 事件动作接收器：处理通知上的「完成」「签到」按钮。
@@ -56,6 +61,28 @@ class EventActionReceiver : BroadcastReceiver() {
         Log.d(TAG, "receive action=${intent.action} eventId=${intent.getStringExtra(EXTRA_EVENT_ID)}")
 
         when (intent.action) {
+            AccountingDuplicateAction.RECEIVER_ACTION -> {
+                val ids = AccountingDuplicateAction.draftIds(intent.getStringExtra(AccountingDuplicateAction.EXTRA_DRAFT_IDS))
+                if (ids.isEmpty()) return
+                val pending = goAsync()
+                scope.launch {
+                    try {
+                        val saved = AccountingDuplicateConfirmation.confirm(ids,
+                            readDrafts = { app.accountingApi.drafts.first() },
+                            confirmDraft = app.ingestCommandApi::confirmAccountingDraft)
+                        withContext(Dispatchers.Main) {
+                            if (saved > 0) UniversalToastUtil.showSuccess(context, "已计入 $saved 笔账单")
+                            else UniversalToastUtil.showInfo(context, "账单已处理或需要核对，请查看记账页")
+                        }
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        Log.e(TAG, "accounting duplicate confirmation failed", error)
+                        withContext(Dispatchers.Main) {
+                            UniversalToastUtil.showError(context, "部分账单未能入库，请在记账页核对")
+                        }
+                    } finally { pending.finish() }
+                }
+            }
             ACTION_CLEAR_IMAGE_PIN -> {
                 val id = intent.getLongExtra("image_pin_id", -1L).takeIf { it > 0 } ?: return
                 val pending = goAsync()

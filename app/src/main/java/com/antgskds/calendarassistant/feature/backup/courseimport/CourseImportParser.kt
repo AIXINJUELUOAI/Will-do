@@ -53,6 +53,20 @@ object CourseImportParser {
         return parseWakeUpFile(trimmed)
     }
 
+    /** 新版口令需要 WakeUp 的签名接口；旧接口拒绝时保留文件导入路径。 */
+    fun extractWakeUpShareData(body: String): String {
+        val root = compactJson.parseToJsonElement(body).jsonObject
+        val status = root["status"]?.jsonPrimitive?.content?.toIntOrNull()
+        if (status == 5000004) {
+            error("新版 WakeUp 分享口令暂无法导入，请导出课表文件并选择“从文件”导入")
+        }
+        if (status != 1) {
+            error(root["message"]?.jsonPrimitive?.content ?: "WakeUp 返回错误状态")
+        }
+        return root["data"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+            ?: error("WakeUp 返回数据为空")
+    }
+
     fun parseWakeUpShareData(data: String): ParsedCourseImport {
         val segments = data.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
         if (segments.size < 5) error("WakeUp 分享数据格式不完整")

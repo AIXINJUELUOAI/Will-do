@@ -70,9 +70,11 @@ object CourseEventMapper {
         endNode: Int,
         originalOccurrenceTs: Long,
         originalWeek: Int,
-        originalDate: LocalDate
+        originalDate: LocalDate,
+        teacher: String = parentMeta.teacher,
     ): String {
         val meta = parentMeta.copy(
+            teacher = teacher,
             startNode = startNode,
             endNode = endNode,
             parentCourseUid = parentMeta.uid,

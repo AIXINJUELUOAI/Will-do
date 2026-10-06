@@ -28,6 +28,7 @@ import com.antgskds.calendarassistant.feature.recognition.application.Recognitio
 import com.antgskds.calendarassistant.feature.notification.application.NotificationOrchestrator
 import com.antgskds.calendarassistant.feature.notification.api.NotificationApi
 import com.antgskds.calendarassistant.platform.notification.alarm.QuickMemoReminderScheduler
+import com.antgskds.calendarassistant.feature.notification.policy.ReminderWindowPolicy
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatEnd
 import com.antgskds.calendarassistant.feature.schedule.domain.model.RepeatFrequency
@@ -124,22 +125,30 @@ class QuickMemoFacade(
     }
 
     private suspend fun syncReminderSchedules(reminders: List<QuickMemoReminderEntity>) = reminderMutex.withLock {
-        val active = mutableMapOf<Long, Pair<Long, Long>>()
+        val window = (appContext as? App)?.reminderWindowStore
+        val active = mutableMapOf<Long, Pair<Long, Map<Long, Long>>>()
         reminders.forEach { item ->
             val id = item.id ?: return@forEach
             val current = repository.getReminder(id) ?: return@forEach
-            if (current.triggerAt <= System.currentTimeMillis()) {
-                Log.i(TAG, "reconcile overdue reminder=$id; attempting delivery before cleanup")
+            if (window?.isForeground == true && current.triggerAt <= System.currentTimeMillis()) {
                 deliverReminderLocked(id)
             }
             val remaining = repository.getReminder(id) ?: return@forEach
-            val nextAt = if (remaining.triggerAt > System.currentTimeMillis()) remaining.triggerAt
-                else System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS
-            active[id] = remaining.quickMemoId to nextAt
+            val now = System.currentTimeMillis()
+            val triggers = ReminderWindowPolicy.occurrences(remaining.triggerAt, now, window?.endExclusive ?: 0L) {
+                resolveNextReminderAt(remaining, it)
+            }.associateWith { it }.toMutableMap()
+            if (window?.isForeground == true && remaining.triggerAt <= now) {
+                val retryAt = now + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS
+                if (ReminderWindowPolicy.contains(retryAt, now, window.endExclusive)) triggers[retryAt] = remaining.triggerAt
+            }
+            active[id] = remaining.quickMemoId to triggers.toSortedMap()
         }
-        (scheduledReminderIds - active.keys).forEach { reminderScheduler?.cancel(it) }
-        active.forEach { (id, target) -> reminderScheduler?.schedule(id, target.first, target.second) }
-        scheduledReminderIds = active.keys.toSet()
+        ((reminderScheduler?.scheduledIds().orEmpty() + scheduledReminderIds) - active.keys)
+            .forEach { reminderScheduler?.cancel(it) }
+        scheduledReminderIds = active.filter { (id, target) ->
+            reminderScheduler?.reconcile(id, target.first, target.second) == true
+        }.keys.toSet()
     }
 
     suspend fun getQuickMemo(id: Long): QuickMemoEntity? = withContext(Dispatchers.IO) {
@@ -290,7 +299,7 @@ class QuickMemoFacade(
             )
             reminderId
         }
-        reminderScheduler?.schedule(storedId, memoId, normalizedAt)
+        syncReminderSchedules(repository.getAllReminders())
         storedId
     }
 
@@ -303,13 +312,19 @@ class QuickMemoFacade(
         syncReminderSchedules(repository.getAllReminders())
     }
 
-    suspend fun deliverReminder(reminderId: Long) = withContext(Dispatchers.IO) {
-        reminderMutex.withLock { deliverReminderLocked(reminderId) }
+    suspend fun deliverReminder(reminderId: Long, expectedAt: Long? = null) = withContext(Dispatchers.IO) {
+        reminderMutex.withLock { deliverReminderLocked(reminderId, expectedAt) }
     }
 
-    private suspend fun deliverReminderLocked(reminderId: Long) {
+    private suspend fun deliverReminderLocked(reminderId: Long, expectedAt: Long? = null) {
         val reminder = repository.getReminder(reminderId) ?: run {
             Log.i(TAG, "skip missing or completed reminder=$reminderId")
+            return
+        }
+        if (!QuickMemoReminderDeliveryPolicy.acceptsOccurrence(expectedAt, reminder.triggerAt) {
+                resolveNextReminderAt(reminder, it)
+            }) {
+            Log.d(TAG, "skip outdated reminder occurrence=$reminderId")
             return
         }
         val memo = repository.getQuickMemo(reminder.quickMemoId) ?: return
@@ -324,12 +339,12 @@ class QuickMemoFacade(
             throw error
         } catch (error: Exception) {
             Log.e(TAG, "Quick memo reminder publish exception reminder=$reminderId", error)
-            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS)
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS, reminder.triggerAt)
             return
         }
         if (!QuickMemoReminderDeliveryPolicy.isDelivered(result)) {
             Log.w(TAG, "Quick memo reminder not posted; retained for retry reminder=$reminderId result=$result")
-            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS)
+            reminderScheduler?.schedule(reminderId, reminder.quickMemoId, System.currentTimeMillis() + ConfigCatalog.QUICK_MEMO_REMINDER_RETRY_MS, reminder.triggerAt)
             return
         }
         Log.i(TAG, "Quick memo reminder posted reminder=$reminderId; completing occurrence")

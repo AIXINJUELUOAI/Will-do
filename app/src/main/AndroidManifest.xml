@@ -330,6 +330,11 @@
             android:name=".platform.floating.FloatingBallService"
             android:exported="false" />
 
+        <!-- 普通提醒的持久化系统闹钟入口；名称必须跨版本稳定。 -->
+        <receiver
+            android:name=".platform.notification.receiver.NotificationAlarmReceiver"
+            android:exported="false" />
+
         <!-- 4. 闹钟广播接收器 -->
         <receiver android:name=".platform.receiver.AlarmReceiver" />
 

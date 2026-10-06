@@ -120,12 +120,13 @@ fun AccountingPreviewScreen(
             var analysis by rememberSaveable { mutableStateOf(false) }
             var transferMenu by remember { mutableStateOf(false) }
             var revealedId by remember { mutableStateOf<String?>(null) }
+            var actionMenuId by remember { mutableStateOf<String?>(null) }
             val actionButtonSize = when (uiSize) { 1 -> 48.dp; 2 -> 52.dp; else -> 56.dp }
             val actionMenuWidth = when (uiSize) { 1 -> 130.dp; 2 -> 140.dp; else -> 150.dp }
             LaunchedEffect(savedDate) {
                 savedDate?.let { anchorText = it.toString(); viewModel.consumeSavedDate() }
             }
-            LaunchedEffect(anchorText, periodName) { revealedId = null }
+            LaunchedEffect(anchorText, periodName) { revealedId = null; actionMenuId = null }
             var detailId by rememberSaveable { mutableStateOf<String?>(null) }
             val useTwoPane = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
             LaunchedEffect(importState.result) {
@@ -308,8 +309,8 @@ fun AccountingPreviewScreen(
                                     dataError != null -> dataError.orEmpty()
                                     else -> "这个周期暂无账单"
                                 }, color = pageSecondary)
-                                if (!readOnly) TextButton(onClick = { if (dataError != null) viewModel.reload() else viewModel.openImport() }) {
-                                    Text(if (dataError != null) "重试" else "导入账单")
+                                if (!readOnly && dataError != null) TextButton(onClick = viewModel::reload) {
+                                    Text("重试")
                                 }
                             }
                         }
@@ -335,7 +336,7 @@ fun AccountingPreviewScreen(
                                         }
                                         SwipeActionIcon(Icons.Outlined.Delete, Color(0xFFF44336), actionButtonSize,
                                             hapticEnabled, contentDescription = "删除账单") {
-                                            close(); viewModel.requestDelete(bill.id)
+                                            close(); viewModel.deleteEntry(bill.id)
                                         }
                                     }
                                 },
@@ -343,12 +344,12 @@ fun AccountingPreviewScreen(
                                 Row(swipeModifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).semantics {
                                     customActions = if (readOnly || (useTwoPane && editorState.open)) emptyList() else listOf(
                                         CustomAccessibilityAction("编辑账单") { close(); viewModel.openEditor(bill.date, bill.id); true },
-                                        CustomAccessibilityAction("删除账单") { close(); viewModel.requestDelete(bill.id); true },
+                                        CustomAccessibilityAction("删除账单") { close(); viewModel.deleteEntry(bill.id); true },
                                     )
                                 }.combinedClickable(
                                     enabled = !useTwoPane || !editorState.open,
                                     onClick = { haptics.click(); if (progress > 0f) close() else detailId = bill.id },
-                                    onLongClick = { haptics.longPress(); close(); detailId = bill.id },
+                                    onLongClick = { haptics.longPress(); close(); if (!readOnly) actionMenuId = bill.id },
                                     hapticFeedbackEnabled = false,
                                 ).padding(top = 12.dp, bottom = 12.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                                     val accent = if (!bill.counted) MaterialTheme.colorScheme.onSurfaceVariant
@@ -442,15 +443,27 @@ fun AccountingPreviewScreen(
                 onDismiss = { transferMenu = false; exportBills() }, onDismissRequest = { transferMenu = false },
                 modifier = Modifier.padding(bottom = 24.dp),
             )
+            val menuBill = bills.firstOrNull { it.id == actionMenuId }
             if (!readOnly) PredictiveFloatingActionCard(
-                visible = deleteState.entry != null,
-                title = "删除账单",
-                content = deleteState.error ?: "确定删除「${deleteState.entry?.merchant.orEmpty()}」？删除后将从列表和统计中移除。",
-                confirmText = "删除", dismissText = "取消", isDestructive = true, isLoading = deleteState.saving,
-                predictiveBackEnabled = predictiveBackEnabled,
-                onConfirm = viewModel::confirmDelete, onDismiss = viewModel::closeDelete,
-                onDismissRequest = viewModel::closeDelete, modifier = Modifier.padding(bottom = 24.dp),
+                visible = menuBill != null,
+                title = "账单操作",
+                content = menuBill?.title.orEmpty(),
+                confirmText = "编辑", dismissText = "删除", dismissIsDestructive = true,
+                isLoading = deleteState.saving, predictiveBackEnabled = predictiveBackEnabled,
+                onConfirm = {
+                    menuBill?.let { detailId = null; viewModel.openEditor(it.date, it.id) }
+                    actionMenuId = null
+                },
+                onDismiss = { menuBill?.let { viewModel.deleteEntry(it.id) }; actionMenuId = null },
+                onDismissRequest = { actionMenuId = null }, modifier = Modifier.padding(bottom = 24.dp),
             )
+            val toastContext = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(deleteState.error) {
+                deleteState.error?.let {
+                    UniversalToastUtil.showError(toastContext, it)
+                    viewModel.closeDelete()
+                }
+            }
             if (!useTwoPane && !readOnly && editorState.open && editorState.draft == null) AccountingEditorSheet(editorState, viewModel::saveEntry, viewModel::closeEditor)
             if (!readOnly && importState.open) AccountingImportSheet(importState, viewModel::selectSource,
                 viewModel::readFile, viewModel::confirmImport, viewModel::closeImport)

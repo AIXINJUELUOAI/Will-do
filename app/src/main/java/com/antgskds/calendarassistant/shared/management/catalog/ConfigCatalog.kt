@@ -133,6 +133,8 @@ object ConfigCatalog {
     const val AUTO_ACCOUNTING_QUEUE_SIZE = 8
     const val AUTO_ACCOUNTING_PROVIDER_TIMEOUT_MS = 8_000
     const val RECOGNITION_SCREENSHOT_TIMEOUT_MS = 5_000
+    // WakeUp 临时令牌与课表请求分别限时；协议失败不无限重试。
+    const val WAKEUP_SHARE_REQUEST_TIMEOUT_MS = 15_000
     const val AUTO_ACCOUNTING_MAX_AGE_MS = 600_000
     // 高频无障碍诊断按来源与阶段限流，避免窗口刷新占满每日日志。
     const val AUTO_ACCOUNTING_DIAGNOSTIC_INTERVAL_MS = 5_000
@@ -180,6 +182,8 @@ object ConfigCatalog {
 
     // 未成功发布时一分钟后重试；胶囊持续时间复用默认日程时长。
     const val QUICK_MEMO_REMINDER_RETRY_MS = 60_000L
+    // 前台确认的提醒窗口包含今天；后台和重启恢复不得自动延长。
+    const val REMINDER_WINDOW_DAYS = 7L
     // 重复计算的安全搜索上限及随口记闹钟提前到达时的重排容差。
     const val REPEAT_OCCURRENCE_SEARCH_LIMIT = 100_000
     const val QUICK_MEMO_REMINDER_EARLY_TOLERANCE_MS = 60_000L
@@ -193,6 +197,8 @@ object ConfigCatalog {
     const val IMAGE_PIN_MAX_TOTAL_BYTES = 128 * 1024 * 1024
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.NOTIFICATION, ConfigKind.POLICY, "notification.reminder_window_days", "前台提醒登记窗口", "包含今天的七个自然日；后台只清理，重启仅恢复已确认窗口。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(REMINDER_WINDOW_DAYS.toInt(), REMINDER_WINDOW_DAYS.toInt()), { REMINDER_WINDOW_DAYS.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.SYNC, ConfigKind.POLICY, "course.wakeup_request_timeout_ms", "WakeUp 口令请求超时", "每次认证或课表请求的时间上限；超时不影响已有课表。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(WAKEUP_SHARE_REQUEST_TIMEOUT_MS, WAKEUP_SHARE_REQUEST_TIMEOUT_MS), { WAKEUP_SHARE_REQUEST_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_bytes", "图片挂起文件上限", "限定外部分享图片副本大小。",
             ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(IMAGE_PIN_MAX_BYTES, IMAGE_PIN_MAX_BYTES),
             { IMAGE_PIN_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),

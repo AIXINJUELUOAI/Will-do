@@ -55,6 +55,9 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("提醒窗口生命周期", Chain.NOTIFICATION, "platform/notification/alarm/ReminderWindowStore", Maturity.PIPELINE, "前台持久化窗口，后台不扩展；恢复作用域用于重启与升级；Android 14+ 一次清除旧混淆接收器闹钟并经现有入口重建"),
+        PipelineEntry("WakeUp 新版口令导入", Chain.INGEST, "feature/backup/courseimport/external/wakeup/WakeUpShareClient", Maturity.PIPELINE, "官方接口获取临时令牌、签名请求并解密分享数据；仅生成导入预览，经已有确认流程入库，失败保留数据并提供文件导入"),
+        PipelineEntry("疑似重复账单通知确认", Chain.INGEST, "platform/receiver/EventActionReceiver", Maturity.PIPELINE, "普通与胶囊通知仍然计入动作按本批次 ID 重读待确认草稿，统一入库再次校验并精确排重，不放行未知时间或其他草稿"),
         PipelineEntry("图片挂起无窗口分享", Chain.NOTIFICATION, "platform/entry/image/ImagePinShareHandleActivity", Maturity.PIPELINE, "权限齐全的分享在 NoDisplay 入口同步打开读取流，应用级任务接管复制、反馈与资源关闭；入口在 onCreate 结束，缺权限和选图保留原有可见流程"),
         PipelineEntry("自动记账截图排队", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService.enqueueAutomatic", Maturity.PIPELINE, "命中即截图，前后核实归属后写入临时缓存；各笔独立通知、顺序模型识别及统一入库，结束清理缓存"),
         PipelineEntry("截图挂起", Chain.NOTIFICATION, "platform/accessibility/TextAccessibilityService.startImagePinCapture", Maturity.PIPELINE, "磁贴主动触发，检查权限和截图占用、复用截图延迟后采集，PNG 临时文件经 ImagePinController 统一追加并清理；失败保留已有图片"),
@@ -66,9 +69,10 @@ object PipelineCatalog {
         PipelineEntry("账单识别入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "识别账单事务内逐条校验并自动入账，明确重复不写入，疑似重复与缺失字段暂存待核对；成功后经独立短时胶囊反馈实际金额"),
         PipelineEntry("账单文件导入确认", Chain.INGEST, "feature/accounting/ui/AccountingViewModel", Maturity.PIPELINE, "后台解析文件并展示诊断，经用户确认后委派 IngestCommandApi，维护重选取消与入库状态"),
         PipelineEntry("账单导入入库", Chain.INGEST, "feature/accounting/application/AccountingRepository", Maturity.PIPELINE, "IngestCommandApi 统一委派账单批次写入；同平台交易号去重；手动新增、编辑、软删除统一经入库契约，保留删除标记，事务失败整体回滚"),
-        PipelineEntry("随口记提醒生命周期", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "维护多个提醒的保存、删除、重排、触发及重复推进；发布经 NotificationApi"),
+        PipelineEntry("随口记提醒生命周期", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "维护多个提醒的保存、删除、重排、触发及重复推进；发布经 NotificationApi，仅跟踪已登记闹钟，失败保留提醒待重试"),
         PipelineEntry("随口记提醒通知桥接", Chain.NOTIFICATION, "feature/quickmemo/application/QuickMemoReminderNotificationBridge", Maturity.PIPELINE, "到期随口记经 NotificationApi 按胶囊开关分流，只有 POSTED 才完成本次提醒"),
-        PipelineEntry("随口记提醒闹钟调度", Chain.NOTIFICATION, "platform/notification/alarm/QuickMemoReminderScheduler", Maturity.PIPELINE, "统一安装及取消随口记闹钟，精确权限不可用时回退非精确调度"),
+        PipelineEntry("随口记提醒闹钟调度", Chain.NOTIFICATION, "platform/notification/alarm/QuickMemoReminderScheduler", Maturity.PIPELINE, "统一安装及取消随口记闹钟；registerQuickMemoReminderAlarm 保护首选及降级登记，权限或额度拒绝返回失败，避免启动崩溃"),
+        PipelineEntry("提醒定期恢复", Chain.NOTIFICATION, "platform/receiver/ReminderReconcileReceiver", Maturity.PIPELINE, "复用定期广播清理过期和失效登记；前台与重启恢复统一核对已确认窗口，后台不新增登记或扩展窗口"),
         // —— 识别 ——
         PipelineEntry(
             "识别主流程", Chain.RECOGNITION, "feature/recognition/application/RecognitionOrchestrator",

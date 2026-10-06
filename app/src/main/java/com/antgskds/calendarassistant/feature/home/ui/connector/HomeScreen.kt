@@ -597,6 +597,9 @@ fun HomeScreen(
                 initialEndNode = meta.endNode,
                 initialDate = item.startDate,
                 maxNodes = maxNodes,
+                timeTableJson = settings.timeTableJson,
+                initialColor = item.color,
+                initialTeacher = meta.teacher,
                 predictiveBackEnabled = settings.predictiveBackEnabled,
                 onDismiss = { courseItemToEdit = null },
                 onDelete = {
@@ -604,9 +607,9 @@ fun HomeScreen(
                     mainViewModel.deleteCourseOccurrence(item)
                     courseItemToEdit = null
                 },
-                onConfirm = { name, location, startNode, endNode, date ->
+                onConfirm = { name, location, teacher, startNode, endNode, date ->
                     if (demoModeEnabled) { showToast("演示模式不会保存修改"); return@CourseSingleEditDialog }
-                    mainViewModel.updateCourseOccurrence(item, name, location, startNode, endNode, date)
+                    mainViewModel.updateCourseOccurrence(item, name, location, teacher, startNode, endNode, date)
                     courseItemToEdit = null
                 }
             )

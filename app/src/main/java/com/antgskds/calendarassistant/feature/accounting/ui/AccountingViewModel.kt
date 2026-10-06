@@ -135,27 +135,6 @@ class AccountingViewModel(
         }
     }
 
-    fun countAnyway(draft: AccountingDraft) {
-        if (_recognition.value.busy || _editor.value.saving) return
-        val current = _recognition.value.drafts.firstOrNull { it.id == draft.id } ?: return
-        val input = AccountingRecognitionMapper.possibleDuplicateInput(current)
-        if (input == null) {
-            _recognition.update { it.copy(message = "账单信息不完整，请先核对并入账") }
-            return
-        }
-        _recognition.update { it.copy(busy = true, message = null) }
-        viewModelScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) { ingest.confirmAccountingDraft(current.id, input) }
-                _recognition.update { it.copy(message = if (result.duplicate) "该交易已有记录，未重复入账" else "账单已计入") }
-                result.entry?.let { _savedDate.value = Instant.ofEpochMilli(it.occurredAt).atZone(ZoneId.of(it.zoneId)).toLocalDate() }
-            } catch (e: CancellationException) { throw e
-            } catch (e: Exception) {
-                _recognition.update { it.copy(message = if (e is IllegalArgumentException) e.message else "保存失败，请重试") }
-            } finally { _recognition.update { it.copy(busy = false) } }
-        }
-    }
-
     fun reload() {
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
@@ -197,12 +176,19 @@ class AccountingViewModel(
         }
     }
 
-    fun requestDelete(id: String) {
+    /** 侧滑及长按菜单的删除共用同一入库契约，不额外弹出确认层。 */
+    fun deleteEntry(id: String) {
+        if (_delete.value.saving) return
+        requestDelete(id)
+        confirmDelete()
+    }
+
+    private fun requestDelete(id: String) {
         if (_delete.value.saving) return
         _delete.value = AccountingDeleteState(entry = _entries.value.entries.firstOrNull { it.id == id })
     }
     fun closeDelete() { if (!_delete.value.saving) _delete.value = AccountingDeleteState() }
-    fun confirmDelete() {
+    private fun confirmDelete() {
         val state = _delete.value
         val entry = state.entry ?: return
         if (state.saving) return

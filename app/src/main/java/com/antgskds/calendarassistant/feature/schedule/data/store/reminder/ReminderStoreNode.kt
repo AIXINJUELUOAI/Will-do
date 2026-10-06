@@ -15,6 +15,7 @@ import com.antgskds.calendarassistant.feature.schedule.domain.model.Reminder
 import com.antgskds.calendarassistant.feature.schedule.domain.model.isTransit
 import com.antgskds.calendarassistant.feature.schedule.domain.rule.RuleMatchingEngine
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.feature.notification.policy.ReminderWindowPolicy
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationIds
 import com.antgskds.calendarassistant.platform.notification.alarmlegacy.NotificationScheduler
 import com.antgskds.calendarassistant.platform.receiver.AlarmReceiver
@@ -56,8 +57,7 @@ class ReminderStoreNode(context: Context) {
         // Phase 2：单次事件的「普通提醒」已切到新通知链路
         // （ScheduleNotificationBridge → NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher）。
         // 此处不再排 EventReminderReceiver 闹钟，避免与新链路双弹；上方的取消/清理与胶囊 early-return 保留不变。
-        // 「错过即时补发(missed-immediate)」已由新链路 ScheduleNotificationBridge.shouldFireMissedImmediate 恢复
-        // （事件创建/更新/reconcile/开机重排时判定补发，带 state!=POSTED 去重），此处无需再做。
+        // 过期的系统闹钟由窗口核对注销；本方法不补发或登记下一窗口。
     }
 
     fun cancelForEvent(eventId: Long) {
@@ -111,61 +111,57 @@ class ReminderStoreNode(context: Context) {
         parentEvents: Map<Long, Event>
     ) {
         val now = System.currentTimeMillis()
-        val nowSec = now / 1000L
-
-        // 收集所有应该有通知的 instanceKey
-        val shouldNotifyKeys = mutableSetOf<String>()
-
+        val window = (appContext as com.antgskds.calendarassistant.App).reminderWindowStore
+        val desired = linkedMapOf<String, Triple<ScheduleDisplayItem, Event, List<AlarmSpec>>>()
         for (item in items) {
-            // 过滤规则
-            if (item.state != STATE_PENDING) continue
-            if (item.endTS <= nowSec) {
-                clearActiveMarkersForNotificationKey(item.stableKey)
-                continue
-            }
-            shouldNotifyKeys.add(item.stableKey)
-
+            if (item.endTS * 1000L <= now) continue
             val parent = when (val target = item.action) {
-                is ScheduleDisplayItem.ActionTarget.Single -> {
-                    // 单次事件的通知由 rebuildForEvent 管理，这里跳过
-                    continue
-                }
-                is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> {
-                    parentEvents[target.parentId] ?: continue
-                }
+                is ScheduleDisplayItem.ActionTarget.Single -> parentEvents[target.eventId]
+                is ScheduleDisplayItem.ActionTarget.RecurringOccurrence -> parentEvents[target.parentId]
+            } ?: continue
+            if (item.state != STATE_PENDING && !(item.state == STATE_CHECKED_IN && parent.isTransit)) continue
+            val specs = buildRecurringAlarmSpecs(item, parent, item.stableKey, now).filter {
+                ReminderWindowPolicy.contains(it.triggerMillis, now, window.endExclusive) &&
+                    (item.state == STATE_PENDING || it.action == NotificationScheduler.ACTION_CAPSULE_END)
             }
-
-            val instanceKey = item.stableKey
-            val existingCodes = loadRequestCodes(instanceKey).toSet()
-
-            // 注册新通知
-            val requestCodes = mutableSetOf<Int>()
-            for (spec in buildRecurringAlarmSpecs(item, parent, instanceKey, now)) {
-                val requestCode = spec.requestCode
-                if (spec.triggerMillis > now) {
-                    val pendingIntent = createRecurringAlarmPendingIntent(spec, item, parent, instanceKey)
-                    if (scheduleReminderAlarm(spec.triggerMillis, pendingIntent)) {
-                        requestCodes.add(requestCode)
-                    }
-                } else if (shouldSendImmediateAlarm(spec, item, now) &&
-                    markImmediateReminderIfNeeded(instanceKey, spec.marker)
-                ) {
-                    sendImmediateRecurringAlarm(spec, item, parent, instanceKey)
-                }
-            }
-            (existingCodes - requestCodes).forEach { cancelRequestCode(it) }
-            saveRequestCodes(instanceKey, requestCodes)
+            if (specs.isNotEmpty()) desired[item.stableKey] = Triple(item, parent, specs)
         }
-        clearActiveMarkersExcept(shouldNotifyKeys)
-
-        // 注销不再需要通知的重复实例
-        val allInstanceKeys = getAllInstanceKeys()
-        for (key in allInstanceKeys) {
-            if (key.startsWith("rec:") && key !in shouldNotifyKeys) {
+        // Cleanup across the entire previous window before registering the new window.
+        getAllInstanceKeys().forEach { key ->
+            val specs = desired[key]?.third.orEmpty().associateBy { it.requestCode }
+            if (specs.isEmpty()) {
                 cancelForInstanceKey(key)
+            } else {
+                val codes = loadRequestCodes(key).toSet()
+                val retained = codes.filter { code ->
+                    val spec = specs[code]
+                    spec != null && prefs.getLong(alarmTimeKey(key, code), -1L) == spec.triggerMillis
+                }.toSet()
+                (codes - retained).forEach { code ->
+                    cancelRequestCode(code)
+                    prefs.edit().remove(alarmTimeKey(key, code)).apply()
+                }
+                saveRequestCodes(key, retained)
             }
+        }
+        clearActiveMarkersExcept(desired.keys)
+        if (!window.canRegister) return
+        desired.forEach { (key, target) ->
+            val (item, parent, specs) = target
+            val codes = loadRequestCodes(key).toMutableSet()
+            specs.forEach specLoop@ { spec ->
+                if (!window.allows(spec.triggerMillis)) return@specLoop
+                val intent = createRecurringAlarmPendingIntent(spec, item, parent, key)
+                if (scheduleReminderAlarm(spec.triggerMillis, intent)) {
+                    codes.add(spec.requestCode)
+                    prefs.edit().putLong(alarmTimeKey(key, spec.requestCode), spec.triggerMillis).apply()
+                }
+            }
+            saveRequestCodes(key, codes)
         }
     }
+
+    private fun alarmTimeKey(instanceKey: String, requestCode: Int): String = "trigger:$instanceKey:$requestCode"
 
     fun resetAndRebuildAll(events: List<Event>) {
         clearAllScheduled()
@@ -199,7 +195,10 @@ class ReminderStoreNode(context: Context) {
 
     private fun cancelForInstanceKey(instanceKey: String) {
         val codes = loadRequestCodes(instanceKey)
-        codes.forEach { requestCode -> cancelRequestCode(requestCode) }
+        codes.forEach { requestCode ->
+            cancelRequestCode(requestCode)
+            prefs.edit().remove(alarmTimeKey(instanceKey, requestCode)).apply()
+        }
         cancelDisplayedNotificationsForInstance(instanceKey)
         prefs.edit().remove(keyForInstance(instanceKey)).apply()
     }
@@ -356,7 +355,7 @@ class ReminderStoreNode(context: Context) {
         val parentId = (item.action as? ScheduleDisplayItem.ActionTarget.RecurringOccurrence)?.parentId ?: parent.id ?: 0L
         return Intent(appContext, AlarmReceiver::class.java).apply {
             action = spec.action
-            putExtra("EVENT_ID", instanceKey)
+            putExtra("EVENT_ID", if (item.action is ScheduleDisplayItem.ActionTarget.Single) parent.id?.toString() else instanceKey)
             putExtra("EVENT_PARENT_ID", parentId)
             putExtra("EVENT_OCCURRENCE_TS", item.startTS)
             putExtra("EVENT_TITLE", item.title)
@@ -413,8 +412,13 @@ class ReminderStoreNode(context: Context) {
     }
 
     private fun scheduleReminderAlarm(triggerMillis: Long, pendingIntent: PendingIntent): Boolean {
+        if ((appContext as? com.antgskds.calendarassistant.App)?.reminderWindowStore?.allows(triggerMillis) != true) return false
         return try {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            }
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "Exact reminder alarm permission missing, falling back to inexact alarm", e)

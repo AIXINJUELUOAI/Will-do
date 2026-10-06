@@ -211,7 +211,10 @@ class TextAccessibilityService : AccessibilityService() {
                     when (result) {
                         is AnalysisResult.Success -> {
                             val display = result.accountingResult?.let(AccountingRecognitionDisplay::create)
-                            publishAutomatic(id, display?.primaryText ?: "未识别到账单", display?.expandedText ?: "请核对截图或手动记账", false, display?.shortText ?: "未识别到账单")
+                            publishAutomatic(id, display?.primaryText ?: "未识别到账单", display?.expandedText ?: "请核对截图或手动记账",
+                                false, display?.shortText ?: "未识别到账单",
+                                listOfNotNull(com.antgskds.calendarassistant.feature.accounting.domain.AccountingDuplicateAction
+                                    .create(result.accountingResult?.suspectedDraftIds.orEmpty())))
                         }
                         is AnalysisResult.Empty -> publishAutomatic(id, "本次未记账", result.message, false)
                         is AnalysisResult.Failure -> publishAutomatic(id, "自动记账失败", result.failure.fullMessage(), false)
@@ -223,7 +226,8 @@ class TextAccessibilityService : AccessibilityService() {
         }
     }
 
-    private suspend fun publishAutomatic(id: String, title: String, content: String, ongoing: Boolean, shortText: String = title) {
+    private suspend fun publishAutomatic(id: String, title: String, content: String, ongoing: Boolean,
+        shortText: String = title, resultActions: List<NotificationAction> = emptyList()) {
         val key = NotificationKey.recognition("accounting:$id")
         try {
             val registered = accountingNotifications.create(NotificationRequest(key = key, kind = NotificationKind.RECOGNITION_STATUS,
@@ -231,7 +235,7 @@ class TextAccessibilityService : AccessibilityService() {
                 display = NotificationDisplaySnapshot(shortText, title, content, expandedText = content),
                 tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME, mapOf("open_accounting" to "true")),
                 actions = if (ongoing) listOf(NotificationAction(EventActionReceiver.ACTION_CANCEL_RECOGNITION,
-                    "取消", mapOf(EventActionReceiver.EXTRA_ACCOUNTING_TASK_ID to id))) else emptyList(),
+                    "取消", mapOf(EventActionReceiver.EXTRA_ACCOUNTING_TASK_ID to id))) else resultActions,
                 behavior = NotificationBehavior(ongoing = ongoing, autoCancel = !ongoing, onlyAlertOnce = true,
                     timeoutAfterMillis = com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy
                         .timeout(ongoing, settingsQueryApi.settings.value)),

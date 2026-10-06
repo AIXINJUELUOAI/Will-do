@@ -37,10 +37,13 @@ fun CourseSingleEditDialog(
     initialEndNode: Int,
     initialDate: LocalDate,
     maxNodes: Int = 12,
+    timeTableJson: String = "",
+    initialColor: Int? = null,
+    initialTeacher: String = "",
     predictiveBackEnabled: Boolean = true,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
-    onConfirm: (String, String, Int, Int, LocalDate) -> Unit
+    onConfirm: (String, String, String, Int, Int, LocalDate) -> Unit
 ) {
     MaterialCourseSingleEditDialog(
         initialName = initialName,
@@ -49,6 +52,9 @@ fun CourseSingleEditDialog(
         initialEndNode = initialEndNode,
         initialDate = initialDate,
         maxNodes = maxNodes,
+        timeTableJson = timeTableJson,
+        initialColor = initialColor,
+        initialTeacher = initialTeacher,
         predictiveBackEnabled = predictiveBackEnabled,
         onDismiss = onDismiss,
         onDelete = onDelete,

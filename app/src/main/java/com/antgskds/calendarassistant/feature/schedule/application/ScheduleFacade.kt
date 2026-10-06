@@ -43,7 +43,9 @@ class ScheduleFacade(
     private val notificationApi: NotificationApi? = null,
     private val eventActionQueryApi: EventActionQueryApi? = null,
     private val settingsProvider: () -> MySettings = { MySettings() },
-    private val braceletScheduleUpdateNotifier: (Event) -> Unit = {}
+    private val braceletScheduleUpdateNotifier: (Event) -> Unit = {},
+    private val reminderWindowEndProvider: () -> Long = { 0L },
+    private val reminderRegistrationAllowedProvider: () -> Boolean = { false },
 ) {
     var onScheduleChanged: (() -> Unit)? = null
 
@@ -63,7 +65,7 @@ class ScheduleFacade(
     val pendingItemStates: StateFlow<Map<String, PendingItemState>> = _pendingItemStates.asStateFlow()
     private val statusOperationInFlight = AtomicBoolean(false)
     private val notificationBridge: ScheduleNotificationBridge? = notificationApi?.let {
-        ScheduleNotificationBridge(it, settingsProvider, eventActionQueryApi)
+        ScheduleNotificationBridge(it, settingsProvider, eventActionQueryApi, reminderWindowEndProvider, reminderRegistrationAllowedProvider)
     }
 
     suspend fun submitSingleEvents(events: List<Event>) {

@@ -23,6 +23,7 @@ data class AccountingRecognitionResult(
     val duplicates: Int = 0,
     val suspectedDuplicates: Int = 0,
     val pending: Int = 0,
+    val suspectedDraftIds: List<String> = emptyList(),
 )
 enum class BillFileSource(val label: String) { WECHAT("微信支付"), ALIPAY("支付宝"), WILLDO("账单备份") }
 data class AccountingImportIssue(val sheet: String, val row: Int, val reason: String)

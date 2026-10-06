@@ -119,6 +119,10 @@ class App : Application() {
         ScheduleStoreGateway.getInstance(this)
     }
 
+    val reminderWindowStore by lazy {
+        com.antgskds.calendarassistant.platform.notification.alarm.ReminderWindowStore(this)
+    }
+
     val scheduleCenter: ScheduleFacade by lazy {
         ScheduleFacade(
             calendarCenter = calendarCenter,
@@ -126,6 +130,8 @@ class App : Application() {
             notificationApi = notificationCenter,
             eventActionQueryApi = eventActionQueryApi,
             settingsProvider = { settingsQueryApi.settings.value },
+            reminderWindowEndProvider = { reminderWindowStore.endExclusive },
+            reminderRegistrationAllowedProvider = { reminderWindowStore.canRegister },
             braceletScheduleUpdateNotifier = { event ->
                 braceletNotificationPublisher.notifyScheduleEventUpdate(event)
             }

@@ -65,6 +65,7 @@
 | [HyperIsland](https://github.com/1812z/HyperIsland) | 小米超级岛相关代码 |
 | [parcel](https://github.com/shareven/parcel) | 短信取件码提取相关代码 |
 | [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting) | Xposed 自动记账、通知与短信信息提取相关实现 |
+| [WakeUpDecoder](https://github.com/airline233/WakeUpDecoder) | 新版 WakeUp 课表分享口令的签名与解密实现，移植为 Kotlin；[来源与许可说明](docs/third-party/wakeupdecoder/README.md) |
 
 感谢上述项目的开发者，以及参与 Will do 测试、反馈问题和提出建议的用户。
 
@@ -74,4 +75,4 @@ Copyright © 2024–2026 AIXINJUELUOAI
 
 本项目采用 **GNU GPL v3 或更新版本**开源许可。使用、修改与分发本项目时，请遵守相应许可条款，并保留版权及许可声明。
 
-完整条款请参阅 [LICENSE](https://github.com/AIXINJUELUOAI/Will-do/blob/main/LICENSE)。
+完整条款请参阅 [LICENSE](https://github.com/AIXINJUELUOAI/Will-do/blob/main/LICENSE)。第三方代码保留各自许可与署名；WakeUpDecoder 的 [Apache 2.0 许可全文](app/src/main/assets/licenses/WakeUpDecoder-LICENSE.txt) 与 [来源声明](app/src/main/assets/licenses/WakeUpDecoder-NOTICE.txt) 随项目及应用资源一并提供。

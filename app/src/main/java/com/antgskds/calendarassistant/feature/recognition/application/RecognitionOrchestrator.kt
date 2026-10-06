@@ -332,6 +332,8 @@ class RecognitionOrchestrator(
                 tapTarget = com.antgskds.calendarassistant.feature.notification.model.NotificationTapTarget(
                     com.antgskds.calendarassistant.feature.notification.model.NotificationTapTargetType.APP_HOME,
                     mapOf("open_accounting" to "true")),
+                actions = listOfNotNull(com.antgskds.calendarassistant.feature.accounting.domain.AccountingDuplicateAction
+                    .create(accounting.suspectedDraftIds)),
                 source = "accounting_recognition",
                 behavior = com.antgskds.calendarassistant.feature.notification.model.NotificationBehavior(
                     onlyAlertOnce = false, priority = com.antgskds.calendarassistant.feature.notification.model.NotificationPriority.HIGH),

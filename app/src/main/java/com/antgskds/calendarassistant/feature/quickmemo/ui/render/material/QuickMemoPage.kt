@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -541,6 +542,7 @@ internal fun QuickMemoListItem(
         val voicePlayButtonAlpha = (1f - revealProgress * 1.35f).coerceIn(0f, 1f)
         Box(
             modifier = swipeModifier
+                .heightIn(min = actionButtonSize)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
                     if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
@@ -558,7 +560,8 @@ internal fun QuickMemoListItem(
                         haptics.longPress()
                         onLongPress()
                     }
-                )
+                ),
+            contentAlignment = Alignment.CenterStart,
         ) {
             if (isVoice) {
                 Column(modifier = Modifier.fillMaxWidth()) {

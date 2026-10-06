@@ -23,20 +23,12 @@ class BootReceiver : BroadcastReceiver() {
 
             // 1. 恢复数据与提醒/胶囊闹钟
             app.scheduleCenter.refreshAll()
-            app.reminderCenter.reconcileAll()
             // Phase 2 修复：重启会清空 AlarmManager，从持久化 Registry 重排新通知链路的系统闹钟。
             val pendingResult = goAsync()
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 try {
-                    try {
-                        app.notificationCenter.rescheduleAllAlarms()
-                    } catch (error: Throwable) {
-                        Log.e("BootReceiver", "Failed to restore notification alarms", error)
-                    }
-                    try {
-                        app.quickMemoCenter.rescheduleReminders()
-                    } catch (error: Throwable) {
-                        Log.e("BootReceiver", "Failed to restore quick memo reminders", error)
+                    app.reminderWindowStore.restoring {
+                        app.reminderCenter.reconcileAllNow()
                     }
                 } finally {
                     pendingResult.finish()

@@ -30,12 +30,11 @@ import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSugg
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoSuggestionStatus
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.request.url
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.isSuccess
+import com.antgskds.calendarassistant.feature.backup.courseimport.external.wakeup.WakeUpShareClient
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.cookies.HttpCookies
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -64,7 +63,16 @@ class BackupCoordinator(
         prettyPrint = true
         isLenient = true
     }
-    private val httpClient by lazy { HttpClient(Android) }
+    private val httpClient by lazy {
+        HttpClient(Android) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = ConfigCatalog.WAKEUP_SHARE_REQUEST_TIMEOUT_MS.toLong()
+                connectTimeoutMillis = ConfigCatalog.WAKEUP_SHARE_REQUEST_TIMEOUT_MS.toLong()
+                socketTimeoutMillis = ConfigCatalog.WAKEUP_SHARE_REQUEST_TIMEOUT_MS.toLong()
+            }
+            install(HttpCookies)
+        }
+    }
 
     suspend fun exportCoursesData(): String {
         val courses = CourseEventMapper.extractParentCourses(scheduleCenter.events.value, settingsQueryApi.settings.value)
@@ -826,24 +834,10 @@ class BackupCoordinator(
 
     suspend fun fetchWakeUpShareImport(shareText: String): Result<ParsedCourseImport> = runCatching {
         val key = CourseImportParser.extractWakeUpKey(shareText) ?: error("剪贴板中未识别到 WakeUp 分享口令")
-        val response = httpClient.get {
-            url("https://i.wakeup.fun/share_schedule/get")
-            parameter("key", key)
-            header("User-Agent", "WillDo/2.0")
-        }
-        if (!response.status.isSuccess()) {
-            error("WakeUp 请求失败：HTTP ${response.status.value}")
-        }
-
-        val body = response.bodyAsText()
-        val root = json.parseToJsonElement(body).jsonObject
-        val status = root["status"]?.jsonPrimitive?.content?.toIntOrNull()
-        if (status != 1) {
-            error(root["message"]?.jsonPrimitive?.content ?: "WakeUp 返回错误状态")
-        }
-        val data = root["data"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-            ?: error("WakeUp 返回数据为空")
+        val data = WakeUpShareClient(httpClient).fetchShareData(key)
         CourseImportParser.parseWakeUpShareData(data)
+    }.onFailure { failure ->
+        if (failure is CancellationException) throw failure
     }
 
     suspend fun importParsedCourseImport(

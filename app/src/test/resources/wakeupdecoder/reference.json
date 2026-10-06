@@ -1,0 +1,14 @@
+{
+  "rand10": "AbC123xYz9",
+  "cuid": "C77D5D04D94F5F56C8A0A6DC3DBF240A|0",
+  "adid": "d58a81f457529caf0e642e7f9d97e447112bd763",
+  "sign_a": "0b020b0403030a070c020501060c0a090b0404070e0501020e0405040e090d0a040a0b0f0c010106020e00090c0c0905090c0f00020f00080b0b0b04060e050907010300080b0b06000804070e0f050c0e00090b00060f04010d08070103080306020109030f0007010f0d00050b060e0103060b09020d04050106060c0e0e040d030e000402080e020f09020d03050e0805010a020e04070b030600010c070904010f0f040e010f0407070e05000a05",
+  "sign_b": "050d060102090d0e02020b0b0d010808060908030e00090a040d04080308060c0f0a0e0d05090a00010c0c0603040e07",
+  "token": "0123456789",
+  "rc4_key": "376c325bebdb2c5eae57becf92822f756a551466a0ed5688c1351cdaee31d4d9b561ede2ea6e77349e45a85dc0958f5f31cd22941af1d9898bc5ba70303e789a",
+  "request_data": "BqVLPEhB/JiwMccaSnLoSbSFB3rvCCYBVVg=",
+  "request_sign": "8c49298aeecaef3b25f80d174d976b48",
+  "request_body": "&data=BqVLPEhB%2FJiwMccaSnLoSbSFB3rvCCYBVVg%3D&area=&screensize=1080x2400&cuid=C77D5D04D94F5F56C8A0A6DC3DBF240A%7C0&os=android&city=&abis=arm64-v8a&channel=100271a&appBit=64&vc=450&deviceId=&token=1_XPXQH3c5HRPtFHkSwi3sCCURmT25QfxM&adid=d58a81f457529caf0e642e7f9d97e447112bd763&province=&pkgName=com.suda.yzune.wakeupschedule&appId=wakeup&download_type=1&vcname=6.1.70&sdk=35&device=Pixel+7&brand=google&operatorid=&nt=wifi&sign=8c49298aeecaef3b25f80d174d976b48&_t_=1780000000&kakorrhaphiophobia=123456",
+  "share_data": "{\"courseLen\":45,\"name\":\"测试\"}\n[{\"node\":1,\"startTime\":\"08:00\",\"endTime\":\"08:45\"},{\"node\":2,\"startTime\":\"08:55\",\"endTime\":\"09:40\"}]\n{\"startDate\":\"2026-09-07\",\"maxWeek\":16}\n[{\"id\":1,\"courseName\":\"测试课程\",\"teacher\":\"测试老师\",\"color\":-13408615}]\n[{\"id\":1,\"day\":1,\"startNode\":1,\"step\":2,\"startWeek\":1,\"endWeek\":16,\"type\":0,\"room\":\"测试教室\"}]",
+  "encrypted_response": "FuJBaVpK96i5INJRE331fO6SHX34ViAiVFPzHiH4bsUuuLgdHcFGcyvhiALharS6bBR9yVe7hjz0dww9tXPCPipWgoHovrCTezSaeRblIzailepjR3iYjYzwrR1cNhUTKq0l0AsYh2r4xb2i3rboSLdwms2MsC4fDRSaBdr0RlhZ/OaqAe1iNGtl1c5OpeAhbzgt1fLjlnO2m8x9K8KngWVZ3I7g29wCsi6jkiAud8DE5Bk7hB6hfClnNtXyp1HHVOjb58PQVKHf6IIriybJMCJOfJ5lkVoeaArg8pX5xwug+7ysV7GrZow8yqCgmgW64rboCJNJx9+opbM6CxeO83EKd1AQi7l1FPPAUZx/E57HNa6PUTx0ToxcGjPTmDefsPQbXBVX0wBf0I8TJBd9I/uBpP/LrjBtWpDoHuPjx6UiI/kguEIlIDI7GHI6XDmGBjbrRhMuRpOLgMqT+q7OmFtZOTIT+OE3jdYFIQdVlNUiWYYSVbmc1enZscBaMFmZlLer/RDBHO6TZCtPnghF+Vt17lT/lm9wNceONf+vzCg0HK+cHxvBsRj/iOqhesDtQoqMHw=="
+}

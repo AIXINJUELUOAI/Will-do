@@ -860,7 +860,7 @@ class MainActivity : ComponentActivity() {
                 } else if (accountingRecognition.open && !accountingEditor.open) {
                     com.antgskds.calendarassistant.feature.accounting.ui.AccountingRecognitionSheet(
                         accountingRecognition, accountingViewModel::editDraft, accountingViewModel::dismissDraft,
-                        accountingViewModel::closeRecognition, accountingViewModel::countAnyway)
+                        accountingViewModel::closeRecognition)
                 }
 
                 GlobalPromptHost(
@@ -943,6 +943,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        (application as App).reminderWindowStore.setForeground(false)
         (application as App).webDavForegroundSyncV2Center.stop()
         super.onStop()
     }
@@ -953,6 +954,7 @@ class MainActivity : ComponentActivity() {
         if (::mainViewModel.isInitialized) {
             mainViewModel.refreshData()
         }
+        app.reminderCenter.onForeground()
         app.runtimeCenter.startEdgeBarIfNeeded()
         app.runtimeCenter.restoreSmsNotificationListenerIfNeeded()
         app.localModelResidueCenter.checkForResidue()

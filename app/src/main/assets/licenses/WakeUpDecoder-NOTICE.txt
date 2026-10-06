@@ -1,0 +1,15 @@
+WakeUpDecoder
+Author: airline233
+Source: https://github.com/airline233/WakeUpDecoder
+Upstream revision: 577161c9ea8c34dddbcecd6ea9a702687c4ac8c4
+Upstream license: Apache License, Version 2.0
+
+Will do includes a Kotlin adaptation of the protocol algorithms and request
+flow from main.py and wakeup_share_sim.py. Modified on 2026-10-06: Kotlin/Ktor
+transport, fixed APK compatibility metadata, stricter response validation,
+and integration with the existing course-import preview.
+
+The APK and native binaries in the upstream repository are not distributed
+with this adaptation. No account credentials or private signing keys are used.
+The combined Will do application remains licensed under GPL-3.0-or-later;
+the upstream Apache 2.0 license and applicable attribution are retained.

@@ -232,7 +232,6 @@ private fun QuickMemoReminderSheet(
                 ReminderSettingRow(
                     label = "日期",
                     value = "${selectedDate.year}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日",
-                    expanded = expandedSection == ReminderEditorSection.DATE,
                     onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.DATE) }
                 )
                 AnimatedVisibility(visible = expandedSection == ReminderEditorSection.DATE) {
@@ -242,7 +241,6 @@ private fun QuickMemoReminderSheet(
                 ReminderSettingRow(
                     label = "时间",
                     value = String.format("%02d:%02d", selectedHour, selectedMinute),
-                    expanded = expandedSection == ReminderEditorSection.TIME,
                     onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.TIME) }
                 )
                 AnimatedVisibility(visible = expandedSection == ReminderEditorSection.TIME) {
@@ -258,7 +256,6 @@ private fun QuickMemoReminderSheet(
                 ReminderSettingRow(
                     label = "重复",
                     value = selectedRepeatSpec?.summary() ?: "不重复",
-                    expanded = expandedSection == ReminderEditorSection.REPEAT,
                     onClick = { expandedSection = expandedSection.toggle(ReminderEditorSection.REPEAT) }
                 )
                 AnimatedVisibility(visible = expandedSection == ReminderEditorSection.REPEAT) {
@@ -278,7 +275,6 @@ private fun QuickMemoReminderSheet(
 private fun ReminderSettingRow(
     label: String,
     value: String,
-    expanded: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
@@ -304,12 +300,6 @@ private fun ReminderSettingRow(
                 textAlign = TextAlign.End,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (expanded) "⌃" else "⌄",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

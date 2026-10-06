@@ -275,6 +275,7 @@ fun MaterialCourseManagerScreen(
 
     var showEditDialog by remember { mutableStateOf(false) }
     var courseToEdit by remember { mutableStateOf<Course?>(null) }
+    var courseToDelete by remember { mutableStateOf<Course?>(null) }
     val bottomInset = LocalAppPageBottomPadding.current
 
     val wide = LocalAdaptiveLayoutInfo.current.useTwoPaneContent
@@ -323,6 +324,7 @@ fun MaterialCourseManagerScreen(
                             course = course,
                             onDelete = { onAction(CourseManagerUiAction.DeleteCourse(course)) },
                             onClick = { courseToEdit = course; showEditDialog = true },
+                            onLongPress = { courseToDelete = course },
                             uiSize = uiSize
                         )
                     }
@@ -363,5 +365,18 @@ fun MaterialCourseManagerScreen(
     }
     }
     if (!wide) editorContent()
+    PredictiveFloatingActionCard(
+        visible = courseToDelete != null,
+        title = "删除课程", content = "确定删除「${courseToDelete?.name.orEmpty()}」？",
+        confirmText = "删除", dismissText = "取消", isDestructive = true,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onConfirm = {
+            haptics.warning()
+            courseToDelete?.let { onAction(CourseManagerUiAction.DeleteCourse(it)) }
+            courseToDelete = null
+        },
+        onDismiss = { courseToDelete = null }, onDismissRequest = { courseToDelete = null },
+        modifier = Modifier.padding(bottom = 24.dp),
+    )
 
 }

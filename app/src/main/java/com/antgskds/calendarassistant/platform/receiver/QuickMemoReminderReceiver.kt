@@ -19,7 +19,8 @@ class QuickMemoReminderReceiver : BroadcastReceiver() {
         val app = context.applicationContext as App
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                app.quickMemoCenter.deliverReminder(reminderId)
+                val expectedAt = intent.getLongExtra(EXTRA_TRIGGER_AT, -1L).takeIf { it > 0L }
+                app.quickMemoCenter.deliverReminder(reminderId, expectedAt)
             } catch (error: Throwable) {
                 Log.e(TAG, "Quick memo reminder failed reminderId=$reminderId", error)
             } finally {
@@ -32,6 +33,7 @@ class QuickMemoReminderReceiver : BroadcastReceiver() {
         const val ACTION_REMIND_QUICK_MEMO = "com.antgskds.calendarassistant.action.REMIND_QUICK_MEMO"
         const val EXTRA_QUICK_MEMO_REMINDER_ID = "quick_memo_reminder_id"
         const val EXTRA_QUICK_MEMO_ID = "quick_memo_id"
+        const val EXTRA_TRIGGER_AT = "trigger_at"
         private const val TAG = "QuickMemoReminder"
     }
 }

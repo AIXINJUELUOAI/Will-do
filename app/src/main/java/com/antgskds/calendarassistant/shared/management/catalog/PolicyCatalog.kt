@@ -51,6 +51,7 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("提醒登记窗口", Chain.NOTIFICATION, "feature/notification/policy/ReminderWindowPolicy", Maturity.ACTIVE, "按实际触发时刻限制七个自然日；只允许前台登记和已有窗口恢复；胶囊模式省去普通闹钟但保留手环；随口记预展开窗口内重复提醒"),
         PolicyEntry("记账任务通知分流", Chain.NOTIFICATION, "feature/notification/policy/AccountingRecognitionNotificationPolicy", Maturity.ACTIVE, "独立记账任务在触发时按实况开关选择 NORMAL/LIVE，绕过日程旧抑制门控；进度持续到任务结束，结果沿用结果通知时长"),
         PolicyEntry("自动记账截图粗检", Chain.RECOGNITION, "feature/accounting/domain/AccountingScreenshotPolicy", Maturity.ACTIVE, "排除系统栏后拒绝黑屏或近似纯色图；归属由截图前后页面检查，账单内容由统一多模态确认"),
         PolicyEntry("支付页面交易身份", Chain.RECOGNITION, "feature/accounting/domain/PaymentPageIdentity", Maturity.ACTIVE, "按交易号类型、交易性质及实际时间/金额/商户合并刷新；弱证据仅在同次访问合并，补充字段丰富原任务"),

@@ -68,3 +68,6 @@
 # OfflineRecognizer.newFromFile abort with "fid == null" if these are renamed.
 -keep class com.k2fsa.sherpa.onnx.** { *; }
 -dontwarn com.k2fsa.sherpa.onnx.**
+
+# PendingIntent identities survive updates and include the receiver class name.
+-keepnames class * extends android.content.BroadcastReceiver

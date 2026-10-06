@@ -44,6 +44,11 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("WakeUp 新版分享协议", Chain.INGEST, "feature/backup/courseimport/external/wakeup/WakeUpShareProtocol", "移植 WakeUpDecoder 的设备标识派生、自定义 DES、RC4 与请求签名；协议固定值不是用户凭据，不采集设备标识"),
+        HelperEntry("WakeUp 分享响应解析", Chain.INGEST, "feature/backup/courseimport/CourseImportParser.extractWakeUpShareData", "兼容旧分享响应格式校验；新版签名与解密由 WakeUpShareClient 处理，共用课程内容解析"),
+        HelperEntry("疑似重复账单通知动作", Chain.NOTIFICATION, "feature/accounting/domain/AccountingDuplicateAction", "普通与胶囊通知共用仍然计入动作，只携带本批次已暂存的疑似重复草稿 ID"),
+        HelperEntry("疑似重复账单确认", Chain.INGEST, "feature/accounting/application/AccountingDuplicateConfirmation", "通知动作重读草稿并经统一入库确认；已处理及不完整草稿不重入库，保留精确交易去重"),
+        HelperEntry("课程编辑统一弹窗", Chain.SUPPORT, "feature/schedule/ui/render/material/dialog/CourseManagementDialog.CourseEditorDialogHost", "课程弹窗复用日程的键盘避让方式；新建、整门及单次编辑共用表单布局，单次编辑保留老师及本节作用域"),
         HelperEntry("自动记账截图队列", Chain.RECOGNITION, "feature/accounting/application/AccountingScreenshotQueue", "已确认截图先进先出调用统一识别入口；独立取消、反馈和资源释放，模型处理不占用截图入口"),
         HelperEntry("演示数据生成", Chain.SUPPORT, "feature/settings/developer/application/DemoModeDataFactory", "按当天稳定生成只读日程、大学课表、随口记、账单和完整天气展示数据"),
         HelperEntry("财务消息正则", Chain.RECOGNITION, "feature/accounting/domain/AccountingMessageRules", "按通知包名或短信发件人匹配，命名分组抽取金额、名称、时间和单号，未知静默跳过"),
@@ -61,7 +66,7 @@ object HelperCatalog {
         HelperEntry("记账结果展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/AccountingRecognitionDisplay", "按实际入库账单汇总金额与收支；独立任务显示适配普通快照与实况模板，保留金额短文案、取消参数及账单跳转"),
         HelperEntry("统一识别结果解析", Chain.RECOGNITION, "feature/recognition/application/ai/RecognitionJsonParser", "分别解析 events 与 bills，坏条目隔离；旧响应兼容，账单缺失字段留待确认"),
         HelperEntry("账单识别转换", Chain.INGEST, "feature/accounting/domain/AccountingRecognitionMapper", "同金额同一分钟独立拦截疑似重复；时间仅接近时结合名称，同类交易号明确不同可放行，支付交易号精确排重兜底"),
-        HelperEntry("账单识别待确认列表", Chain.SUPPORT, "feature/accounting/ui/AccountingRecognitionSheet", "展示持久化识别草稿，逐条编辑确认或丢弃，未确认不计入收支"),
+        HelperEntry("账单识别待确认列表", Chain.SUPPORT, "feature/accounting/ui/AccountingRecognitionSheet", "展示持久化识别草稿，选中单条后在固定底部核对入库或忽略，关闭保留待处理；快捷仍然计入仅放在通知"),
         HelperEntry("统一多模态配置", Chain.SUPPORT, "feature/recognition/application/ai/AiModelConfig", "统一图文模型配置；旧设置在 MySettings.migrateToMultimodalConfig 中兼容迁移，不覆盖已有多模态凭据"),
         HelperEntry("账单编辑转换", Chain.INGEST, "feature/accounting/domain/AccountingEntryEditor", "手动账单金额校验和字段转换；编辑保留原始来源、去重标识及待核对状态"),
         HelperEntry("账单编辑面板", Chain.SUPPORT, "feature/accounting/ui/AccountingEditorSheet", "共用 Sheet 新建和编辑账单，复用日期时间滚轮，校验后保存真实数据"),
