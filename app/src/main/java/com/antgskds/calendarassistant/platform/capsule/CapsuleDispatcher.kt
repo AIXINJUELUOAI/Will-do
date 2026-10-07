@@ -144,6 +144,7 @@ class CapsuleDispatcher(
     private val provider: ICapsuleProvider =
         if (FlymeUtils.isFlyme()) FlymeCapsuleProvider() else NativeCapsuleProvider()
     private val activeNotifIds = ConcurrentHashMap.newKeySet<Int>()
+    private val publicationTracker = com.antgskds.calendarassistant.feature.capsule.domain.CapsulePublicationTracker()
     private var monitorJob: Job? = null
     private var isAggregateMode = false
 
@@ -194,10 +195,14 @@ class CapsuleDispatcher(
             monitorJob?.cancel()
         }
 
+        val systemIds = runCatching { notificationManager.activeNotifications.map { it.id }.toSet() }.getOrNull()
         newCapsules.forEach { item ->
-            val iconResId = IconUtils.getSmallIconForCapsule(context, item)
-            val notification = provider.buildNotification(context, item, iconResId)
+            val publication = publicationTracker.prepare(item, System.currentTimeMillis(),
+                force = systemIds != null && item.notifId !in systemIds) ?: return@forEach
+            val iconResId = IconUtils.getSmallIconForCapsule(context, publication.item)
+            val notification = provider.buildNotification(context, publication.item, iconResId, publication.firstPublishedAt)
             notificationManager.notify(item.notifId, notification)
+            publicationTracker.commit(publication)
             activeNotifIds.add(item.notifId)
             cancelLegacyCapsuleNotification(item)
         }
@@ -208,6 +213,7 @@ class CapsuleDispatcher(
         staleIds.forEach { id ->
             notificationManager.cancel(id)
             activeNotifIds.remove(id)
+            publicationTracker.remove(id)
         }
     }
 
@@ -223,6 +229,7 @@ class CapsuleDispatcher(
         }
     }
 
+    @Synchronized
     private fun cleanupStaleNotifications() {
         try {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
@@ -240,6 +247,7 @@ class CapsuleDispatcher(
                         if (!stillValid) {
                             notificationManager.cancel(notificationId)
                             activeNotifIds.remove(notificationId)
+                            publicationTracker.remove(notificationId)
                             Log.d(TAG, "清除过期胶囊通知: id=$notificationId")
                         }
                     }
@@ -255,6 +263,7 @@ class CapsuleDispatcher(
             notificationManager.cancel(id)
         }
         activeNotifIds.clear()
+        publicationTracker.clear()
     }
 
     private fun cancelLegacyCapsuleNotification(item: CapsuleUiState.Active.CapsuleItem) {

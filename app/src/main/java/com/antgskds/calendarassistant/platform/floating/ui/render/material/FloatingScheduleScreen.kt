@@ -125,6 +125,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -828,24 +830,6 @@ fun TimeWheelList(
     val scheduleDragStepPx = with(density) { 82.dp.toPx() }
     val externalDragDirectionBias = 1.2f
     val normalizedDragHotZonePercent = MySettings.normalizeFloatingDragHotZonePercent(dragHotZonePercent)
-    val dragHotZoneWidthPx = windowWidthPx * (normalizedDragHotZonePercent / 100f)
-    fun isInFloatingDragHotZone(x: Float): Boolean {
-        return if (expandFromLeft) {
-            x <= dragHotZoneWidthPx
-        } else {
-            x >= windowWidthPx - dragHotZoneWidthPx
-        }
-    }
-    fun shouldStartExternalDrag(startX: Float, totalX: Float, totalY: Float): Boolean {
-        if (windowWidthPx <= 0f) return false
-        val currentX = (startX + totalX).coerceIn(0f, windowWidthPx)
-        val movedOutFromFloatingSide = if (expandFromLeft) totalX > 0f else totalX < 0f
-        return movedOutFromFloatingSide &&
-            isInFloatingDragHotZone(startX) &&
-            !isInFloatingDragHotZone(currentX) &&
-            abs(totalX) > abs(totalY) * externalDragDirectionBias
-    }
-
     LaunchedEffect(orderedScheduleKeys) {
         scheduleOrder.clear()
         scheduleOrder.addAll(orderedScheduleKeys)
@@ -937,6 +921,7 @@ fun TimeWheelList(
                     val memoDragText = remember(memo.id, memo.updatedAt, memo.bodyText, memo.type) {
                         memo.bodyText.ifBlank { floatingQuickMemoFallbackText(memo) }.trim().take(800)
                     }
+                    var dragCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                     val isDragging = draggingQuickMemoKey == memoKey
                     val dragScale by animateFloatAsState(
                         targetValue = if (isDragging) 1.035f else 1f,
@@ -950,18 +935,17 @@ fun TimeWheelList(
                             .zIndex(if (isDragging) 1f else 0f)
                             .offset { IntOffset(0, if (isDragging) draggedQuickMemoOffsetY.roundToInt() else 0) }
                             .scale(dragScale)
+                            .onGloballyPositioned { dragCoordinates = it }
                             .pointerInput(memoKey, displayQuickMemos.size, expandFromLeft, normalizedDragHotZonePercent, windowWidthPx) {
-                                var dragStartX = 0f
-                                var totalDragX = 0f
-                                var totalDragY = 0f
+                                val textDragGesture = FloatingTextDragGesture(
+                                    windowWidthPx, normalizedDragHotZonePercent, expandFromLeft, externalDragDirectionBias
+                                )
                                 var externalDragAttempted = false
                                 var externalDragStarted = false
                                 detectDragGesturesAfterLongPress(
-                                    onDragStart = { offset ->
+                                    onDragStart = {
                                         haptics.longPress()
-                                        dragStartX = offset.x.coerceIn(0f, windowWidthPx)
-                                        totalDragX = 0f
-                                        totalDragY = 0f
+                                        textDragGesture.reset()
                                         externalDragAttempted = false
                                         externalDragStarted = false
                                         draggingQuickMemoKey = memoKey
@@ -980,11 +964,13 @@ fun TimeWheelList(
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         if (externalDragStarted) return@detectDragGesturesAfterLongPress
-                                        totalDragX += dragAmount.x
-                                        totalDragY += dragAmount.y
+                                        val coordinates = dragCoordinates?.takeIf { it.isAttached }
                                         if (
                                             !externalDragAttempted &&
-                                            shouldStartExternalDrag(dragStartX, totalDragX, totalDragY)
+                                            coordinates != null &&
+                                            textDragGesture.shouldStartExternalDrag(
+                                                change.previousPosition, change.position, coordinates::localToWindow
+                                            )
                                         ) {
                                             externalDragAttempted = true
                                             externalDragStarted = onStartPlainTextDrag("随口记", memoDragText) {
@@ -1037,6 +1023,7 @@ fun TimeWheelList(
                 val scheduleDragText = remember(item.stableKey, item.title, item.startTS, item.endTS, item.location, item.description, dragTextOptions) {
                     formatScheduleDragText(item, dragTextOptions)
                 }
+                var dragCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                 val isDragging = draggingScheduleKey == scheduleKey
                 val dragScale by animateFloatAsState(
                     targetValue = if (isDragging) 1.035f else 1f,
@@ -1050,18 +1037,17 @@ fun TimeWheelList(
                         .zIndex(if (isDragging) 1f else 0f)
                         .offset { IntOffset(0, if (isDragging) draggedScheduleOffsetY.roundToInt() else 0) }
                         .scale(dragScale)
+                        .onGloballyPositioned { dragCoordinates = it }
                         .pointerInput(scheduleKey, displayScheduleItems.size, expandFromLeft, normalizedDragHotZonePercent, windowWidthPx) {
-                            var dragStartX = 0f
-                            var totalDragX = 0f
-                            var totalDragY = 0f
+                            val textDragGesture = FloatingTextDragGesture(
+                                windowWidthPx, normalizedDragHotZonePercent, expandFromLeft, externalDragDirectionBias
+                            )
                             var externalDragAttempted = false
                             var externalDragStarted = false
                             detectDragGesturesAfterLongPress(
-                                onDragStart = { offset ->
+                                onDragStart = {
                                     haptics.longPress()
-                                    dragStartX = offset.x.coerceIn(0f, windowWidthPx)
-                                    totalDragX = 0f
-                                    totalDragY = 0f
+                                    textDragGesture.reset()
                                     externalDragAttempted = false
                                     externalDragStarted = false
                                     draggingScheduleKey = scheduleKey
@@ -1080,11 +1066,13 @@ fun TimeWheelList(
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     if (externalDragStarted) return@detectDragGesturesAfterLongPress
-                                    totalDragX += dragAmount.x
-                                    totalDragY += dragAmount.y
+                                    val coordinates = dragCoordinates?.takeIf { it.isAttached }
                                     if (
                                         !externalDragAttempted &&
-                                        shouldStartExternalDrag(dragStartX, totalDragX, totalDragY)
+                                        coordinates != null &&
+                                        textDragGesture.shouldStartExternalDrag(
+                                            change.previousPosition, change.position, coordinates::localToWindow
+                                        )
                                     ) {
                                         externalDragAttempted = true
                                         externalDragStarted = onStartPlainTextDrag("日程", scheduleDragText) {

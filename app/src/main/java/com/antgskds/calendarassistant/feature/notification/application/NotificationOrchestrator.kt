@@ -576,7 +576,8 @@ class NotificationOrchestrator(
             capsuleProvider.buildNotification(
                 context = appContext,
                 item = item,
-                iconResId = R.drawable.ic_notification_small
+                iconResId = R.drawable.ic_notification_small,
+                firstPublishedAt = item.startMillis
             ).apply {
                 contentIntent = pendingIntent
             }
@@ -683,7 +684,8 @@ class NotificationOrchestrator(
             return capsuleProvider.buildNotification(
                 context = appContext,
                 item = item,
-                iconResId = iconResId ?: IconUtils.getSmallIconForCapsule(appContext, item)
+                iconResId = iconResId ?: IconUtils.getSmallIconForCapsule(appContext, item),
+                firstPublishedAt = item.startMillis
             ).apply {
                 contentIntent = pendingIntent
             }

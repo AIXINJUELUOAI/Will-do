@@ -55,6 +55,7 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("离线语音转写", Chain.RECOGNITION, "feature/quickmemo/application/QuickMemoTranscriptionService", Maturity.PIPELINE, "独立 ASR 进程复用 SherpaSpeechTranscriber；优先导入的 Qwen3-ASR，中英混说自动识别，失败保留录音"),
         PipelineEntry("提醒窗口生命周期", Chain.NOTIFICATION, "platform/notification/alarm/ReminderWindowStore", Maturity.PIPELINE, "前台持久化窗口，后台不扩展；恢复作用域用于重启与升级；Android 14+ 一次清除旧混淆接收器闹钟并经现有入口重建"),
         PipelineEntry("WakeUp 新版口令导入", Chain.INGEST, "feature/backup/courseimport/external/wakeup/WakeUpShareClient", Maturity.PIPELINE, "官方接口获取临时令牌、签名请求并解密分享数据；仅生成导入预览，经已有确认流程入库，失败保留数据并提供文件导入"),
         PipelineEntry("疑似重复账单通知确认", Chain.INGEST, "platform/receiver/EventActionReceiver", Maturity.PIPELINE, "普通与胶囊通知仍然计入动作按本批次 ID 重读待确认草稿，统一入库再次校验并精确排重，不放行未知时间或其他草稿"),

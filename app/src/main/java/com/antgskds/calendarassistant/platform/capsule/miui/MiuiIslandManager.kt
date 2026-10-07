@@ -31,6 +31,7 @@ object MiuiIslandManager {
 
     @Volatile private var lastRequestKey: String? = null
     @Volatile private var lastNotifId: Int? = null
+    private val shownNotifIds = mutableSetOf<Int>()
 
     private data class ActionPayload(
         val actions: List<MiuiIslandAction>,
@@ -38,6 +39,7 @@ object MiuiIslandManager {
         val actionIntentUri: String?
     )
 
+    @Synchronized
     fun update(context: Context, capsules: List<CapsuleUiState.Active.CapsuleItem>) {
         if (!isAvailable()) return
         val target = selectTargetCapsule(capsules) ?: run {
@@ -45,7 +47,8 @@ object MiuiIslandManager {
             return
         }
 
-        val isNewTarget = lastNotifId == null || lastNotifId != target.notifId
+        shownNotifIds.retainAll(capsules.map { it.notifId }.toSet())
+        val isNewTarget = target.notifId !in shownNotifIds
         val request = buildRequest(context, target, isNewTarget)
         val requestKey = buildRequestKey(request)
         if (requestKey == lastRequestKey) return
@@ -58,14 +61,17 @@ object MiuiIslandManager {
         lastRequestKey = requestKey
         lastNotifId = request.notifId
         MiuiIslandDispatcher.sendBroadcast(context, request)
+        shownNotifIds.add(target.notifId)
         Log.d(TAG, "send island: ${request.title} | ${request.content} | actions=${request.actions.size}")
     }
 
+    @Synchronized
     fun clear(context: Context) {
         if (!isAvailable()) return
         lastNotifId?.let { sendDismiss(context, it) }
         lastRequestKey = null
         lastNotifId = null
+        shownNotifIds.clear()
     }
 
     private fun sendDismiss(context: Context, notifId: Int) {
@@ -145,7 +151,7 @@ object MiuiIslandManager {
             notifId = item.notifId,
             timeoutSecs = timeout,
             firstFloat = isNewTarget,
-            enableFloat = true,
+            enableFloat = isNewTarget,
             showNotification = true,
             highlightColor = highlightColor,
             dismissIsland = false,

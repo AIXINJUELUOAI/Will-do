@@ -8,6 +8,7 @@ interface ICapsuleProvider {
     fun buildNotification(
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem,
-        iconResId: Int
+        iconResId: Int,
+        firstPublishedAt: Long
     ): Notification
 }

@@ -27,7 +27,8 @@ class NativeCapsuleProvider : ICapsuleProvider {
     override fun buildNotification(
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem,
-        iconResId: Int
+        iconResId: Int,
+        firstPublishedAt: Long
     ): Notification {
         val display = item.display
         val collapsedShortText = collapseShortText(
@@ -51,7 +52,7 @@ class NativeCapsuleProvider : ICapsuleProvider {
             .setOnlyAlertOnce(true)
             .setColor(item.color)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setWhen(System.currentTimeMillis())
+            .setWhen(firstPublishedAt)
             .setShowWhen(true)
 
         builder.setContentText(

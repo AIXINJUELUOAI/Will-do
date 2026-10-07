@@ -84,6 +84,17 @@ class ConfigItem(
 )
 
 object ConfigCatalog {
+    // Qwen3-ASR 手机离线转写：控制 CPU 并发、单段长度、生成预算及模型导入上限。
+    const val QWEN_ASR_NUM_THREADS = 2
+    const val QWEN_ASR_CHUNK_SECONDS = 20
+    const val QWEN_ASR_BOUNDARY_SEARCH_SECONDS = 4
+    const val QWEN_ASR_BOUNDARY_WINDOW_MS = 200
+    const val QWEN_ASR_MAX_TOTAL_TOKENS = 1024
+    const val QWEN_ASR_MAX_NEW_TOKENS = 512
+    const val QWEN_ASR_IMPORT_MAX_BYTES = 1536L * 1024 * 1024
+    const val ASR_MODEL_MIN_BYTES = 1024L * 1024
+    const val ASR_TOKENIZER_MAX_BYTES = 16L * 1024 * 1024
+
     // 平板三栏：导航栏只在右侧仍有足够空间时展开，中间栏始终保持手机内容宽度。
     const val ADAPTIVE_NAVIGATION_EXPAND_MIN_WIDTH_DP = 1116
     const val ADAPTIVE_COMPACT_PANE_WIDTH_DP = 400

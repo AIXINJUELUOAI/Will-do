@@ -44,6 +44,11 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("悬浮文本拖拽坐标", Chain.SUPPORT, "platform/floating/ui/render/material/FloatingTextDragGesture", "单次手势从实际拖动事件换算窗口坐标，消除入场与缩放动画对热区判定的影响；日程与随口记共用，不持久化"),
+        HelperEntry("离线语音转写", Chain.RECOGNITION, "feature/quickmemo/data/asr/SherpaSpeechTranscriber", "完整 Qwen3-ASR 0.6B int8 替换后清理原 Paraformer；共用音频解码，串行推理，不固定语言"),
+        HelperEntry("Qwen 语音模型导入", Chain.SUPPORT, "feature/quickmemo/data/asr/QwenAsrModelFiles", "六个文件按白名单验证，完整校验替换成功后清理旧模型；失败保留旧模型，已有 Qwen 在转写前补清理；缓存随文件版本失效"),
+        HelperEntry("Qwen 长录音分段", Chain.RECOGNITION, "feature/quickmemo/data/asr/QwenAsrAudioChunks", "在每段末尾低能量位置切分，连续覆盖全部采样，不丢弃中英文混说；不额外引入 VAD 模型"),
+        HelperEntry("胶囊增量发布", Chain.NOTIFICATION, "feature/capsule/domain/CapsulePublicationTracker", "按通知 ID 比较内容，进度转结果保留首次发布时间；取消只清理已消失条目，不重发未变化胶囊"),
         HelperEntry("WakeUp 新版分享协议", Chain.INGEST, "feature/backup/courseimport/external/wakeup/WakeUpShareProtocol", "移植 WakeUpDecoder 的设备标识派生、自定义 DES、RC4 与请求签名；协议固定值不是用户凭据，不采集设备标识"),
         HelperEntry("WakeUp 分享响应解析", Chain.INGEST, "feature/backup/courseimport/CourseImportParser.extractWakeUpShareData", "兼容旧分享响应格式校验；新版签名与解密由 WakeUpShareClient 处理，共用课程内容解析"),
         HelperEntry("疑似重复账单通知动作", Chain.NOTIFICATION, "feature/accounting/domain/AccountingDuplicateAction", "普通与胶囊通知共用仍然计入动作，只携带本批次已暂存的疑似重复草稿 ID"),

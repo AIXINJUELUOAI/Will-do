@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 180
+        versionCode = 182
         versionName = "2.4.0 Beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -171,7 +171,7 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
 
     // === 离线语音转写 ===
-    implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.21")
+    implementation("com.bihe0832.android:lib-sherpa-onnx:8.6.10")
 
     // === 测试库 ===
     testImplementation(libs.junit)

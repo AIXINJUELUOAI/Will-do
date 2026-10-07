@@ -1763,10 +1763,10 @@ private fun QuickMemoRecordingDisplayPreference(
 
 private fun formatQuickMemoAsrModelStatus(status: QuickMemoAsrModelStatus): String {
     return when {
-        status.ready -> "已导入本地模型，可离线转写"
-        !status.modelReady && !status.tokensReady -> "未导入模型，请依次导入 model.int8.onnx 和 tokens.txt"
-        !status.modelReady -> "缺少 model.int8.onnx 或 model.onnx"
-        else -> "缺少 tokens.txt"
+        status.ready && status.modelName == "Qwen3-ASR 0.6B" -> "Qwen3-ASR 0.6B 已就绪，可离线转写中英文"
+        status.ready -> "当前使用 Paraformer，可导入 Qwen3-ASR 模型 ZIP 包升级"
+        status.missingFiles.size == 6 -> "请导入 Qwen3-ASR 0.6B 模型 ZIP 包"
+        else -> "Qwen 模型未完整导入，缺少 ${status.missingFiles.joinToString { it.substringAfterLast('/') }}"
     }
 }
 

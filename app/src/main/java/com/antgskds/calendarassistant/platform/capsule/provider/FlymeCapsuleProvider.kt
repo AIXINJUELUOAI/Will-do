@@ -31,7 +31,8 @@ class FlymeCapsuleProvider : ICapsuleProvider {
     override fun buildNotification(
         context: Context,
         item: CapsuleUiState.Active.CapsuleItem,
-        iconResId: Int
+        iconResId: Int,
+        firstPublishedAt: Long
     ): Notification {
         val content = FlymeLiveNotificationTemplate.create(context, item, iconResId)
         val pendingIntent = createContentPendingIntent(context, item, content.tapOpensPickupList)
@@ -69,7 +70,7 @@ class FlymeCapsuleProvider : ICapsuleProvider {
             .setCustomBigContentView(content.remoteViews)
             .setGroup("LIVE_CAPSULE_GROUP")
             .setGroupSummary(false)
-            .setWhen(System.currentTimeMillis())
+            .setWhen(firstPublishedAt)
             .setShowWhen(false)
 
         content.subtitleText?.let { builder.setContentText(it) }

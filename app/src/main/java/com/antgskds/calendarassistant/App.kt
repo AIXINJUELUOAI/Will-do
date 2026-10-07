@@ -38,7 +38,7 @@ import com.antgskds.calendarassistant.shared.content.ContentSourceType
 import com.antgskds.calendarassistant.feature.note.data.NoteRepository
 import com.antgskds.calendarassistant.feature.note.data.migration.LegacyNoteMigrator
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
-import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaParaformerTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaSpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.application.audio.QuickMemoAudioPlayer
 import com.antgskds.calendarassistant.shared.query.CapsuleRoutingQueryApi
 import com.antgskds.calendarassistant.shared.query.AlarmRoutingQueryApi
@@ -170,7 +170,7 @@ class App : Application() {
         QuickMemoFacade(
             repository = quickMemoRepository,
             appScope = appScope,
-            speechTranscriber = SherpaParaformerTranscriber(applicationContext),
+            speechTranscriber = SherpaSpeechTranscriber(applicationContext),
             recognitionCenter = recognitionCenter,
             settingsQueryApi = settingsQueryApi,
             appContext = applicationContext,

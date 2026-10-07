@@ -15,7 +15,7 @@ import com.antgskds.calendarassistant.App
 import com.antgskds.calendarassistant.MainActivity
 import com.antgskds.calendarassistant.R
 import com.antgskds.calendarassistant.feature.quickmemo.data.QuickMemoRepository
-import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaParaformerTranscriber
+import com.antgskds.calendarassistant.feature.quickmemo.data.asr.SherpaSpeechTranscriber
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.domain.transcription.TranscriptionResult
 import com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase
@@ -56,7 +56,7 @@ class QuickMemoTranscriptionService : Service() {
     private val repository: QuickMemoRepository by lazy {
         QuickMemoRepository(EventsDatabase.getInstance(applicationContext).quickMemoDao())
     }
-    private val transcriber by lazy { SherpaParaformerTranscriber(applicationContext) }
+    private val transcriber by lazy { SherpaSpeechTranscriber(applicationContext) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action != ACTION_TRANSCRIBE) {
