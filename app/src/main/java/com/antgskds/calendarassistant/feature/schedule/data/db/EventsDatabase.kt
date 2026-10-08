@@ -40,6 +40,8 @@ import java.util.concurrent.Executors
         EventAttachment::class,
         NoteEntity::class,
         QuickMemoEntity::class,
+        com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisEntity::class,
+        com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoFolderEntity::class,
         QuickMemoReminderEntity::class,
         QuickMemoSuggestionEntity::class,
         SyncV2BindingEntity::class,
@@ -48,7 +50,7 @@ import java.util.concurrent.Executors
         SyncV2PeerEntity::class,
         SyncV2MetaEntity::class
     ],
-    version = 20,
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -59,6 +61,7 @@ abstract class EventsDatabase : RoomDatabase() {
     abstract fun eventTypesDao(): EventTypesDao
     abstract fun eventAttachmentsDao(): EventAttachmentsDao
     abstract fun notesDao(): NotesDao
+    abstract fun linkAnalysisDao(): com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisDao
     abstract fun quickMemoDao(): QuickMemoDao
     abstract fun syncV2Dao(): SyncV2Dao
 
@@ -72,7 +75,7 @@ abstract class EventsDatabase : RoomDatabase() {
                     context.applicationContext,
                     EventsDatabase::class.java,
                     "events.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_17, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20).addCallback(object : Callback() {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_17, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22).addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         insertRegularEventType(context)
@@ -90,6 +93,24 @@ abstract class EventsDatabase : RoomDatabase() {
                     color = 0xFF3F51B5.toInt()
                 )
                 database.eventTypesDao().insertOrUpdate(defaultType)
+            }
+        }
+
+        internal val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS quick_memo_link_analysis (memoId INTEGER NOT NULL, token TEXT NOT NULL, sourceUrl TEXT NOT NULL, sourceId TEXT NOT NULL, sourceDigest TEXT NOT NULL, localAudio INTEGER NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL, resultJson TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(memoId), FOREIGN KEY(memoId) REFERENCES quick_memos(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+            }
+        }
+
+        internal val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN source_url TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN link_key TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE quick_memos ADD COLUMN folder_id TEXT DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_link_key ON quick_memos(link_key)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_quick_memos_folder_id ON quick_memos(folder_id)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS quick_memo_folders (id TEXT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
             }
         }
 

@@ -229,6 +229,9 @@ class SettingsViewModel(
         forceInstantCodeTimeToNow: Boolean? = null,
         predictiveBackEnabled: Boolean? = null,
         clipboardCodeRecognitionEnabled: Boolean? = null,
+        clipboardLinkCollectionEnabled: Boolean? = null,
+        linkAnalysisEnabled: Boolean? = null,
+        linkAudioLocalTranscription: Boolean? = null,
         imagePinEnabled: Boolean? = null,
         voiceInputEnabled: Boolean? = null,
         floatingVoiceLongPressEnabled: Boolean? = null,
@@ -293,6 +296,9 @@ class SettingsViewModel(
                 forceInstantCodeTimeToNow = forceInstantCodeTimeToNow,
                 predictiveBackEnabled = predictiveBackEnabled,
                 clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled,
+                clipboardLinkCollectionEnabled = clipboardLinkCollectionEnabled,
+                linkAnalysisEnabled = linkAnalysisEnabled,
+                linkAudioLocalTranscription = linkAudioLocalTranscription,
                 imagePinEnabled = imagePinEnabled,
                 voiceInputEnabled = voiceInputEnabled,
                 floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled,
@@ -453,6 +459,10 @@ class SettingsViewModel(
 
     fun setCourseModuleEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsOperationApi.updateSettings(settings.value.copy(courseModuleEnabled = enabled))
+    }
+
+    fun setHomeBottomSelectedFillEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsOperationApi.updateSettings(settings.value.copy(homeBottomSelectedFillEnabled = enabled))
     }
 
     fun setHomeAgendaOnlyScheduled(enabled: Boolean) = viewModelScope.launch {

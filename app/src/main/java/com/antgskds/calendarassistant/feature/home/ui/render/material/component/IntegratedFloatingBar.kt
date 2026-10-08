@@ -12,6 +12,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antgskds.calendarassistant.R
@@ -82,6 +84,7 @@ fun IntegratedFloatingBar(
     onSearchClick: () -> Unit,
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
+    selectedFillEnabled: Boolean = false,
     backgroundMode: Boolean = false,
     miuiBlurEnabled: Boolean = false,
     cardAlphaPercent: Int = MySettings.APP_BACKGROUND_CARD_ALPHA_DEFAULT_PERCENT,
@@ -158,12 +161,28 @@ fun IntegratedFloatingBar(
     )
     val actionWidth = fabCollapsedWidth + iconAreaWidth
 
+    val effectiveSelectedKey = if (selectedPageKey in normalizedNavItems) {
+        selectedPageKey
+    } else {
+        normalizedNavItems.firstOrNull() ?: HomeEntryKey.TODAY
+    }
     val isMenuSelected = isSidebarOpen
     val isTabHighlightEnabled = !isSidebarOpen
-    val menuIcon = painterResource(R.drawable.floatingbar_menu)
-    val todayIcon = painterResource(R.drawable.floatingbar_today)
-    val allIcon = painterResource(R.drawable.floatingbar_all)
-    val quickMemoIcon = painterResource(R.drawable.ic_stat_quickmemo)
+    val menuIcon = painterResource(
+        if (selectedFillEnabled && isMenuSelected) R.drawable.floatingbar_menu_filled else R.drawable.floatingbar_menu
+    )
+    val todayIcon = painterResource(
+        if (selectedFillEnabled && isTabHighlightEnabled && effectiveSelectedKey == HomeEntryKey.TODAY)
+            R.drawable.floatingbar_today_filled else R.drawable.floatingbar_today
+    )
+    val allIcon = painterResource(
+        if (selectedFillEnabled && isTabHighlightEnabled && effectiveSelectedKey == HomeEntryKey.ALL)
+            R.drawable.floatingbar_all_filled else R.drawable.floatingbar_all
+    )
+    val quickMemoIcon = painterResource(
+        if (selectedFillEnabled && isTabHighlightEnabled && effectiveSelectedKey == HomeEntryKey.NOTE)
+            R.drawable.floatingbar_quickmemo_filled else R.drawable.ic_stat_quickmemo
+    )
 
     fun painterIconForPageKey(key: String): Painter? = when (key) {
         HomeEntryKey.TODAY -> todayIcon
@@ -176,11 +195,6 @@ fun IntegratedFloatingBar(
         else -> null
     }
 
-    val effectiveSelectedKey = if (selectedPageKey in normalizedNavItems) {
-        selectedPageKey
-    } else {
-        normalizedNavItems.firstOrNull() ?: HomeEntryKey.TODAY
-    }
     val currentTabClick = { onPageClick(effectiveSelectedKey) }
 
     // 修改点 1：最外层 Box 允许内容溢出绘制，不强制裁剪
@@ -301,10 +315,19 @@ fun IntegratedFloatingBar(
                             .fillMaxHeight(),
                         contentAlignment = Alignment.Center
                     ) {
-                        IconButton(onClick = { haptics.click(); onExpandedChange(!isExpanded) }) {
+                        Box(
+                            modifier = Modifier.size(48.dp).clip(CircleShape).combinedClickable(
+                                role = Role.Button,
+                                onClick = { haptics.click(); onExpandedChange(!isExpanded) },
+                                onLongClickLabel = "新建",
+                                onLongClick = { haptics.longPress(); onEditClick() },
+                                hapticFeedbackEnabled = false,
+                            ),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Icon(
                                 Icons.Default.Add,
-                                contentDescription = "Toggle",
+                                contentDescription = if (isExpanded) "收起操作" else "展开操作",
                                 tint = fabIcon,
                                 modifier = Modifier
                                     .size(AppFloatingActionButtonDefaults.IconSize)

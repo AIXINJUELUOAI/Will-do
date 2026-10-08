@@ -198,13 +198,22 @@ class NotificationOrchestrator(
             Log.d("WillDoNotify", "fire key=${key.value} -> NOT_FOUND")
             return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
         }
+        val summaryRoute = com.antgskds.calendarassistant.feature.notification.policy.LinkSummaryNotificationPolicy.route(snapshot.kind,liveCapsuleEnabled)
+        if (summaryRoute != null) {
+            if (summaryRoute == NotificationRoute.NORMAL) livePublisherProvider()?.cancel(key)
+            val routed = snapshot.copy(route=summaryRoute)
+            registryStore.upsert(routed)
+            return publishSnapshot(routed)
+        }
         val clipboardRoute = com.antgskds.calendarassistant.feature.notification.policy.ClipboardCodePromptDeliveryPolicy
             .route(snapshot.kind, liveCapsuleEnabled)
         if (clipboardRoute != null) {
             // 独立候选尚未入库，必须主动发布；日程胶囊不会替它补发。
             if (clipboardRoute == NotificationRoute.NORMAL) livePublisherProvider()?.cancel(key)
             Log.i("WillDoNotify", "clipboard prompt dispatch key=${key.value} route=$clipboardRoute")
-            return publishSnapshot(snapshot.copy(route = clipboardRoute))
+            val routed = snapshot.copy(route = clipboardRoute)
+            registryStore.upsert(routed)
+            return publishSnapshot(routed)
         }
         if (snapshot.kind == com.antgskds.calendarassistant.feature.notification.model.NotificationKind.QUICK_MEMO_REMINDER) {
             val route = com.antgskds.calendarassistant.feature.notification.policy.QuickMemoReminderDeliveryPolicy.route(liveCapsuleEnabled)

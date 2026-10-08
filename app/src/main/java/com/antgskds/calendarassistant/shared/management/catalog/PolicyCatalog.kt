@@ -51,7 +51,14 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
-        PolicyEntry("剪贴板确认通知投递", Chain.NOTIFICATION, "feature/notification/policy/ClipboardCodePromptDeliveryPolicy", Maturity.ACTIVE, "新通知链路按实况开关真实发布 NORMAL/LIVE；独立候选不进入日程旧抑制门控，只有 POSTED 表示发布完成"),
+        PolicyEntry("收藏链接刷新", Chain.INGEST, "feature/quickmemo/domain/QuickMemoLinkRefreshPolicy", Maturity.ACTIVE, "相同内容 ID 的新分享参数刷新原记录；不以缺失 token 的链接覆盖已有 token；保留标题、正文编辑、文件夹和成功摘要"),
+        PolicyEntry("链接分析策略", Chain.RECOGNITION, "feature/linkanalysis/domain/LinkAnalysisPolicy", Maturity.ACTIVE, "总开关、源精确主机匹配、网页 UA 与素材完整性判断；保留标准端口、域名和私有地址限制"),
+        PolicyEntry("链接摘要通知分流", Chain.NOTIFICATION, "feature/notification/policy/LinkSummaryNotificationPolicy", Maturity.ACTIVE, "保存有效摘要后真实分流 NORMAL/LIVE；按随口记取消，不走旧日程抑制门控"),
+
+        PolicyEntry("随口记新建草稿", Chain.INGEST, "feature/quickmemo/domain/QuickMemoDraftPolicy", Maturity.ACTIVE, "空白新建仅驻留会话，有内容或添加提醒/附件/待办后串行保存；编辑中不进入列表，退出只清理无有效内容的草稿"),
+        PolicyEntry("链接平台规则表", Chain.RECOGNITION, "feature/quickmemo/domain/QuickMemoLinkRules", Maturity.ACTIVE, "声明域名、分享套话清理和已验证内容 ID；新增平台只补规则，未登记网址使用通用链接收藏"),
+        PolicyEntry("链接收藏识别", Chain.INGEST, "feature/quickmemo/domain/QuickMemoLinkParser", Maturity.ACTIVE, "本地提取 HTTP(S) 链接，按完整域名区分六类来源；来源标题统一，文案与链接分行，不联网解析短链或生成摘要"),
+        PolicyEntry("剪贴板确认通知投递", Chain.NOTIFICATION, "feature/notification/policy/ClipboardCodePromptDeliveryPolicy", Maturity.ACTIVE, "新通知链路按实况开关真实发布 NORMAL/LIVE；独立候选不进入日程旧抑制门控，只有 POSTED 表示发布完成，失败不消耗提示去重；收藏成功更新原通知并直达记录详情"),
         PolicyEntry("日历视图恢复", Chain.SCHEDULE, "feature/home/domain/HomeCalendarViewPolicy", Maturity.ACTIVE, "按布局与课表开关安全解析持久偏好，临时回退不写偏好"),
         PolicyEntry("随口记创建来源", Chain.INGEST, "feature/quickmemo/domain/QuickMemoCreationSource", Maturity.ACTIVE, "普通入口保持候选分析；文字分享只保存，不自动调用识别"),
         PolicyEntry("提醒登记窗口", Chain.NOTIFICATION, "feature/notification/policy/ReminderWindowPolicy", Maturity.ACTIVE, "按实际触发时刻限制七个自然日；只允许前台登记和已有窗口恢复；胶囊模式省去普通闹钟但保留手环；随口记预展开窗口内重复提醒"),

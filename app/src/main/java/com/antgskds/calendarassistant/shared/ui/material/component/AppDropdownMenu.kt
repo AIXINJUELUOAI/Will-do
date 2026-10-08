@@ -40,6 +40,7 @@ data class AppMenuItem(
     val selected: Boolean = false,
     val enabled: Boolean = true,
     val destructive: Boolean = false,
+    val dividerBefore: Boolean = false,
 )
 
 /**
@@ -93,6 +94,10 @@ fun AppDropdownMenu(
             ) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                     items.forEach { item ->
+                        if (item.dividerBefore) HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            color = contentColor.copy(alpha = 0.16f),
+                        )
                         val tint = if (item.destructive) MaterialTheme.colorScheme.error else contentColor
                         DropdownMenuItem(
                             text = { Text(item.text, style = MaterialTheme.typography.bodyLarge,

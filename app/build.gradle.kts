@@ -41,7 +41,7 @@ android {
         applicationId = "com.antgskds.calendarassistant"
         minSdk = 33
         targetSdk = 36
-        versionCode = 188
+        versionCode = 194
         versionName = "2.4.0 Beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -205,6 +205,9 @@ dependencies {
 
     // === WorkManager ===
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+    // User-imported link sources run in a bounded QuickJS sandbox (Apache-2.0).
+    implementation("io.github.dokar3:quickjs-kt:1.0.15")
+    implementation("androidx.webkit:webkit:1.14.0")
     // 与 AndroidX Test 1.7 的原子依赖组对齐，避免 instrumentation 编译/运行类路径版本冲突。
     implementation("androidx.concurrent:concurrent-futures:1.2.0")
 
@@ -216,4 +219,12 @@ dependencies {
     implementation("io.noties.markwon:ext-tasklist:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
 
+}
+
+// Desktop tests use JVM native binaries instead of Android .so files.
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:1.0.15"))
+    }
 }

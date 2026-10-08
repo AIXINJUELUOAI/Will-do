@@ -319,6 +319,8 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <service android:name=".platform.linkanalysis.LinkAudioTranscriptionService"
+            android:exported="false" android:process=":link_asr" />
         <service
             android:name=".feature.quickmemo.application.QuickMemoTranscriptionService"
             android:exported="false"

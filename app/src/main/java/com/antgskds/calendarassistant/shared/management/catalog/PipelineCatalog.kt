@@ -55,6 +55,10 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("链接摘要任务", Chain.RECOGNITION, "feature/linkanalysis/application/LinkAnalysisCoordinator", Maturity.PIPELINE, "收藏后唯一任务固定源版本；提取、下载、AI、条件写回、完成通知，取消与旧任务不能覆盖当前结果"),
+
+        PipelineEntry("随口记文件夹同步", Chain.SYNC, "feature/cloudsync/data/SyncV2LocalRepository", Maturity.PIPELINE, "文件夹以 UUID 独立同步版本与删除标记，空文件夹也同步；随口记携带归属，旧数据保持未分组"),
+        PipelineEntry("随口记链接收藏", Chain.INGEST, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "系统分享与剪贴板按钮共用事务去重保存；保留原链接和本地分享文案，不调用 AI"),
         PipelineEntry("剪贴板确认通知分流", Chain.NOTIFICATION, "feature/notification/application/NotificationOrchestrator", Maturity.PIPELINE, "剪贴板候选经 NotificationApi 与投递策略真实分流普通发布器/胶囊发布站；两者共用提示数据，确认、取消、替换候选时清理已发布通知"),
         PipelineEntry("特权剪贴板监听", Chain.RECOGNITION, "platform/clipboard/PrivilegedClipboardReader", Maturity.PIPELINE, "复用 Root/Shizuku 进程启动，app_process 以真实 Shell/Root 身份读取与监听；开关关闭或授权失效销毁进程，回调复用取件类确认及统一通知入库"),
         PipelineEntry("离线语音转写", Chain.RECOGNITION, "feature/quickmemo/application/QuickMemoTranscriptionService", Maturity.PIPELINE, "独立 ASR 进程复用 SherpaSpeechTranscriber；优先导入的 Qwen3-ASR，中英混说自动识别，失败保留录音"),

@@ -8,9 +8,74 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkRefreshPolicy
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLink
 
 @Dao
 interface QuickMemoDao {
+    @Query("SELECT * FROM quick_memo_folders ORDER BY createdAt ASC")
+    fun observeFolders(): Flow<List<QuickMemoFolderEntity>>
+
+    @Query("SELECT * FROM quick_memo_folders ORDER BY createdAt ASC")
+    suspend fun getAllFolders(): List<QuickMemoFolderEntity>
+
+    @Query("SELECT * FROM quick_memo_folders WHERE id = :id LIMIT 1")
+    suspend fun getFolder(id: String): QuickMemoFolderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFolder(folder: QuickMemoFolderEntity): Long
+
+    @Query("UPDATE quick_memos SET folder_id = :folderId, updated_at = :now WHERE id IN (:ids)")
+    suspend fun assignFolder(ids: List<Long>, folderId: String?, now: Long): Int
+
+    @Query("UPDATE quick_memos SET folder_id = NULL, updated_at = :now WHERE folder_id = :folderId")
+    suspend fun unassignFolder(folderId: String, now: Long)
+
+    @Query("UPDATE quick_memo_folders SET name = :name, updatedAt = :now WHERE id = :id")
+    suspend fun renameFolder(id: String, name: String, now: Long): Int
+
+    @Query("DELETE FROM quick_memo_folders WHERE id = :id")
+    suspend fun deleteFolderRow(id: String)
+
+    @Transaction
+    suspend fun deleteFolder(id: String, now: Long) {
+        unassignFolder(id, now)
+        deleteFolderRow(id)
+    }
+
+    @Transaction
+    suspend fun moveToFolder(ids: List<Long>, folderId: String?, now: Long): Int {
+        require(folderId == null || getFolder(folderId) != null) { "文件夹不存在" }
+        return assignFolder(ids.distinct(), folderId, now)
+    }
+
+    @Query("SELECT * FROM quick_memos WHERE link_key = :key LIMIT 1")
+    suspend fun findLink(key: String): QuickMemoEntity?
+
+    @Transaction
+    suspend fun insertLinkIfAbsent(memo: QuickMemoEntity): Long {
+        val key = requireNotNull(memo.linkKey)
+        val saved = findLink(key) ?: return insertQuickMemo(memo)
+        val link = QuickMemoLink(requireNotNull(memo.sourceUrl), "", "", key)
+        if (QuickMemoLinkRefreshPolicy.needsRefresh(saved.sourceUrl, link)) {
+            refreshLinkSource(requireNotNull(saved.id), link.url,
+                QuickMemoLinkRefreshPolicy.refreshedBody(saved.bodyText, saved.sourceUrl, link.url), memo.updatedAt)
+        }
+        return requireNotNull(saved.id)
+    }
+
+    @Query("UPDATE quick_memos SET source_url = :url, body_text = :body, updated_at = :now WHERE id = :id")
+    suspend fun refreshLinkSource(id: Long, url: String, body: String, now: Long)
+
+    @Query("UPDATE quick_memos SET title = :title, updated_at = :now WHERE id = :id")
+    suspend fun updateTitle(id: Long, title: String, now: Long)
+
+    @Query("UPDATE quick_memos SET body_text = :body, updated_at = :now WHERE id = :id")
+    suspend fun updateBody(id: Long, body: String, now: Long)
+
+    @Update
+    suspend fun updateFolder(folder: QuickMemoFolderEntity)
+
     @Query("SELECT * FROM quick_memos ORDER BY sort_rank ASC, updated_at DESC")
     fun observeQuickMemos(): Flow<List<QuickMemoEntity>>
 

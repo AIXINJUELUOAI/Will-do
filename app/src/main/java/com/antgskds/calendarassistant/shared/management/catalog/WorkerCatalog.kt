@@ -59,6 +59,8 @@ object WorkerCatalog {
     )
 
     val workers: List<WorkerEntry> = listOf(
+        WorkerEntry("链接摘要后台任务", Chain.RECOGNITION, "feature/linkanalysis/application/LinkAnalysisWorker", Trigger.ONE_TIME, Maturity.ACTIVE, "新链接或用户重试触发唯一 WorkManager 任务；联网后按已固定源版本运行，不批量回溯旧收藏"),
+
         WorkerEntry(
             "WebDAV 多设备同步任务", Chain.SYNC, "feature/cloudsync/application/WebDavSyncV2Worker",
             Trigger.PERIODIC, Maturity.ACTIVE,

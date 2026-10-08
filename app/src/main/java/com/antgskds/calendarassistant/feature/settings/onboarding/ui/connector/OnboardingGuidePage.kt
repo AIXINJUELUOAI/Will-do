@@ -380,15 +380,11 @@ fun OnboardingGuidePage(
 
     fun handleLaboratoryAction(action: LaboratoryUiAction) {
         when (action) {
-            is LaboratoryUiAction.SetImagePin -> settingsViewModel.updatePreference(imagePinEnabled = action.enabled)
             is LaboratoryUiAction.SetBraceletMode -> {
                 settingsViewModel.updatePreference(braceletModeEnabled = action.enabled)
             }
             is LaboratoryUiAction.SetForceInstantCodeTime -> {
                 settingsViewModel.updatePreference(forceInstantCodeTimeToNow = action.enabled)
-            }
-            is LaboratoryUiAction.SetPredictiveBack -> {
-                settingsViewModel.updatePreference(predictiveBackEnabled = action.enabled)
             }
             is LaboratoryUiAction.SetClipboardRecognition -> {
                 settingsViewModel.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
@@ -396,6 +392,7 @@ fun OnboardingGuidePage(
                     toast("已开启，打开 WillDo 时将检查剪贴板并询问是否创建日程")
                 }
             }
+            is LaboratoryUiAction.SetClipboardLinkCollection -> settingsViewModel.updatePreference(clipboardLinkCollectionEnabled = action.enabled)
             LaboratoryUiAction.OpenDeveloper -> Unit
         }
     }
@@ -511,6 +508,7 @@ fun OnboardingGuidePage(
                             ),
                             itemVisibility = PreferenceItemVisibility(
                                 showHapticFeedback = false,
+                                showPredictiveBack = false,
                                 showNetworkSpeedCapsule = false,
                                 showAutoArchive = false,
                                 showScheduleColors = false,
@@ -522,7 +520,6 @@ fun OnboardingGuidePage(
                                     showDeveloperEntry = false,
                                     itemVisibility = LaboratoryItemVisibility(
                                         showForceInstantCodeTime = false,
-                                        showPredictiveBack = false,
                                     ),
                                     onBraceletModeChange = { enabled ->
                                         if (enabled) {

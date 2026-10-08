@@ -47,6 +47,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.antgskds.calendarassistant.shared.ui.material.component.AppCard
+import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled
 import com.antgskds.calendarassistant.shared.ui.interaction.rememberAppHaptics
 import com.antgskds.calendarassistant.shared.ui.permission.rememberPermissionGate
@@ -91,17 +92,46 @@ fun LaboratoryPage(
         }
     }
 
+    val app = LocalContext.current.applicationContext as? com.antgskds.calendarassistant.App
+    val sources by app?.linkAnalysisApi?.sources?.collectAsState() ?: remember { mutableStateOf(emptyList<com.antgskds.calendarassistant.feature.linkanalysis.data.InstalledLinkSource>()) }
+    val sourceScope = rememberCoroutineScope()
+    val sourceContext = LocalContext.current
+    var sourceBusy by remember { mutableStateOf(false) }
+    fun sourceAction(action: suspend () -> Unit) {
+        if (sourceBusy) return
+        sourceBusy=true
+        sourceScope.launch {
+            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { action() } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { android.widget.Toast.makeText(sourceContext,error.message?.take(120) ?: "解析源操作失败",android.widget.Toast.LENGTH_LONG).show() }
+            finally { sourceBusy=false }
+        }
+    }
     MaterialLaboratoryScreen(
+        sourceContent = {
+            com.antgskds.calendarassistant.feature.linkanalysis.ui.LinkSourceManagerCard(
+                sources=sources,enabled=settings?.linkAnalysisEnabled==true,localAudio=settings?.linkAudioLocalTranscription!=false,busy=sourceBusy,
+                onEnable={enabled ->
+                    settingsViewModel?.updatePreference(linkAnalysisEnabled=enabled)
+                    if(!enabled) sourceAction { app?.linkAnalysisApi?.cancelAll() }
+                },
+                onAudioMode={settingsViewModel?.updatePreference(linkAudioLocalTranscription=it)},
+                onImport={uri -> sourceAction { sourceContext.contentResolver.openInputStream(uri)?.use { app?.linkAnalysisApi?.importSource(it) } ?: error("无法读取源文件") } },
+                onSourceEnabled={id,enabled -> sourceAction { app?.linkAnalysisApi?.setSourceEnabled(id,enabled) }},
+                onDelete={id -> sourceAction { app?.linkAnalysisApi?.deleteSource(id) }},
+            )
+        },
         state = LaboratoryUiState(settings = settings),
         uiSize = uiSize,
         onAction = { action ->
             when (action) {
-                is LaboratoryUiAction.SetImagePin -> settingsViewModel?.updatePreference(imagePinEnabled = action.enabled)
                 is LaboratoryUiAction.SetBraceletMode -> settingsViewModel?.updatePreference(braceletModeEnabled = action.enabled)
                 is LaboratoryUiAction.SetForceInstantCodeTime -> settingsViewModel?.updatePreference(forceInstantCodeTimeToNow = action.enabled)
-                is LaboratoryUiAction.SetPredictiveBack -> settingsViewModel?.updatePreference(predictiveBackEnabled = action.enabled)
                 is LaboratoryUiAction.SetClipboardRecognition -> {
                     settingsViewModel?.updatePreference(clipboardCodeRecognitionEnabled = action.enabled)
+                }
+                is LaboratoryUiAction.SetClipboardLinkCollection -> {
+                    settingsViewModel?.updatePreference(clipboardLinkCollectionEnabled = action.enabled)
                 }
                 LaboratoryUiAction.OpenDeveloper -> onNavigateToDeveloper()
             }
@@ -113,7 +143,8 @@ fun LaboratoryPage(
 fun MaterialLaboratoryScreen(
     state: LaboratoryUiState,
     uiSize: Int = 2,
-    onAction: (LaboratoryUiAction) -> Unit
+    onAction: (LaboratoryUiAction) -> Unit,
+    sourceContent: @Composable () -> Unit = {},
 ) {
     val settings = state.settings
     val scrollState = rememberScrollState()
@@ -185,20 +216,38 @@ fun MaterialLaboratoryScreen(
                 },
             )
 
+            sourceContent()
+
             AppCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
-                Column(Modifier.padding(vertical = 8.dp)) {
-                    ActionSettingItem(
-                        title = "申请权限",
-                        subtitle = "优先申请 Root 权限，无 Root 时申请 Shizuku 权限",
-                        value = if (requestingPrivilege) "申请中…" else when (privilegeType) {
-                            PrivilegeManager.PrivilegeType.ROOT -> "Root 已授权"
-                            PrivilegeManager.PrivilegeType.SHIZUKU -> "Shizuku 已授权"
-                            PrivilegeManager.PrivilegeType.NONE -> "未授权"
-                        },
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "申请权限",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = (when (privilegeType) {
+                                PrivilegeManager.PrivilegeType.ROOT -> "Root 已授权"
+                                PrivilegeManager.PrivilegeType.SHIZUKU -> "Shizuku 已授权"
+                                PrivilegeManager.PrivilegeType.NONE -> "未授权"
+                            }) + "\n优先申请 Root 权限，无 Root 时申请 Shizuku 权限",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    EditionButton(
                         enabled = !requestingPrivilege,
                         onClick = {
                             if (!requestingPrivilege) {
@@ -223,10 +272,9 @@ fun MaterialLaboratoryScreen(
                                 }
                             }
                         },
-                        cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                        cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                        cardValueStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                    )
+                    ) {
+                        Text(if (requestingPrivilege) "申请中…" else "申请")
+                    }
                 }
             }
 
@@ -243,7 +291,6 @@ fun MaterialLaboratoryScreen(
 data class LaboratoryItemVisibility(
     val showForceInstantCodeTime: Boolean = true,
     val showClipboardRecognition: Boolean = true,
-    val showPredictiveBack: Boolean = true,
     val showBraceletMode: Boolean = true,
 )
 
@@ -264,13 +311,6 @@ fun LaboratorySettingsContent(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            LaboratorySwitchCard(
-                title = "图片挂起",
-                subtitle = "将多张图片挂起在岛上，点击后左右滑动查看",
-                checked = settings.imagePinEnabled,
-                onCheckedChange = { onAction(LaboratoryUiAction.SetImagePin(it)) }
-            )
-
             if (itemVisibility.showForceInstantCodeTime) LaboratorySwitchCard(
                 title = "取件类事件使用当前时间",
                 subtitle = "开启后取件码、取餐码、取票码、寄件码会忽略 AI 返回时间，入库时改为当前时间",
@@ -282,20 +322,18 @@ fun LaboratorySettingsContent(
 
             if (itemVisibility.showClipboardRecognition) LaboratorySwitchCard(
                 title = "剪贴板取件类识别（Beta）",
-                subtitle = "检查取件码、取餐码、取票码和寄件码；授权 Root 或 Shizuku 后可在后台监听复制，命中后提醒确认创建日程",
+                subtitle = "识别取件码、取餐码、取票码和寄件码；通知中直接添加。授权 Root 或 Shizuku 后可在后台监听复制",
                 checked = settings.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
                     onAction(LaboratoryUiAction.SetClipboardRecognition(enabled))
                 }
             )
 
-            if (itemVisibility.showPredictiveBack) LaboratorySwitchCard(
-                title = "预测性返回手势",
-                subtitle = "侧滑返回时页面支持跟手动画效果",
-                checked = settings.predictiveBackEnabled,
-                onCheckedChange = { enabled ->
-                    onAction(LaboratoryUiAction.SetPredictiveBack(enabled))
-                }
+            if (itemVisibility.showClipboardRecognition) LaboratorySwitchCard(
+                title = "剪贴板链接收藏（Beta）",
+                subtitle = "复制链接后提示收藏到随口记；授权 Root 或 Shizuku 后可在后台监听，不抓取网页正文",
+                checked = settings.clipboardLinkCollectionEnabled,
+                onCheckedChange = { onAction(LaboratoryUiAction.SetClipboardLinkCollection(it)) }
             )
 
             if (itemVisibility.showBraceletMode) LaboratorySwitchCard(

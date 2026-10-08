@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Mutex
@@ -59,6 +60,7 @@ class QuickMemoFacade(
     private val capsuleCommandApi: CapsuleCommandApi? = null,
     private val capsuleQueryApi: CapsuleQueryApi? = null,
     private val notificationApi: NotificationApi? = null,
+    private val linkAnalysisApi: com.antgskds.calendarassistant.feature.linkanalysis.api.LinkAnalysisApi? = null,
 ) {
     companion object {
         private const val TAG = "QuickMemoFacade"
@@ -68,6 +70,38 @@ class QuickMemoFacade(
         private const val ASR_PROCESS_SUFFIX = ":quickmemo_asr"
         private const val USE_ISOLATED_ASR_PROCESS = true
         private const val TEXT_QUICK_MEMO_ID_PREFIX = "TEXT_QUICK_MEMO_"
+    }
+
+    val folders = repository.folders.stateIn(appScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    suspend fun createLinkMemo(link: com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLink): Long =
+        withContext(Dispatchers.IO) {
+            val existing = repository.findLink(link.dedupKey)
+            val id = repository.createLinkMemo(link)
+            val refreshed = existing != null &&
+                repository.getQuickMemo(id)?.sourceUrl != existing.sourceUrl
+            if (existing == null || refreshed) {
+                try {
+                    linkAnalysisApi?.queue(id)
+                }
+                catch(cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch(_: Exception) { Log.w(TAG,"link analysis enqueue failed memoId=$id; original link retained") }
+            }
+            id
+        }
+
+    suspend fun isSavedLinkCurrent(link: com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLink): Boolean =
+        withContext(Dispatchers.IO) {
+            val saved = repository.findLink(link.dedupKey) ?: return@withContext false
+            !com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkRefreshPolicy.needsRefresh(saved.sourceUrl, link)
+        }
+    suspend fun updateTitle(id: Long, title: String) = withContext(Dispatchers.IO) { repository.updateTitle(id, title) }
+    suspend fun createFolder(name: String): String = withContext(Dispatchers.IO) { repository.createFolder(name) }
+    suspend fun renameFolder(id: String, name: String) = withContext(Dispatchers.IO) { repository.renameFolder(id, name) }
+    suspend fun deleteFolder(id: String) = withContext(Dispatchers.IO) { repository.deleteFolder(id) }
+    suspend fun moveToFolder(ids: List<Long>, folderId: String?) = withContext(Dispatchers.IO) { repository.moveToFolder(ids, folderId) }
+    suspend fun deleteQuickMemos(ids: Collection<Long>) = withContext(Dispatchers.IO) {
+        ids.distinct().forEach { deleteQuickMemo(it) }
     }
 
     private val _quickMemos = MutableStateFlow<List<QuickMemoEntity>>(emptyList())
@@ -165,6 +199,11 @@ class QuickMemoFacade(
 
     suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false,
         source: com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource = com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource.NORMAL): Long = withContext(Dispatchers.IO) {
+        if (source == com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource.TEXT_SHARE) {
+            com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkParser.parse(bodyText)?.let {
+                return@withContext createLinkMemo(it)
+            }
+        }
         val id = repository.createTextMemo(bodyText, asTodo)
         val cleanText = bodyText.trim()
         if (cleanText.isNotBlank() && source.analyzeSuggestions) {
@@ -409,12 +448,14 @@ class QuickMemoFacade(
     }
 
     suspend fun deleteQuickMemo(id: Long) = withContext(Dispatchers.IO) {
+        linkAnalysisApi?.cancel(id)
         clearPinnedTextQuickMemo(id)
         repository.getRemindersForMemo(id).mapNotNull { it.id }.forEach { reminderScheduler?.cancel(it) }
         repository.deleteQuickMemo(id)
     }
 
     suspend fun clearAllQuickMemos(): Int = withContext(Dispatchers.IO) {
+        linkAnalysisApi?.cancelAll()
         capsuleCommandApi?.clearTextQuickMemo()
         repository.getAllReminders().mapNotNull { it.id }.forEach { reminderScheduler?.cancel(it) }
         repository.clearAllQuickMemos()

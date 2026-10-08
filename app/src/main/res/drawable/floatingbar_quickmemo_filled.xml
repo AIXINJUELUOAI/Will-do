@@ -1,0 +1,13 @@
+<!-- Google Material Symbols Outlined, FILL=1, 24px.
+     https://github.com/google/material-design-icons/blob/master/symbols/web/sticky_note_2/materialsymbolsoutlined/sticky_note_2_fill1_24px.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v400L600-120H200Zm360-80 200-200H560v200ZM280-400h200v-80H280v80Zm0-160h400v-80H280v80Z" />
+    </group>
+</vector>

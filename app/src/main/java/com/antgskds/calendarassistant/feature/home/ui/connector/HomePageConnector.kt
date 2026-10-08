@@ -10,6 +10,7 @@ import com.antgskds.calendarassistant.feature.schedule.presentation.model.Schedu
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
 import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoPage
+import com.antgskds.calendarassistant.feature.quickmemo.ui.connector.QuickMemoFolderMenuRoute
 import com.antgskds.calendarassistant.feature.schedule.ui.connector.AllEventsRoute
 import com.antgskds.calendarassistant.feature.home.ui.render.HomePageScreen
 import com.antgskds.calendarassistant.feature.schedule.ui.render.ScheduleView
@@ -44,7 +45,7 @@ fun HomePageRoute(
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteQuickMemo: (QuickMemoEntity) -> Unit = {},
-    onRequestClearQuickMemos: () -> Unit = {},
+    onRequestQuickMemoFolders: () -> Unit = {},
     quickMemoCount: Int = 0,
     onOpenQuickMemoDetail: (Long) -> Unit = {},
     onScheduleExpandedChange: (Boolean) -> Unit = {},
@@ -155,7 +156,10 @@ fun HomePageRoute(
         onAddCourseClick = onAddCourseClick,
         onEditItem = { item -> if (!demoModeEnabled || isTwoPane) onEditItem(item) },
         onRequestDeleteItem = { item -> if (!demoModeEnabled) onRequestDeleteItem(item) },
-        onRequestClearQuickMemos = { if (!demoModeEnabled) onRequestClearQuickMemos() },
+        onRequestQuickMemoFolders = { if (!demoModeEnabled) onRequestQuickMemoFolders() },
+        quickMemoFolderMenu = { container, selection, content, additionalItems ->
+            QuickMemoFolderMenuRoute(viewModel, container, selection, content, additionalItems)
+        },
         quickMemoCount = quickMemoCount,
         onScheduleExpandedChange = onScheduleExpandedChange,
         onScheduleProgressChange = onScheduleProgressChange,

@@ -139,16 +139,20 @@ class AndroidNormalNotificationPublisher(
     ) {
         payload.actions.forEach { action ->
             if (action.key.isBlank() || action.label.isBlank()) return@forEach
-            val actionIntent = Intent(appContext, EventActionReceiver::class.java).apply {
+            val memoId = action.openQuickMemoId
+            val actionIntent = Intent(appContext, if (memoId != null) MainActivity::class.java else EventActionReceiver::class.java).apply {
                 this.action = action.key
                 action.payload.forEach { (key, value) -> putExtra(key, value) }
+                if (memoId != null) {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, memoId)
+                }
             }
-            val pendingAction = PendingIntent.getBroadcast(
-                appContext,
-                payload.notificationId xor action.key.hashCode(),
-                actionIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val requestCode = payload.notificationId xor action.key.hashCode()
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val pendingAction = if (memoId != null) {
+                PendingIntent.getActivity(appContext, requestCode, actionIntent, flags)
+            } else PendingIntent.getBroadcast(appContext, requestCode, actionIntent, flags)
             builder.addAction(R.drawable.ic_notification_small, action.label, pendingAction)
         }
     }

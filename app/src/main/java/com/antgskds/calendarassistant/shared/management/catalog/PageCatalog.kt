@@ -64,7 +64,7 @@ object PageCatalog {
         // —— 其他设置（普通用户）——
         PageEntry(SettingsDestination.AI, "settings_ai", "模型与连接", PageVisibility.USER, "配置 AI 识别模型与 WebDAV 连接"),
         PageEntry(SettingsDestination.Weather, "settings_weather", "天气", PageVisibility.USER, "天气位置与预警设置"),
-        PageEntry(SettingsDestination.Preference, "settings_preference", "偏好设置", PageVisibility.USER, "通用偏好：显示、操作、通知、日程等开关"),
+        PageEntry(SettingsDestination.Preference, "settings_preference", "偏好设置", PageVisibility.USER, "通用偏好：显示、操作、通知、日程等开关，含图片挂起与预测性返回手势"),
         PageEntry(SettingsDestination.ScheduleColors, "settings_schedule_colors", "日程颜色", PageVisibility.USER, "自定义新建和识别日程使用的颜色色盘（从偏好设置进入）"),
         PageEntry(SettingsDestination.Archives, "settings_archives", "归档", PageVisibility.USER, "查看与恢复已归档的过期日程"),
         PageEntry(SettingsDestination.Backup, "settings_backup", "数据备份", PageVisibility.USER, "导入导出备份"),
@@ -79,8 +79,8 @@ object PageCatalog {
         PageEntry(SettingsDestination.Logout, null, "退出应用", PageVisibility.ACTION, "退出登录/应用（不导航）"),
 
         // —— 实验室 / 开发者 ——
-        PageEntry(SettingsDestination.Laboratory, "settings_laboratory", "实验室", PageVisibility.USER, "实验性功能开关、Root 优先的特权授权申请与开发者选项入口"),
-        PageEntry(SettingsDestination.Developer, "settings_developer", "开发者", PageVisibility.DEVELOPER, "测试中心：列表排序开关 + DebugActionRegistry 调试动作（从实验室进入）"),
+        PageEntry(SettingsDestination.Laboratory, "settings_laboratory", "实验室", PageVisibility.USER, "实验性功能开关、链接源导入/管理及音频处理选择、Root 优先的特权授权申请与开发者选项入口"),
+        PageEntry(SettingsDestination.Developer, "settings_developer", "开发者", PageVisibility.DEVELOPER, "测试中心：底栏选中填充开关、列表排序开关与 DebugActionRegistry 调试动作（从实验室进入）"),
         PageEntry(SettingsDestination.ConfigEditor, "settings_config_editor", "配置编辑", PageVisibility.DEVELOPER, "由 ConfigCatalog 驱动的底层配置编辑（从开发者页进入）"),
         PageEntry(SettingsDestination.OnboardingGuide, "settings_onboarding_guide", "初始化引导", PageVisibility.DEVELOPER, "首次启动引导页调试入口：权限与一级功能开关体检"),
         PageEntry(SettingsDestination.RegexRuleEditor, "settings_regex_rule_editor", "正则规则", PageVisibility.DEVELOPER, "编辑日程及通知短信记账规则；测试仅解析、不入库"),

@@ -164,6 +164,16 @@ class App : Application() {
         QuickMemoRepository(com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext).quickMemoDao())
     }
 
+    val linkAnalysisCoordinator: com.antgskds.calendarassistant.feature.linkanalysis.application.LinkAnalysisCoordinator by lazy {
+        com.antgskds.calendarassistant.feature.linkanalysis.application.LinkAnalysisCoordinator(
+            applicationContext,
+            com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository(com.antgskds.calendarassistant.feature.schedule.data.db.EventsDatabase.getInstance(applicationContext)),
+            com.antgskds.calendarassistant.feature.linkanalysis.data.LinkSourceStore(java.io.File(filesDir,"link-sources")),
+            settingsQueryApi, notificationCenter, appScope,
+        )
+    }
+    val linkAnalysisApi: com.antgskds.calendarassistant.feature.linkanalysis.api.LinkAnalysisApi get() = linkAnalysisCoordinator
+
     val audioPlaybackCenter: QuickMemoAudioPlayer by lazy { QuickMemoAudioPlayer() }
 
     val quickMemoCenter: QuickMemoFacade by lazy {
@@ -178,6 +188,7 @@ class App : Application() {
             capsuleCommandApi = capsuleCommandApi,
             capsuleQueryApi = capsuleQueryApi,
             notificationApi = notificationCenter,
+            linkAnalysisApi = linkAnalysisApi,
         )
     }
 
@@ -359,6 +370,7 @@ class App : Application() {
             ingestCommandApi = ingestCommandApi,
             appScope = appScope,
             notificationApi = notificationCenter,
+            quickMemoFacade = quickMemoCenter,
         )
     }
 

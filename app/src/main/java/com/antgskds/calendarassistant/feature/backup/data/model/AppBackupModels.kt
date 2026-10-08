@@ -31,7 +31,8 @@ data class AppBackupData(
     val appBackgroundImageFileName: String? = null,
     val attachments: List<AppBackupAttachmentDto> = emptyList(),
     val quickMemos: List<AppBackupQuickMemoDto> = emptyList(),
-    val quickMemoSuggestions: List<AppBackupQuickMemoSuggestionDto> = emptyList()
+    val quickMemoSuggestions: List<AppBackupQuickMemoSuggestionDto> = emptyList(),
+    val quickMemoFolders: List<AppBackupQuickMemoFolderDto> = emptyList()
 )
 
 @Serializable
@@ -62,7 +63,20 @@ data class AppBackupQuickMemoDto(
     val todoCompletedAt: Long? = null,
     val reminderAt: Long? = null,
     val reminderRRule: String = "",
-    val reminders: List<AppBackupQuickMemoReminderDto> = emptyList()
+    val reminders: List<AppBackupQuickMemoReminderDto> = emptyList(),
+    val title: String = "",
+    val sourceUrl: String? = null,
+    val linkKey: String? = null,
+    val folderId: String? = null,
+    val linkSummary: com.antgskds.calendarassistant.feature.linkanalysis.domain.LinkSummaryData? = null,
+)
+
+@Serializable
+data class AppBackupQuickMemoFolderDto(
+    val id: String,
+    val name: String,
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
 )
 
 @Serializable

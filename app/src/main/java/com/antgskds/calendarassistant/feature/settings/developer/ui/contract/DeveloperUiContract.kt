@@ -17,6 +17,7 @@ sealed interface DeveloperUiAction {
     data class SetSimulateRoot(val enabled: Boolean) : DeveloperUiAction
     data class SetCourseModule(val enabled: Boolean) : DeveloperUiAction
     data class SetAgendaOnlyScheduled(val enabled: Boolean) : DeveloperUiAction
+    data class SetHomeBottomSelectedFill(val enabled: Boolean) : DeveloperUiAction
     data class SetDemoMode(val enabled: Boolean) : DeveloperUiAction
     data class SetQuickMemoPinnedFixedTitle(val enabled: Boolean) : DeveloperUiAction
     data class SetScheduleIngestDedup(val enabled: Boolean) : DeveloperUiAction

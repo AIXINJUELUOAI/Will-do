@@ -40,7 +40,8 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
         volumeUpLongPressEnabled: Boolean?, volumeUpLongPressAction: Int?, smsMonitoring: Boolean?,
         courseFeatureEnabled: Boolean?, quickMemoRecordingDisplayMode: Int?, voiceInputEnabled: Boolean?,
         floatingVoiceLongPressEnabled: Boolean?, floatingTextQuickMemoAutoPinEnabled: Boolean?,
-        voiceQuickMemoAutoPinEnabled: Boolean?
+        voiceQuickMemoAutoPinEnabled: Boolean?,
+        imagePinEnabled: Boolean?, predictiveBackEnabled: Boolean?
     ) = viewModel.updatePreference(
         showTomorrow = showTomorrow, dailySummary = dailySummary, liveCapsule = liveCapsule,
         pickupAggregation = pickupAggregation, hapticFeedbackEnabled = hapticFeedbackEnabled,
@@ -65,6 +66,7 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
         voiceInputEnabled = voiceInputEnabled,
         floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled,
         floatingTextQuickMemoAutoPinEnabled = floatingTextQuickMemoAutoPinEnabled,
-        voiceQuickMemoAutoPinEnabled = voiceQuickMemoAutoPinEnabled
+        voiceQuickMemoAutoPinEnabled = voiceQuickMemoAutoPinEnabled,
+        imagePinEnabled = imagePinEnabled, predictiveBackEnabled = predictiveBackEnabled
     )
 }

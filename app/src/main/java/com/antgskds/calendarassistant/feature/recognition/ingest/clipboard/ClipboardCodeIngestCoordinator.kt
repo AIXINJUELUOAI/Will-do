@@ -1,5 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.ingest.clipboard
 
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoFacade
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkParser
 import android.app.ActivityManager
 import android.content.ClipboardManager
 import android.content.Context
@@ -65,6 +67,7 @@ class ClipboardCodeIngestCoordinator(
     private val ingestCommandApi: IngestCommandApi,
     private val appScope: CoroutineScope,
     private val notificationApi: NotificationApi,
+    private val quickMemoFacade: QuickMemoFacade,
 ) {
     private val _pendingPrompt = MutableStateFlow<ClipboardCodePrompt?>(null)
     val pendingPrompt: StateFlow<ClipboardCodePrompt?> = _pendingPrompt.asStateFlow()
@@ -78,9 +81,11 @@ class ClipboardCodeIngestCoordinator(
     fun start() {
         if (!started.compareAndSet(false, true)) return
         appScope.launch {
-            combine(settingsQueryApi.settings.map { it.clipboardCodeRecognitionEnabled }.distinctUntilChanged(),
-                PrivilegeManager.privilegeTypeFlow) { enabled, privilege -> enabled to privilege }
-                .collectLatest { (enabled, privilege) ->
+            combine(settingsQueryApi.settings.map { it.clipboardCodeRecognitionEnabled to it.clipboardLinkCollectionEnabled }.distinctUntilChanged(),
+                PrivilegeManager.privilegeTypeFlow) { flags, privilege -> flags to privilege }
+                .collectLatest { (flags, privilege) ->
+                    val enabled = flags.first || flags.second
+                    cancelDisabledNotifications()
                     if (!enabled || privilege == PrivilegeManager.PrivilegeType.NONE) {
                         backgroundListener = "none"
                         record("listener_stopped", details = "reason=${if (enabled) "no_privilege" else "setting_disabled"}")
@@ -93,7 +98,7 @@ class ClipboardCodeIngestCoordinator(
                             record("listener_starting", details = "requested_mode=${privilege.name}")
                             try {
                                 privilegedReader.watch { event ->
-                                    if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled ||
+                                    if (!clipboardEnabled() ||
                                         PrivilegeManager.refreshPrivilege() != privilege) return@watch
                                     if (event.type == "ready") {
                                         backgroundListener = event.reader
@@ -127,7 +132,7 @@ class ClipboardCodeIngestCoordinator(
                 "clipboard_time_ms=${event.timestamp} text_length=${event.text?.length ?: 0} error_type=${event.errorType ?: "none"}")
     }
 
-    private fun promptNotificationKey(prompt: ClipboardCodePrompt) = ClipboardCodePromptDeliveryPolicy.key(prompt.traceId)
+    private fun promptNotificationKey(prompt: ClipboardCodePrompt) = ClipboardCodePromptDeliveryPolicy.key(prompt.traceId, sessionToken)
 
     private suspend fun cancelPromptNotification(prompt: ClipboardCodePrompt) {
         try { notificationApi.cancel(promptNotificationKey(prompt)) }
@@ -147,7 +152,9 @@ class ClipboardCodeIngestCoordinator(
             key = key, kind = NotificationKind.CLIPBOARD_CODE_PROMPT, route = NotificationRoute.AUTO,
             notificationId = key.value.hashCode(),
             channelKey = App.CHANNEL_ID_POPUP,
-            display = ClipboardCodePromptDisplay.snapshot(prompt.candidate.type.displayLabel),
+            display = ClipboardCodePromptDisplay.snapshot(prompt.candidate.type.displayLabel, prompt.candidate.code),
+            actions = listOf(ClipboardPromptAction.create(key, "添加${prompt.candidate.type.header}")),
+            metadata = ClipboardPromptAction.encode(prompt.candidate) + mapOf("instanceKey" to prompt.instanceKey, "fingerprint" to prompt.fingerprint),
             tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME),
             behavior = NotificationBehavior(priority = NotificationPriority.HIGH), source = "clipboard_changed",
         ))
@@ -170,7 +177,9 @@ class ClipboardCodeIngestCoordinator(
     private var lastSeenPromptTextHash: String? = null
     private var lastPromptedTextHash: String? = null
 
-    private val traceSequence = AtomicLong()
+    private val sessionToken = java.util.UUID.randomUUID().toString()
+    private val traceSequence = AtomicLong(System.currentTimeMillis())
+    private var pendingLinkKey: NotificationKey? = null
     private val diagnosticRunning = AtomicBoolean()
     @Volatile private var activityVisible: Boolean? = null
     @Volatile private var windowFocused: Boolean? = null
@@ -236,33 +245,154 @@ class ClipboardCodeIngestCoordinator(
         val settings = settingsQueryApi.settings.value
         Log.i(TAG, "stage=$stage trace=$traceId source=$source " +
             "activity_visible=$activityVisible window_focus=$windowFocused process_importance=$importance " +
-            "enabled=${settings.clipboardCodeRecognitionEnabled} auto_record=${settings.autoRecordLogs} " +
+            "enabled=${settings.clipboardCodeRecognitionEnabled} link_enabled=${settings.clipboardLinkCollectionEnabled} auto_record=${settings.autoRecordLogs} " +
             "privilege_cache=${PrivilegeManager.privilegeType.name} background_listener=$backgroundListener $details")
+    }
+
+    private fun clipboardEnabled() = settingsQueryApi.settings.value.let {
+        it.clipboardCodeRecognitionEnabled || it.clipboardLinkCollectionEnabled
+    }
+
+    private suspend fun cancelDisabledNotifications() {
+        val settings = settingsQueryApi.settings.value
+        notificationApi.list().filter {
+            ClipboardCodePromptDeliveryPolicy.owns(it.key) &&
+                (it.kind == NotificationKind.CLIPBOARD_CODE_PROMPT && !settings.clipboardCodeRecognitionEnabled ||
+                    it.kind == NotificationKind.CLIPBOARD_LINK_PROMPT && !settings.clipboardLinkCollectionEnabled)
+        }.forEach { notificationApi.cancel(it.key) }
+        if (!settings.clipboardCodeRecognitionEnabled) _pendingPrompt.value = null
+        if (!settings.clipboardLinkCollectionEnabled) pendingLinkKey = null
+    }
+
+    /** Serialized with clipboard checks; duplicate/stale taps cannot save a different candidate. */
+    suspend fun acceptPrompt(key: NotificationKey): String? = checkMutex.withLock { acceptPromptInternal(key) }
+
+    private suspend fun acceptPromptInternal(key: NotificationKey): String? {
+        if (!ClipboardCodePromptDeliveryPolicy.owns(key)) return "提示已失效"
+        val snapshot = notificationApi.get(key) ?: return "提示已处理"
+        if (snapshot.state in setOf(NotificationState.CANCELLED, NotificationState.EXPIRED))
+            return "提示已处理"
+        val settings = settingsQueryApi.settings.value
+        val message = when (snapshot.kind) {
+            NotificationKind.CLIPBOARD_CODE_PROMPT -> {
+                if (!settings.clipboardCodeRecognitionEnabled) return "取件类识别已关闭"
+                val candidate = ClipboardPromptAction.code(snapshot.metadata) ?: return "提示已失效"
+                val added = ingestCommandApi.ingestInstantCode(InstantCodeParser.toDraft(candidate), "clipboard_confirm")
+                markHandled(listOfNotNull(snapshot.metadata["instanceKey"], snapshot.metadata["fingerprint"]?.let(::fingerprintKey)))
+                if (added == null) "该${candidate.type.header}已添加" else "已添加${candidate.type.header}"
+            }
+            NotificationKind.CLIPBOARD_LINK_PROMPT -> {
+                if (!settings.clipboardLinkCollectionEnabled) return "链接收藏已关闭"
+                snapshot.metadata["savedMemoId"]?.toLongOrNull()?.let {
+                    val result = notificationApi.trigger(NotificationTrigger.ByKey(key))
+                    return if (ClipboardCodePromptDeliveryPolicy.isDelivered(result)) null else "已收藏，结果通知暂未显示"
+                }
+                val link = ClipboardPromptAction.link(snapshot.metadata) ?: return "提示已失效"
+                val memoId = quickMemoFacade.createLinkMemo(link)
+                val title = quickMemoFacade.getQuickMemo(memoId)?.title?.ifBlank { link.title } ?: link.title
+                val posted = publishSavedLinkNotification(snapshot, memoId, title)
+                if (pendingLinkKey == key) pendingLinkKey = null
+                record("ingest_complete", details = "result=saved kind=${snapshot.kind.name}")
+                return if (posted) null else "已收藏，结果通知暂未显示"
+            }
+            else -> return "提示已失效"
+        }
+        notificationApi.cancel(key)
+        _pendingPrompt.value?.takeIf { promptNotificationKey(it) == key }?.let { _pendingPrompt.value = null }
+        if (pendingLinkKey == key) pendingLinkKey = null
+        record("ingest_complete", details = "result=saved kind=${snapshot.kind.name}")
+        return message
     }
 
     fun confirmPendingPrompt() {
         val prompt = _pendingPrompt.value ?: return
-        _pendingPrompt.value = null
-        record("prompt_confirmed", prompt.traceId, "clipboard_confirm")
         appScope.launch {
-            cancelPromptNotification(prompt)
-            if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
-                record("ingest_skipped", prompt.traceId, "clipboard_confirm", "reason=setting_disabled")
-                return@launch
-            }
-            val draft = InstantCodeParser.toDraft(prompt.candidate)
-            record("ingest_begin", prompt.traceId, "clipboard_confirm")
-            val added = runCatching { ingestCommandApi.ingestInstantCode(draft, "clipboard_confirm") }
-                .onFailure { record("ingest_exception", prompt.traceId, "clipboard_confirm", "error_type=${it.javaClass.simpleName}") }
-                .getOrNull()
-            if (added != null) {
-                markHandled(listOf(prompt.instanceKey, fingerprintKey(prompt.fingerprint)))
-                record("ingest_complete", prompt.traceId, "clipboard_confirm", "result=added")
-            } else {
-                markFailed(prompt.instanceKey)
-                record("ingest_complete", prompt.traceId, "clipboard_confirm", "result=no_event_returned")
+            try {
+                val message = checkMutex.withLock {
+                    if (_pendingPrompt.value?.traceId != prompt.traceId) return@withLock "提示已处理"
+                    val key = promptNotificationKey(prompt)
+                    if (notificationApi.get(key)?.state.let { it == null || it == NotificationState.CANCELLED }) {
+                        notificationApi.create(NotificationRequest(
+                            key = key, kind = NotificationKind.CLIPBOARD_CODE_PROMPT,
+                            display = ClipboardCodePromptDisplay.snapshot(prompt.candidate.type.displayLabel, prompt.candidate.code),
+                            metadata = ClipboardPromptAction.encode(prompt.candidate) +
+                                mapOf("instanceKey" to prompt.instanceKey, "fingerprint" to prompt.fingerprint),
+                        ))
+                    }
+                    acceptPromptInternal(key)
+                }
+                withContext(Dispatchers.Main) {
+                    message?.let { com.antgskds.calendarassistant.shared.ui.material.component.UniversalToastUtil.showInfo(appContext, it) }
+                }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                record("ingest_exception", prompt.traceId, "clipboard_confirm", "error_type=${error.javaClass.simpleName}")
             }
         }
+    }
+
+    private suspend fun publishSavedLinkNotification(snapshot: NotificationSnapshot, memoId: Long, title: String): Boolean {
+        return try {
+            val created = notificationApi.update(NotificationRequest(
+                key = snapshot.key, kind = snapshot.kind, notificationId = snapshot.notificationId,
+                route = NotificationRoute.AUTO, channelKey = snapshot.channelKey,
+                display = ClipboardCodePromptDisplay.savedLinkSnapshot(title),
+                tapTarget = NotificationTapTarget(NotificationTapTargetType.QUICK_MEMO_DETAIL,
+                    mapOf("quickMemoId" to memoId.toString())),
+                actions = listOf(NotificationAction.viewQuickMemo(memoId)),
+                metadata = mapOf("savedMemoId" to memoId.toString()),
+                behavior = snapshot.behavior.copy(onlyAlertOnce = true), source = "clipboard_link_saved",
+            ))
+            val result = if (created is NotificationResult.Failure) created else notificationApi.trigger(NotificationTrigger.ByKey(snapshot.key))
+            recordLinkNotification(result, snapshot.key, "saved_link_notification")
+            ClipboardCodePromptDeliveryPolicy.isDelivered(result)
+        } catch (error: CancellationException) { throw error }
+        catch (error: Exception) {
+            record("saved_link_notification_failed", details = "error_type=${error.javaClass.simpleName}")
+            false
+        }
+    }
+
+    suspend fun dismissLinkResults(memoId: Long) = checkMutex.withLock {
+        if (memoId <= 0L) return@withLock
+        val keys = notificationApi.list().filter {
+            it.kind == NotificationKind.CLIPBOARD_LINK_PROMPT && ClipboardCodePromptDeliveryPolicy.owns(it.key) &&
+                it.metadata["savedMemoId"] == memoId.toString()
+        }.map { it.key }
+        notificationApi.cancelAll(keys)
+    }
+
+    private suspend fun recordLinkNotification(result: NotificationResult, key: NotificationKey, stage: String, traceId: Long = 0L) {
+        val success = result as? NotificationResult.Success
+        val failure = result as? NotificationResult.Failure
+        val route = notificationApi.get(key)?.route?.name ?: "unknown"
+        record(stage, traceId, details = "posted=${ClipboardCodePromptDeliveryPolicy.isDelivered(result)} " +
+            "state=${success?.state?.name ?: "none"} route=$route reason=${failure?.reason?.name ?: "none"}")
+    }
+
+    private suspend fun publishLinkNotification(text: String, traceId: Long): Boolean {
+        if (!settingsQueryApi.settings.value.clipboardLinkCollectionEnabled) return false
+        val link = QuickMemoLinkParser.parse(text) ?: return false
+        if (quickMemoFacade.isSavedLinkCurrent(link)) {
+            record("check_skipped", traceId, details = "reason=link_already_saved")
+            return true
+        }
+        val key = ClipboardCodePromptDeliveryPolicy.key(traceId, sessionToken)
+        pendingLinkKey?.let { notificationApi.cancel(it) }
+        val created = notificationApi.create(NotificationRequest(
+            key = key, kind = NotificationKind.CLIPBOARD_LINK_PROMPT, route = NotificationRoute.AUTO,
+            notificationId = key.value.hashCode(), channelKey = App.CHANNEL_ID_POPUP,
+            display = ClipboardCodePromptDisplay.linkSnapshot(link.source.takeUnless { it == "链接" }.orEmpty()),
+            tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME),
+            actions = listOf(ClipboardPromptAction.create(key, "收藏")),
+            metadata = ClipboardPromptAction.encode(link),
+            behavior = NotificationBehavior(priority = NotificationPriority.HIGH), source = "clipboard_link",
+        ))
+        val result = if (created is NotificationResult.Failure) created else notificationApi.trigger(NotificationTrigger.ByKey(key))
+        val posted = ClipboardCodePromptDeliveryPolicy.isDelivered(result)
+        if (posted) pendingLinkKey = key
+        recordLinkNotification(result, key, "link_notification", traceId)
+        return posted
     }
 
     fun dismissPendingPrompt() {
@@ -281,20 +411,23 @@ class ClipboardCodeIngestCoordinator(
 
     private suspend fun checkClipboardForPromptInternal(source: String, traceId: Long, providedText: String? = null) {
         record("check_begin", traceId, source)
-        if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
+        if (!clipboardEnabled()) {
             record("check_skipped", traceId, source, "reason=setting_disabled")
             return
         }
         val snapshot = (providedText?.let { createSnapshot(it, source, traceId) }
             ?: readClipboardSnapshot(source, traceId)) ?: return
-        if (!settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled) {
+        if (!clipboardEnabled()) {
             record("check_skipped", traceId, source, "reason=setting_disabled_after_read")
             return
         }
         if (shouldSkipRepeatedPrompt(snapshot, source, traceId)) return
-        val candidate = InstantCodeParser.parseClipboard(snapshot.text)
+        val candidate = if (settingsQueryApi.settings.value.clipboardCodeRecognitionEnabled)
+            InstantCodeParser.parseClipboard(snapshot.text) else null
         if (candidate == null) {
-            record("match_complete", traceId, source, "matched=false")
+            val linkHandled = publishLinkNotification(snapshot.text, traceId)
+            if (linkHandled) markPrompted(snapshot.textHash)
+            record("match_complete", traceId, source, "code_matched=false link_handled=$linkHandled")
             return
         }
         record("match_complete", traceId, source, "matched=true type=${candidate.type.name}")

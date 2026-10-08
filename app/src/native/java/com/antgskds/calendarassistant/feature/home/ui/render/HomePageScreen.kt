@@ -2,6 +2,8 @@ package com.antgskds.calendarassistant.feature.home.ui.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Color
+import com.antgskds.calendarassistant.shared.ui.material.component.AppMenuItem
 import com.antgskds.calendarassistant.feature.schedule.presentation.model.ScheduleDisplayItem
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiAction
 import com.antgskds.calendarassistant.feature.home.ui.contract.HomePageUiState
@@ -36,7 +38,8 @@ fun HomePageScreen(
     onAddCourseClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit,
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit,
-    onRequestClearQuickMemos: () -> Unit,
+    onRequestQuickMemoFolders: () -> Unit,
+    quickMemoFolderMenu: @Composable (Color, Color, Color, List<AppMenuItem>) -> Unit,
     quickMemoCount: Int,
     onScheduleExpandedChange: (Boolean) -> Unit,
     onScheduleProgressChange: (Float) -> Unit,
@@ -72,7 +75,8 @@ fun HomePageScreen(
         onAddCourseClick = onAddCourseClick,
         onEditItem = onEditItem,
         onRequestDeleteItem = onRequestDeleteItem,
-        onRequestClearQuickMemos = onRequestClearQuickMemos,
+        onRequestQuickMemoFolders = onRequestQuickMemoFolders,
+        quickMemoFolderMenu = quickMemoFolderMenu,
         quickMemoCount = quickMemoCount,
         onScheduleExpandedChange = onScheduleExpandedChange,
         onScheduleProgressChange = onScheduleProgressChange,

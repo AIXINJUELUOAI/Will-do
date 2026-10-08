@@ -179,7 +179,7 @@ object MiuiIslandManager {
     }
 
     private fun useTextIconOnlyTemplate(item: CapsuleUiState.Active.CapsuleItem): Boolean {
-        if (item.display.tapOpensAccounting && item.display.effectiveActions.isNotEmpty()) return false
+        if (item.display.effectiveActions.isNotEmpty()) return false
         return when (item.type) {
             CapsuleType.OCR_PROGRESS,
             CapsuleType.OCR_RESULT -> true
@@ -228,24 +228,27 @@ object MiuiIslandManager {
 
         var firstActionIntentUri: String? = null
         val actions = actionSpecs.mapIndexed { index, action ->
-            val broadcastIntent = Intent(context, EventActionReceiver::class.java).apply {
+            val memoId = action.openQuickMemoId
+            val actionIntent = Intent(context, if (memoId != null) MainActivity::class.java else EventActionReceiver::class.java).apply {
                 this.action = action.receiverAction
                 action.stringExtras.forEach { (key, value) -> putExtra(key, value) }
-                if (action.extraLongKey != null && action.extraLongValue != null) {
+                if (memoId != null) {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(MainActivity.EXTRA_OPEN_QUICK_MEMO_ID, memoId)
+                } else if (action.extraLongKey != null && action.extraLongValue != null) {
                     putExtra(action.extraLongKey, action.extraLongValue)
                 } else {
                     putExtra(EventActionReceiver.EXTRA_EVENT_ID, item.id)
                 }
             }
-            if (index == 0) {
-                firstActionIntentUri = broadcastIntent.toUri(Intent.URI_INTENT_SCHEME)
+            if (index == 0 && memoId == null) {
+                firstActionIntentUri = actionIntent.toUri(Intent.URI_INTENT_SCHEME)
             }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                item.id.hashCode() xor action.receiverAction.hashCode() xor index,
-                broadcastIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val requestCode = item.id.hashCode() xor action.receiverAction.hashCode() xor index
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val pendingIntent = if (memoId != null) {
+                PendingIntent.getActivity(context, requestCode, actionIntent, flags)
+            } else PendingIntent.getBroadcast(context, requestCode, actionIntent, flags)
             MiuiIslandAction(action.label, pendingIntent)
         }
         return ActionPayload(
@@ -266,7 +269,7 @@ object MiuiIslandManager {
         }
         val tapEventId = item.display.tapEventId?.toLongOrNull()
         val tapQuickMemoId = item.display.tapQuickMemoId?.toLongOrNull()
-        val tapIntent = Intent(context, if (tapEventId != null || tapQuickMemoId != null) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
+        val tapIntent = Intent(context, if (!item.display.tapOpensQuickMemoDetail && (tapEventId != null || tapQuickMemoId != null)) PickupQrHandleActivity::class.java else MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (tapEventId != null) {
                 putExtra(MainActivity.EXTRA_OPEN_EVENT_ID, tapEventId)

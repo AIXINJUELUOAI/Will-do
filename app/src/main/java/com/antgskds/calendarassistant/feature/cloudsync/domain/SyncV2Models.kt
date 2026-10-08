@@ -7,6 +7,7 @@ const val SYNC_V2_PROTOCOL_VERSION = 2
 enum class SyncV2EntityType {
     EVENT,
     QUICK_MEMO,
+    QUICK_MEMO_FOLDER,
 }
 
 enum class SyncV2RecordStatus {
@@ -106,6 +107,17 @@ data class SyncV2QuickMemoPayload(
     val reminderAt: Long? = null,
     val reminderRRule: String? = "",
     val reminders: List<SyncV2QuickMemoReminderPayload>? = emptyList(),
+    val title: String? = "",
+    val sourceUrl: String? = null,
+    val linkKey: String? = null,
+    val folderId: String? = null,
+    val linkSummary: com.antgskds.calendarassistant.feature.linkanalysis.domain.LinkSummaryData? = null,
+)
+
+data class SyncV2QuickMemoFolderPayload(
+    val name: String,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 data class SyncV2QuickMemoReminderPayload(

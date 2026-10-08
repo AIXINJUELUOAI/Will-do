@@ -107,6 +107,7 @@ fun DeveloperPage(
             )
             is DeveloperUiAction.SetCourseModule -> settingsViewModel.setCourseModuleEnabled(action.enabled)
             is DeveloperUiAction.SetAgendaOnlyScheduled -> settingsViewModel.setHomeAgendaOnlyScheduled(action.enabled)
+            is DeveloperUiAction.SetHomeBottomSelectedFill -> settingsViewModel.setHomeBottomSelectedFillEnabled(action.enabled)
             is DeveloperUiAction.SetDemoMode -> settingsViewModel.setDemoModeEnabled(action.enabled)
             is DeveloperUiAction.SetQuickMemoPinnedFixedTitle -> {
                 settingsViewModel.setQuickMemoPinnedFixedTitleEnabled(action.enabled) {
@@ -456,6 +457,15 @@ fun MaterialDeveloperScreen(
 
             Text(text = "页面功能", style = sectionTitleStyle)
             SettingsCard {
+                SwitchSettingItem(
+                    title = "底栏选中图标填充",
+                    subtitle = "开启后选中入口使用填充图标，默认关闭",
+                    checked = settings.homeBottomSelectedFillEnabled,
+                    onCheckedChange = { onAction(DeveloperUiAction.SetHomeBottomSelectedFill(it)) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+                RowDivider()
                 SwitchSettingItem(
                     title = "启用课表功能",
                     subtitle = "关闭后隐藏课表和课程入口、暂停课程提醒，保留课程数据和下滑偏好",

@@ -31,7 +31,7 @@ enum class ConfigDomain(val label: String) {
     SYNC("同步"),
 }
 
-/** 暴露级别（§5.5）。编辑页按级别决定是否渲染；SYSTEM_INTERNAL 不渲染。 */
+/** 暴露级别（`5.5）。编辑页按级别决定是否渲染；SYSTEM_INTERNAL 不渲染。 */
 enum class ConfigExposure {
     USER_EDITABLE,    // 普通用户可改（将来可在普通设置页也开入口）
     DEVELOPER_ONLY,   // 仅开发者页可见
@@ -216,7 +216,65 @@ object ConfigCatalog {
     const val IMAGE_PIN_MAX_COUNT = 20
     const val IMAGE_PIN_MAX_TOTAL_BYTES = 128 * 1024 * 1024
 
+    // 链接解析源的资源边界：固定系统策略也在此集中登记。
+    const val LINK_SOURCE_MAX_BYTES = 2 * 1024 * 1024
+    const val LINK_SOURCE_MAX_FILES = 64
+    const val LINK_JS_MEMORY_BYTES = 128L * 1024 * 1024
+    const val LINK_SCRIPT_TIMEOUT_MS = 60_000
+    const val LINK_TASK_TIMEOUT_MS = 540_000
+    const val LINK_HTTP_TIMEOUT_MS = 30_000
+    const val LINK_BROWSER_UA_MAX_CHARS = 512
+    const val LINK_HTTP_MAX_BYTES = 8 * 1024 * 1024
+    const val LINK_MAX_REDIRECTS = 5
+    const val LINK_RESULT_MAX_BYTES = 256 * 1024
+    const val LINK_TEXT_MAX_CHARS = 60_000
+    const val LINK_MAX_MEDIA = 32
+    const val LINK_MEDIA_MAX_BYTES = 64 * 1024 * 1024
+    const val LINK_MEDIA_TOTAL_BYTES = 96 * 1024 * 1024
+    const val LINK_AI_IMAGE_COUNT = 8
+    const val LINK_AI_IMAGE_SIDE = 1600
+    const val LINK_AI_JPEG_QUALITY = 85
+    const val LINK_AI_INPUT_BYTES = 12 * 1024 * 1024
+    const val LINK_AUDIO_CHUNK_MS = 90_000
+    const val LINK_AUDIO_MIN_COVERAGE_PERCENT = 90
+    const val LINK_AUDIO_DURATION_TOLERANCE_MS = 2_000
+    const val LINK_AUDIO_MAX_MS = 30 * 60_000L
+    const val LINK_BROWSER_POLL_MS = 250L
+    const val LINK_HTTP_MAX_CALLS = 32
+    const val LINK_SUMMARY_MAX_CHARS = 20_000
+
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.audio_coverage_percent", "音轨时长覆盖门槛", "音轨显著短于视频时改用视频内嵌音轨；时长相近仍不能证明含完整旁白。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AUDIO_MIN_COVERAGE_PERCENT, LINK_AUDIO_MIN_COVERAGE_PERCENT), { LINK_AUDIO_MIN_COVERAGE_PERCENT }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.audio_duration_tolerance_ms", "音轨时长容差", "允许编码时长差异。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AUDIO_DURATION_TOLERANCE_MS, LINK_AUDIO_DURATION_TOLERANCE_MS), { LINK_AUDIO_DURATION_TOLERANCE_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.jpeg_quality", "摘要图片压缩质量", "缩放后转换 JPEG，限制上传体积。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AI_JPEG_QUALITY, LINK_AI_JPEG_QUALITY), { LINK_AI_JPEG_QUALITY }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "link.audio_local_transcription", "音频处理方式", "音频在本地转写或直接发送给 AI；开启本地转写，关闭直接发送。", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.linkAudioLocalTranscription) 1 else 0 }, { s, v -> s.copy(linkAudioLocalTranscription = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "link.analysis_enabled", "链接自动摘要", "仅运行用户导入且启用的源，默认关闭，不回溯旧收藏。", ConfigExposure.USER_EDITABLE, ConfigControl.Toggle, { if (it.linkAnalysisEnabled) 1 else 0 }, { s, v -> s.copy(linkAnalysisEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
+        // 以下上限以固定策略集中登记；不通过业务裸常量改变。
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.source_bytes", "源包大小", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_SOURCE_MAX_BYTES, LINK_SOURCE_MAX_BYTES), { LINK_SOURCE_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.source_files", "源包文件数", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_SOURCE_MAX_FILES, LINK_SOURCE_MAX_FILES), { LINK_SOURCE_MAX_FILES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.script_timeout", "脚本超时", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_SCRIPT_TIMEOUT_MS, LINK_SCRIPT_TIMEOUT_MS), { LINK_SCRIPT_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.task_timeout", "任务超时", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_TASK_TIMEOUT_MS, LINK_TASK_TIMEOUT_MS), { LINK_TASK_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.http_timeout", "网络超时", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_HTTP_TIMEOUT_MS, LINK_HTTP_TIMEOUT_MS), { LINK_HTTP_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.http_bytes", "文本响应大小", "完整 HTML 最多 8 MiB，超过后明确失败，不截断正文。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_HTTP_MAX_BYTES, LINK_HTTP_MAX_BYTES), { LINK_HTTP_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.redirects", "重定向次数", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_MAX_REDIRECTS, LINK_MAX_REDIRECTS), { LINK_MAX_REDIRECTS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.result_bytes", "源结果大小", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_RESULT_MAX_BYTES, LINK_RESULT_MAX_BYTES), { LINK_RESULT_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.text_chars", "正文长度", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_TEXT_MAX_CHARS, LINK_TEXT_MAX_CHARS), { LINK_TEXT_MAX_CHARS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.media_count", "媒体条目数", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_MAX_MEDIA, LINK_MAX_MEDIA), { LINK_MAX_MEDIA }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.media_bytes", "单素材大小", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_MEDIA_MAX_BYTES, LINK_MEDIA_MAX_BYTES), { LINK_MEDIA_MAX_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.total_bytes", "素材总大小", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_MEDIA_TOTAL_BYTES, LINK_MEDIA_TOTAL_BYTES), { LINK_MEDIA_TOTAL_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.image_count", "单次 AI 图片数", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AI_IMAGE_COUNT, LINK_AI_IMAGE_COUNT), { LINK_AI_IMAGE_COUNT }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.image_side", "AI 图片最大边", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AI_IMAGE_SIDE, LINK_AI_IMAGE_SIDE), { LINK_AI_IMAGE_SIDE }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.ai_bytes", "单次 AI 输入大小", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AI_INPUT_BYTES, LINK_AI_INPUT_BYTES), { LINK_AI_INPUT_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.audio_chunk_ms", "音频分段时长", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AUDIO_CHUNK_MS, LINK_AUDIO_CHUNK_MS), { LINK_AUDIO_CHUNK_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.http_calls", "网络请求次数", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_HTTP_MAX_CALLS, LINK_HTTP_MAX_CALLS), { LINK_HTTP_MAX_CALLS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.summary_chars", "摘要长度", "链接解析资源边界。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_SUMMARY_MAX_CHARS, LINK_SUMMARY_MAX_CHARS), { LINK_SUMMARY_MAX_CHARS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.js_memory_bytes", "JS 内存", "每个源 128 MiB 沙箱，支持 8 MiB HTML 与宿主 JSON 转义的临时复制。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_JS_MEMORY_BYTES.toInt(), LINK_JS_MEMORY_BYTES.toInt()), { LINK_JS_MEMORY_BYTES.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.audio_max_ms", "音频最长时长", "超过上限明确失败，不截断为完整摘要。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_AUDIO_MAX_MS.toInt(), LINK_AUDIO_MAX_MS.toInt()), { LINK_AUDIO_MAX_MS.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.browser_ua_chars", "网页 UA 长度", "解析源可声明移动或桌面 UA；拒绝空白与换行，最多 512 字符。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_BROWSER_UA_MAX_CHARS, LINK_BROWSER_UA_MAX_CHARS), { LINK_BROWSER_UA_MAX_CHARS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "link.browser_poll_ms", "页面等待间隔", "脚本页面数据轮询间隔。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(LINK_BROWSER_POLL_MS.toInt(), LINK_BROWSER_POLL_MS.toInt()), { LINK_BROWSER_POLL_MS.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.USER_SETTING, "clipboard.links_enabled", "剪贴板链接收藏", "复制链接后提示收藏；默认关闭，与取件码识别独立。", ConfigExposure.USER_EDITABLE,
+            ConfigControl.Toggle, { if (it.clipboardLinkCollectionEnabled) 1 else 0 }, { s, v -> s.copy(clipboardLinkCollectionEnabled = v != 0) }, agentAccess = AgentConfigAccess.READ_ONLY),
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.remember_calendar_view", "记住日历视图",
             "保存主动选择的视图类型；关闭时新启动沿用原起始视图规则。", ConfigExposure.USER_EDITABLE,
             ConfigControl.Toggle, { if (it.rememberCalendarViewMode) 1 else 0 }, { s, v -> s.copy(rememberCalendarViewMode = v != 0) }),
@@ -236,10 +294,19 @@ object ConfigCatalog {
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_total_bytes", "图片挂起总大小上限", "已有图片与本批追加副本的总大小边界。",
             ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(IMAGE_PIN_MAX_TOTAL_BYTES, IMAGE_PIN_MAX_TOTAL_BYTES),
             { IMAGE_PIN_MAX_TOTAL_BYTES }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        // 保留旧 key 兼容配置引用，入口已迁到偏好设置。
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "laboratory.image_pin_enabled", "图片挂起",
-            "将图片挂起在岛上，并允许点击查看", ConfigExposure.DEVELOPER_ONLY,
+            "偏好设置：将多张图片挂起在岛上，点击后左右滑动查看。", ConfigExposure.USER_EDITABLE,
             ConfigControl.Toggle, { if (it.imagePinEnabled) 1 else 0 },
             { s, v -> s.copy(imagePinEnabled = v != 0) }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "appearance.predictive_back_enabled", "预测性返回手势",
+            "偏好设置：侧滑返回时页面支持跟手动画效果；沿用原设置值。", ConfigExposure.USER_EDITABLE,
+            ConfigControl.Toggle, { if (it.predictiveBackEnabled) 1 else 0 },
+            { s, v -> s.copy(predictiveBackEnabled = v != 0) }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.bottom_selected_fill_enabled", "底栏选中图标填充",
+            "开发者选项：默认关闭；开启后首页底栏选中入口与编辑预览使用官方填充图标。", ConfigExposure.DEVELOPER_ONLY,
+            ConfigControl.Toggle, { if (it.homeBottomSelectedFillEnabled) 1 else 0 },
+            { s, v -> s.copy(homeBottomSelectedFillEnabled = v != 0) }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "course.module_enabled", "启用课表功能",
             "课表总开关：隐藏课程入口和展示，暂停课程提醒；保留数据和下滑偏好。", ConfigExposure.DEVELOPER_ONLY,
             ConfigControl.Toggle, { if (it.courseModuleEnabled) 1 else 0 },

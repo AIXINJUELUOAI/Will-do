@@ -205,6 +205,10 @@ fun HomeScreen(
     }
 
     val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
+    val quickMemoBrowser by mainViewModel.quickMemoBrowser.collectAsState()
+    LaunchedEffect(effectiveSelectedPageKey) {
+        if (effectiveSelectedPageKey != HomeEntryKey.NOTE) mainViewModel.resetQuickMemoBrowser()
+    }
     var searchRequestId by remember(effectiveSelectedPageKey) { mutableIntStateOf(0) }
     var imageRequestId by remember(effectiveSelectedPageKey) { mutableIntStateOf(0) }
 
@@ -239,7 +243,6 @@ fun HomeScreen(
     var recurringEditCommitSession by remember { mutableStateOf<RecurringEditCommitSession?>(null) }
     var scheduleItemToDelete by remember { mutableStateOf<ScheduleDisplayItem?>(null) }
     var selectedQuickMemoAction by remember { mutableStateOf<QuickMemoEntity?>(null) }
-    var showClearQuickMemosConfirm by remember { mutableStateOf(false) }
     var dialogAttachments by remember { mutableStateOf<List<EventAttachment>>(emptyList()) }
     var currentDialogSessionId by remember { mutableStateOf(0L) }
     var pendingAddDialog by remember { mutableStateOf(false) }
@@ -254,10 +257,6 @@ fun HomeScreen(
             showAddEventDialog = true
         }
         pendingAddDialog = false
-    }
-
-    LaunchedEffect(quickMemoCount) {
-        if (quickMemoCount <= 0) showClearQuickMemosConfirm = false
     }
 
     fun beginEdit(event: Event) {
@@ -446,7 +445,7 @@ fun HomeScreen(
         courseItemToEdit = null
         isActionExpanded = false
         if (effectiveSelectedPageKey == HomeEntryKey.NOTE) {
-            mainViewModel.createTextQuickMemo("") { id ->
+            mainViewModel.beginQuickMemoDraft { id ->
                 if (adaptiveLayoutInfo.useTwoPaneContent) openedQuickMemoId = id else onOpenQuickMemoDetail(id)
             }
         } else {
@@ -687,7 +686,7 @@ fun HomeScreen(
                 onEditItem = { item -> beginEditItem(item) },
                 onRequestDeleteItem = { item -> requestDeleteItem(item) },
                 onRequestDeleteQuickMemo = { memo -> selectedQuickMemoAction = memo },
-                onRequestClearQuickMemos = { showClearQuickMemosConfirm = true },
+                onRequestQuickMemoFolders = mainViewModel::showQuickMemoFolders,
                 quickMemoCount = quickMemoCount,
                 onOpenQuickMemoDetail = onOpenQuickMemoDetail,
                 onScheduleExpandedChange = { isScheduleExpanded = it },
@@ -699,12 +698,13 @@ fun HomeScreen(
             )
         },
         chrome = {
-        if (!useNavigationRail) {
+        if (!useNavigationRail && !quickMemoBrowser.selectionMode) {
             IntegratedFloatingBar(
             isExpanded = isActionExpanded,
             onExpandedChange = { isActionExpanded = it },
             isSidebarOpen = isSidebarOpen,
             navItems = homeBottomItems,
+            selectedFillEnabled = settings.homeBottomSelectedFillEnabled,
             selectedPageKey = effectiveSelectedPageKey,
             onMenuClick = {
                 isActionExpanded = false
@@ -760,24 +760,6 @@ fun HomeScreen(
             predictiveBackEnabled = settings.predictiveBackEnabled,
             onConfirm = onConfirmClipboardPrompt,
             onDismiss = onDismissClipboardPrompt,
-            modifier = Modifier
-                .padding(bottom = cardFloatingBarOffset + 16.dp)
-        )
-
-        HomeActionDialog(
-            visible = showClearQuickMemosConfirm && quickMemoCount > 0,
-            title = "确认清空",
-            content = "此操作将永久删除 $quickMemoCount 条随口记。\n删除后将无法恢复。",
-            confirmText = "删除",
-            dismissText = "取消",
-            isDestructive = true,
-            predictiveBackEnabled = settings.predictiveBackEnabled,
-            onConfirm = {
-                selectedQuickMemoAction = null
-                showClearQuickMemosConfirm = false
-                mainViewModel.clearAllQuickMemos()
-            },
-            onDismiss = { showClearQuickMemosConfirm = false },
             modifier = Modifier
                 .padding(bottom = cardFloatingBarOffset + 16.dp)
         )

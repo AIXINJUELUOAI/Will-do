@@ -45,6 +45,7 @@ interface PreferenceUiController {
         courseFeatureEnabled: Boolean? = null, quickMemoRecordingDisplayMode: Int? = null,
         voiceInputEnabled: Boolean? = null, floatingVoiceLongPressEnabled: Boolean? = null,
         floatingTextQuickMemoAutoPinEnabled: Boolean? = null,
-        voiceQuickMemoAutoPinEnabled: Boolean? = null
+        voiceQuickMemoAutoPinEnabled: Boolean? = null,
+        imagePinEnabled: Boolean? = null, predictiveBackEnabled: Boolean? = null
     )
 }

@@ -21,6 +21,42 @@ class QuickMemoRepository(
     }
 
     val quickMemos: Flow<List<QuickMemoEntity>> = quickMemoDao.observeQuickMemos()
+    val folders = quickMemoDao.observeFolders()
+
+    suspend fun findLink(key: String): QuickMemoEntity? = quickMemoDao.findLink(key)
+
+    suspend fun createLinkMemo(link: com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLink): Long {
+        val now = System.currentTimeMillis()
+        return quickMemoDao.insertLinkIfAbsent(QuickMemoEntity(
+            type = QuickMemoType.LINK, bodyText = link.body, title = link.title,
+            sourceUrl = link.url, linkKey = link.dedupKey,
+            createdAt = now, updatedAt = now, sortRank = nextTopSortRank(),
+        ))
+    }
+
+    suspend fun updateTitle(id: Long, title: String) =
+        quickMemoDao.updateTitle(id, title.trim(), System.currentTimeMillis())
+
+    suspend fun createFolder(name: String): String {
+        val clean = name.trim()
+        require(clean.isNotBlank()) { "请输入文件夹名称" }
+        quickMemoDao.getAllFolders().firstOrNull { it.name.equals(clean, true) }?.let { return it.id }
+        val id = java.util.UUID.randomUUID().toString()
+        quickMemoDao.insertFolder(com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoFolderEntity(id, clean))
+        return id
+    }
+
+    suspend fun renameFolder(id: String, name: String) {
+        val clean = name.trim()
+        require(clean.isNotBlank()) { "请输入文件夹名称" }
+        require(quickMemoDao.getAllFolders().none { it.id != id && it.name.equals(clean, true) }) { "已有同名文件夹" }
+        check(quickMemoDao.renameFolder(id, clean, System.currentTimeMillis()) == 1) { "文件夹不存在" }
+    }
+
+    suspend fun deleteFolder(id: String) = quickMemoDao.deleteFolder(id, System.currentTimeMillis())
+    suspend fun moveToFolder(ids: List<Long>, folderId: String?) =
+        quickMemoDao.moveToFolder(ids, folderId, System.currentTimeMillis())
+
     val reminders: Flow<List<QuickMemoReminderEntity>> = quickMemoDao.observeReminders()
     val suggestions: Flow<List<QuickMemoSuggestionEntity>> = quickMemoDao.observeSuggestions()
 
@@ -108,13 +144,7 @@ class QuickMemoRepository(
     }
 
     suspend fun updateBody(id: Long, bodyText: String) {
-        val memo = quickMemoDao.getQuickMemo(id) ?: return
-        quickMemoDao.updateQuickMemo(
-            memo.copy(
-                bodyText = normalizeBody(bodyText),
-                updatedAt = System.currentTimeMillis()
-            )
-        )
+        quickMemoDao.updateBody(id, normalizeBody(bodyText), System.currentTimeMillis())
     }
 
     suspend fun getAllQuickMemos(): List<QuickMemoEntity> = quickMemoDao.getAllQuickMemos()

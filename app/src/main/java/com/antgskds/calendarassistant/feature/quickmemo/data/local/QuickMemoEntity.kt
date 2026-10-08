@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 
 object QuickMemoType {
     const val TEXT = "TEXT"
+    const val LINK = "LINK"
     const val VOICE = "VOICE"
     const val IMAGE = "IMAGE"
 }
@@ -52,7 +53,9 @@ object QuickMemoSuggestionStatus {
         Index(value = ["updated_at"]),
         Index(value = ["sort_rank"]),
         Index(value = ["todo_state"]),
-        Index(value = ["type"])
+        Index(value = ["type"]),
+        Index(value = ["link_key"]),
+        Index(value = ["folder_id"])
     ]
 )
 data class QuickMemoEntity(
@@ -87,7 +90,15 @@ data class QuickMemoEntity(
     @ColumnInfo(name = "reminder_at")
     val reminderAt: Long? = null,
     @ColumnInfo(name = "reminder_rrule")
-    val reminderRRule: String = ""
+    val reminderRRule: String = "",
+    @ColumnInfo(name = "title", defaultValue = "''")
+    val title: String = "",
+    @ColumnInfo(name = "source_url", defaultValue = "NULL")
+    val sourceUrl: String? = null,
+    @ColumnInfo(name = "link_key", defaultValue = "NULL")
+    val linkKey: String? = null,
+    @ColumnInfo(name = "folder_id", defaultValue = "NULL")
+    val folderId: String? = null
 ) {
     val isVoice: Boolean get() = type == QuickMemoType.VOICE
     val isImage: Boolean get() = type == QuickMemoType.IMAGE

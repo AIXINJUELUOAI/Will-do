@@ -12,6 +12,9 @@ import com.antgskds.calendarassistant.app.runtime.migration.LegacyDataMigrationC
 import com.antgskds.calendarassistant.shared.operation.SettingsOperationApi
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupAttachmentDto
+import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupQuickMemoFolderDto
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoFolderEntity
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkParser
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupData
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupImportResult
 import com.antgskds.calendarassistant.feature.backup.data.model.AppBackupManifest
@@ -307,7 +310,10 @@ class BackupCoordinator(
             appBackgroundImageFileName = appBackgroundImageFileName,
             attachments = attachmentDtos,
             quickMemos = quickMemoData.memos,
-            quickMemoSuggestions = quickMemoData.suggestions
+            quickMemoSuggestions = quickMemoData.suggestions,
+            quickMemoFolders = if (options.includeQuickMemos) db.quickMemoDao().getAllFolders().map {
+                AppBackupQuickMemoFolderDto(it.id, it.name, it.createdAt, it.updatedAt)
+            } else emptyList()
         )
     }
 
@@ -377,7 +383,7 @@ class BackupCoordinator(
             0
         }
         val importedQuickMemos = if (options.includeQuickMemos) {
-            importQuickMemos(data.quickMemos, data.quickMemoSuggestions, attachmentsDir)
+            importQuickMemos(data.quickMemos, data.quickMemoSuggestions, data.quickMemoFolders, attachmentsDir)
         } else {
             0
         }
@@ -445,6 +451,8 @@ class BackupCoordinator(
                 backupKey = backupKey,
                 type = memo.type,
                 bodyText = memo.bodyText,
+                title = memo.title, sourceUrl = memo.sourceUrl, linkKey = memo.linkKey, folderId = memo.folderId,
+                linkSummary = com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository.summary(db.linkAnalysisDao().get(requireNotNull(memo.id))),
                 audioFileName = audioFileNames[backupKey],
                 imageFileName = imageFileNames[backupKey],
                 audioDurationMs = memo.audioDurationMs,
@@ -522,10 +530,14 @@ class BackupCoordinator(
     private suspend fun importQuickMemos(
         memos: List<AppBackupQuickMemoDto>,
         suggestions: List<AppBackupQuickMemoSuggestionDto>,
+        folders: List<AppBackupQuickMemoFolderDto>,
         tempDir: File?
     ): Int {
-        if (memos.isEmpty()) return 0
         val dao = db.quickMemoDao()
+        folders.filter { it.id.isNotBlank() && it.name.isNotBlank() }.forEach {
+            dao.insertFolder(QuickMemoFolderEntity(it.id, it.name.trim(), it.createdAt, it.updatedAt))
+        }
+        if (memos.isEmpty()) return 0
         val existingByKey = dao.getAllQuickMemos()
             .filter { it.id != null }
             .associateBy { quickMemoDuplicateKey(it) }
@@ -574,6 +586,7 @@ class BackupCoordinator(
                     importReminders(it, dto)
                 }
                 repairExistingQuickMemoFiles(existingMemo, dto, audioTempDir, imageTempDir)
+                if (db.linkAnalysisDao().get(requireNotNull(existingMemo.id))==null) com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository(db).restore(requireNotNull(existingMemo.id),dto.linkSummary)
                 return@forEach
             }
             val audioPath = importQuickMemoAudio(dto.audioFileName, audioTempDir)
@@ -582,6 +595,10 @@ class BackupCoordinator(
                 QuickMemoEntity(
                     type = dto.type,
                     bodyText = dto.bodyText,
+                    title = dto.title,
+                    sourceUrl = dto.sourceUrl?.takeIf { QuickMemoLinkParser.parse(it) != null },
+                    linkKey = dto.sourceUrl?.let(QuickMemoLinkParser::parse)?.dedupKey,
+                    folderId = dto.folderId?.takeIf { dao.getFolder(it) != null },
                     audioPath = audioPath,
                     imagePath = imagePath,
                     audioDurationMs = dto.audioDurationMs,
@@ -595,6 +612,7 @@ class BackupCoordinator(
                     todoCompletedAt = dto.todoCompletedAt
                 )
             )
+            com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository(db).restore(memoId,dto.linkSummary)
             importReminders(memoId, dto)
             importedMemoIds[dto.backupKey] = memoId
             existingByKey[duplicateKey] = dao.getQuickMemo(memoId) ?: return@forEach
@@ -749,10 +767,12 @@ class BackupCoordinator(
     }
 
     private fun quickMemoDuplicateKey(memo: QuickMemoEntity): String {
+        memo.linkKey?.let { return "link:$it" }
         return listOf(memo.type, memo.createdAt, memo.bodyText, memo.audioDurationMs, memo.imagePath?.let { File(it).name }.orEmpty()).joinToString("|")
     }
 
     private fun quickMemoDuplicateKey(dto: AppBackupQuickMemoDto): String {
+        dto.sourceUrl?.let(QuickMemoLinkParser::parse)?.dedupKey?.let { return "link:$it" }
         return listOf(dto.type, dto.createdAt, dto.bodyText, dto.audioDurationMs, dto.imageFileName.orEmpty()).joinToString("|")
     }
 

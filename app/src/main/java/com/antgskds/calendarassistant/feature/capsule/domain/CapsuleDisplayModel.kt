@@ -5,7 +5,8 @@ data class CapsuleActionSpec(
     val receiverAction: String,
     val extraLongKey: String? = null,
     val extraLongValue: Long? = null,
-    val stringExtras: Map<String, String> = emptyMap()
+    val stringExtras: Map<String, String> = emptyMap(),
+    val openQuickMemoId: Long? = null,
 )
 
 data class CapsuleDisplayModel(
@@ -22,6 +23,7 @@ data class CapsuleDisplayModel(
     val actions: List<CapsuleActionSpec> = emptyList(),
     val tapOpensAccounting: Boolean = false,
     val tapImagePinId: Long? = null,
+    val tapOpensQuickMemoDetail: Boolean = false,
 ) {
     val effectiveActions: List<CapsuleActionSpec>
         get() = actions.ifEmpty { action?.let(::listOf).orEmpty() }

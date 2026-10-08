@@ -47,6 +47,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -545,6 +546,12 @@ class MainActivity : ComponentActivity() {
                 var appBackgroundRootSize by remember { mutableStateOf(IntSize.Zero) }
                 val currentRoute = currentBackStackEntry?.destination?.route
                     ?: if (shouldShowInitialOnboarding) AppRoutes.OnboardingGuide else AppRoutes.Home
+                LaunchedEffect(currentRoute, selectedHomePageKey) {
+                    if (currentRoute != AppRoutes.QuickMemoDetailPattern &&
+                        (currentRoute != AppRoutes.Home || selectedHomePageKey != HomeEntryKey.NOTE)) {
+                        mainViewModel.resetQuickMemoBrowser()
+                    }
+                }
                 val showAdaptivePrimaryNavigation = adaptiveLayoutInfo.useNavigationRail &&
                     currentRoute in setOf(
                         AppRoutes.Home,
@@ -944,6 +951,11 @@ class MainActivity : ComponentActivity() {
         }
         val memoId = intent?.getLongExtra(EXTRA_OPEN_QUICK_MEMO_ID, -1L)?.takeIf { it > 0L } ?: return
         pendingQuickMemoDetailLaunch.value = PendingQuickMemoDetailLaunch(memoId)
+        lifecycleScope.launch {
+            val app = application as App
+            app.clipboardCodeCenter.dismissLinkResults(memoId)
+            app.linkAnalysisApi.dismissNotification(memoId)
+        }
         intent.removeExtra(EXTRA_OPEN_QUICK_MEMO_ID)
     }
 

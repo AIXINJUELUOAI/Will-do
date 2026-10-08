@@ -135,7 +135,7 @@ object XiaomiLiveNotificationTemplate {
     }
 
     private fun formatTimeRange(startMillis: Long, endMillis: Long): String? {
-        if (startMillis <= 0 || endMillis <= 0) return null
+        if (startMillis <= 0 || endMillis <= 0 || endMillis == Long.MAX_VALUE) return null
         return try {
             val zone = ZoneId.systemDefault()
             val start = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalTime()

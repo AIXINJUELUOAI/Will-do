@@ -6,6 +6,7 @@ import com.antgskds.calendarassistant.feature.quickmemo.ui.render.material.Mater
 
 @Composable
 fun QuickMemoDetailActionBar(
+    onOpenSource: (() -> Unit)? = null,
     isRecordingVoice: Boolean,
     isSavingVoice: Boolean,
     hasVoice: Boolean,
@@ -22,6 +23,7 @@ fun QuickMemoDetailActionBar(
     miuiBlurEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) = MaterialQuickMemoDetailBottomBar(
+    onOpenSource = onOpenSource,
     isRecordingVoice = isRecordingVoice,
     isSavingVoice = isSavingVoice,
     hasVoice = hasVoice,

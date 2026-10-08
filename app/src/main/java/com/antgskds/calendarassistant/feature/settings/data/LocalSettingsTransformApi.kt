@@ -55,6 +55,9 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         forceInstantCodeTimeToNow: Boolean?,
         predictiveBackEnabled: Boolean?,
         clipboardCodeRecognitionEnabled: Boolean?,
+        clipboardLinkCollectionEnabled: Boolean?,
+        linkAnalysisEnabled: Boolean?,
+        linkAudioLocalTranscription: Boolean?,
         imagePinEnabled: Boolean?,
         voiceInputEnabled: Boolean?,
         floatingVoiceLongPressEnabled: Boolean?,
@@ -151,6 +154,9 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (predictiveBackEnabled != null) updated = updated.copy(predictiveBackEnabled = predictiveBackEnabled)
         if (imagePinEnabled != null) updated = updated.copy(imagePinEnabled = imagePinEnabled)
         if (clipboardCodeRecognitionEnabled != null) updated = updated.copy(clipboardCodeRecognitionEnabled = clipboardCodeRecognitionEnabled)
+        if (clipboardLinkCollectionEnabled != null) updated = updated.copy(clipboardLinkCollectionEnabled = clipboardLinkCollectionEnabled)
+        if (linkAnalysisEnabled != null) updated = updated.copy(linkAnalysisEnabled = linkAnalysisEnabled)
+        if (linkAudioLocalTranscription != null) updated = updated.copy(linkAudioLocalTranscription = linkAudioLocalTranscription)
         if (voiceInputEnabled != null) updated = updated.copy(voiceInputEnabled = voiceInputEnabled)
         if (floatingVoiceLongPressEnabled != null) updated = updated.copy(floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled)
         if (floatingTextQuickMemoAutoPinEnabled != null) {

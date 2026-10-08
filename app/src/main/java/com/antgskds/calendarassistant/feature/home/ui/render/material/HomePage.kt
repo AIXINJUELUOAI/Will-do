@@ -42,6 +42,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -167,7 +168,8 @@ fun MaterialHomePage(
     onAddCourseClick: () -> Unit = {},
     onEditItem: (ScheduleDisplayItem) -> Unit = {},
     onRequestDeleteItem: (ScheduleDisplayItem) -> Unit = {},
-    onRequestClearQuickMemos: () -> Unit = {},
+    onRequestQuickMemoFolders: () -> Unit = {},
+    quickMemoFolderMenu: @Composable (Color, Color, Color, List<AppMenuItem>) -> Unit = { _, _, _, _ -> },
     quickMemoCount: Int = 0,
     onScheduleExpandedChange: (Boolean) -> Unit = {},
     onScheduleProgressChange: (Float) -> Unit = {},
@@ -662,10 +664,11 @@ fun MaterialHomePage(
                                     isWideActionMenuExpanded = false
                                     if (!isImageImporting) imagePickerLauncher.launch("image/*")
                                 },
-                                onClearQuickMemos = {
+                                quickMemoFolderMenu = quickMemoFolderMenu,
+                                onQuickMemoFolders = {
                                     haptics.click()
                                     isWideActionMenuExpanded = false
-                                    onRequestClearQuickMemos()
+                                    onRequestQuickMemoFolders()
                                 },
                             )
                         }
@@ -1184,7 +1187,8 @@ private fun RowScope.HomeTopBarActions(
     onCreate: () -> Unit,
     onSearch: () -> Unit,
     onImage: () -> Unit,
-    onClearQuickMemos: () -> Unit,
+    onQuickMemoFolders: () -> Unit,
+    quickMemoFolderMenu: @Composable (Color, Color, Color, List<AppMenuItem>) -> Unit,
 ) {
     if (isTodayPage && !isTwoPane) {
         Box {
@@ -1225,7 +1229,23 @@ private fun RowScope.HomeTopBarActions(
         }
     }
 
-    if (isWideNavigation && (isNotePage || !isTwoPane)) {
+    if (isNotePage) {
+        if (isWideNavigation) IconButton(onClick = onCreate) {
+            Icon(Icons.Default.Add, "新建随口记", modifier = Modifier.size(topBarIconSize))
+        }
+        Box {
+            IconButton(onClick = onQuickMemoFolders) {
+                Icon(Icons.Default.MoreVert, "随口记文件夹", modifier = Modifier.size(topBarIconSize))
+            }
+            quickMemoFolderMenu(
+                menuContainerColor, menuSelectionColor, menuContentColor,
+                if (isWideNavigation) listOf(
+                    AppMenuItem("搜索", onSearch, Icons.Default.Search),
+                    AppMenuItem("上传图片识别", onImage, Icons.Default.Image),
+                ) else emptyList(),
+            )
+        }
+    } else if (isWideNavigation && !isTwoPane) {
         IconButton(onClick = onCreate) {
             Icon(
                 imageVector = Icons.Default.Add,
@@ -1250,18 +1270,7 @@ private fun RowScope.HomeTopBarActions(
                 items = buildList {
                     add(AppMenuItem("搜索", onSearch, Icons.Default.Search))
                     add(AppMenuItem("上传图片识别", onImage, Icons.Default.Image))
-                    if (isNotePage && quickMemoCount > 0) {
-                        add(AppMenuItem("清空随口记", onClearQuickMemos, Icons.Default.DeleteSweep, destructive = true))
-                    }
                 },
-            )
-        }
-    } else if (isNotePage && quickMemoCount > 0) {
-        IconButton(onClick = onClearQuickMemos) {
-            Icon(
-                imageVector = Icons.Default.DeleteSweep,
-                contentDescription = "清空随口记",
-                modifier = Modifier.size(topBarIconSize),
             )
         }
     }

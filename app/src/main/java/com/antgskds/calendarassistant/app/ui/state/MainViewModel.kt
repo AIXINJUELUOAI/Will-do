@@ -52,6 +52,10 @@ import com.antgskds.calendarassistant.shared.ui.material.component.ToastType
 import com.antgskds.calendarassistant.feature.backup.ui.contract.PromptCheckFeedback
 import com.antgskds.calendarassistant.feature.schedule.domain.course.Course
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoDraftPolicy
+import com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoDraftState
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -179,6 +183,101 @@ class MainViewModel(
     val archivedEvents = scheduleCenter.archivedEvents
     val notes: StateFlow<List<NoteEntity>> = noteCenter.notes
     val quickMemos: StateFlow<List<QuickMemoEntity>> = quickMemoCenter.quickMemos
+    val quickMemoFolders = quickMemoCenter.folders
+    private val linkAnalysisApi get() = (appContext.applicationContext as? com.antgskds.calendarassistant.App)?.linkAnalysisApi
+    val quickMemoLinkAnalyses = linkAnalysisApi?.records ?: MutableStateFlow(emptyList<com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisEntity>())
+    fun retryQuickMemoLinkAnalysis(id: Long, onResult: (Result<Unit>)->Unit) = viewModelScope.launch {
+        onResult(runCatching { linkAnalysisApi?.queue(id,force=true) ?: error("链接解析不可用") })
+    }
+    fun cancelQuickMemoLinkAnalysis(id: Long) = viewModelScope.launch { linkAnalysisApi?.cancel(id) }
+    private val quickMemoDraftMutex = Mutex()
+    private var nextQuickMemoDraftId = 0L
+    private val _quickMemoDraft = MutableStateFlow<QuickMemoDraftState?>(null)
+    val quickMemoDraft = _quickMemoDraft.asStateFlow()
+
+    fun beginQuickMemoDraft(onOpened: (Long) -> Unit) = viewModelScope.launch {
+        quickMemoDraftMutex.withLock {
+            finishQuickMemoDraftLocked()
+            val draftId = --nextQuickMemoDraftId
+            _quickMemoDraft.value = QuickMemoDraftState(QuickMemoEntity(id = draftId))
+            onOpened(draftId)
+        }
+    }
+
+    fun finishQuickMemoDraft(draftId: Long) = viewModelScope.launch {
+        quickMemoDraftMutex.withLock { finishQuickMemoDraftLocked(draftId) }
+    }
+
+    private suspend fun finishQuickMemoDraftLocked(expectedId: Long? = null) {
+        val draft = _quickMemoDraft.value ?: return
+        if (expectedId != null && draft.memo.id != expectedId) return
+        draft.storedId?.let { id ->
+            val memo = quickMemoCenter.getQuickMemo(id)
+            val hasReminders = quickMemoCenter.getRemindersForMemo(id).isNotEmpty()
+            if (memo != null && !QuickMemoDraftPolicy.hasContent(memo, hasReminders)) {
+                quickMemoCenter.deleteQuickMemo(id)
+            }
+        }
+        _quickMemoDraft.value = null
+    }
+
+    // Serialize typing, attachment saves and closing so a draft allocates at most one row.
+    private suspend fun <T> withQuickMemoTarget(
+        memoId: Long,
+        requireContent: Boolean = false,
+        edit: (QuickMemoEntity) -> QuickMemoEntity = { it },
+        action: suspend (Long) -> T,
+    ): T? {
+        if (!QuickMemoDraftPolicy.isDraft(memoId)) return action(memoId)
+        return quickMemoDraftMutex.withLock {
+            val draft = _quickMemoDraft.value?.takeIf { it.memo.id == memoId } ?: error("新建随口记已关闭")
+            val edited = draft.copy(memo = edit(draft.memo))
+            _quickMemoDraft.value = edited
+            if (requireContent && edited.storedId == null && !QuickMemoDraftPolicy.hasContent(edited.memo)) {
+                return@withLock null
+            }
+            val id = edited.storedId ?: quickMemoCenter.createTextMemo("").also { created ->
+                _quickMemoDraft.value = edited.copy(storedId = created)
+                quickMemoCenter.updateTitle(created, edited.memo.title)
+                quickMemoCenter.updateBody(created, edited.memo.bodyText)
+            }
+            try {
+                action(id)
+            } finally {
+                quickMemoCenter.getQuickMemo(id)?.let { saved ->
+                    _quickMemoDraft.value = _quickMemoDraft.value?.copy(memo = saved.copy(id = memoId))
+                }
+            }
+        }
+    }
+    private val _quickMemoBrowser = MutableStateFlow(com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoBrowserState())
+    val quickMemoBrowser = _quickMemoBrowser.asStateFlow()
+    fun updateQuickMemoBrowser(state: com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoBrowserState) {
+        _quickMemoBrowser.value = state
+    }
+    fun resetQuickMemoBrowser() = updateQuickMemoBrowser(com.antgskds.calendarassistant.feature.quickmemo.ui.contract.QuickMemoBrowserState())
+    fun showQuickMemoFolders() { _quickMemoBrowser.update { it.copy(foldersVisible = true) } }
+
+    fun updateQuickMemoTitle(id: Long, title: String) = viewModelScope.launch {
+        withQuickMemoTarget(id, requireContent = true, edit = { it.copy(title = title) }) { quickMemoCenter.updateTitle(it, title) }
+    }
+    fun createQuickMemoFolder(name: String, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { quickMemoCenter.createFolder(name); Unit })
+    }
+    fun renameQuickMemoFolder(id: String, name: String, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { quickMemoCenter.renameFolder(id, name) })
+    }
+    fun deleteQuickMemoFolder(id: String, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        val result = runCatching { quickMemoCenter.deleteFolder(id); Unit }
+        if (result.isSuccess && _quickMemoBrowser.value.folderId == id) resetQuickMemoBrowser()
+        onResult(result)
+    }
+    fun moveQuickMemos(ids: List<Long>, folderId: String?, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { quickMemoCenter.moveToFolder(ids, folderId); Unit })
+    }
+    fun deleteQuickMemos(ids: Set<Long>, onResult: (Result<Unit>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { quickMemoCenter.deleteQuickMemos(ids); Unit })
+    }
     val quickMemoReminders: StateFlow<List<QuickMemoReminderEntity>> = quickMemoCenter.quickMemoReminders
     val quickMemoSuggestions: StateFlow<List<QuickMemoSuggestionEntity>> = quickMemoCenter.suggestions
     val audioPlaybackState: StateFlow<AudioPlaybackState> = audioPlaybackCenter.playbackState
@@ -441,7 +540,7 @@ class MainViewModel(
     }
 
     fun updateQuickMemoBody(memoId: Long, bodyText: String) = viewModelScope.launch {
-        quickMemoCenter.updateBody(memoId, bodyText)
+        withQuickMemoTarget(memoId, requireContent = true, edit = { it.copy(bodyText = bodyText) }) { quickMemoCenter.updateBody(it, bodyText) }
     }
 
     fun saveQuickMemoReminder(
@@ -453,7 +552,7 @@ class MainViewModel(
     ) = viewModelScope.launch {
         val result = runCatching {
             val triggerAt = reminderAt ?: error("提醒时间不能为空")
-            if (quickMemoCenter.saveReminder(memoId, reminderId, triggerAt, reminderRRule) == null) {
+            if (withQuickMemoTarget(memoId) { quickMemoCenter.saveReminder(it, reminderId, triggerAt, reminderRRule) } == null) {
                 error("提醒保存失败")
             }
         }
@@ -468,20 +567,20 @@ class MainViewModel(
     }
 
     fun attachImageToQuickMemo(memoId: Long, imagePath: String, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
-        val result = runCatching { quickMemoCenter.attachImageToMemo(memoId, imagePath) }
+        val result = runCatching { withQuickMemoTarget(memoId) { quickMemoCenter.attachImageToMemo(it, imagePath) }; Unit }
         onResult(result)
     }
 
     fun removeImageFromQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
         val result = runCatching {
-            if (!quickMemoCenter.removeImageFromMemo(memoId)) error("当前随口记没有图片")
+            if (withQuickMemoTarget(memoId) { quickMemoCenter.removeImageFromMemo(it) } != true) error("当前随口记没有图片")
         }
         onResult(result)
     }
 
     fun attachVoiceToQuickMemo(memoId: Long, audioPath: String, durationMs: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
         val result = runCatching {
-            if (!quickMemoCenter.attachVoiceToMemo(memoId, audioPath, durationMs)) error("随口记不存在")
+            if (withQuickMemoTarget(memoId) { quickMemoCenter.attachVoiceToMemo(it, audioPath, durationMs) } != true) error("随口记不存在")
         }
         onResult(result)
     }
@@ -498,31 +597,31 @@ class MainViewModel(
     }
 
     fun toggleQuickMemoTodoCompletion(memoId: Long) = viewModelScope.launch {
-        quickMemoCenter.toggleTodoCompletion(memoId)
+        withQuickMemoTarget(memoId) { quickMemoCenter.toggleTodoCompletion(it) }
     }
 
     fun markQuickMemoTodo(memoId: Long) = viewModelScope.launch {
-        quickMemoCenter.markTodoActive(memoId)
+        withQuickMemoTarget(memoId) { quickMemoCenter.markTodoActive(it) }
     }
 
     fun removeQuickMemoTodo(memoId: Long) = viewModelScope.launch {
-        quickMemoCenter.removeTodo(memoId)
+        withQuickMemoTarget(memoId) { quickMemoCenter.removeTodo(it) }
     }
 
-    fun retryQuickMemoTranscription(memoId: Long) {
-        quickMemoCenter.retryTranscription(memoId)
+    fun retryQuickMemoTranscription(memoId: Long) = viewModelScope.launch {
+        withQuickMemoTarget(memoId) { quickMemoCenter.retryTranscription(it) }
     }
 
     fun pinQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
         val result = runCatching {
-            if (!quickMemoCenter.pinQuickMemo(memoId)) error("随口记不可挂起")
+            if (withQuickMemoTarget(memoId) { quickMemoCenter.pinQuickMemo(it) } != true) error("随口记不可挂起")
         }
         onResult(result)
     }
 
     fun clearPinnedQuickMemo(memoId: Long, onResult: (Result<Unit>) -> Unit = {}) = viewModelScope.launch {
         val result = runCatching {
-            if (!quickMemoCenter.clearPinnedTextQuickMemo(memoId)) error("当前随口记未挂起")
+            if (withQuickMemoTarget(memoId) { quickMemoCenter.clearPinnedTextQuickMemo(it) } != true) error("当前随口记未挂起")
         }
         onResult(result)
     }

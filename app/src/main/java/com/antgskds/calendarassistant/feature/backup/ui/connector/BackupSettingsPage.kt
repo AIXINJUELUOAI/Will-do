@@ -14,6 +14,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -566,16 +570,13 @@ internal fun CourseImportConfirmSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = parsed.canImportSettings) { haptics.selection(); onImportSettingsChange(!importSettings) }
+                    .toggleable(value = importSettings && parsed.canImportSettings, enabled = parsed.canImportSettings, role = Role.Checkbox) {
+                        haptics.selection(); onImportSettingsChange(it)
+                    }
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                EditionCheckbox(
-                    checked = importSettings && parsed.canImportSettings,
-                    enabled = parsed.canImportSettings,
-                    onCheckedChange = { haptics.selection(); onImportSettingsChange(it) }
-                )
-                Column(Modifier.padding(start = 12.dp)) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text("同步课表设置", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         if (parsed.canImportSettings) "同步已检测到的开学日期、总周数和每节课时间" else "未检测到可同步的课表设置",
@@ -583,6 +584,11 @@ internal fun CourseImportConfirmSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                EditionCheckbox(
+                    checked = importSettings && parsed.canImportSettings,
+                    enabled = parsed.canImportSettings,
+                    onCheckedChange = null, modifier = Modifier.size(48.dp),
+                )
             }
 
             Text(
@@ -696,20 +702,21 @@ fun ImportOptionRadio(currentMode: ImportMode, contentBodyStyle: TextStyle, onMo
         haptics.selection()
         onModeChange(mode)
     }
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EditionRadioButton(
-                selected = currentMode == ImportMode.APPEND,
-                onClick = { select(ImportMode.APPEND) }
-            )
-            Text("追加 (保留现有课程，追加新课)", modifier = Modifier.clickable { select(ImportMode.APPEND) }, style = contentBodyStyle)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EditionRadioButton(
-                selected = currentMode == ImportMode.OVERWRITE,
-                onClick = { select(ImportMode.OVERWRITE) }
-            )
-            Text("覆盖 (清空现有课程，仅保留新课)", modifier = Modifier.clickable { select(ImportMode.OVERWRITE) }, style = contentBodyStyle)
+    Column(Modifier.selectableGroup()) {
+        listOf(
+            ImportMode.APPEND to "追加 (保留现有课程，追加新课)",
+            ImportMode.OVERWRITE to "覆盖 (清空现有课程，仅保留新课)",
+        ).forEach { (mode, label) ->
+            Row(
+                modifier = Modifier.fillMaxWidth().selectable(
+                    selected = currentMode == mode, role = Role.RadioButton,
+                    onClick = { select(mode) },
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, modifier = Modifier.weight(1f).padding(end = 12.dp), style = contentBodyStyle)
+                EditionRadioButton(selected = currentMode == mode, onClick = null, modifier = Modifier.size(48.dp))
+            }
         }
     }
 }
@@ -798,15 +805,17 @@ private fun BackupOptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { haptics.selection(); onCheckedChange(!checked) }
+            .toggleable(value = checked, enabled = enabled, role = Role.Checkbox) {
+                haptics.selection(); onCheckedChange(it)
+            }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        EditionCheckbox(checked = checked, enabled = enabled, onCheckedChange = { haptics.selection(); onCheckedChange(it) })
-        Column(Modifier.padding(start = 12.dp)) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        EditionCheckbox(checked = checked, enabled = enabled, onCheckedChange = null, modifier = Modifier.size(48.dp))
     }
 }
 

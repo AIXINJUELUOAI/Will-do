@@ -125,7 +125,8 @@ fun BottomBarEditorPage(
             standbyItems = standbyItems,
             startPage = startPage,
             quickMemoEnabled = settings.voiceInputEnabled,
-            hapticEnabled = settings.hapticFeedbackEnabled
+            hapticEnabled = settings.hapticFeedbackEnabled,
+            selectedFillEnabled = settings.homeBottomSelectedFillEnabled
         ),
         uiSize = uiSize,
         onAction = { action ->
@@ -193,6 +194,7 @@ fun MaterialBottomBarEditorScreen(
                         onExpandedChange = { isPreviewExpanded = it },
                         isSidebarOpen = false,
                         navItems = activeItems,
+                        selectedFillEnabled = state.selectedFillEnabled,
                         selectedPageKey = previewSelectedPage,
                         onMenuClick = { isPreviewExpanded = false },
                         onPageClick = {

@@ -42,6 +42,8 @@ object FeatureCatalog {
     )
 
     val features: List<FeatureEntry> = listOf(
+        FeatureEntry("链接解析与摘要", Chain.RECOGNITION, "feature/linkanalysis/application/LinkAnalysisCoordinator", "实验室导入用户源；手机端受控 JS/HTTP/WebView 提取素材，在线 AI 生成独立摘要，不内置平台源"),
+
         FeatureEntry("文字分享到随口记", Chain.INGEST, "platform/entry/text/TextShareQuickMemoActivity", "系统分享或选中文字直接存随口记原文，不自动调用 AI"),
         FeatureEntry("截图挂起磁贴", Chain.NOTIFICATION, "platform/tile/ImagePinTileService", "点击后收起控制中心，复用无障碍截图并追加图片挂起；需要实验室图片挂起、实况通知及权限，不调用 AI"),
         FeatureEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", "实验室默认关闭；权限齐全的分享无窗口接收，分享或快捷多选追加到同一胶囊，单图显示图片挂起、多图显示共 X 张，点击媒体弹窗翻页或取消本张挂起，同步剩余图片与数量；不调用识别或创建日程/随口记"),
@@ -55,7 +57,7 @@ object FeatureCatalog {
         FeatureEntry("正则日程识别", Chain.RECOGNITION, "data/node/recognition/RecognitionRegexNode", "文本/语音转写先走可配置正则规则生成日程草稿"),
         FeatureEntry("随口记", Chain.RECOGNITION, "core/service/voice/VoiceCaptureHandleActivity", "长按音量+或悬浮窗入口录音，转写为随口记/识别输入"),
         FeatureEntry("短信取件码", Chain.RECOGNITION, "feature/recognition/ingest/sms/SmsPickupIngestCoordinator", "监听短信、本地解析取件码"),
-        FeatureEntry("剪贴板识别", Chain.RECOGNITION, "feature/recognition/ingest/clipboard/ClipboardCodeIngestCoordinator", "普通权限窗口获焦读取；已授权 Root/Shizuku 走真实特权进程读取与复制监听，后台命中经通知打开应用确认后入库；诊断复用同一读取路径，不记录正文"),
+        FeatureEntry("剪贴板识别", Chain.RECOGNITION, "feature/recognition/ingest/clipboard/ClipboardCodeIngestCoordinator", "普通权限窗口获焦读取；已授权 Root/Shizuku 走真实特权进程读取与复制监听，后台命中经普通/实况通知直接添加取件或收藏链接；诊断复用同一读取路径，不记录正文"),
 
         // —— 入库 ——
         FeatureEntry("内容入库", Chain.INGEST, "feature/recognition/application/ingest/IngestPipeline", "识别结果/短信/导入 → 去重转换 → 写库主线"),

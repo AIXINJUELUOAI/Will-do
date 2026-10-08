@@ -12,6 +12,9 @@ import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2AssetRole
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2AttachmentRef
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2EntityType
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2EventPayload
+import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2QuickMemoFolderPayload
+import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoFolderEntity
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkParser
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2QuickMemoPayload
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2QuickMemoReminderPayload
 import com.antgskds.calendarassistant.feature.cloudsync.domain.SyncV2Record
@@ -46,6 +49,7 @@ class SyncV2LocalRepository(
         database.withTransaction {
             val events = eventsDao.getAllEventsForSync()
             val memos = quickMemoDao.getAllQuickMemos()
+            val folders = quickMemoDao.getAllFolders()
             val remindersByMemo = quickMemoDao.getAllReminders().groupBy { it.quickMemoId }
             Log.d(
                 TAG,
@@ -54,6 +58,17 @@ class SyncV2LocalRepository(
             )
             ensureBindings(SyncV2EntityType.EVENT, events.mapNotNull { it.id })
             ensureBindings(SyncV2EntityType.QUICK_MEMO, memos.mapNotNull { it.id })
+
+            folders.forEach { folder ->
+                val key = recordKey(SyncV2EntityType.QUICK_MEMO_FOLDER.name, folder.id)
+                val binding = syncDao.getBinding(key) ?: SyncV2BindingEntity(
+                    recordKey = key, entityType = SyncV2EntityType.QUICK_MEMO_FOLDER.name,
+                    syncUuid = folder.id, localId = null,
+                ).also(syncDao::putBinding)
+                recordLocalPayload(binding, codec.encodePayload(SyncV2QuickMemoFolderPayload(
+                    folder.name, folder.createdAt, folder.updatedAt,
+                )), emptyList(), deviceId)
+            }
 
             val eventBindings = syncDao.getBindings()
                 .filter { it.entityType == SyncV2EntityType.EVENT.name }
@@ -90,6 +105,13 @@ class SyncV2LocalRepository(
                 SyncV2EntityType.QUICK_MEMO.name to memos.mapNotNull { it.id }.toSet(),
             )
             syncDao.getBindings().forEach { binding ->
+                if (binding.entityType == SyncV2EntityType.QUICK_MEMO_FOLDER.name) {
+                    if (folders.none { it.id == binding.syncUuid } &&
+                        syncDao.getRevision(binding.selectedRevisionId)?.status != SyncV2RecordStatus.DELETED.name) {
+                        recordLocalPayload(binding, "", emptyList(), deviceId, SyncV2RecordStatus.DELETED)
+                    }
+                    return@forEach
+                }
                 val localId = binding.localId ?: return@forEach
                 if (localId in liveIds[binding.entityType].orEmpty()) return@forEach
                 val selected = syncDao.getRevision(binding.selectedRevisionId)
@@ -192,6 +214,12 @@ class SyncV2LocalRepository(
         selected: SyncV2Record,
     ): String? {
         if (binding.selectedRevisionId != selected.revisionId) return "revision_changed"
+        if (selected.entityType == SyncV2EntityType.QUICK_MEMO_FOLDER.name) {
+            val exists = quickMemoDao.getFolder(selected.syncUuid) != null
+            return if (selected.status == SyncV2RecordStatus.DELETED.name) {
+                if (exists) "deleted_folder_still_exists" else null
+            } else if (!exists) "folder_row_missing" else null
+        }
         if (selected.status == SyncV2RecordStatus.DELETED.name) {
             return if (binding.localId != null) "deleted_binding_still_attached" else null
         }
@@ -271,8 +299,9 @@ class SyncV2LocalRepository(
             }
             SyncV2EntityType.QUICK_MEMO.name -> {
                 val payload = codec.decodePayload(record.payloadJson, SyncV2QuickMemoPayload::class.java)
-                listOf(
+                payload.sourceUrl?.let(QuickMemoLinkParser::parse)?.dedupKey ?: listOf(
                     payload.type,
+                    payload.title.orEmpty(),
                     payload.bodyText.trim(),
                     payload.createdAt.toString(),
                 ).joinToString("\u001f")
@@ -283,6 +312,7 @@ class SyncV2LocalRepository(
 
     private fun applyPriority(record: SyncV2Record): Int {
         if (record.status == SyncV2RecordStatus.DELETED.name) return 3
+        if (record.entityType == SyncV2EntityType.QUICK_MEMO_FOLDER.name) return -1
         if (record.entityType == SyncV2EntityType.QUICK_MEMO.name) return 2
         val parent = runCatching {
             codec.decodePayload(record.payloadJson, SyncV2EventPayload::class.java).parentSyncUuid
@@ -424,6 +454,9 @@ class SyncV2LocalRepository(
     private suspend fun applySelected(binding: SyncV2BindingEntity, selected: SyncV2Record) {
         val payloadHash = codec.payloadHash(selected.payloadJson, selected.attachments)
         if (selected.status == SyncV2RecordStatus.DELETED.name) {
+            if (binding.entityType == SyncV2EntityType.QUICK_MEMO_FOLDER.name) {
+                quickMemoDao.deleteFolder(binding.syncUuid, selected.modifiedAt)
+            }
             binding.localId?.let { localId ->
                 when (binding.entityType) {
                     SyncV2EntityType.EVENT.name -> {
@@ -441,6 +474,14 @@ class SyncV2LocalRepository(
         val localId = when (selected.entityType) {
             SyncV2EntityType.EVENT.name -> applyEvent(binding, selected)
             SyncV2EntityType.QUICK_MEMO.name -> applyQuickMemo(binding, selected)
+            SyncV2EntityType.QUICK_MEMO_FOLDER.name -> {
+                val payload = codec.decodePayload(selected.payloadJson, SyncV2QuickMemoFolderPayload::class.java)
+                require(payload.name.isNotBlank()) { "文件夹名称为空" }
+                val folder = QuickMemoFolderEntity(selected.syncUuid, payload.name, payload.createdAt, payload.updatedAt)
+                if (quickMemoDao.getFolder(folder.id) == null) quickMemoDao.insertFolder(folder)
+                else quickMemoDao.updateFolder(folder)
+                null
+            }
             else -> binding.localId
         }
         if (selected.entityType == SyncV2EntityType.EVENT.name && localId != null) {
@@ -502,6 +543,10 @@ class SyncV2LocalRepository(
             id = existing?.id,
             type = payload.type,
             bodyText = payload.bodyText,
+            title = payload.title.orEmpty(),
+            sourceUrl = payload.sourceUrl?.takeIf { QuickMemoLinkParser.parse(it) != null },
+            linkKey = payload.sourceUrl?.let(QuickMemoLinkParser::parse)?.dedupKey,
+            folderId = payload.folderId?.takeIf { quickMemoDao.getFolder(it) != null },
             audioPath = reusablePath(SyncV2AssetRole.QUICK_MEMO_AUDIO),
             imagePath = reusablePath(SyncV2AssetRole.QUICK_MEMO_IMAGE),
             audioDurationMs = payload.audioDurationMs,
@@ -517,6 +562,7 @@ class SyncV2LocalRepository(
             reminderRRule = "",
         )
         val localId = quickMemoDao.insertQuickMemo(memo)
+        com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository(database).restore(localId,payload.linkSummary)
         quickMemoDao.deleteRemindersForMemo(localId)
         val remoteReminders = payload.reminders.orEmpty().ifEmpty {
             payload.reminderAt?.let { triggerAt ->
@@ -725,9 +771,11 @@ class SyncV2LocalRepository(
         codeQrPayload = codeQrPayload,
     )
 
-    private fun QuickMemoEntity.toPortable(reminders: List<QuickMemoReminderEntity>) = SyncV2QuickMemoPayload(
+    private suspend fun QuickMemoEntity.toPortable(reminders: List<QuickMemoReminderEntity>) = SyncV2QuickMemoPayload(
         type = type,
         bodyText = bodyText,
+        title = title, sourceUrl = sourceUrl, linkKey = linkKey, folderId = folderId,
+        linkSummary = com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository.summary(database.linkAnalysisDao().get(requireNotNull(id))),
         audioDurationMs = audioDurationMs,
         transcriptionStatus = transcriptionStatus,
         analysisStatus = analysisStatus,

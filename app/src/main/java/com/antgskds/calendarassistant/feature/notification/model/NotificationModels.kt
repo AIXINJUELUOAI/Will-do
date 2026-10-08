@@ -1,7 +1,9 @@
 package com.antgskds.calendarassistant.feature.notification.model
 
 enum class NotificationKind {
+    LINK_SUMMARY_READY,
     CLIPBOARD_CODE_PROMPT,
+    CLIPBOARD_LINK_PROMPT,
     QUICK_MEMO_REMINDER,
     SCHEDULE_REMINDER,
     RECOGNITION_STATUS,

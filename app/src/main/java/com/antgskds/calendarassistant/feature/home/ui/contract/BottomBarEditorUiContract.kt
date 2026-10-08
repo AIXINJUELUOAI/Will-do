@@ -5,7 +5,8 @@ data class BottomBarEditorUiState(
     val standbyItems: List<String>,
     val startPage: String,
     val quickMemoEnabled: Boolean,
-    val hapticEnabled: Boolean
+    val hapticEnabled: Boolean,
+    val selectedFillEnabled: Boolean = false
 )
 
 sealed interface BottomBarEditorUiAction {

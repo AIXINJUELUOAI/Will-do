@@ -35,6 +35,7 @@ fun AppSwipeReveal(
     onRevealedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     identity: Any? = Unit,
+    gesturesEnabled: Boolean = true,
     revealThreshold: Float = 0.5f,
     hapticThreshold: Float = revealThreshold,
     dragOverflowPx: Float = 0f,
@@ -99,7 +100,8 @@ fun AppSwipeReveal(
         val foreground = Modifier
             .fillMaxWidth()
             .offset { IntOffset(offset.roundToInt(), 0) }
-            .pointerInput(identity, widthPx, revealThreshold, hapticThreshold, dragOverflowPx) {
+            .pointerInput(identity, widthPx, revealThreshold, hapticThreshold, dragOverflowPx, gesturesEnabled) {
+                if (!gesturesEnabled) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragStart = { animation?.cancel() },
                     onDragEnd = {

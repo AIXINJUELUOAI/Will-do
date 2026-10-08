@@ -13,6 +13,8 @@ fun QuickMemoScreen(
     uiSize: Int,
     extraBottomPadding: Dp,
     selectedMemoId: Long? = null,
+    selectedMemoIds: Set<Long> = emptySet(),
+    selectionMode: Boolean = false,
     reserveFloatingBarSpace: Boolean = true,
     hapticEnabled: Boolean,
     onAction: (QuickMemoUiAction) -> Unit
@@ -23,6 +25,8 @@ fun QuickMemoScreen(
         uiSize = uiSize,
         extraBottomPadding = extraBottomPadding,
         selectedMemoId = selectedMemoId,
+        selectedMemoIds = selectedMemoIds,
+        selectionMode = selectionMode,
         reserveFloatingBarSpace = reserveFloatingBarSpace,
         hapticEnabled = hapticEnabled,
         onAction = onAction

@@ -151,11 +151,15 @@ data class MySettings(
     // 【实验室】取件类事件时间兜底：取件/取餐/取票/寄件忽略 AI 返回时间，入库时使用当前时间
     val forceInstantCodeTimeToNow: Boolean = false,
 
-    // 【实验室】预测性返回手势
+    // 【偏好设置】预测性返回手势
     val predictiveBackEnabled: Boolean = true,
 
     // 【实验室】剪贴板取件类识别
     val clipboardCodeRecognitionEnabled: Boolean = false,
+    val clipboardLinkCollectionEnabled: Boolean = false,
+    val linkAnalysisEnabled: Boolean = false,
+    val linkAudioLocalTranscription: Boolean = true,
+    // 【偏好设置】图片挂起；入口移动不改变已有保存值。
     val imagePinEnabled: Boolean = false,
 
     // 【实验室】随口记总开关
@@ -327,6 +331,8 @@ data class MySettings(
     val developerSimulateRootEnabled: Boolean = false,
     val developerDemoModeEnabled: Boolean = false,
     val quickMemoPinnedFixedTitleEnabled: Boolean = false,
+    // 开发者选项：开启时首页底栏选中入口使用填充图标；默认保留线条。
+    val homeBottomSelectedFillEnabled: Boolean = false,
 
     // Agent API
     val agentApiEnabled: Boolean = true,

@@ -3,6 +3,8 @@ package com.antgskds.calendarassistant.feature.settings.preference.ui.connector
 
 import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageBottomPadding
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCheckbox
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionCategoricalPreference
 import com.antgskds.calendarassistant.shared.ui.edition.EditionDropdownActionSettingItem
@@ -92,6 +94,7 @@ data class PreferenceItemVisibility(
     val showBottomBarEditor: Boolean = true,
     val showWidgetSettings: Boolean = true,
     val showHapticFeedback: Boolean = true,
+    val showPredictiveBack: Boolean = true,
     val showNetworkSpeedCapsule: Boolean = true,
     val showAutoArchive: Boolean = true,
     val showScheduleColors: Boolean = true,
@@ -429,6 +432,15 @@ fun MaterialPreferenceSettingsScreen(
             if (PreferenceSection.DISPLAY in visibleSections) {
             Text("显示", style = sectionTitleStyle)
             SettingsCard {
+                SwitchSettingItem(
+                    title = "图片挂起",
+                    subtitle = "将多张图片挂起在岛上，点击后左右滑动查看",
+                    checked = settings.imagePinEnabled,
+                    onCheckedChange = { controller.updatePreference(imagePinEnabled = it) },
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+                AppSettingsDivider()
                 if (itemVisibility.showUiSize) {
                     SliderSettingItem(
                         title = "界面大小",
@@ -1023,6 +1035,17 @@ fun MaterialPreferenceSettingsScreen(
             if (PreferenceSection.OPERATION in visibleSections) {
             Text("操作", style = sectionTitleStyle)
             SettingsCard {
+                if (itemVisibility.showPredictiveBack) {
+                    SwitchSettingItem(
+                        title = "预测性返回手势",
+                        subtitle = "侧滑返回时页面支持跟手动画效果",
+                        checked = settings.predictiveBackEnabled,
+                        onCheckedChange = { controller.updatePreference(predictiveBackEnabled = it) },
+                        cardTitleStyle = cardTitleStyle,
+                        cardSubtitleStyle = cardSubtitleStyle,
+                    )
+                    AppSettingsDivider()
+                }
                 if (itemVisibility.showHapticFeedback) {
                     SwitchSettingItem(
                         title = "触感反馈",
@@ -1999,29 +2022,14 @@ private fun SourceCalendarPickerSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .toggleable(value = checked, role = Role.Checkbox) { isChecked ->
                                     haptics.selection()
-                                    selectedIds = if (checked) {
-                                        selectedIds - calendar.id
-                                    } else {
-                                        selectedIds + calendar.id
-                                    }
+                                    selectedIds = if (isChecked) selectedIds + calendar.id else selectedIds - calendar.id
                                 }
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            EditionCheckbox(
-                                checked = checked,
-                                onCheckedChange = { isChecked ->
-                                    haptics.selection()
-                                    selectedIds = if (isChecked) {
-                                        selectedIds + calendar.id
-                                    } else {
-                                        selectedIds - calendar.id
-                                    }
-                                }
-                            )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(calendar.name, style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     text = buildCalendarMetaLine(calendar),
@@ -2029,6 +2037,9 @@ private fun SourceCalendarPickerSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            EditionCheckbox(
+                                checked = checked, onCheckedChange = null, modifier = Modifier.size(48.dp),
+                            )
                         }
                     }
                 }

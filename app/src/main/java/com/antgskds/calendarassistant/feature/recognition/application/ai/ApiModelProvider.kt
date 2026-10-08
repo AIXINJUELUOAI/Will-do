@@ -71,6 +71,53 @@ object ApiModelProvider {
         }
     }
 
+
+    /** Link summaries reuse configured providers and pass actual inline media. */
+    suspend fun generateWithMaterials(
+        prompt: String, materials: List<Pair<String, ByteArray>>, apiKey: String, baseUrl: String,
+        modelName: String, disableThinking: Boolean = false,
+    ): ApiCallResult {
+        if (apiKey.isBlank() || baseUrl.isBlank() || modelName.isBlank())
+            return ApiCallResult.Failure(ApiErrorKind.CONFIG, message = "请先配置在线 AI 模型")
+        require(materials.sumOf { it.second.size.toLong() } <= com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.LINK_AI_INPUT_BYTES)
+        return try {
+            if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
+                val body = buildJsonObject {
+                    putJsonArray("contents") {
+                        add(buildJsonObject { put("role","user"); putJsonArray("parts") {
+                            add(buildJsonObject { put("text",prompt) })
+                            materials.forEach { (mime,bytes) -> add(buildJsonObject {
+                                putJsonObject("inline_data") { put("mime_type",mime); put("data",Base64.encodeToString(bytes,Base64.NO_WRAP)) }
+                            }) }
+                        } })
+                    }
+                }
+                val response = client.post {
+                    url(baseUrl); headers.append("x-goog-api-key",apiKey)
+                    contentType(ContentType.Application.Json); setBody(body)
+                }
+                if (response.status.value !in 200..299) ApiCallResult.Failure(ApiErrorKind.HTTP, response.status.value, "AI 请求失败")
+                else {
+                    val parts = JSONObject(response.bodyAsText()).optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                    val text = if (parts == null) "" else (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.optString("text") }.joinToString("\n").trim()
+                    if (text.isBlank()) ApiCallResult.Failure(ApiErrorKind.PARSE,message="AI 未返回摘要") else ApiCallResult.Success(text)
+                }
+            } else {
+                val request = LinkMaterialRequestBuilder.openAi(prompt, materials.map { (mime, bytes) ->
+                    mime to Base64.encodeToString(bytes, Base64.NO_WRAP)
+                }, modelName, disableThinking && isDeepSeekEndpoint(baseUrl))
+                val (status, raw) = postJsonWithAuth(baseUrl, apiKey, request)
+                if (status !in 200..299) ApiCallResult.Failure(ApiErrorKind.HTTP,status,"AI 请求失败；请确认模型支持所选素材")
+                else {
+                    val root = JSONObject(raw)
+                    val text = extractMessageContent(root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")).orEmpty().trim()
+                    if (text.isBlank()) ApiCallResult.Failure(ApiErrorKind.PARSE,message="AI 未返回摘要") else ApiCallResult.Success(text)
+                }
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: Exception) { ApiCallResult.Failure(ApiErrorKind.NETWORK,message="AI 请求失败，请检查网络和模型配置") }
+    }
+
     suspend fun generate(
         request: ModelRequest,
         apiKey: String,

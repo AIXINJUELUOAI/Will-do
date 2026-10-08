@@ -61,6 +61,24 @@ class EventActionReceiver : BroadcastReceiver() {
         Log.d(TAG, "receive action=${intent.action} eventId=${intent.getStringExtra(EXTRA_EVENT_ID)}")
 
         when (intent.action) {
+            com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardPromptAction.RECEIVER_ACTION -> {
+                val value = intent.getStringExtra(
+                    com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardPromptAction.EXTRA_KEY
+                )?.takeIf(String::isNotBlank) ?: return
+                val pending = goAsync()
+                scope.launch {
+                    try {
+                        val message = app.clipboardCodeCenter.acceptPrompt(
+                            com.antgskds.calendarassistant.feature.notification.model.NotificationKey(value)
+                        )
+                        withContext(Dispatchers.Main) { message?.let { UniversalToastUtil.showInfo(context, it) } }
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        Log.e(TAG, "clipboard save failed error_type=${error.javaClass.simpleName}")
+                        withContext(Dispatchers.Main) { UniversalToastUtil.showError(context, "保存失败，请重试") }
+                    } finally { pending.finish() }
+                }
+            }
             AccountingDuplicateAction.RECEIVER_ACTION -> {
                 val ids = AccountingDuplicateAction.draftIds(intent.getStringExtra(AccountingDuplicateAction.EXTRA_DRAFT_IDS))
                 if (ids.isEmpty()) return
