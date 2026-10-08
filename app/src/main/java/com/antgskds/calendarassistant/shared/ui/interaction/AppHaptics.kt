@@ -6,14 +6,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import kotlin.math.roundToInt
 
 @Stable
 class AppHaptics internal constructor(
     private val view: View,
-    private val enabled: Boolean
+    private val enabled: () -> Boolean
 ) {
     fun selection() = perform(HapticFeedbackConstants.KEYBOARD_TAP)
 
@@ -31,7 +35,7 @@ class AppHaptics internal constructor(
 
     
     private fun perform(feedbackConstant: Int) {
-        if (enabled) {
+        if (enabled()) {
             view.performHapticFeedback(feedbackConstant)
         }
     }
@@ -42,7 +46,23 @@ val LocalAppHapticsEnabled = staticCompositionLocalOf { true }
 @Composable
 fun rememberAppHaptics(enabled: Boolean): AppHaptics {
     val view = LocalView.current
-    return remember(view, enabled) { AppHaptics(view, enabled) }
+    val latestEnabled = rememberUpdatedState(enabled && LocalAppHapticsEnabled.current)
+    // 手势协程可能保留旧引用；稳定实例在触发时读取最新开关。
+    return remember(view) { AppHaptics(view) { latestEnabled.value } }
+}
+
+/** 给 combinedClickable 等内置反馈使用；保留系统默认触感类型。 */
+@Composable
+fun rememberAppSystemHapticFeedback(enabled: Boolean): HapticFeedback {
+    val system = rememberUpdatedState(LocalHapticFeedback.current)
+    val latestEnabled = rememberUpdatedState(enabled)
+    return remember {
+        object : HapticFeedback {
+            override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+                if (latestEnabled.value) system.value.performHapticFeedback(hapticFeedbackType)
+            }
+        }
+    }
 }
 
 @Composable

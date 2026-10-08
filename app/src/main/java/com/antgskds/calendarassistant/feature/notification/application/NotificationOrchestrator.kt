@@ -198,6 +198,14 @@ class NotificationOrchestrator(
             Log.d("WillDoNotify", "fire key=${key.value} -> NOT_FOUND")
             return NotificationResult.Failure(key, NotificationFailureReason.NOT_FOUND)
         }
+        val clipboardRoute = com.antgskds.calendarassistant.feature.notification.policy.ClipboardCodePromptDeliveryPolicy
+            .route(snapshot.kind, liveCapsuleEnabled)
+        if (clipboardRoute != null) {
+            // 独立候选尚未入库，必须主动发布；日程胶囊不会替它补发。
+            if (clipboardRoute == NotificationRoute.NORMAL) livePublisherProvider()?.cancel(key)
+            Log.i("WillDoNotify", "clipboard prompt dispatch key=${key.value} route=$clipboardRoute")
+            return publishSnapshot(snapshot.copy(route = clipboardRoute))
+        }
         if (snapshot.kind == com.antgskds.calendarassistant.feature.notification.model.NotificationKind.QUICK_MEMO_REMINDER) {
             val route = com.antgskds.calendarassistant.feature.notification.policy.QuickMemoReminderDeliveryPolicy.route(liveCapsuleEnabled)
             Log.i("WillDoNotify", "quick memo dispatch key=${key.value} route=$route")
@@ -222,7 +230,7 @@ class NotificationOrchestrator(
             cancel(key)
             return NotificationResult.Success(key, NotificationState.CANCELLED)
         }
-        // 其余提醒沿用现有胶囊与手环门控；随口记已在上方完成真实分流发布。
+        // 遗留日程提醒沿用胶囊与手环门控；独立通知已在上方完成真实分流发布。
         if (liveCapsuleEnabled && !braceletModeEnabled) {
             Log.d("WillDoNotify", "fire key=${key.value} -> SUPPRESSED_CAPSULE")
             return markSnapshotReady(key, cancelAlarm = true)
@@ -305,7 +313,7 @@ class NotificationOrchestrator(
             category = snapshot.category
         )
         val result = publisher.publish(payload)
-        if (result is NotificationResult.Success && markPosted) {
+        if (result is NotificationResult.Success && result.state == NotificationState.POSTED && markPosted) {
             registryStore.upsert(
                 snapshot.copy(
                     state = NotificationState.POSTED,

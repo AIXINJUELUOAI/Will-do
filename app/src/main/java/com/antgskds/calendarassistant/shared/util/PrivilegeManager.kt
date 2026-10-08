@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -27,6 +29,10 @@ object PrivilegeManager {
     private const val TAG = "PrivilegeManager"
 
     enum class PrivilegeType { NONE, SHIZUKU, ROOT }
+
+    enum class AccessRequestResult {
+        ROOT_GRANTED, ROOT_DENIED, SHIZUKU_GRANTED, SHIZUKU_DENIED, SHIZUKU_UNAVAILABLE
+    }
 
     private val _privilegeTypeFlow = MutableStateFlow(PrivilegeType.NONE)
     val privilegeTypeFlow: StateFlow<PrivilegeType> = _privilegeTypeFlow.asStateFlow()
@@ -57,6 +63,11 @@ object PrivilegeManager {
         if (privilegeType == PrivilegeType.SHIZUKU) {
             privilegeType = PrivilegeType.NONE
         }
+        val callback = pendingShizukuResult
+        pendingShizukuResult = null
+        if (callback != null) {
+            Handler(Looper.getMainLooper()).post { callback(false) }
+        }
     }
 
     private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
@@ -67,6 +78,7 @@ object PrivilegeManager {
             }
             Log.d(TAG, "Shizuku permission granted")
         } else {
+            if (privilegeType == PrivilegeType.SHIZUKU) privilegeType = PrivilegeType.NONE
             Log.w(TAG, "Shizuku permission denied")
         }
         val callback = pendingShizukuResult
@@ -88,6 +100,7 @@ object PrivilegeManager {
         try {
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
+            Shizuku.addRequestPermissionResultListener(permissionResultListener)
             
             if (Shizuku.pingBinder()) {
                 Log.d(TAG, "Shizuku binder available")
@@ -110,22 +123,21 @@ object PrivilegeManager {
     }
 
     fun refreshPrivilege(): PrivilegeType {
-        if (privilegeType == PrivilegeType.ROOT || privilegeType == PrivilegeType.SHIZUKU) {
-            return privilegeType
-        }
+        if (privilegeType == PrivilegeType.ROOT) return privilegeType
         try {
-            if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                privilegeType = PrivilegeType.SHIZUKU
-            }
+            privilegeType = if (Shizuku.pingBinder() &&
+                isShizukuGranted()
+            ) PrivilegeType.SHIZUKU else PrivilegeType.NONE
         } catch (e: Exception) {
+            privilegeType = PrivilegeType.NONE
             Log.e(TAG, "Shizuku refresh failed", e)
         }
         return privilegeType
     }
 
-    suspend fun requestRootAccess(context: Context? = null): Boolean = withContext(Dispatchers.IO) {
+    suspend fun requestRootAccess(context: Context? = null, forceCheck: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         rootRequestMutex.withLock {
-            if (privilegeType == PrivilegeType.ROOT) return@withLock true
+            if (!forceCheck && privilegeType == PrivilegeType.ROOT) return@withLock true
             val granted = checkRoot()
             if (granted) {
                 privilegeType = PrivilegeType.ROOT
@@ -136,6 +148,9 @@ object PrivilegeManager {
                     ?.apply()
                 Log.d(TAG, "Root privilege acquired")
             } else {
+                if (privilegeType == PrivilegeType.ROOT) {
+                    privilegeType = PrivilegeType.NONE
+                }
                 context?.applicationContext
                     ?.getSharedPreferences(PRIVILEGE_PREFS, Context.MODE_PRIVATE)
                     ?.edit()
@@ -160,20 +175,63 @@ object PrivilegeManager {
         }
     }
 
+    /** Only a user click starts this request; a Root denial never falls through to Shizuku. */
+    suspend fun requestPreferredAccess(context: Context): AccessRequestResult = withContext(Dispatchers.Main.immediate) {
+        val rootAvailable = withContext(Dispatchers.IO) { hasRootBinary() }
+        if (!rootAvailable && privilegeType == PrivilegeType.ROOT) privilegeType = PrivilegeType.NONE
+        requestPreferredAccess(
+            rootAvailable = rootAvailable,
+            requestRoot = { requestRootAccess(context, forceCheck = true) },
+            requestShizuku = {
+                refreshPrivilege()
+                if (!Shizuku.pingBinder()) {
+                    AccessRequestResult.SHIZUKU_UNAVAILABLE
+                } else {
+                    val granted = suspendCancellableCoroutine<Boolean> { continuation ->
+                        val callback: (Boolean) -> Unit = { allowed ->
+                            if (continuation.isActive) continuation.resume(allowed)
+                        }
+                        continuation.invokeOnCancellation {
+                            if (pendingShizukuResult === callback) pendingShizukuResult = null
+                        }
+                        requestShizukuAccess(callback)
+                    }
+                    if (granted && refreshPrivilege() == PrivilegeType.SHIZUKU) {
+                        AccessRequestResult.SHIZUKU_GRANTED
+                    } else if (!Shizuku.pingBinder()) {
+                        AccessRequestResult.SHIZUKU_UNAVAILABLE
+                    } else {
+                        AccessRequestResult.SHIZUKU_DENIED
+                    }
+                }
+            },
+        )
+    }
+
+    internal suspend fun requestPreferredAccess(
+        rootAvailable: Boolean,
+        requestRoot: suspend () -> Boolean,
+        requestShizuku: suspend () -> AccessRequestResult,
+    ): AccessRequestResult = if (rootAvailable) {
+        if (requestRoot()) AccessRequestResult.ROOT_GRANTED else AccessRequestResult.ROOT_DENIED
+    } else {
+        requestShizuku()
+    }
+
     fun requestShizukuAccess(onResult: (Boolean) -> Unit = {}) {
+        initCheck()
         try {
             if (!Shizuku.pingBinder()) {
                 onResult(false)
                 return
             }
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            if (isShizukuGranted()) {
                 if (privilegeType != PrivilegeType.ROOT) {
                     privilegeType = PrivilegeType.SHIZUKU
                 }
                 onResult(true)
             } else {
                 pendingShizukuResult = onResult
-                Shizuku.addRequestPermissionResultListener(permissionResultListener)
                 Shizuku.requestPermission(0)
             }
         } catch (e: Exception) {
@@ -183,14 +241,19 @@ object PrivilegeManager {
         }
     }
 
+    // Query the service directly: the SDK caches grants and can miss a later revocation.
+    private fun isShizukuGranted(): Boolean = Shizuku.pingBinder() &&
+        IShizukuService.Stub.asInterface(Shizuku.getBinder())?.checkSelfPermission() == true
+
     private fun refreshShizukuPermission() {
         try {
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            if (isShizukuGranted()) {
                 if (privilegeType != PrivilegeType.ROOT) {
                     privilegeType = PrivilegeType.SHIZUKU
                 }
                 Log.d(TAG, "Shizuku permission already granted")
             } else {
+                if (privilegeType == PrivilegeType.SHIZUKU) privilegeType = PrivilegeType.NONE
                 Log.d(TAG, "Shizuku permission not granted")
             }
         } catch (e: Exception) {
@@ -239,7 +302,7 @@ object PrivilegeManager {
                     ProcessHandle.Local(process, os)
                 }
                 PrivilegeType.SHIZUKU -> {
-                    if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                    if (!Shizuku.pingBinder() || !isShizukuGranted()) {
                         return null
                     }
                     val binder = Shizuku.getBinder() ?: return null
@@ -309,7 +372,7 @@ object PrivilegeManager {
             if (!Shizuku.pingBinder()) {
                 return Pair(false, "Shizuku binder not available")
             }
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            if (!isShizukuGranted()) {
                 return Pair(false, "Shizuku permission denied")
             }
             val binder = Shizuku.getBinder() ?: return Pair(false, "Shizuku binder unavailable")

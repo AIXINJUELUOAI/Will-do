@@ -84,6 +84,9 @@ class ConfigItem(
 )
 
 object ConfigCatalog {
+    // 日历视图记忆的默认设置。
+    const val HOME_REMEMBER_CALENDAR_VIEW_DEFAULT = true
+
     // Qwen3-ASR 手机离线转写：控制 CPU 并发、单段长度、生成预算及模型导入上限。
     const val QWEN_ASR_NUM_THREADS = 2
     const val QWEN_ASR_CHUNK_SECONDS = 20
@@ -149,6 +152,12 @@ object ConfigCatalog {
     const val AUTO_ACCOUNTING_MAX_AGE_MS = 600_000
     // 高频无障碍诊断按来源与阶段限流，避免窗口刷新占满每日日志。
     const val AUTO_ACCOUNTING_DIAGNOSTIC_INTERVAL_MS = 5_000
+    // 开发者主动启动后预留切换软件和复制的时间，只读取一次，不参与正式监听。
+    const val CLIPBOARD_DIAGNOSTIC_DELAY_MS = 10_000
+    // 特权进程启动/单次读取上限、异常重连间隔和私有管道文本大小。
+    const val CLIPBOARD_PROCESS_TIMEOUT_MS = 10_000
+    const val CLIPBOARD_PROCESS_RETRY_MS = 5_000
+    const val CLIPBOARD_PROCESS_MAX_TEXT_CHARS = 65_536
     // 一次性支付诊断的时间和资源上限；不改变正式支付触发条件。
     const val PAYMENT_DIAGNOSTIC_DURATION_MS = 120_000
     // 手动诊断会话的独立健康采样，不受截图耗时/次数上限影响。
@@ -208,6 +217,14 @@ object ConfigCatalog {
     const val IMAGE_PIN_MAX_TOTAL_BYTES = 128 * 1024 * 1024
 
     val items: List<ConfigItem> = listOf(
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.remember_calendar_view", "记住日历视图",
+            "保存主动选择的视图类型；关闭时新启动沿用原起始视图规则。", ConfigExposure.USER_EDITABLE,
+            ConfigControl.Toggle, { if (it.rememberCalendarViewMode) 1 else 0 }, { s, v -> s.copy(rememberCalendarViewMode = v != 0) }),
+        ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.USER_SETTING, "home.calendar_view", "上次日历视图",
+            "持久记录视图类型，不记日期；布局临时回退不覆盖此值。", ConfigExposure.SYSTEM_INTERNAL,
+            ConfigControl.IntOptions(com.antgskds.calendarassistant.feature.home.domain.HomeCalendarViewPolicy.modes.mapIndexed { index, name -> ConfigControl.IntOptions.Option(index, name) }),
+            { com.antgskds.calendarassistant.feature.home.domain.HomeCalendarViewPolicy.modes.indexOf(it.homeCalendarViewMode).coerceAtLeast(0) },
+            { s, v -> s.copy(homeCalendarViewMode = com.antgskds.calendarassistant.feature.home.domain.HomeCalendarViewPolicy.modes.getOrElse(v) { "TODAY" }) }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.NOTIFICATION, ConfigKind.POLICY, "notification.reminder_window_days", "前台提醒登记窗口", "包含今天的七个自然日；后台只清理，重启仅恢复已确认窗口。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(REMINDER_WINDOW_DAYS.toInt(), REMINDER_WINDOW_DAYS.toInt()), { REMINDER_WINDOW_DAYS.toInt() }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.SYNC, ConfigKind.POLICY, "course.wakeup_request_timeout_ms", "WakeUp 口令请求超时", "每次认证或课表请求的时间上限；超时不影响已有课表。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(WAKEUP_SHARE_REQUEST_TIMEOUT_MS, WAKEUP_SHARE_REQUEST_TIMEOUT_MS), { WAKEUP_SHARE_REQUEST_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(ConfigDomain.APPEARANCE, ConfigKind.POLICY, "image_pin.max_bytes", "图片挂起文件上限", "限定外部分享图片副本大小。",
@@ -372,6 +389,10 @@ object ConfigCatalog {
             set = { s, _ -> s },
             agentAccess = AgentConfigAccess.NONE,
         ),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "clipboard.process_timeout_ms", "特权剪贴板进程超时", "启动或单次读取超时销毁进程。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(CLIPBOARD_PROCESS_TIMEOUT_MS, CLIPBOARD_PROCESS_TIMEOUT_MS), { CLIPBOARD_PROCESS_TIMEOUT_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "clipboard.process_retry_ms", "特权剪贴板重连间隔", "异常结束后限速重连；开关关闭或权限撤销立即停止。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(CLIPBOARD_PROCESS_RETRY_MS, CLIPBOARD_PROCESS_RETRY_MS), { CLIPBOARD_PROCESS_RETRY_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.RECOGNITION, ConfigKind.POLICY, "clipboard.max_text_chars", "特权剪贴板文本上限", "限制进程传输的文字，不读取图片或 URI。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(CLIPBOARD_PROCESS_MAX_TEXT_CHARS, CLIPBOARD_PROCESS_MAX_TEXT_CHARS), { CLIPBOARD_PROCESS_MAX_TEXT_CHARS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
+        ConfigItem(ConfigDomain.DIAGNOSTICS, ConfigKind.POLICY, "diagnostics.clipboard_delay_ms", "后台剪贴板诊断延迟", "开发者启动后延迟一次读取，只记录状态，不提示候选或入库。", ConfigExposure.SYSTEM_INTERNAL, ConfigControl.IntInput(CLIPBOARD_DIAGNOSTIC_DELAY_MS, CLIPBOARD_DIAGNOSTIC_DELAY_MS), { CLIPBOARD_DIAGNOSTIC_DELAY_MS }, { s, _ -> s }, agentAccess = AgentConfigAccess.NONE),
         ConfigItem(
             domain = ConfigDomain.DIAGNOSTICS,
             kind = ConfigKind.POLICY,

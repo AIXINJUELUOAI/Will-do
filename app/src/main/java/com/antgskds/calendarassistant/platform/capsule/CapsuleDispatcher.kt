@@ -64,11 +64,23 @@ class CapsuleDispatcher(
         val now = System.currentTimeMillis()
         val settings = settingsQueryApi.settings.value
         val accounting = com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.owns(payload.key)
-        val duration = if (accounting) {
+        val clipboard = com.antgskds.calendarassistant.feature.notification.policy.ClipboardCodePromptDeliveryPolicy.owns(payload.key)
+        // 确认提示持续到用户处理或候选被替换，普通通知和胶囊共用该生命周期。
+        val duration = if (clipboard) null else if (accounting) {
             if (payload.behavior.ongoing) null else payload.behavior.timeoutAfterMillis
                 ?: com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.timeout(false, settings)
         } else QuickMemoCapsuleDurationPolicy.durationMillis(settings.defaultEventDurationMinutes)
-        val item = if (accounting) {
+        val item = if (clipboard) {
+            val display = com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.ClipboardCodePromptDisplay
+                .notification(payload.display)
+            CapsuleUiState.Active.CapsuleItem(
+                id = payload.key.value, notifId = payload.notificationId,
+                type = CapsuleType.OCR_RESULT, eventType = "clipboard_code_prompt",
+                title = display.primaryText, content = display.secondaryText.orEmpty(),
+                description = display.expandedText.orEmpty(), color = 0xFF4CAF50.toInt(),
+                startMillis = now, endMillis = Long.MAX_VALUE, display = display,
+            )
+        } else if (accounting) {
             val display = com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.AccountingRecognitionDisplay
                 .notification(payload.display, payload.actions)
             CapsuleUiState.Active.CapsuleItem(

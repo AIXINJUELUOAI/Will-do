@@ -55,6 +55,8 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("剪贴板确认通知分流", Chain.NOTIFICATION, "feature/notification/application/NotificationOrchestrator", Maturity.PIPELINE, "剪贴板候选经 NotificationApi 与投递策略真实分流普通发布器/胶囊发布站；两者共用提示数据，确认、取消、替换候选时清理已发布通知"),
+        PipelineEntry("特权剪贴板监听", Chain.RECOGNITION, "platform/clipboard/PrivilegedClipboardReader", Maturity.PIPELINE, "复用 Root/Shizuku 进程启动，app_process 以真实 Shell/Root 身份读取与监听；开关关闭或授权失效销毁进程，回调复用取件类确认及统一通知入库"),
         PipelineEntry("离线语音转写", Chain.RECOGNITION, "feature/quickmemo/application/QuickMemoTranscriptionService", Maturity.PIPELINE, "独立 ASR 进程复用 SherpaSpeechTranscriber；优先导入的 Qwen3-ASR，中英混说自动识别，失败保留录音"),
         PipelineEntry("提醒窗口生命周期", Chain.NOTIFICATION, "platform/notification/alarm/ReminderWindowStore", Maturity.PIPELINE, "前台持久化窗口，后台不扩展；恢复作用域用于重启与升级；Android 14+ 一次清除旧混淆接收器闹钟并经现有入口重建"),
         PipelineEntry("WakeUp 新版口令导入", Chain.INGEST, "feature/backup/courseimport/external/wakeup/WakeUpShareClient", Maturity.PIPELINE, "官方接口获取临时令牌、签名请求并解密分享数据；仅生成导入预览，经已有确认流程入库，失败保留数据并提供文件导入"),

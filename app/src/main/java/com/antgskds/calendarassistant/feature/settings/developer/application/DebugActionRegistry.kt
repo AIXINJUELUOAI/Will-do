@@ -147,6 +147,9 @@ object DebugActionRegistry {
         DebugAction("delete-test-events", "删除所有 DEBUG 测试事件", CATEGORY_EVENT, dangerous = true) { app ->
             deleteTestEvents(app)
         },
+        DebugAction("clipboard-read-diagnostic", "后台剪贴板读取诊断（10 秒后）", "剪贴板诊断") { app ->
+            app.clipboardCodeCenter.scheduleReadDiagnostic()
+        },
         // —— 元 ——
         // 单次实验会自动结束并导出；日志与截图用于区分窗口、时序、触发规则和截图限制。
         DebugAction("payment-diagnostic-start", "开始支付采集诊断（2 分钟）", "支付诊断") { app -> app.startPaymentDiagnostics() },

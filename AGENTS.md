@@ -70,7 +70,10 @@ UI、Receiver、Service 不直接写 DAO。同步失败不回滚本地入库。W
 
 ## 通知边界
 
-- 业务层不直接调用 `NotificationManager.notify()` 或构建 `NotificationCompat.Builder`；普通通知走 `NotificationApi → NotificationOrchestrator → platform/notification`。
+- 所有新增业务通知统一走新链路：`NotificationApi → NotificationOrchestrator → AndroidNormalNotificationPublisher / CapsuleDispatcher`。业务层只提交 `NotificationRequest` 与纯数据，不直接调用 `NotificationManager.notify()`、构建 `NotificationCompat.Builder`，也不接入旧通知快捷发布入口。
+- 新增通知先登记 `NotificationKindCatalog` 及对应 Policy；由 Policy 按实况通知开关选择 `NORMAL` / `LIVE`，在 `NotificationOrchestrator` 中接入真实发布分流。独立通知不能落入旧日程的 `SUPPRESSED_CAPSULE` 门控；置为 `READY` 不代表已发布，不能假设日程胶囊会替它展示。
+- 普通与实况共用 `NotificationDisplaySnapshot` 等展示、点击和动作数据；普通发布器渲染快照，实况模板转换为 `CapsuleDisplayModel` 并交 `CapsuleDispatcher` 发布。新增通知须同时适配两种模板，并覆盖开关两种状态、点击目标及取消生命周期；剪贴板确认可参考 `ClipboardCodePromptDeliveryPolicy` 和 `ClipboardCodePromptDisplay`。
+- 只有 `NotificationResult.Success.state == NotificationState.POSTED` 才能记为“已发布”；`create()` 的成功、`READY` 或被抑制均不能当作投递成功，日志记录实际状态、路由和失败原因。
 - 单次、重复、错过补发日程提醒走 `feature/schedule/notification/ScheduleNotificationBridge`。旧 `NotificationScheduler` 仅承担胶囊闹钟等遗留职责，不用于新增普通提醒。
 - `CapsuleStateManager` 计算状态，发布交 `platform/capsule/CapsuleDispatcher`；小米超级岛的 Xposed/SystemUI 跨进程传输是平台例外。
 - 展示模板 `shared/management/resource/notification/display/` 不引入 NotificationManager、Compat、Builder、PendingIntent、Repository、Room 或业务编排器。
@@ -97,6 +100,5 @@ UI、Receiver、Service 不直接写 DAO。同步失败不回滚本地入库。W
 - 纯文档改动检查路径、链接及 `git diff --check`，不为此打包 APK。
 - 构建以日志 `BUILD SUCCESSFUL` 为准，不依赖后台任务提示。区分编译/单测通过与真机验证通过。
 - 当前用户自行打 Release 验证；不要主动执行 `assembleNativeDebug` 或安装应用。需要打包时依用户当次指令选择 variant。
-- 当前没有可用测试机。以后获准装机也仅使用 `adb -s 36e06fca`，绝不安装到主力机 `3B162U0051H00000`。
-- `NotificationAlarmReceiver` 非导出，获准使用测试机后可通过 root 广播执行 `debug:<id>`；动作定义见 `DebugActionRegistry`，日志看 `WillDoNotify`。
+- 开发者调试动作定义见 `DebugActionRegistry`；通知链路日志看 `WillDoNotify`。
 - 不自行提交或推送。保留已有未提交改动，完成后报告实际检查结果及尚未真机验证的范围。

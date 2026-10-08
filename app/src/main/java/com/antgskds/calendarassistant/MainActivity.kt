@@ -365,6 +365,19 @@ class MainActivity : ComponentActivity() {
                 val showClipboardPrompt = clipboardPrompt != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt
                 val showClipboardPromptGlobally = showClipboardPrompt && !showClipboardPromptOnMaterialHome
                 val homeClipboardPrompt = clipboardPrompt.takeIf { showClipboardPrompt && showClipboardPromptOnMaterialHome }
+                LaunchedEffect(clipboardPrompt?.traceId, showClipboardPrompt, showClipboardPromptOnMaterialHome) {
+                    clipboardPrompt?.let { prompt ->
+                        app.clipboardCodeCenter.recordPromptPresentation(
+                            traceId = prompt.traceId,
+                            requested = showClipboardPrompt,
+                            placement = when {
+                                !showClipboardPrompt -> "blocked_by_other_prompt"
+                                showClipboardPromptOnMaterialHome -> "home_inline"
+                                else -> "global_dialog"
+                            },
+                        )
+                    }
+                }
                 val showPromptDialog = promptUpdateDialogState != null && !showCrashDialog && !showCleanupDialog && !showLocalModelResiduePrompt && !showClipboardPrompt
 
                 val handleCrashDismiss = {
@@ -561,6 +574,9 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalHapticFeedback provides
+                            com.antgskds.calendarassistant.shared.ui.interaction.rememberAppSystemHapticFeedback(settings.hapticFeedbackEnabled),
+                        com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled,
                         LocalAppBackgroundWallpaperBitmap provides appBackgroundBitmap,
                         LocalAppBackgroundRootSize provides appBackgroundRootSize,
                         LocalAppBackgroundAverageLuminance provides settings.appBackgroundAverageLuminance,
@@ -939,10 +955,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        (application as App).clipboardCodeCenter.recordActivityVisibility(true)
         (application as App).webDavForegroundSyncV2Center.start()
     }
 
     override fun onStop() {
+        (application as App).clipboardCodeCenter.recordActivityVisibility(false)
         (application as App).reminderWindowStore.setForeground(false)
         (application as App).webDavForegroundSyncV2Center.stop()
         super.onStop()
@@ -963,8 +981,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        val clipboardCoordinator = (application as App).clipboardCodeCenter
+        clipboardCoordinator.recordWindowFocus(hasFocus)
         if (hasFocus) {
-            (application as App).clipboardCodeCenter.checkClipboardForPrompt("window_focus")
+            clipboardCoordinator.checkClipboardForPrompt("window_focus")
         }
     }
 

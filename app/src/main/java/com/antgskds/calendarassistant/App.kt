@@ -357,7 +357,8 @@ class App : Application() {
             appContext = applicationContext,
             settingsQueryApi = settingsQueryApi,
             ingestCommandApi = ingestCommandApi,
-            appScope = appScope
+            appScope = appScope,
+            notificationApi = notificationCenter,
         )
     }
 
@@ -473,6 +474,20 @@ class App : Application() {
         )
     }
 
+    /** 分享接收页立即返回；保存不随接收页旋转或离开而取消。 */
+    fun saveSharedTextToQuickMemo(text: String) {
+        appScope.launch {
+            val message = try {
+                quickMemoCenter.createTextMemo(text, source = com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource.TEXT_SHARE)
+                "已保存到随口记"
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { "保存失败，请重新分享" }
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(applicationContext, message, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     /** 开发者诊断只调用公开入口，不直接访问无障碍服务内部状态。 */
     suspend fun startPaymentDiagnostics() = kotlinx.coroutines.withContext(Dispatchers.Main) {
         val service = com.antgskds.calendarassistant.platform.accessibility.TextAccessibilityService.instance
@@ -568,6 +583,7 @@ class App : Application() {
         scheduleCenter.refreshEvents()
         noteCenter.start()
         quickMemoCenter.start()
+        clipboardCodeCenter.start()
         AppLogger.i(TAG, "schedule events refreshed count=${scheduleCenter.events.value.size}")
         scheduleCenter.onScheduleChanged = {
             widgetCenter.requestRefresh(com.antgskds.calendarassistant.platform.widget.WidgetType.SCHEDULE)

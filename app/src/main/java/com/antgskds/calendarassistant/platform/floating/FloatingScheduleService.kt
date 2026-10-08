@@ -572,7 +572,11 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         onLoadingChange = { _ -> }
                     )
                     }
-                    floatingContent()
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalHapticFeedback provides
+                            com.antgskds.calendarassistant.shared.ui.interaction.rememberAppSystemHapticFeedback(settings.hapticFeedbackEnabled),
+                        com.antgskds.calendarassistant.shared.ui.interaction.LocalAppHapticsEnabled provides settings.hapticFeedbackEnabled
+                    ) { floatingContent() }
                 }
             }
         }
@@ -1255,6 +1259,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     private fun performServiceHaptic() {
+        if (!settingsQueryApi.settings.value.hapticFeedbackEnabled) return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager

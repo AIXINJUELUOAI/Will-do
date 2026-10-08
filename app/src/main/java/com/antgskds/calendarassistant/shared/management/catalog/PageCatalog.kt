@@ -79,7 +79,7 @@ object PageCatalog {
         PageEntry(SettingsDestination.Logout, null, "退出应用", PageVisibility.ACTION, "退出登录/应用（不导航）"),
 
         // —— 实验室 / 开发者 ——
-        PageEntry(SettingsDestination.Laboratory, "settings_laboratory", "实验室", PageVisibility.USER, "实验性功能开关与开发者选项入口"),
+        PageEntry(SettingsDestination.Laboratory, "settings_laboratory", "实验室", PageVisibility.USER, "实验性功能开关、Root 优先的特权授权申请与开发者选项入口"),
         PageEntry(SettingsDestination.Developer, "settings_developer", "开发者", PageVisibility.DEVELOPER, "测试中心：列表排序开关 + DebugActionRegistry 调试动作（从实验室进入）"),
         PageEntry(SettingsDestination.ConfigEditor, "settings_config_editor", "配置编辑", PageVisibility.DEVELOPER, "由 ConfigCatalog 驱动的底层配置编辑（从开发者页进入）"),
         PageEntry(SettingsDestination.OnboardingGuide, "settings_onboarding_guide", "初始化引导", PageVisibility.DEVELOPER, "首次启动引导页调试入口：权限与一级功能开关体检"),

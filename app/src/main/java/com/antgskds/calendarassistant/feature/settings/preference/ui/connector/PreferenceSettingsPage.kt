@@ -455,6 +455,15 @@ fun MaterialPreferenceSettingsScreen(
                     )
                     AppSettingsDivider()
                 }
+                SwitchSettingItem(
+                    title = "记住日历视图",
+                    subtitle = "下次打开恢复上次选择的视图，不记忆日期",
+                    checked = settings.rememberCalendarViewMode,
+                    onCheckedChange = controller::setRememberCalendarViewMode,
+                    cardTitleStyle = cardTitleStyle,
+                    cardSubtitleStyle = cardSubtitleStyle,
+                )
+                AppSettingsDivider()
                 if (itemVisibility.showBottomBarEditor) {
                     ActionSettingItem(
                         title = "底栏编辑",

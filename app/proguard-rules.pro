@@ -37,6 +37,9 @@
 # Xposed API is compileOnly and provided by the framework at runtime.
 -dontwarn de.robv.android.xposed.**
 
+# app_process loads this entry by its class name from the installed APK.
+-keep class com.antgskds.calendarassistant.platform.clipboard.PrivilegedClipboardProcess** { *; }
+
 # Shizuku binder interfaces are used through AIDL/proxy calls.
 -keep class moe.shizuku.server.** { *; }
 -keep class rikka.shizuku.** { *; }

@@ -163,10 +163,11 @@ class QuickMemoFacade(
         repository.getRemindersForMemo(memoId)
     }
 
-    suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false): Long = withContext(Dispatchers.IO) {
+    suspend fun createTextMemo(bodyText: String, asTodo: Boolean = false,
+        source: com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource = com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoCreationSource.NORMAL): Long = withContext(Dispatchers.IO) {
         val id = repository.createTextMemo(bodyText, asTodo)
         val cleanText = bodyText.trim()
-        if (cleanText.isNotBlank()) {
+        if (cleanText.isNotBlank() && source.analyzeSuggestions) {
             notifyBraceletQuickMemoResult(id, cleanText)
             analyzeTextForSuggestions(id, cleanText)
         }

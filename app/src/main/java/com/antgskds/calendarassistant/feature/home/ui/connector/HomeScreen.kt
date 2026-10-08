@@ -184,8 +184,6 @@ fun HomeScreen(
     var scheduleProgress by remember { mutableFloatStateOf(0f) }
     var scheduleOffsetPx by remember { mutableFloatStateOf(0f) }
     var isActionExpanded by remember { mutableStateOf(false) }
-    var searchRequestId by remember { mutableIntStateOf(0) }
-    var imageRequestId by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(useNavigationRail) {
         if (useNavigationRail) isSidebarOpen = false
@@ -207,6 +205,8 @@ fun HomeScreen(
     }
 
     val effectiveSelectedPageKey = if (selectedPageKey in homeBottomItems) selectedPageKey else homeStartPageKey
+    var searchRequestId by remember(effectiveSelectedPageKey) { mutableIntStateOf(0) }
+    var imageRequestId by remember(effectiveSelectedPageKey) { mutableIntStateOf(0) }
 
     LaunchedEffect(settings.homeBottomItems, settings.homeStartPageKey, storedHomeBottomItems) {
         val storedStartPage = sanitizeHomeStartPageKey(settings.homeStartPageKey, storedHomeBottomItems)
@@ -666,6 +666,9 @@ fun HomeScreen(
                 onActionExpandedChange = { isActionExpanded = it },
                 searchRequestId = searchRequestId,
                 imageRequestId = imageRequestId,
+                onSearchRequestHandled = { id -> if (searchRequestId == id) searchRequestId = 0 },
+                onImageRequestHandled = { id -> if (imageRequestId == id) imageRequestId = 0 },
+                onRememberCalendarViewMode = settingsViewModel::setHomeCalendarViewMode,
                 isSidebarOpen = !useNavigationRail && isSidebarOpen,
                 isWideNavigation = useNavigationRail,
                 isTwoPane = adaptiveLayoutInfo.useTwoPaneContent,

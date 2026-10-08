@@ -33,6 +33,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,7 +54,10 @@ import com.antgskds.calendarassistant.app.ui.state.MainViewModel
 import com.antgskds.calendarassistant.app.ui.state.SettingsViewModel
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiAction
 import com.antgskds.calendarassistant.feature.settings.laboratory.ui.contract.LaboratoryUiState
+import com.antgskds.calendarassistant.shared.util.PrivilegeManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun LaboratoryPage(
@@ -115,6 +120,9 @@ fun MaterialLaboratoryScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val privilegeType by PrivilegeManager.privilegeTypeFlow.collectAsState()
+    var requestingPrivilege by remember { mutableStateOf(false) }
     val permissionGate = rememberPermissionGate(snackbarHostState)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -142,7 +150,10 @@ fun MaterialLaboratoryScreen(
 
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) permissionGate.resumePending()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionGate.resumePending()
+                PrivilegeManager.refreshPrivilege()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -173,6 +184,51 @@ fun MaterialLaboratoryScreen(
                     }
                 },
             )
+
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    ActionSettingItem(
+                        title = "申请权限",
+                        subtitle = "优先申请 Root 权限，无 Root 时申请 Shizuku 权限",
+                        value = if (requestingPrivilege) "申请中…" else when (privilegeType) {
+                            PrivilegeManager.PrivilegeType.ROOT -> "Root 已授权"
+                            PrivilegeManager.PrivilegeType.SHIZUKU -> "Shizuku 已授权"
+                            PrivilegeManager.PrivilegeType.NONE -> "未授权"
+                        },
+                        enabled = !requestingPrivilege,
+                        onClick = {
+                            if (!requestingPrivilege) {
+                                requestingPrivilege = true
+                                scope.launch {
+                                    val message = try {
+                                        when (PrivilegeManager.requestPreferredAccess(context)) {
+                                            PrivilegeManager.AccessRequestResult.ROOT_GRANTED -> "Root 权限已授权"
+                                            PrivilegeManager.AccessRequestResult.ROOT_DENIED -> "Root 未授权，请在 Root 管理器中允许 Will do"
+                                            PrivilegeManager.AccessRequestResult.SHIZUKU_GRANTED -> "Shizuku 权限已授权"
+                                            PrivilegeManager.AccessRequestResult.SHIZUKU_DENIED -> "Shizuku 未授权，请在授权弹窗中允许 Will do"
+                                            PrivilegeManager.AccessRequestResult.SHIZUKU_UNAVAILABLE -> "未连接到 Shizuku 服务，请先启动 Shizuku 或 Stellar"
+                                        }
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        "申请权限失败：${e.message ?: "请检查权限管理器"}"
+                                    } finally {
+                                        requestingPrivilege = false
+                                    }
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            }
+                        },
+                        cardTitleStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                        cardSubtitleStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                        cardValueStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
         }
@@ -226,7 +282,7 @@ fun LaboratorySettingsContent(
 
             if (itemVisibility.showClipboardRecognition) LaboratorySwitchCard(
                 title = "剪贴板取件类识别（Beta）",
-                subtitle = "打开 WillDo 时检查剪贴板中的取件码、取餐码、取票码和寄件码，命中后询问是否创建日程",
+                subtitle = "检查取件码、取餐码、取票码和寄件码；授权 Root 或 Shizuku 后可在后台监听复制，命中后提醒确认创建日程",
                 checked = settings.clipboardCodeRecognitionEnabled,
                 onCheckedChange = { enabled ->
                     onAction(LaboratoryUiAction.SetClipboardRecognition(enabled))

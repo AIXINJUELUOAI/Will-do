@@ -135,6 +135,24 @@
             android:taskAffinity=""
             android:exported="false" />
 
+        <activity android:name=".platform.entry.text.TextShareQuickMemoActivity"
+            android:theme="@style/Theme.CalendarAssistant.ShareRelay"
+            android:label="@string/share_target_create_text_memo"
+            android:icon="@drawable/ic_share_image_memo"
+            android:exported="true" android:excludeFromRecents="true"
+            android:noHistory="true" android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- 系统图片分享入口：由 activity-alias 暴露 Sharesheet 目标，入口内不再弹二级菜单 -->
         <activity
             android:name=".core.service.image.ImageShareHandleActivity"

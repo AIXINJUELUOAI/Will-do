@@ -51,6 +51,9 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("剪贴板确认通知投递", Chain.NOTIFICATION, "feature/notification/policy/ClipboardCodePromptDeliveryPolicy", Maturity.ACTIVE, "新通知链路按实况开关真实发布 NORMAL/LIVE；独立候选不进入日程旧抑制门控，只有 POSTED 表示发布完成"),
+        PolicyEntry("日历视图恢复", Chain.SCHEDULE, "feature/home/domain/HomeCalendarViewPolicy", Maturity.ACTIVE, "按布局与课表开关安全解析持久偏好，临时回退不写偏好"),
+        PolicyEntry("随口记创建来源", Chain.INGEST, "feature/quickmemo/domain/QuickMemoCreationSource", Maturity.ACTIVE, "普通入口保持候选分析；文字分享只保存，不自动调用识别"),
         PolicyEntry("提醒登记窗口", Chain.NOTIFICATION, "feature/notification/policy/ReminderWindowPolicy", Maturity.ACTIVE, "按实际触发时刻限制七个自然日；只允许前台登记和已有窗口恢复；胶囊模式省去普通闹钟但保留手环；随口记预展开窗口内重复提醒"),
         PolicyEntry("记账任务通知分流", Chain.NOTIFICATION, "feature/notification/policy/AccountingRecognitionNotificationPolicy", Maturity.ACTIVE, "独立记账任务在触发时按实况开关选择 NORMAL/LIVE，绕过日程旧抑制门控；进度持续到任务结束，结果沿用结果通知时长"),
         PolicyEntry("自动记账截图粗检", Chain.RECOGNITION, "feature/accounting/domain/AccountingScreenshotPolicy", Maturity.ACTIVE, "排除系统栏后拒绝黑屏或近似纯色图；归属由截图前后页面检查，账单内容由统一多模态确认"),

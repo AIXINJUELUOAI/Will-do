@@ -15,4 +15,5 @@
     <string name="shortcut_disabled">无障碍服务未开启</string>
     <string name="share_target_recognize_schedule">识别信息</string>
     <string name="share_target_create_image_memo">创建图片随口记</string>
+    <string name="share_target_create_text_memo">保存到 Will do 随口记</string>
 </resources>

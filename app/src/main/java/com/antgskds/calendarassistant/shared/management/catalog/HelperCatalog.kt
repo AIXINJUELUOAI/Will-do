@@ -44,6 +44,11 @@ object HelperCatalog {
     )
 
     val helpers: List<HelperEntry> = listOf(
+        HelperEntry("剪贴板确认通知展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/ClipboardCodePromptDisplay", "只接收候选类型名称生成普通快照与实况模板；仅展示识别状态和确认提示，默认点击首页，不携带正文或取件码"),
+        HelperEntry("特权剪贴板进程协议", Chain.RECOGNITION, "platform/clipboard/ClipboardProcessProtocol", "解析进程私有管道中的限量 JSON，验证真实 UID、事件类型和文本大小；正文只用于规则匹配，不输出日志"),
+        HelperEntry("剪贴板流程诊断", Chain.RECOGNITION, "feature/recognition/ingest/clipboard/ClipboardCodeIngestCoordinator", "状态日志关联焦点、读取、匹配、去重、确认与入库；开发者可延迟一次只读诊断，复用应用日志，不记录正文、内容指纹或取件码，记录真实特权读取身份与监听状态"),
+        HelperEntry("特权授权申请", Chain.SUPPORT, "shared/util/PrivilegeManager", "实验室申请权限入口复用现有授权工具；点击时检测 Root 环境，优先申请 Root，无 Root 才申请 Shizuku，拒绝不自动切换授权渠道"),
+        HelperEntry("全局交互触感", Chain.SUPPORT, "shared/ui/interaction/AppHaptics", "共用开关约束显式触感和 Compose 内置长按反馈；主界面与悬浮窗口根分别注入"),
         HelperEntry("悬浮文本拖拽坐标", Chain.SUPPORT, "platform/floating/ui/render/material/FloatingTextDragGesture", "单次手势从实际拖动事件换算窗口坐标，消除入场与缩放动画对热区判定的影响；日程与随口记共用，不持久化"),
         HelperEntry("离线语音转写", Chain.RECOGNITION, "feature/quickmemo/data/asr/SherpaSpeechTranscriber", "完整 Qwen3-ASR 0.6B int8 替换后清理原 Paraformer；共用音频解码，串行推理，不固定语言"),
         HelperEntry("Qwen 语音模型导入", Chain.SUPPORT, "feature/quickmemo/data/asr/QwenAsrModelFiles", "六个文件按白名单验证，完整校验替换成功后清理旧模型；失败保留旧模型，已有 Qwen 在转写前补清理；缓存随文件版本失效"),

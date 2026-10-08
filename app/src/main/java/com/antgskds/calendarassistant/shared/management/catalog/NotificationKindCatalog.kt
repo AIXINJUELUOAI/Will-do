@@ -45,6 +45,7 @@ object NotificationKindCatalog {
 
     // 图片挂起走 CapsuleStateManager → CapsuleDispatcher，独立实况类型 CapsuleType.IMAGE_PIN（13），不创建普通 NotificationKind。
     val kinds: List<KindEntry> = listOf(
+        KindEntry(NotificationKind.CLIPBOARD_CODE_PROMPT, "剪贴板取件类确认", TypicalRoute.EITHER, "特权后台复制命中后经新通知链路按实况开关发布普通/胶囊；共用展示数据，点击打开应用确认，不自动入库、不展示剪贴板正文"),
         KindEntry(NotificationKind.QUICK_MEMO_REMINDER, "随口记提醒", TypicalRoute.EITHER, "随口记到期经 NotificationApi 按胶囊开关分流；独立 QUICK_MEMO_REMINDER 胶囊不覆盖手动挂起，成功发布后推进提醒"),
         KindEntry(NotificationKind.SCHEDULE_REMINDER, "日程提醒", TypicalRoute.EITHER, "日程到点/提前提醒；普通提醒走普通通知，开启胶囊时走实况胶囊"),
         KindEntry(NotificationKind.RECOGNITION_STATUS, "识别状态", TypicalRoute.EITHER, "AI 识别进行中、成功、失败的反馈；自动记账每个任务独立更新，按实况开关分流普通/胶囊"),

@@ -61,6 +61,19 @@ class SettingsViewModel(
     private val webDavConnectionCenter: WebDavConnectionCoordinator,
     private val webDavSyncV2Center: WebDavSyncV2Coordinator,
 ) : ViewModel() {
+    fun setRememberCalendarViewMode(enabled: Boolean) {
+        val current = settingsQueryApi.settings.value
+        if (current.rememberCalendarViewMode != enabled) settingsOperationApi.updateSettings(current.copy(rememberCalendarViewMode = enabled))
+    }
+
+    fun setHomeCalendarViewMode(name: String) {
+        val current = settingsQueryApi.settings.value
+        val normalized = com.antgskds.calendarassistant.feature.home.domain.HomeCalendarViewPolicy.normalize(name)
+        if (current.rememberCalendarViewMode && current.homeCalendarViewMode != normalized) {
+            settingsOperationApi.updateSettings(current.copy(homeCalendarViewMode = normalized))
+        }
+    }
+
     private val backgroundImageStore = AppBackgroundImageStore(appContext)
 
     // 直接观察 QueryApi 的数据源

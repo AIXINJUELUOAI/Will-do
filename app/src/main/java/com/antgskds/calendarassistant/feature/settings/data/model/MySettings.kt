@@ -174,6 +174,8 @@ data class MySettings(
     // 首页入口配置（第 2~4 位，第一位固定侧边栏）
     val homeBottomItems: List<String> = listOf(HomeEntryKey.TODAY, HomeEntryKey.ALL, HomeEntryKey.NOTE),
     val homeStartPageKey: String = HomeEntryKey.TODAY,
+    val rememberCalendarViewMode: Boolean = com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.HOME_REMEMBER_CALENDAR_VIEW_DEFAULT,
+    val homeCalendarViewMode: String = "TODAY",
 
     // 【新增】归档配置
     val autoArchiveEnabled: Boolean = false, // 自动归档总开关

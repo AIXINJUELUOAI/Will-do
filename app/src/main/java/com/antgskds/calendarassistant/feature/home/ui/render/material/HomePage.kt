@@ -156,6 +156,9 @@ fun MaterialHomePage(
     onActionExpandedChange: (Boolean) -> Unit = {},
     searchRequestId: Int = 0,
     imageRequestId: Int = 0,
+    onSearchRequestHandled: (Int) -> Unit = {},
+    onImageRequestHandled: (Int) -> Unit = {},
+    onRememberCalendarViewMode: (String) -> Unit = {},
     isSidebarOpen: Boolean = false,
     isWideNavigation: Boolean = false,
     isTwoPane: Boolean = false,
@@ -216,7 +219,17 @@ fun MaterialHomePage(
     var allSearchQuery by rememberSaveable { mutableStateOf("") }
     var noteSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
-    var calendarViewName by rememberSaveable { mutableStateOf(HomeCalendarViewMode.TODAY.name) }
+    var pickedCalendarViewName by rememberSaveable { mutableStateOf<String?>(null) }
+    val requestedCalendarViewName = pickedCalendarViewName ?: if (state.settings.rememberCalendarViewMode)
+        state.settings.homeCalendarViewMode else HomeCalendarViewMode.TODAY.name
+    val calendarViewName = com.antgskds.calendarassistant.feature.home.domain.HomeCalendarViewPolicy.resolve(
+        requestedCalendarViewName, isTwoPane,
+        com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(state.settings)
+    )
+    fun chooseCalendarView(mode: HomeCalendarViewMode) {
+        pickedCalendarViewName = mode.name
+        if (state.settings.rememberCalendarViewMode) onRememberCalendarViewMode(mode.name)
+    }
     var isCalendarViewMenuExpanded by remember { mutableStateOf(false) }
     var isWideActionMenuExpanded by remember { mutableStateOf(false) }
     val calendarViewMode = HomeCalendarViewMode.valueOf(calendarViewName)
@@ -234,13 +247,6 @@ fun MaterialHomePage(
         if (!isTodayPage) isCalendarViewMenuExpanded = false
     }
 
-    LaunchedEffect(isTwoPane) {
-        if (isTwoPane && calendarViewMode !in HomeCalendarViewMode.wideModes) {
-            calendarViewName = HomeCalendarViewMode.WEEK.name
-        } else if (!isTwoPane && calendarViewMode !in HomeCalendarViewMode.phoneModes) {
-            calendarViewName = HomeCalendarViewMode.TODAY.name
-        }
-    }
 
     var isImageImporting by remember { mutableStateOf(false) }
     var imageImportJob by remember { mutableStateOf<Job?>(null) }
@@ -348,11 +354,6 @@ fun MaterialHomePage(
     val courseModuleEnabled = com.antgskds.calendarassistant.feature.schedule.domain.course.CourseFeaturePolicy.enabled(state.settings)
     val progress = if (courseModuleEnabled) (offsetY.value / maxOffsetPx).coerceIn(0f, 1f) else 0f
     LaunchedEffect(courseModuleEnabled) {
-        if (!courseModuleEnabled && calendarViewMode == HomeCalendarViewMode.COURSE) {
-            calendarViewName = HomeCalendarViewMode.WEEK.name
-        }
-    }
-    LaunchedEffect(courseModuleEnabled) {
         if (!courseModuleEnabled && offsetY.value != 0f) {
             offsetY.snapTo(0f)
         }
@@ -366,7 +367,7 @@ fun MaterialHomePage(
             lastHandledOpenCourseRequestId = openCourseRequestId
             if (!courseModuleEnabled) return@LaunchedEffect
             if (isTwoPane) {
-                calendarViewName = HomeCalendarViewMode.COURSE.name
+                pickedCalendarViewName = HomeCalendarViewMode.COURSE.name
                 return@LaunchedEffect
             }
             offsetY.animateTo(
@@ -470,12 +471,14 @@ fun MaterialHomePage(
     LaunchedEffect(searchRequestId) {
         if (searchRequestId > 0) {
             isSearchMode = true
+            onSearchRequestHandled(searchRequestId)
         }
     }
 
     LaunchedEffect(imageRequestId) {
-        if (imageRequestId > 0 && !isImageImporting) {
-            imagePickerLauncher.launch("image/*")
+        if (imageRequestId > 0) {
+            if (!isImageImporting) imagePickerLauncher.launch("image/*")
+            onImageRequestHandled(imageRequestId)
         }
     }
 
@@ -630,7 +633,7 @@ fun MaterialHomePage(
                                 onWideActionMenuExpandedChange = { isWideActionMenuExpanded = it },
                                 onCycleCalendarMode = {
                                     haptics.selection()
-                                    calendarViewName = calendarViewMode.next(isTwoPane).name
+                                    chooseCalendarView(calendarViewMode.next(isTwoPane, courseModuleEnabled))
                                 },
                                 onOpenCalendarModeMenu = {
                                     haptics.longPress()
@@ -640,7 +643,7 @@ fun MaterialHomePage(
                                 onDismissCalendarModeMenu = { isCalendarViewMenuExpanded = false },
                                 onSelectCalendarMode = { mode ->
                                     haptics.selection()
-                                    calendarViewName = mode.name
+                                    chooseCalendarView(mode)
                                 },
                                 menuContainerColor = calendarMenuContainerColor,
                                 menuSelectionColor = calendarMenuSelectionColor,
@@ -759,7 +762,7 @@ fun MaterialHomePage(
                             onEditItem = onEditItem,
                             onRequestDeleteItem = onRequestDeleteItem,
                             scheduleContent = scheduleContent,
-                            onCalendarViewModeChange = { mode -> calendarViewName = mode.name },
+                            onCalendarViewModeChange = { mode -> chooseCalendarView(mode) },
                         )
                     } else if (animatedIsAllPage) {
                         if (isTwoPane) {
@@ -775,7 +778,7 @@ fun MaterialHomePage(
                                     HomeWideCalendarWorkspace(
                                         state = state,
                                         viewMode = calendarViewMode,
-                                        onViewModeChange = { mode -> calendarViewName = mode.name },
+                                        onViewModeChange = { mode -> chooseCalendarView(mode) },
                                         onSelectDate = { date ->
                                             haptics.selection()
                                             onAction(HomePageUiAction.SelectDate(date))
@@ -1455,8 +1458,8 @@ internal enum class HomeCalendarViewMode {
     AGENDA,
     COURSE;
 
-    fun next(twoPane: Boolean): HomeCalendarViewMode {
-        val modes = if (twoPane) wideModes else phoneModes
+    fun next(twoPane: Boolean, courseEnabled: Boolean): HomeCalendarViewMode {
+        val modes = if (twoPane) wideModes.filter { it != COURSE || courseEnabled } else phoneModes
         return modes[(modes.indexOf(this).takeIf { it >= 0 } ?: 0).let { (it + 1) % modes.size }]
     }
 

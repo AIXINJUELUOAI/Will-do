@@ -8,6 +8,7 @@ class PreferenceUiControllerAdapter(private val viewModel: SettingsViewModel) : 
     override val syncStatus = viewModel.syncStatus
     override val availableSyncCalendars = viewModel.availableSyncCalendars
 
+    override fun setRememberCalendarViewMode(enabled: Boolean) = viewModel.setRememberCalendarViewMode(enabled)
     override fun refreshSyncStatus() = viewModel.refreshSyncStatus()
     override fun updateAccountingMessages(enabled: Boolean) = viewModel.updateAccountingMessages(enabled)
     override fun updateAutomaticAccounting(enabled: Boolean) = viewModel.updateAutomaticAccounting(enabled)

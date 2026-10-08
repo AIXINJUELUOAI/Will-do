@@ -10,6 +10,7 @@ interface PreferenceUiController {
     val syncStatus: StateFlow<CalendarSyncManager.SyncStatus>
     val availableSyncCalendars: StateFlow<List<CalendarManager.CalendarInfo>>
 
+    fun setRememberCalendarViewMode(enabled: Boolean)
     fun refreshSyncStatus()
     fun updateAccountingMessages(enabled: Boolean)
     fun updateAutomaticAccounting(enabled: Boolean)
