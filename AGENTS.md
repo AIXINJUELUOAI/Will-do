@@ -66,7 +66,7 @@ UI、Receiver、Service 不直接写 DAO。同步失败不回滚本地入库。W
 - 通知与短信共用一个默认关闭子开关，只有自动记账开启、通知使用权与 `READ_SMS` / `RECEIVE_SMS` 全部满足才运行。权限申请先通知使用权，再短信；取消保持关闭。原取件短信开关独立。
 - 通知与短信只显示结果，不显示识别进度；规则未命中静默跳过。开发者规则编辑与运行时必须使用同一配置。
 - 复用现有账单去重。疑似重复暂存并提示，可由用户“仍然计入”；不要按测试金额或商家硬编码。
-- 新识别来源通过统一入库和反馈链路，截图附件与账单关联存储。具体测试范围见 [自动记账验证](docs/automatic-accounting-testing.md) 和 [通知与短信规则](docs/accounting-message-rules.md)。
+- 新识别来源通过统一入库和反馈链路，截图附件与账单关联存储。具体测试范围见 `docs/automatic-accounting-testing.md` 和 `docs/accounting-message-rules.md`（本地开发文档，不随仓库公开）。
 
 ## 通知边界
 

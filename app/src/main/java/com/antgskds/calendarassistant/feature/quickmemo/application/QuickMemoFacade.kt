@@ -252,6 +252,14 @@ class QuickMemoFacade(
         }
     }
 
+    suspend fun updateContent(id: Long, title: String, bodyText: String) = withContext(Dispatchers.IO) {
+        repository.updateContent(id, title, bodyText)
+        val memo = repository.getQuickMemo(id) ?: return@withContext
+        if (activeTextQuickMemoId() == id) {
+            refreshPinnedTextQuickMemo(memo)
+        }
+    }
+
     suspend fun attachImageToMemo(id: Long, imagePath: String) = withContext(Dispatchers.IO) {
         repository.attachImage(id, imagePath)
     }
@@ -497,7 +505,7 @@ class QuickMemoFacade(
                 } else {
                     val startedAt = System.currentTimeMillis()
                     QuickMemoTranscriptionService.enqueue(context, id, audioPath, autoPin)
-                    Log.i(TAG, "ASR service enqueued memoId=$id audioPath=$audioPath autoPin=$autoPin")
+                    Log.i(TAG, "ASR service enqueued memoId=$id autoPin=$autoPin")
                     launchTranscriptionWatchdog(id, audioPath, startedAt)
                 }
             } catch (e: Exception) {
@@ -539,7 +547,7 @@ class QuickMemoFacade(
                             restartForNewAudio = true
                             return@launch
                         }
-                        Log.w(TAG, "语音转写失败: ${result.message}")
+                        Log.w(TAG, "voice transcription failed")
                         clearAutoPinAfterTranscription(id)
                         repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     }
@@ -581,7 +589,7 @@ class QuickMemoFacade(
                 }
                 is TranscriptionResult.Failure -> {
                     if (!isCurrentAudioPath(id, audioPath)) return
-                    Log.w(TAG, "璇煶杞啓澶辫触: ${result.message}")
+                    Log.w(TAG, "voice transcription failed")
                     repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     onExternalTranscriptionFailed(id)
                 }
@@ -610,7 +618,7 @@ class QuickMemoFacade(
                     repository.updateTranscriptionStatus(id, QuickMemoTranscriptionStatus.FAILED)
                     notifyBraceletQuickMemoFailed(id)
                     val after = repository.getQuickMemo(id)
-                    Log.w(TAG, "ASR watchdog status after mark memoId=$id status=${after?.transcriptionStatus} audio=${after?.audioPath}")
+                    Log.w(TAG, "ASR watchdog status after mark memoId=$id status=${after?.transcriptionStatus} has_audio=${!after?.audioPath.isNullOrBlank()}")
                     finishTranscription(id)
                     return@launch
                 }
@@ -761,7 +769,7 @@ class QuickMemoFacade(
                         repository.updateAnalysisStatus(id, QuickMemoAnalysisStatus.SUCCESS)
                     }
                     is AnalysisResult.Failure -> {
-                        Log.w(TAG, "随口记日程候选分析失败: ${result.failure.fullMessage()}")
+                        Log.w(TAG, "随口记日程候选分析失败 code=${result.failure.errorCode} retryable=${result.failure.retryable}")
                         repository.updateAnalysisStatus(id, QuickMemoAnalysisStatus.FAILED)
                     }
                 }

@@ -66,8 +66,8 @@ class CapsuleDispatcher(
         val accounting = com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.owns(payload.key)
         val linkSummary = com.antgskds.calendarassistant.feature.notification.policy.LinkSummaryNotificationPolicy.owns(payload.key)
         val clipboard = com.antgskds.calendarassistant.feature.notification.policy.ClipboardCodePromptDeliveryPolicy.owns(payload.key)
-        // 确认提示持续到用户处理或候选被替换，普通通知和胶囊共用该生命周期。
-        val duration = if (linkSummary) payload.behavior.timeoutAfterMillis else if (clipboard) null else if (accounting) {
+        // 各通知携带自身时长；无时长的码类确认保持到处理或替换。
+        val duration = if (linkSummary || clipboard) payload.behavior.timeoutAfterMillis else if (accounting) {
             if (payload.behavior.ongoing) null else payload.behavior.timeoutAfterMillis
                 ?: com.antgskds.calendarassistant.feature.notification.policy.AccountingRecognitionNotificationPolicy.timeout(false, settings)
         } else QuickMemoCapsuleDurationPolicy.durationMillis(settings.defaultEventDurationMinutes)
@@ -86,7 +86,7 @@ class CapsuleDispatcher(
                 type = CapsuleType.OCR_RESULT, eventType = "clipboard_code_prompt",
                 title = display.primaryText, content = display.secondaryText.orEmpty(),
                 description = display.expandedText.orEmpty(), color = 0xFF4CAF50.toInt(),
-                startMillis = now, endMillis = Long.MAX_VALUE, display = display,
+                startMillis = now, endMillis = duration?.let { now + it } ?: Long.MAX_VALUE, display = display,
             )
         } else if (accounting) {
             val display = com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.AccountingRecognitionDisplay

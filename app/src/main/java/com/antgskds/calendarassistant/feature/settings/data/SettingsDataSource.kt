@@ -34,7 +34,7 @@ class SettingsDataSource(context: Context) {
             return try {
                 json.decodeFromString<MySettings>(jsonString)
             } catch (e: Exception) {
-                e.printStackTrace()
+                com.antgskds.calendarassistant.shared.util.AppLogger.e("SettingsDataSource", "settings operation failed", e)
                 MySettings() // 解析失败，返回默认
             }
         }
@@ -76,7 +76,7 @@ class SettingsDataSource(context: Context) {
                 )
                 .commit()
         } catch (e: Exception) {
-            e.printStackTrace()
+            com.antgskds.calendarassistant.shared.util.AppLogger.e("SettingsDataSource", "settings operation failed", e)
         }
     }
 

@@ -64,6 +64,9 @@ import com.antgskds.calendarassistant.shared.event.events.IngestSucceededEvent
 import com.antgskds.calendarassistant.shared.event.events.RecognitionFailedEvent
 import com.antgskds.calendarassistant.shared.query.SettingsQueryApi
 import com.antgskds.calendarassistant.feature.weather.api.WeatherQueryApi
+import com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository
+import com.antgskds.calendarassistant.feature.linkanalysis.domain.LinkSummaryPresentationPolicy
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoFloatingPresentationPolicy
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoEntity
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.QuickMemoTranscriptionStatus
 import com.antgskds.calendarassistant.feature.quickmemo.data.audio.QuickMemoAudioRecorder
@@ -376,6 +379,15 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                 val context = LocalContext.current
                 val weatherData by weatherQueryApi.weatherData.collectAsState()
                 val quickMemos by quickMemoCenter.quickMemos.collectAsState()
+                val linkAnalysisRecords by app.linkAnalysisApi.records.collectAsState()
+                val quickMemoSummaries = androidx.compose.runtime.remember(linkAnalysisRecords) {
+                    linkAnalysisRecords.mapNotNull { record ->
+                        LinkAnalysisRepository.summary(record)?.let { data ->
+                            LinkSummaryPresentationPolicy.present(data).markdown.takeIf(String::isNotBlank)
+                                ?.let { record.memoId to it }
+                        }
+                    }.toMap()
+                }
                 val currentVoiceCaptureState by voiceCaptureState.collectAsState()
                 val currentRecentVoiceMemoId by recentVoiceMemoId.collectAsState()
                 val currentRequestedInputMode by requestedInputMode.collectAsState()
@@ -451,6 +463,7 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                         } else FloatingScheduleRoute(
                         scheduleItems = scheduleItems,
                         quickMemos = quickMemos,
+                        quickMemoSummaries = quickMemoSummaries,
                         voiceCaptureState = currentVoiceCaptureState,
                         recentVoiceMemoId = currentRecentVoiceMemoId,
                         reverseScheduleOrder = settings.floatingListReverseOrder,
@@ -533,15 +546,22 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
                                 }
                             }
                         },
-                        onSaveQuickMemo = { memo, body, onComplete ->
+                        onSaveQuickMemo = { memo, title, body, onComplete ->
                             serviceScope.launch {
-                                try {
-                                    memo.id?.let { quickMemoCenter.updateBody(it, body) }
-                                } finally {
-                                    onComplete()
+                                val saved = try {
+                                    quickMemoCenter.updateContent(requireNotNull(memo.id), title, body)
+                                    true
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Quick memo save failed: ${e.javaClass.simpleName}")
+                                    Toast.makeText(applicationContext, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+                                    false
                                 }
+                                onComplete(saved)
                             }
                         },
+                        onOpenQuickMemoLink = { url -> openQuickMemoLink(url) },
                         onReorderQuickMemos = { ids ->
                             serviceScope.launch { quickMemoCenter.updateSortRanks(ids) }
                         },
@@ -1736,6 +1756,23 @@ class FloatingScheduleService : Service(), LifecycleOwner, SavedStateRegistryOwn
         } else {
             mediaRequest.value = request.copy(imagePaths = remaining.map { it.absolutePath })
         }
+    }
+
+    private fun openQuickMemoLink(url: String) {
+        val sourceUrl = QuickMemoFloatingPresentationPolicy.sourceUrl(url)
+        if (sourceUrl == null) {
+            Toast.makeText(applicationContext, "链接无效", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(sourceUrl).normalizeScheme())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Log.w(TAG, "Quick memo link open failed: ${e.javaClass.simpleName}")
+            Toast.makeText(applicationContext, "无法打开链接", Toast.LENGTH_SHORT).show()
+            return
+        }
+        requestClose()
     }
 
     private fun requestClose() {

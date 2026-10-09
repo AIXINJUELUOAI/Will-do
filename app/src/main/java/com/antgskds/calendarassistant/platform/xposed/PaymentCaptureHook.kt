@@ -1,7 +1,7 @@
 /*
  * Hook lifecycle and payment interception adapted from AutoAccounting 4e707980.
  * Copyright (C) 2023-2025 ankio (ankio@ankio.net).
- * See docs/third-party/autoaccounting/README.md and LICENSE for sources and integration changes.
+ * See 开发记录/第三方来源与许可说明.md and LICENSE for sources and integration changes.
  */
 package com.antgskds.calendarassistant.platform.xposed
 

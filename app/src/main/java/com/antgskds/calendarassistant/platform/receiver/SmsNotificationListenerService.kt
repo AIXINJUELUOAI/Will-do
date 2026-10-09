@@ -83,7 +83,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
                     Log.d(TAG, "当前通知监听组件未授权，跳过重新绑定")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "重新绑定失败: ${e.message}")
+                Log.e(TAG, "重新绑定失败: ${e.javaClass.simpleName}")
             }
         }
     }
@@ -106,7 +106,7 @@ class SmsNotificationListenerService : NotificationListenerService() {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "重连失败: ${e.message}")
+            Log.e(TAG, "重连失败: ${e.javaClass.simpleName}")
         }
     }
 

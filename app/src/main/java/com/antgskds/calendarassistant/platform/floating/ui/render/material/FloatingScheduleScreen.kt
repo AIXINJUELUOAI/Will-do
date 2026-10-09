@@ -75,6 +75,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import com.antgskds.calendarassistant.feature.note.ui.render.material.component.MarkdownText
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoFloatingPresentationPolicy
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ConfirmationNumber
@@ -217,6 +220,7 @@ fun MaterialFloatingScheduleScreen(
 ) {
     val scheduleItems = state.scheduleItems
     val quickMemos = state.quickMemos
+    val quickMemoSummaries = state.quickMemoSummaries
     val voiceCaptureState = state.voiceCaptureState
     val recentVoiceMemoId = state.recentVoiceMemoId
     val audioPlaybackState = state.audioPlaybackState
@@ -248,6 +252,7 @@ fun MaterialFloatingScheduleScreen(
     val onToggleQuickMemoTodo = actions.onToggleQuickMemoTodo
     val onDeleteQuickMemo = actions.onDeleteQuickMemo
     val onSaveQuickMemo = actions.onSaveQuickMemo
+    val onOpenQuickMemoLink = actions.onOpenQuickMemoLink
     val onReorderQuickMemos = actions.onReorderQuickMemos
     val onReorderScheduleItems = actions.onReorderScheduleItems
     val onStartPlainTextDrag = actions.onStartPlainTextDrag
@@ -380,6 +385,7 @@ fun MaterialFloatingScheduleScreen(
             TimeWheelList(
                 scheduleItems = if (scheduleFloatingEnabled) scheduleItems else emptyList(),
                 quickMemos = if (quickMemoFloatingEnabled) quickMemos else emptyList(),
+                quickMemoSummaries = quickMemoSummaries,
                 audioPlaybackState = audioPlaybackState,
                 weatherData = if (scheduleFloatingEnabled) weatherData else null,
                 weatherForecastRange = weatherForecastRange,
@@ -400,6 +406,7 @@ fun MaterialFloatingScheduleScreen(
                     onDeleteQuickMemo(memo, onComplete)
                 },
                 onSaveQuickMemo = onSaveQuickMemo,
+                onOpenQuickMemoLink = onOpenQuickMemoLink,
                 onReorderQuickMemos = onReorderQuickMemos,
                 floatingScheduleOrderKeys = floatingScheduleOrderKeys,
                 onReorderScheduleItems = onReorderScheduleItems,
@@ -773,6 +780,7 @@ private fun FloatingRecentVoiceMemoInput(
 fun TimeWheelList(
     scheduleItems: List<ScheduleDisplayItem>,
     quickMemos: List<QuickMemoEntity> = emptyList(),
+    quickMemoSummaries: Map<Long, String> = emptyMap(),
     audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     weatherData: WeatherData? = null,
     weatherForecastRange: Int = 0,
@@ -788,7 +796,8 @@ fun TimeWheelList(
     onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, String, (Boolean) -> Unit) -> Unit = { _, _, _, onComplete -> onComplete(false) },
+    onOpenQuickMemoLink: (String) -> Unit = {},
     onReorderQuickMemos: (List<Long>) -> Unit = {},
     floatingScheduleOrderKeys: List<String> = emptyList(),
     onReorderScheduleItems: (List<String>) -> Unit = {},
@@ -1004,13 +1013,15 @@ fun TimeWheelList(
                     ) {
                         FloatingQuickMemoCard(
                             memo = memo,
+                            summary = memo.id?.let { quickMemoSummaries[it] },
                             audioPlaybackState = audioPlaybackState,
                             modifier = cardModifier,
                             onMarkTodo = { onMarkQuickMemoTodo(memo) },
                             onRemoveTodo = { onRemoveQuickMemoTodo(memo) },
                             onToggleTodo = { onToggleQuickMemoTodo(memo) },
                             onDelete = { onDeleteQuickMemo(memo) {} },
-                            onSave = { body -> onSaveQuickMemo(memo, body) {} },
+                            onSave = { title, body, onComplete -> onSaveQuickMemo(memo, title, body, onComplete) },
+                            onOpenLink = onOpenQuickMemoLink,
                             onToggleAudioPlayback = onToggleAudioPlayback,
                             expandFromLeft = expandFromLeft,
                             hapticEnabled = hapticEnabled
@@ -1242,26 +1253,30 @@ private fun cleanStructuredDragField(ruleId: String, index: Int, value: String):
 @Composable
 private fun FloatingQuickMemoCard(
     memo: QuickMemoEntity,
+    summary: String? = null,
     audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
     modifier: Modifier = Modifier,
     onMarkTodo: () -> Unit,
     onRemoveTodo: () -> Unit,
     onToggleTodo: () -> Unit,
     onDelete: () -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, String, (Boolean) -> Unit) -> Unit,
+    onOpenLink: (String) -> Unit = {},
     onToggleAudioPlayback: (String?) -> Unit = {},
     expandFromLeft: Boolean = false,
     hapticEnabled: Boolean = true
 ) {
     val haptics = rememberAppHaptics(hapticEnabled)
-    var isExpanded by remember { mutableStateOf(false) }
-    var isEditing by remember { mutableStateOf(false) }
-    var draftBody by remember(memo.id, memo.updatedAt) { mutableStateOf(memo.bodyText) }
+    var isExpanded by remember(memo.id) { mutableStateOf(false) }
+    var isEditing by remember(memo.id) { mutableStateOf(false) }
+    var isSaving by remember(memo.id) { mutableStateOf(false) }
+    var draftTitle by remember(memo.id) { mutableStateOf(memo.title) }
+    var draftBody by remember(memo.id) { mutableStateOf(memo.bodyText) }
+    val presentation = remember(memo, summary) { QuickMemoFloatingPresentationPolicy.present(memo, summary) }
     val isTodo = memo.todoState == QuickMemoTodoState.ACTIVE || memo.todoState == QuickMemoTodoState.COMPLETED
     val isCompleted = memo.todoState == QuickMemoTodoState.COMPLETED
-    val isVoice = memo.type == QuickMemoType.VOICE
+    val isVoice = presentation.showAudio
     val isPlaying = memo.audioPath != null && audioPlaybackState.audioPath == memo.audioPath && audioPlaybackState.isPlaying
-    val displayBody = memo.bodyText.ifBlank { floatingQuickMemoFallbackText(memo) }
     val todoAccentColor = Color(0xFFF2B705)
     val accentColor = when {
         isCompleted -> MaterialTheme.colorScheme.outlineVariant
@@ -1327,6 +1342,7 @@ private fun FloatingQuickMemoCard(
             color = MaterialTheme.colorScheme.primary,
             onClick = {
                 haptics.click()
+                draftTitle = memo.title
                 draftBody = memo.bodyText
                 isExpanded = true
                 isEditing = true
@@ -1432,10 +1448,15 @@ private fun FloatingQuickMemoCard(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     FloatingQuickMemoCompactContent(
                         accentColor = accentColor,
-                        text = displayBody,
+                        text = presentation.compactText,
                         isCompleted = isCompleted,
                         isVoice = isVoice,
                         isPlaying = isPlaying,
+                        hasLink = presentation.sourceUrl != null,
+                        onOpenLink = {
+                            haptics.click()
+                            presentation.sourceUrl?.let(onOpenLink)
+                        },
                         onContentClick = {
                             haptics.click()
                             isExpanded = !isExpanded
@@ -1457,85 +1478,67 @@ private fun FloatingQuickMemoCard(
                         ) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = displayBody,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                                textDecoration = if (isCompleted) TextDecoration.LineThrough else null
-                            )
+                            if (presentation.hasSummary) {
+                                MarkdownText(
+                                    markdown = presentation.expandedText,
+                                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textSizeSp = MaterialTheme.typography.bodySmall.fontSize.value,
+                                    maxLines = 4,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                Text(
+                                    text = presentation.expandedText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textDecoration = if (isCompleted) TextDecoration.LineThrough else null
+                                )
+                            }
                         }
                     }
                 }
             } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(48.dp)
-                            .padding(vertical = 8.dp)
-                            .background(accentColor, RoundedCornerShape(2.dp))
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    CompactTextField(
+                        value = draftTitle, onValueChange = { draftTitle = it },
+                        placeholder = "标题", enabled = !isSaving,
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                    AnimatedVisibility(
-                        visible = isExpanded,
-                        enter = fadeIn(tween(120)) + expandVertically(tween(180), expandFrom = Alignment.Top),
-                        exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top)
-                    ) {
-                        Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
-                            Spacer(Modifier.height(8.dp))
-                            AnimatedContent(targetState = isEditing, label = "quick_memo_edit_transition") { editing ->
-                                if (editing) {
-                                    Column {
-                                        CompactTextField(value = draftBody, onValueChange = { draftBody = it }, placeholder = "正文", singleLine = false, maxLines = 6)
-                                        Spacer(Modifier.height(8.dp))
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                            if (isTodo) {
-                                                FloatingCompactTextButton(
-                                                    text = "移除代办",
-                                                    onClick = {
-                                                        haptics.confirm()
-                                                        onRemoveTodo()
-                                                        isEditing = false
-                                                    }
-                                                )
-                                                Spacer(Modifier.width(8.dp))
-                                            }
-                                            FloatingCompactTextButton(
-                                                text = "取消",
-                                                onClick = { draftBody = memo.bodyText; isEditing = false }
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            FloatingCompactPrimaryButton(
-                                                text = "保存",
-                                                onClick = { haptics.confirm(); onSave(draftBody); isEditing = false }
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text(
-                                            text = displayBody,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 4,
-                                            overflow = TextOverflow.Ellipsis,
-                                            textDecoration = if (isCompleted) TextDecoration.LineThrough else null
-                                        )
-                                    }
+                    Spacer(Modifier.height(8.dp))
+                    CompactTextField(
+                        value = draftBody, onValueChange = { draftBody = it },
+                        placeholder = "正文", singleLine = false, maxLines = 6, enabled = !isSaving,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        if (isTodo) {
+                            FloatingCompactTextButton(
+                                text = "移除代办", enabled = !isSaving,
+                                onClick = {
+                                    haptics.confirm()
+                                    onRemoveTodo()
+                                    isEditing = false
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        FloatingCompactTextButton(
+                            text = "取消", enabled = !isSaving,
+                            onClick = { isEditing = false }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        FloatingCompactPrimaryButton(
+                            text = if (isSaving) "保存中" else "保存", enabled = !isSaving,
+                            onClick = {
+                                haptics.confirm()
+                                isSaving = true
+                                onSave(draftTitle, draftBody) { saved ->
+                                    isSaving = false
+                                    if (saved) isEditing = false
                                 }
                             }
-                        }
-                    }
-                    if (!isExpanded) Spacer(Modifier.height(12.dp))
+                        )
                     }
                 }
             }
@@ -1550,6 +1553,8 @@ private fun FloatingQuickMemoCompactContent(
     isCompleted: Boolean,
     isVoice: Boolean,
     isPlaying: Boolean,
+    hasLink: Boolean,
+    onOpenLink: () -> Unit,
     onContentClick: () -> Unit,
     onPlayClick: () -> Unit
 ) {
@@ -1620,7 +1625,18 @@ private fun FloatingQuickMemoCompactContent(
                 )
             }
         }
-        if (isVoice) {
+        if (hasLink) {
+            Surface(
+                onClick = onOpenLink,
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = playContainerColor,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, "打开原链接", Modifier.size(20.dp), tint = playIconColor)
+                }
+            }
+        } else if (isVoice) {
             FloatingVoicePlayButton(
                 isPlaying = isPlaying,
                 onClick = onPlayClick,
@@ -2019,16 +2035,8 @@ private fun FloatingQuickMemoTodoMark(checked: Boolean, onClick: () -> Unit) {
     }
 }
 
-private fun floatingQuickMemoFallbackText(memo: QuickMemoEntity): String {
-    return when {
-        memo.type == QuickMemoType.IMAGE -> "图片随口记"
-        memo.type != QuickMemoType.VOICE -> "空白随口记"
-        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PENDING -> "转写中"
-        memo.transcriptionStatus == QuickMemoTranscriptionStatus.PROCESSING -> "转写中"
-        memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED -> "转写失败，可重试"
-        else -> "仅音频"
-    }
-}
+private fun floatingQuickMemoFallbackText(memo: QuickMemoEntity): String =
+    QuickMemoFloatingPresentationPolicy.fallbackText(memo)
 
 private fun floatingQuickMemoStatusText(memo: QuickMemoEntity): String {
     return when {
@@ -2266,9 +2274,10 @@ private fun compactFloatingDayWeather(day: WeatherDailyForecast): String {
 }
 
 @Composable
-private fun FloatingCompactTextButton(text: String, onClick: () -> Unit) {
+private fun FloatingCompactTextButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(999.dp),
         color = Color.Transparent
     ) {
@@ -2282,9 +2291,10 @@ private fun FloatingCompactTextButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FloatingCompactPrimaryButton(text: String, onClick: () -> Unit) {
+private fun FloatingCompactPrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.primary
     ) {

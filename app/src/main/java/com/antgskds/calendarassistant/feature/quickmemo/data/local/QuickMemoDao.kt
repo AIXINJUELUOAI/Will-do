@@ -73,6 +73,9 @@ interface QuickMemoDao {
     @Query("UPDATE quick_memos SET body_text = :body, updated_at = :now WHERE id = :id")
     suspend fun updateBody(id: Long, body: String, now: Long)
 
+    @Query("UPDATE quick_memos SET title = :title, body_text = :body, updated_at = :now WHERE id = :id")
+    suspend fun updateContent(id: Long, title: String, body: String, now: Long): Int
+
     @Update
     suspend fun updateFolder(folder: QuickMemoFolderEntity)
 

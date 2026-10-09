@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.quickmemo
 
 import com.antgskds.calendarassistant.feature.backup.data.model.*
+import com.antgskds.calendarassistant.feature.linkanalysis.domain.LinkSummaryData
 import com.antgskds.calendarassistant.feature.cloudsync.data.SyncV2Codec
 import com.antgskds.calendarassistant.feature.cloudsync.domain.*
 import kotlinx.serialization.json.Json
@@ -23,7 +24,8 @@ class QuickMemoPortableDataTest {
     @Test fun backupKeepsLinkFieldsAndEmptyFolders() {
         val original = AppBackupData(
             quickMemos = listOf(AppBackupQuickMemoDto(bodyText = "文案\nhttps://example.test/a",
-                title = "链接收藏", sourceUrl = "https://example.test/a", linkKey = "https://example.test/a", folderId = "folder")),
+                title = "链接收藏", sourceUrl = "https://example.test/a", linkKey = "https://example.test/a", folderId = "folder",
+                linkSummary = LinkSummaryData(transcript = "已转写但摘要未完成。", bodyTranscript = "转写原文\n已转写但摘要未完成。"))),
             quickMemoFolders = listOf(AppBackupQuickMemoFolderDto("folder", "文章"), AppBackupQuickMemoFolderDto("empty", "空文件夹")),
         )
         assertEquals(original, Json.decodeFromString<AppBackupData>(Json.encodeToString(original)))
@@ -38,7 +40,8 @@ class QuickMemoPortableDataTest {
         assertEquals("旧正文", legacy.bodyText)
         assertTrue(legacy.title.isNullOrEmpty())
         assertNull(legacy.folderId)
-        val memo = legacy.copy(title = "收藏", sourceUrl = "https://example.test/a", linkKey = "key", folderId = "folder")
+        val memo = legacy.copy(title = "收藏", sourceUrl = "https://example.test/a", linkKey = "key", folderId = "folder",
+            linkSummary = LinkSummaryData(transcript = "独立逐字稿。", bodyTranscript = "转写原文\n独立逐字稿。"))
         assertEquals(memo, codec.decodePayload(codec.encodePayload(memo), SyncV2QuickMemoPayload::class.java))
     }
 }

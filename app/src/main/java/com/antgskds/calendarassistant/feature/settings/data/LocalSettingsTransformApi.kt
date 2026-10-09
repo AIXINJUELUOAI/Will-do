@@ -58,6 +58,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         clipboardLinkCollectionEnabled: Boolean?,
         linkAnalysisEnabled: Boolean?,
         linkAudioLocalTranscription: Boolean?,
+        linkTranscriptToBody: Boolean?,
         imagePinEnabled: Boolean?,
         voiceInputEnabled: Boolean?,
         floatingVoiceLongPressEnabled: Boolean?,
@@ -157,6 +158,7 @@ class LocalSettingsTransformApi : SettingsTransformApi {
         if (clipboardLinkCollectionEnabled != null) updated = updated.copy(clipboardLinkCollectionEnabled = clipboardLinkCollectionEnabled)
         if (linkAnalysisEnabled != null) updated = updated.copy(linkAnalysisEnabled = linkAnalysisEnabled)
         if (linkAudioLocalTranscription != null) updated = updated.copy(linkAudioLocalTranscription = linkAudioLocalTranscription)
+        if (linkTranscriptToBody != null) updated = updated.copy(linkTranscriptToBody = linkTranscriptToBody)
         if (voiceInputEnabled != null) updated = updated.copy(voiceInputEnabled = voiceInputEnabled)
         if (floatingVoiceLongPressEnabled != null) updated = updated.copy(floatingVoiceLongPressEnabled = floatingVoiceLongPressEnabled)
         if (floatingTextQuickMemoAutoPinEnabled != null) {

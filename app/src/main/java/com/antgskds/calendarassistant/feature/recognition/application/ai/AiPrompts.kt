@@ -161,7 +161,7 @@ object AiPrompts {
                 appendLine("=== end ===")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "导出提示词失败: ${e.message}")
+            Log.e(TAG, "导出提示词失败: ${e.javaClass.simpleName}")
             ""
         }
     }
@@ -180,7 +180,7 @@ object AiPrompts {
                 true
             }
         } catch (e: Exception) {
-            Log.e(TAG, "导入提示词失败: ${e.message}")
+            Log.e(TAG, "导入提示词失败: ${e.javaClass.simpleName}")
             false
         }
     }

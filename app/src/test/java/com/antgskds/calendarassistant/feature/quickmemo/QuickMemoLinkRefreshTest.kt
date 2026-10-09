@@ -2,7 +2,6 @@ package com.antgskds.calendarassistant.feature.quickmemo
 
 import com.antgskds.calendarassistant.feature.quickmemo.data.local.*
 import com.antgskds.calendarassistant.feature.quickmemo.domain.*
-import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -16,14 +15,24 @@ class QuickMemoLinkRefreshTest {
             bodyText="我的文案\n$oldUrl", sourceUrl=oldUrl, linkKey="coolapk:feed:123",
             folderId="folder", createdAt=10, updatedAt=20, sortRank=30)
         var writes = 0
-        val dao = Proxy.newProxyInstance(QuickMemoDao::class.java.classLoader, arrayOf(QuickMemoDao::class.java)) { proxy, method, args ->
+        val dao = Proxy.newProxyInstance(QuickMemoDao::class.java.classLoader, arrayOf(QuickMemoDao::class.java)) { _, method, args ->
             when (method.name) {
                 "findLink" -> saved
                 "refreshLinkSource" -> {
                     saved=saved.copy(sourceUrl=args!![1] as String, bodyText=args[2] as String, updatedAt=args[3] as Long)
                     writes++; Unit
                 }
-                "insertLinkIfAbsent" -> InvocationHandler.invokeDefault(proxy, method, *args.orEmpty())
+                "insertLinkIfAbsent" -> {
+                    val memo=args!![0] as QuickMemoEntity
+                    val link=QuickMemoLink(requireNotNull(memo.sourceUrl),"","",requireNotNull(memo.linkKey))
+                    if (QuickMemoLinkRefreshPolicy.needsRefresh(saved.sourceUrl,link)) {
+                        saved=saved.copy(sourceUrl=link.url,
+                            bodyText=QuickMemoLinkRefreshPolicy.refreshedBody(saved.bodyText,saved.sourceUrl,link.url),
+                            updatedAt=memo.updatedAt)
+                        writes++
+                    }
+                    requireNotNull(saved.id)
+                }
                 else -> error("Unexpected write: " + method.name)
             }
         } as QuickMemoDao

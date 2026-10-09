@@ -20,6 +20,8 @@ data class LinkAnalysisEntity(
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(entity: LinkAnalysisEntity)
     @Query("UPDATE quick_memo_link_analysis SET state = :state, error = :error, updatedAt = :now WHERE memoId = :id AND token = :token AND state NOT IN ('CANCELLED', 'DONE')")
     suspend fun state(id: Long, token: String, state: String, error: String, now: Long): Int
+    @Query("UPDATE quick_memo_link_analysis SET resultJson = :result, updatedAt = :now WHERE memoId = :id AND token = :token AND state NOT IN ('CANCELLED', 'DONE')")
+    suspend fun saveResult(id: Long, token: String, result: String, now: Long): Int
     @Query("UPDATE quick_memo_link_analysis SET resultJson = :result, state = 'DONE', error = '', updatedAt = :now WHERE memoId = :id AND token = :token AND state != 'CANCELLED'")
     suspend fun complete(id: Long, token: String, result: String, now: Long): Int
 }

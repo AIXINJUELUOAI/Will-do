@@ -117,7 +117,9 @@ fun LaboratoryPage(
                 },
                 onAudioMode={settingsViewModel?.updatePreference(linkAudioLocalTranscription=it)},
                 onImport={uri -> sourceAction { sourceContext.contentResolver.openInputStream(uri)?.use { app?.linkAnalysisApi?.importSource(it) } ?: error("无法读取源文件") } },
-                onSourceEnabled={id,enabled -> sourceAction { app?.linkAnalysisApi?.setSourceEnabled(id,enabled) }},
+                transcriptToBody = settings?.linkTranscriptToBody == true,
+                onTranscriptToBody = { settingsViewModel?.updatePreference(linkTranscriptToBody = it) },
+                predictiveBackEnabled = settings?.predictiveBackEnabled != false,
                 onDelete={id -> sourceAction { app?.linkAnalysisApi?.deleteSource(id) }},
             )
         },
@@ -214,9 +216,8 @@ fun MaterialLaboratoryScreen(
                         onAction(LaboratoryUiAction.SetBraceletMode(false))
                     }
                 },
+                sourceContent = sourceContent,
             )
-
-            sourceContent()
 
             AppCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -242,7 +243,7 @@ fun MaterialLaboratoryScreen(
                                 PrivilegeManager.PrivilegeType.ROOT -> "Root 已授权"
                                 PrivilegeManager.PrivilegeType.SHIZUKU -> "Shizuku 已授权"
                                 PrivilegeManager.PrivilegeType.NONE -> "未授权"
-                            }) + "\n优先申请 Root 权限，无 Root 时申请 Shizuku 权限",
+                            }),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -301,6 +302,7 @@ fun LaboratorySettingsContent(
     showDeveloperEntry: Boolean = true,
     itemVisibility: LaboratoryItemVisibility = LaboratoryItemVisibility(),
     onBraceletModeChange: ((Boolean) -> Unit)? = null,
+    sourceContent: @Composable () -> Unit = {},
 ) {
     val settings = state.settings
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -345,6 +347,8 @@ fun LaboratorySettingsContent(
                         ?: onAction(LaboratoryUiAction.SetBraceletMode(enabled))
                 }
             )
+
+            sourceContent()
 
             if (showDeveloperEntry && settings.developerOptionsUnlocked) {
                 Text(

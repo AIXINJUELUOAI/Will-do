@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai
 
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatIncomingPaymentPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.shared.util.AppLogger as Log
@@ -136,7 +137,7 @@ object RecognitionProcessor {
         )
 
         Log.d(TAG, "========== [AI 自然语言输入] ==========")
-        Log.d(TAG, "用户输入: $text")
+        Log.d(TAG, "text input chars=${text.length}")
 
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
@@ -162,9 +163,9 @@ object RecognitionProcessor {
                 disableThinking = settings.disableThinking
             )) {
                 is ApiCallResult.Success -> {
-                    Log.d(TAG, "[AI文本输入] 原始响应(${response.content.length} chars): ${response.content}")
+                    Log.d(TAG, "[AI文本输入] response_chars=${response.content.length}")
                     val cleanJson = cleanJsonString(response.content)
-                    Log.d(TAG, "[AI文本输入] 清洗后 JSON(${cleanJson.length} chars): $cleanJson")
+                    Log.d(TAG, "[AI文本输入] json_chars=${cleanJson.length}")
                     val parsedEvent = parseCalendarEvents(cleanJson).firstOrNull()
                     if (parsedEvent == null || parsedEvent.title.isBlank()) {
                         Log.d(TAG, "[AI文本输入] 解析结果为空")
@@ -193,8 +194,9 @@ object RecognitionProcessor {
 
     /** 图片直接交给多模态模型，二维码仍由本地条码扫描补全。 */
     suspend fun analyzeImage(bitmap: Bitmap, settings: MySettings, context: Context,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null): AnalysisResult<List<RecognitionDraft>> {
-        val result = analyzeImageWithMultimodal(bitmap, settings, context.applicationContext, redPacketSent)
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null,
+        wechatIncoming: WechatIncomingPaymentPolicy.Evidence? = null): AnalysisResult<List<RecognitionDraft>> {
+        val result = analyzeImageWithMultimodal(bitmap, settings, context.applicationContext, redPacketSent, wechatIncoming)
         return attachQrPayloads(result, scanQrPayloadsSafely(bitmap))
     }
 
@@ -279,7 +281,8 @@ object RecognitionProcessor {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?,
+        wechatIncoming: WechatIncomingPaymentPolicy.Evidence?
     ): AnalysisResult<List<RecognitionDraft>> {
         val modelConfig = settings.activeAiConfig()
         if (!modelConfig.isConfigured()) {
@@ -311,7 +314,8 @@ object RecognitionProcessor {
 
         return try {
             when (val response = ApiModelProvider.generateWithImage(
-                prompt = prompt + (redPacketSent?.let { "\n\n" + it.promptContext() } ?: ""),
+                prompt = prompt + (redPacketSent?.let { "\n\n" + it.promptContext() } ?: "") +
+                    (wechatIncoming?.let { "\n\n" + it.promptContext() } ?: ""),
                 imageBytes = imageBytes,
                 mimeType = "image/jpeg",
                 apiKey = modelConfig.key,
@@ -321,7 +325,7 @@ object RecognitionProcessor {
             )) {
                 is ApiCallResult.Success -> {
                     val cleanJson = cleanJsonString(response.content)
-                        Log.d(TAG, "[多模态识别] 清洗后内容(${cleanJson.length} chars): $cleanJson")
+                        Log.d(TAG, "[多模态识别] json_chars=${cleanJson.length}")
                         val content = RecognitionJsonParser.parseContent(cleanJson)
                         val events = content.events
                         val normalizedEvents = enforceRuleHeaders(events)
@@ -342,7 +346,7 @@ object RecognitionProcessor {
                 is ApiCallResult.Failure -> {
                     Log.e(
                         TAG,
-                        "[多模态识别] API 失败: kind=${response.kind}, status=${response.statusCode}, message=${response.message}, rawBody=${response.rawBody}"
+                        "[多模态识别] API 失败: kind=${response.kind}, status=${response.statusCode}"
                     )
                     val mapped = AiFailureMapper.mapImage(response)
                     val failure = AnalysisFailure(mapped.title, mapped.detail, mapped.errorCode, mapped.retryable)
@@ -503,7 +507,7 @@ object RecognitionProcessor {
 
             // 3. 如果剩余信息为空（纯动作如"取件"），删除
             if (subjectInfo.isEmpty()) {
-                Log.d(TAG, "过滤纯取件标题: ${schedule.title}")
+                Log.d(TAG, "过滤纯取件日程")
                 return@filter false
             }
 
@@ -513,7 +517,7 @@ object RecognitionProcessor {
             }
 
             if (isCoveredByPickup) {
-                Log.d(TAG, "过滤被覆盖的日程: ${schedule.title} (被 ${pickupEvents.find { it.title.contains(subjectInfo, ignoreCase = true) }?.title} 覆盖)")
+                Log.d(TAG, "过滤被取件日程覆盖的候选")
             }
 
             // 如果被覆盖则删除，否则保留

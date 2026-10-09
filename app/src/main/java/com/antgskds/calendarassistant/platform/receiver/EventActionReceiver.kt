@@ -257,7 +257,7 @@ class EventActionReceiver : BroadcastReceiver() {
                                 ACTION_CHECKIN -> scheduleCenter.checkInItem(target)
                                 else -> scheduleCenter.completeItem(target)
                             }
-                            Log.d(TAG, "event action applied id=$targetEventId title=${event.title} action=${intent.action}")
+                            Log.d(TAG, "event action applied id=$targetEventId action=${intent.action}")
                         }
                     } catch (t: Throwable) {
                         Log.e(TAG, "event action failed action=${intent.action} eventId=$eventIdStr", t)

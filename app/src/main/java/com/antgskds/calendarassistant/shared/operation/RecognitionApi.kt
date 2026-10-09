@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.shared.operation
 
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatIncomingPaymentPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
@@ -29,7 +30,8 @@ interface RecognitionApi {
     suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String = EventIdentity.newTraceId(), isDetailPage: Boolean = false,
         redPacketSent: WechatRedPacketSessionPolicy.SentEvidence? = null,
-        publishFeedback: Boolean = true, capturedAt: Long = System.currentTimeMillis()): AnalysisResult<List<RecognitionDraft>>
+        publishFeedback: Boolean = true, capturedAt: Long = System.currentTimeMillis(),
+        wechatIncoming: WechatIncomingPaymentPolicy.Evidence? = null): AnalysisResult<List<RecognitionDraft>>
 
     /** 支付应用 Hook 消息只做本地解析，不自动调用付费模型。 */
     suspend fun analyzeAutomaticPaymentMessage(sourcePackage: String, payload: String, receivedAt: Long,

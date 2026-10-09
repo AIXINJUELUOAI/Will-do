@@ -39,6 +39,9 @@ object QuickMemoLinkRules {
         // link_id 是否稳定尚未验证，保留完整查询参数，避免误合并帖子。
         QuickMemoLinkRule(name = "小黑盒", hosts = setOf("api.xiaoheihe.cn", "www.xiaoheihe.cn", "xiaoheihe.cn")),
         QuickMemoLinkRule(name = "小红书", hosts = setOf("xhslink.cn", "xhslink.com", "www.xiaohongshu.com", "xiaohongshu.com")),
+        QuickMemoLinkRule(name = "贴吧", hosts = setOf("tieba.baidu.com")),
+        QuickMemoLinkRule(name = "知乎", hosts = setOf("zhihu.com", "www.zhihu.com", "zhuanlan.zhihu.com")),
+        QuickMemoLinkRule(name = "微博", hosts = setOf("weibo.com", "www.weibo.com", "weibo.cn", "m.weibo.cn")),
         // 示例：QuickMemoLinkRule(name = "新平台", hosts = setOf("www.example.com", "example.com")),
     )
 }

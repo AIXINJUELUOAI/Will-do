@@ -147,6 +147,12 @@ class QuickMemoRepository(
         quickMemoDao.updateBody(id, normalizeBody(bodyText), System.currentTimeMillis())
     }
 
+    suspend fun updateContent(id: Long, title: String, bodyText: String) {
+        check(quickMemoDao.updateContent(id, title.trim(), normalizeBody(bodyText), System.currentTimeMillis()) == 1) {
+            "随口记不存在"
+        }
+    }
+
     suspend fun getAllQuickMemos(): List<QuickMemoEntity> = quickMemoDao.getAllQuickMemos()
 
     suspend fun attachImage(id: Long, imagePath: String) {

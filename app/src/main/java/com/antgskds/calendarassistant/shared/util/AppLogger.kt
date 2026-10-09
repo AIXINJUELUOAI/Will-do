@@ -28,7 +28,7 @@ object AppLogger {
             cleanExpired(directory(context), LocalDate.now())
             migrateLegacyLogs(context)
         }
-            .onFailure { Log.e("AppLogger", "log cleanup failed", it) }
+            .onFailure { Log.e("AppLogger", "log cleanup failed error_type=${it.javaClass.simpleName}") }
         Unit
     }
     fun setEnabled(value: Boolean) = synchronized(lock) {
@@ -43,12 +43,15 @@ object AppLogger {
     fun d(tag: String, message: String, throwable: Throwable? = null): Int = write(Log.DEBUG, "DEBUG", tag, message, throwable)
     fun i(tag: String, message: String, throwable: Throwable? = null): Int = write(Log.INFO, "INFO", tag, message, throwable)
     fun w(tag: String, message: String, throwable: Throwable? = null): Int = write(Log.WARN, "WARN", tag, message, throwable)
-    fun w(tag: String, throwable: Throwable): Int = w(tag, throwable.toString(), throwable)
+    fun w(tag: String, throwable: Throwable): Int = w(tag, "error_type=${throwable.javaClass.simpleName}", throwable)
     fun e(tag: String, message: String, throwable: Throwable? = null): Int = write(Log.ERROR, "ERROR", tag, message, throwable)
-    fun getStackTraceString(throwable: Throwable?): String = Log.getStackTraceString(throwable)
+    fun getStackTraceString(throwable: Throwable?): String = LogPrivacyRedactor.stackTrace(throwable)
+
+    internal fun formatBody(message: String, throwable: Throwable?): String =
+        LogPrivacyRedactor.redact(message.trimEnd() + (throwable?.let { "\n${getStackTraceString(it)}" } ?: ""))
 
     private fun write(priority: Int, level: String, tag: String, message: String, throwable: Throwable?): Int {
-        val body = message.trimEnd() + (throwable?.let { "\n${Log.getStackTraceString(it)}" } ?: "")
+        val body = formatBody(message, throwable)
         val result = Log.println(priority, tag, body)
         synchronized(lock) {
             val context = appContext ?: return result
@@ -57,7 +60,7 @@ object AppLogger {
                 val dir = directory(context)
                 val bytes = ("${now.format(formatter)} $level/$tag: $body\n").toByteArray(Charsets.UTF_8)
                 appendRecord(dir, now.toLocalDate(), bytes, !File(context.filesDir, "diagnostics-recording-disabled").exists())
-            }.onFailure { Log.e("AppLogger", "write app log failed", it) }
+            }.onFailure { Log.e("AppLogger", "write app log failed error_type=${it.javaClass.simpleName}") }
         }
         return result
     }
@@ -85,7 +88,7 @@ object AppLogger {
             .joinToString("\n") { file ->
                 RandomAccessFile(file, "r").use { input ->
                     input.channel.lock(0L, Long.MAX_VALUE, true).use {
-                        ByteArray(input.length().toInt()).also { input.readFully(it) }.toString(Charsets.UTF_8)
+                        ByteArray(input.length().toInt()).also { input.readFully(it) }.toString(Charsets.UTF_8).let(LogPrivacyRedactor::redact)
                     }
                 }
             }
@@ -125,7 +128,7 @@ object AppLogger {
         var date = fallbackDate
         val cutoff = LocalDate.now().minusDays(ConfigCatalog.LOG_RETENTION_DAYS - 1)
         val blocks = linkedMapOf<LocalDate, StringBuilder>()
-        text.lineSequence().forEach { line ->
+        LogPrivacyRedactor.redact(text).lineSequence().forEach { line ->
             val match = Regex("^\\[?(\\d{4}-\\d{2}-\\d{2})[ T]").find(line)
             match?.groupValues?.get(1)?.let { value -> runCatching { LocalDate.parse(value) }.getOrNull()?.let { date = it } }
             if (!date.isBefore(cutoff) && !date.isAfter(LocalDate.now())) {

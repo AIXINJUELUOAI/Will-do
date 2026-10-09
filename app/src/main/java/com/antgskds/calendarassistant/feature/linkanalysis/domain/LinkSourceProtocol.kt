@@ -36,6 +36,13 @@ object LinkSourceProtocol {
         require(manifest.matches.isNotEmpty() && manifest.matches.size <= Limits.LINK_SOURCE_MAX_FILES)
         require(manifest.permissions.networkHosts.isNotEmpty() && manifest.permissions.networkHosts.size <= Limits.LINK_SOURCE_MAX_FILES)
         require(manifest.permissions.networkHosts.all(::validHostRule)) { "网络权限必须使用完整域名或 *.域名" }
+        require(manifest.permissions.replay.size <= Limits.LINK_HTTP_MAX_CALLS &&
+            manifest.permissions.replay.all { it.length in 1..200 && !it.contains('\r') && !it.contains('\n') }) { "回放地址模式无效" }
+        require(manifest.loginEntries.size <= Limits.LINK_LOGIN_MAX_ENTRIES &&
+            manifest.loginEntries.all { LinkAnalysisPolicy.allowsLogin(manifest, it) } &&
+            manifest.loginEntries.map { it.url }.distinct().size == manifest.loginEntries.size) {
+            "登录入口须有有效名称、HTTPS 网址、浏览器权限及对应域名权限，且不能重复"
+        }
         require(manifest.matches.all { validHostRule(it.host) && it.pathPrefix.startsWith("/") &&
             manifest.permissions.networkHosts.any { permission -> permission == it.host || matchesHost(permission, it.host.removePrefix("*.")) } })
     }
@@ -63,9 +70,16 @@ object LinkSourceProtocol {
 @Serializable data class LinkSourceManifest(
     val protocolVersion: Int, val id: String, val name: String, val version: String,
     val entry: String = "main.js", val matches: List<LinkSourceMatch>, val permissions: LinkSourcePermissions,
+    /** 可选交互式网页登录入口；旧源默认没有入口，不从平台域名推导。 */
+    val loginEntries: List<LinkSourceLoginEntry> = emptyList(),
 )
+@Serializable data class LinkSourceLoginEntry(val name: String, val url: String, val userAgent: String? = null)
 @Serializable data class LinkSourceMatch(val host: String, val pathPrefix: String = "/")
-@Serializable data class LinkSourcePermissions(val networkHosts: List<String>, val browser: Boolean = false)
+@Serializable data class LinkSourcePermissions(
+    val networkHosts: List<String>, val browser: Boolean = false,
+    /** 网页请求 URL 子串；命中的请求由宿主带 Cookie 重放并把响应注入 window.__willdoCapture（用于 Service Worker/Worker 发出的接口）。 */
+    val replay: List<String> = emptyList(),
+)
 @Serializable data class LinkSourcePackage(val manifest: LinkSourceManifest, val files: Map<String,String>, val digest: String)
 @Serializable data class LinkSourceInput(val protocolVersion: Int = 1, val requestId: String, val url: String, val shareText: String = "")
 @Serializable data class LinkResultSource(val url: String, val canonicalUrl: String = "", val contentId: String = "")
@@ -86,4 +100,7 @@ object LinkSourceProtocol {
     val title: String = "", val author: String = "", val contentType: String = "",
     val extractedText: String = "", val summary: String = "", val warnings: List<String> = emptyList(),
     val sourceId: String = "", val sourceVersion: String = "", val completedAt: Long = 0,
+    // title 保留解析源标题；自动标题仅用于随口记标题保护，不影响旧备份反序列化。
+    val aiTitle: String = "", val autoTitle: String = "",
+    val transcript: String = "", val bodyTranscript: String = "",
 )

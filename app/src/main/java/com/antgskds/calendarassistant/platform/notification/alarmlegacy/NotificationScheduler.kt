@@ -292,6 +292,6 @@ object NotificationScheduler {
      */
     private fun showPickupInitialNotification(context: Context, event: Event) {
         (context.applicationContext as? App)?.notificationCenter?.showPickupInitialNotification(event)
-        Log.d("NotificationScheduler", "取件码初始通知已显示: ${event.title}")
+        Log.d("NotificationScheduler", "取件码初始通知已显示 eventId=${event.id}")
     }
 }

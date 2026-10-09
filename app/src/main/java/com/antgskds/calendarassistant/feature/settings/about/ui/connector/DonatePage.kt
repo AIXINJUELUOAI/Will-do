@@ -327,7 +327,7 @@ private fun saveImageToGallery(context: Context, imageResId: Int) {
             Toast.makeText(context, "保存失败：无法访问存储", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
-        e.printStackTrace()
+        com.antgskds.calendarassistant.shared.util.AppLogger.e("DonatePage", "payment app launch failed", e)
         Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }

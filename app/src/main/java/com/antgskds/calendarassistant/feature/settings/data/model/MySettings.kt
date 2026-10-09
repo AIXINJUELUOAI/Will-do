@@ -159,6 +159,7 @@ data class MySettings(
     val clipboardLinkCollectionEnabled: Boolean = false,
     val linkAnalysisEnabled: Boolean = false,
     val linkAudioLocalTranscription: Boolean = true,
+    val linkTranscriptToBody: Boolean = false,
     // 【偏好设置】图片挂起；入口移动不改变已有保存值。
     val imagePinEnabled: Boolean = false,
 

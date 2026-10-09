@@ -95,7 +95,7 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
         sb.append("==================================\n\n")
 
         sb.append("Exception: ${exception.javaClass.name}\n")
-        sb.append("Message: ${exception.message}\n\n")
+        sb.append("Message: <omitted>\n\n")
 
         sb.append("Stack Trace:\n")
         sb.append(Log.getStackTraceString(exception))

@@ -29,6 +29,8 @@ class LinkFailureDiagnosticsTest {
         val failure=LinkAnalysisFailure.describe(IllegalStateException(sensitive,UnknownHostException(sensitive)),"EXTRACTING")
         assertEquals(LinkFailureCode.NETWORK_DNS,failure.code)
         assertFalse(failure.message!!.contains("secret"))
+        assertEquals("error_type=IllegalStateException", LinkAnalysisFailure.safeDetail(IllegalStateException(sensitive)))
+        assertEquals("code=AI_HTTP http_status=401", LinkAnalysisFailure.safeDetail(LinkAnalysisFailure(LinkFailureCode.AI_HTTP, 401)))
         assertEquals(LinkFailureCode.EXTRACTION_FAILED,LinkFailureCode.fromSource(sensitive))
         assertTrue(LinkFailureCode.fromSource("LINK_UNAVAILABLE").userMessage.contains("重新分享"))
         assertEquals(LinkFailureCode.AI_HTTP,LinkAnalysisFailure.describe(LinkAnalysisFailure(LinkFailureCode.AI_HTTP,401),"SUMMARIZING").code)

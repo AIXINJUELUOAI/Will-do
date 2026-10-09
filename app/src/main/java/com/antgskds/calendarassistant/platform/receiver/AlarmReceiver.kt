@@ -132,7 +132,7 @@ class AlarmReceiver : BroadcastReceiver() {
             if (!isValid) Log.w(TAG, "事件验证失败: eventId=$eventId 不存在或已失效")
             isValid
         } catch (e: Exception) {
-            Log.e(TAG, "检查事件存在性时出错: ${e.message}", e)
+            Log.e(TAG, "检查事件存在性时出错: ${e.javaClass.simpleName}", e)
             // 出错时默认返回 true，避免误杀正常通知
             true
         }
@@ -173,11 +173,11 @@ class AlarmReceiver : BroadcastReceiver() {
         app.reminderCenter.routeByCapsuleMode(
             capsuleRoutingQueryApi = app.capsuleRoutingQueryApi,
             onMiuiIsland = {
-                Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
+                Log.d(TAG, "MIUI 岛模式，刷新胶囊状态")
                 app.reminderCenter.refreshCapsuleState()
             },
             onLiveCapsule = {
-                Log.d(TAG, "启动胶囊: $title (刷新状态)")
+                Log.d(TAG, "启动胶囊 (刷新状态)")
                 app.reminderCenter.refreshCapsuleState()
 
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -214,7 +214,7 @@ class AlarmReceiver : BroadcastReceiver() {
     private fun handleCapsuleRefresh(context: Context, eventId: String, title: String, eventRuleId: String) {
         val app = context.applicationContext as App
         if (app.reminderCenter.isMiuiIslandMode(app.capsuleRoutingQueryApi)) {
-            Log.d(TAG, "MIUI 岛模式，刷新胶囊状态: $title")
+            Log.d(TAG, "MIUI 岛模式，刷新胶囊状态")
             app.reminderCenter.refreshCapsuleState()
             when (val state = app.capsuleCenter.currentState()) {
                 is CapsuleUiState.Active -> MiuiIslandManager.update(context, state.capsules)
@@ -222,7 +222,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             return
         }
-        Log.d(TAG, "刷新胶囊: $title (准点时刷新文案)")
+        Log.d(TAG, "刷新胶囊 (准点时刷新文案)")
         app.reminderCenter.refreshCapsuleState()
     }
 

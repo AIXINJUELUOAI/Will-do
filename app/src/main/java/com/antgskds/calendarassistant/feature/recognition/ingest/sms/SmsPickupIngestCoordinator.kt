@@ -69,7 +69,7 @@ class SmsPickupIngestCoordinator(
             cleanupRecentDeliveries(now)
         }
 
-        Log.d(TAG, "[探针] 候选短信开始处理 source=${candidate.source.logName}, smsId=${candidate.smsId}, body=${candidate.body.take(80)}...")
+        Log.d(TAG, "[探针] 候选短信开始处理 source=${candidate.source.logName}, smsId=${candidate.smsId}, body_chars=${candidate.body.length}")
 
         val eventData = SmsAnalysis.parse(candidate.sender, candidate.body)
         if (eventData == null) {
@@ -79,7 +79,7 @@ class SmsPickupIngestCoordinator(
 
         val fingerprint = SmsPickupFingerprint.fromDraft(eventData)
         if (dedupEnabled && fingerprint != null && terminalFingerprints.containsKey(fingerprint)) {
-            Log.d(TAG, "[探针] 同取件码已由其他入口处理，跳过 source=${candidate.source.logName}, fingerprint=$fingerprint")
+            Log.d(TAG, "[探针] 同取件码已由其他入口处理，跳过 source=${candidate.source.logName}")
             return
         }
         val deliveryKey = candidate.body.trim().replace(Regex("\\s+"), " ")
@@ -111,9 +111,9 @@ class SmsPickupIngestCoordinator(
             }
 
             if (added == null) {
-                Log.d(TAG, "[探针] 取件码已存在或被最终去重拦截 source=${candidate.source.logName}, title=${eventData.title}")
+                Log.d(TAG, "[探针] 取件码已存在或被最终去重拦截 source=${candidate.source.logName}")
             } else {
-                Log.d(TAG, "[探针] ✅ 取件码已入库 source=${candidate.source.logName}, title=${added.title}")
+                Log.d(TAG, "[探针] ✅ 取件码已入库 source=${candidate.source.logName}, eventId=${added.id}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "[探针] 当前入口入库失败，允许后续入口继续尝试 source=${candidate.source.logName}", e)

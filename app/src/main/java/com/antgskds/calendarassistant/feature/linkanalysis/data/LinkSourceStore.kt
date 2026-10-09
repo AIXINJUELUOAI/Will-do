@@ -26,17 +26,16 @@ class LinkSourceStore(private val directory: File) {
     private fun readIndex(): List<InstalledLinkSource> = runCatching {
         val index = File(directory, "index.json")
         if (!index.exists()) emptyList() else json.decodeFromString<List<InstalledLinkSource>>(index.readText())
-            .filter { File(directory, it.digest + ".json").isFile }
+            .filter { File(directory, it.digest + ".json").isFile }.takeLast(1).map { it.copy(enabled = true) }
     }.getOrDefault(emptyList())
 
     suspend fun import(input: InputStream): InstalledLinkSource = withContext(Dispatchers.IO) {
         val pack = readPackage(input)
         mutex.withLock {
             directory.mkdirs()
-            val installed = InstalledLinkSource(pack.manifest, pack.digest,
-                enabled = _sources.value.firstOrNull { it.manifest.id==pack.manifest.id }?.enabled ?: true)
+            val installed = InstalledLinkSource(pack.manifest, pack.digest)
             atomicWrite(File(directory, pack.digest + ".json"), json.encodeToString(pack))
-            val next = _sources.value.filterNot { it.manifest.id == installed.manifest.id } + installed
+            val next = listOf(installed)
             saveIndex(next)
             installed
         }

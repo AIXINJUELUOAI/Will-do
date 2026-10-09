@@ -51,8 +51,13 @@ object PolicyCatalog {
     )
 
     val policies: List<PolicyEntry> = listOf(
+        PolicyEntry("剪贴板复制提示去重", Chain.RECOGNITION, "feature/recognition/ingest/clipboard/ClipboardCopyPromptPolicy", Maturity.ACTIVE, "内容指纹与系统复制时间共同区分每次复制；相同实例的监听及前台读取去重，重新复制允许重试，入库去重独立"),
+        PolicyEntry("随口记悬浮展示", Chain.SUPPORT, "feature/quickmemo/domain/QuickMemoFloatingPresentationPolicy", Maturity.ACTIVE, "收起优先标题、展开优先摘要；有效原链接优先于录音播放，保留完整分享参数"),
         PolicyEntry("收藏链接刷新", Chain.INGEST, "feature/quickmemo/domain/QuickMemoLinkRefreshPolicy", Maturity.ACTIVE, "相同内容 ID 的新分享参数刷新原记录；不以缺失 token 的链接覆盖已有 token；保留标题、正文编辑、文件夹和成功摘要"),
-        PolicyEntry("链接分析策略", Chain.RECOGNITION, "feature/linkanalysis/domain/LinkAnalysisPolicy", Maturity.ACTIVE, "总开关、源精确主机匹配、网页 UA 与素材完整性判断；保留标准端口、域名和私有地址限制"),
+        PolicyEntry("链接转写正文", Chain.INGEST, "feature/linkanalysis/domain/LinkTranscriptPolicy", Maturity.ACTIVE, "独立保存音频逐字稿；按句号分段、开关控制追加正文，重试去重并保留用户编辑"),
+        PolicyEntry("链接摘要限制说明", Chain.RECOGNITION, "feature/linkanalysis/domain/LinkSummaryPresentationPolicy", Maturity.ACTIVE, "限制集中在摘要底部；规范化去重，保留不同限制，详情与 Markdown 导出共用"),
+        PolicyEntry("链接摘要标题回写", Chain.INGEST, "feature/linkanalysis/domain/LinkSummaryTitlePolicy", Maturity.ACTIVE, "仅替换空白、默认收藏及未经修改的自动标题；最终综合摘要与标题在同一事务保存，保护分析期间编辑"),
+        PolicyEntry("链接分析策略", Chain.RECOGNITION, "feature/linkanalysis/domain/LinkAnalysisPolicy", Maturity.ACTIVE, "总开关、源精确主机匹配、网页 UA、源声明登录入口与素材完整性判断；登录仅允许声明的 HTTPS 主机，保留标准端口、域名和私有地址限制"),
         PolicyEntry("链接摘要通知分流", Chain.NOTIFICATION, "feature/notification/policy/LinkSummaryNotificationPolicy", Maturity.ACTIVE, "保存有效摘要后真实分流 NORMAL/LIVE；按随口记取消，不走旧日程抑制门控"),
 
         PolicyEntry("随口记新建草稿", Chain.INGEST, "feature/quickmemo/domain/QuickMemoDraftPolicy", Maturity.ACTIVE, "空白新建仅驻留会话，有内容或添加提醒/附件/待办后串行保存；编辑中不进入列表，退出只清理无有效内容的草稿"),
@@ -70,6 +75,7 @@ object PolicyCatalog {
             "统一课程入口、展示和提醒判断；独立保留下滑偏好，恢复后不补发停用期间的课程提醒"),
 
         PolicyEntry("支付通知优先", Chain.RECOGNITION, "feature/accounting/domain/AccountingNotificationPriorityPolicy", Maturity.ACTIVE, "通知实际入库回执与支付现场按来源、短时窗口、方向及可读金额关联；一份回执仅抑制一次识图，历史详情、短信、待核对或失败不抑制"),
+        PolicyEntry("微信收款与领红包会话", Chain.RECOGNITION, "feature/accounting/domain/WechatIncomingPaymentPolicy", Maturity.ACTIVE, "仅已知转账详情的收款成功事件或领取页到红包详情的短会话授权截图；空树不拼造交易时间，统一模型核实本人收入与去重"),
         PolicyEntry("微信发红包会话", Chain.RECOGNITION, "feature/accounting/domain/WechatRedPacketSessionPolicy", Maturity.ACTIVE, "准备页提交后缓存支付确认截图，仅同会话已发送 Toast 授权识别；取消、离页、过期清理，发送时刻与默认名称由成功证据补齐"),
         PolicyEntry("财务消息权限", Chain.RECOGNITION, "platform/receiver/AccountingMessageAccessPolicy", Maturity.ACTIVE, "总开关、子开关、通知使用权和两项短信权限共同控制消息记账"),
         PolicyEntry("自动记账触发", Chain.RECOGNITION, "feature/accounting/domain/AutomaticAccountingPolicy", Maturity.ACTIVE, "统一开关、支付包白名单、成功页面匹配；无全局时间间隔，页面重复由支付页面策略统一管理；诊断另覆盖拼多多、淘宝和京东，不扩大自动识别范围"),

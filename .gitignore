@@ -61,3 +61,6 @@ settings.local.json
 .kotlin/
 .codex_tmp/
 .local-layout-backup/
+
+# Local private documents; public guides and licenses live in 开发记录.
+/docs/

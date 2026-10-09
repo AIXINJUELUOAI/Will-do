@@ -60,7 +60,7 @@ class SevenUiRegressionTest {
         }
         compose.runOnIdle { reminders = emptyList() }
         compose.onAllNodesWithText("修改").assertCountEquals(0)
-        compose.onNodeWithText("提醒").assertIsDisplayed()
+        compose.onAllNodesWithText("提醒").assertCountEquals(2)
         compose.onNodeWithText("添加").assertIsDisplayed().performClick()
         compose.onNodeWithText("添加提醒").assertIsDisplayed()
     }

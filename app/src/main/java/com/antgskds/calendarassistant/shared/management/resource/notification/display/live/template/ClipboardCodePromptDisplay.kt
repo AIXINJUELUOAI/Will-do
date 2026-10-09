@@ -13,14 +13,14 @@ object ClipboardCodePromptDisplay {
     )
 
     fun linkSnapshot(source: String) = NotificationDisplaySnapshot(
-        shortText = "识别到${source}链接",
+        shortText = "${source.ifBlank { "发现" }}链接",
         primaryText = "识别到${source}链接",
         secondaryText = "收藏到随口记，稍后继续查看",
         expandedText = "收藏到随口记，稍后继续查看",
     )
 
     fun savedLinkSnapshot(title: String) = NotificationDisplaySnapshot(
-        shortText = "已收藏到随口记",
+        shortText = "已收藏",
         primaryText = "已收藏到随口记",
         secondaryText = title,
         expandedText = title,

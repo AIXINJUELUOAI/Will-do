@@ -75,6 +75,10 @@ internal fun QuickMemoReminderSection(
     var editingReminder by remember { mutableStateOf<QuickMemoReminderEntity?>(null) }
     val haptics = rememberAppHaptics(hapticEnabled)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp),
+        )
         reminders.sortedWith(compareBy<QuickMemoReminderEntity> { it.triggerAt }.thenBy { it.id }).forEach { reminder ->
             androidx.compose.runtime.key(reminder.id) {
                 QuickMemoReminderRow(

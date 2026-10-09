@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.notification.policy
 
 import com.antgskds.calendarassistant.feature.notification.model.*
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
 
 /** 待确认候选拥有自己的通知，不依赖已入库日程的胶囊状态计算。 */
 object ClipboardCodePromptDeliveryPolicy {
@@ -14,6 +15,9 @@ object ClipboardCodePromptDeliveryPolicy {
         if (kind !in setOf(NotificationKind.CLIPBOARD_CODE_PROMPT, NotificationKind.CLIPBOARD_LINK_PROMPT)) return null
         return if (liveCapsuleEnabled) NotificationRoute.LIVE else NotificationRoute.NORMAL
     }
+
+    fun timeout(kind: NotificationKind): Long? =
+        if (kind == NotificationKind.CLIPBOARD_LINK_PROMPT) ConfigCatalog.LINK_NOTIFICATION_TIMEOUT_MS.toLong() else null
 
     fun isDelivered(result: NotificationResult): Boolean =
         result is NotificationResult.Success && result.state == NotificationState.POSTED

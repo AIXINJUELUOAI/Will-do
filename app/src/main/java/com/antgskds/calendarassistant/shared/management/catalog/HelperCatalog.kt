@@ -48,8 +48,14 @@ object HelperCatalog {
         HelperEntry("链接音频隔离转写", Chain.RECOGNITION, "platform/linkanalysis/LinkAudioTranscriptionService", "分段 WAV 绑定独立 ASR 进程，复用 Sherpa 模型；断连、取消和超时明确失败，不修改原语音随口记"),
         HelperEntry("链接源协议与存储", Chain.SUPPORT, "feature/linkanalysis/data/LinkSourceStore", "校验 ZIP、manifest、JS 与 URL 权限，原子导入，不包含平台源或用户凭据"),
         HelperEntry("链接脚本宿主", Chain.RECOGNITION, "platform/linkanalysis/LinkScriptRuntime", "QuickJS 内存/时间限制及受控网络；WebView 只向脚本返回页面数据，不暴露模型密钥、文件或 Shell"),
+        HelperEntry("链接网页接口回放", Chain.RECOGNITION, "platform/linkanalysis/LinkBrowserSession", "按源声明的 replay 子串记录命中请求，用 WebView Cookie 重放并把响应注入 window.__willdoCapture，供脚本读取 Service Worker/Worker 发出的接口；仍受域名、请求次数与响应大小限制"),
         HelperEntry("链接素材与 AI 输入", Chain.RECOGNITION, "platform/linkanalysis/LinkMaterialProcessor", "实际下载并验证媒体类型；视频抽音轨、音频分段、多图保留顺序，复用在线模型配置"),
+        HelperEntry("随口记文档导出", Chain.SUPPORT, "feature/quickmemo/application/QuickMemoExportWriter", "无附件导出 Markdown，有附件 ZIP 打包相对路径；正文、摘要、来源、时间与转写原文共用快照"),
+        HelperEntry("随口记文件分享与保存", Chain.SUPPORT, "platform/quickmemo/QuickMemoExportFiles", "使用系统文档创建器与 FileProvider 分享，仅读取本应用附件，失败清理临时产物"),
+        HelperEntry("随口记导出菜单", Chain.SUPPORT, "feature/quickmemo/ui/render/material/QuickMemoExportActions", "详情更多菜单调用同一导出流程，保持最新输入、系统分享与保存反馈"),
         HelperEntry("链接源管理界面", Chain.SUPPORT, "feature/linkanalysis/ui/LinkSourceManagerCard", "实验室导入、启停、删除用户源；自动摘要默认关闭"),
+        HelperEntry("链接平台登录", Chain.SUPPORT, "feature/linkanalysis/ui/LinkPlatformLoginDialog", "按当前源声明的名称、网址及可选 UA 交互式网页登录，不内置平台；沿用源域名与私有地址检查，Cookie 仅存本机 WebView、排除备份、不写日志，分析时由宿主复用"),
+        HelperEntry("链接摘要响应解析", Chain.RECOGNITION, "feature/linkanalysis/application/LinkSummaryResponseParser", "最终 AI 响应解析为标题和 Markdown 摘要；缺失或无效标题不丢弃有效摘要，兼容纯文本响应"),
         HelperEntry("链接摘要展示", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/LinkSummaryDisplay", "普通及实况共用完成快照、查看动作与详情点击目标"),
 
         HelperEntry("主页底部操作栏", Chain.SUPPORT, "feature/home/ui/render/material/component/IntegratedFloatingBar", "菜单、今日、全部和随口记由默认关闭的开发者开关控制选中填充，使用官方 Material Symbols Fill 路径并同步编辑预览；加号单击展开或收起操作，长按复用新建入口；今日与全部打开日程弹窗，随口记进入临时草稿，长按遵守触感开关且松手不触发单击"),
@@ -112,7 +118,8 @@ object HelperCatalog {
         HelperEntry("日程展示助手", Chain.SCHEDULE, "feature/schedule/domain/ScheduleDisplayHelper", "日程展示字段拼装"),
         HelperEntry("WebDAV V2 编解码", Chain.SYNC, "feature/cloudsync/data/SyncV2Codec", "状态压缩加密、资产加密、HMAC 内容寻址和稳定哈希"),
         HelperEntry("Agent 协议编解码", Chain.SCHEDULE, "shared/api/AgentProtocolJson", "Agent API v2 请求、响应与业务 DTO 的 JSON 转换"),
-        HelperEntry("Agent 日志脱敏", Chain.SUPPORT, "feature/settings/diagnostics/application/DiagnosticLogRedactor", "导出给 Agent 前遮盖 API Key、密码、Token 和鉴权请求头"),
+        HelperEntry("日志导出脱敏", Chain.SUPPORT, "feature/settings/diagnostics/application/DiagnosticLogRedactor", "普通与 Agent 日志导出复用统一隐私过滤，遮盖凭据、敏感 URL 与历史内容日志"),
+        HelperEntry("日志隐私过滤", Chain.SUPPORT, "shared/util/LogPrivacyRedactor", "Logcat 与落盘前共用凭据、内容字段及 URL 脱敏；异常只保留类型、调用栈和原因类型，不输出异常消息"),
 
         // —— 通知 ——
         HelperEntry("日程实况展示支持", Chain.NOTIFICATION, "shared/management/resource/notification/display/live/template/ScheduleLiveDisplaySupport", "日程胶囊展示字段裁剪/拼接"),

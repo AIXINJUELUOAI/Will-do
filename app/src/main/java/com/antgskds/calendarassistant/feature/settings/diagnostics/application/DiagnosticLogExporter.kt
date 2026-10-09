@@ -32,7 +32,7 @@ class DiagnosticLogExporter(private val context: Context) {
             val timestamp = LocalDateTime.now().format(exportNameFormatter)
             val suffix = minutes?.let { "_${it}min" } ?: "_all"
             val fileName = "willdo_log_${timestamp}$suffix.txt"
-            val text = buildMergedLogText(minutes)
+            val text = DiagnosticLogRedactor.redact(buildMergedLogText(minutes))
             check(WillDoDownloadLogNode.writeText(appContext, WillDoDownloadLogNode.EXPORT_DIR, fileName, text)) {
                 "写入日志失败"
             }
@@ -72,7 +72,7 @@ class DiagnosticLogExporter(private val context: Context) {
             appendLine("Exported at: $now")
             appendLine("Package: ${appContext.packageName}")
             appendLine("UID: ${appContext.applicationInfo.uid}")
-            appendLine("Notice: logs may contain recognized text, prompts, model responses, API responses, and runtime logcat lines.")
+            appendLine("Notice: sensitive fields are filtered. Review diagnostic logs before sharing.")
             appendLine()
             sections.forEach { section ->
                 appendLine("===== ${section.title} =====")

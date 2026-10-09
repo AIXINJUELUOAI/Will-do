@@ -857,7 +857,7 @@ class NotificationOrchestrator(
                 builder.addAction(R.drawable.ic_notification_small, actionButton.text, pendingAction)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "检查事件状态失败: ${e.message}")
+            Log.e(TAG, "检查事件状态失败: ${e.javaClass.simpleName}")
         }
 
         manager.notify(notificationId, builder.build())
@@ -1078,7 +1078,7 @@ class NotificationOrchestrator(
                 builder.addAction(R.drawable.ic_notification_small, actionButton.text, pendingAction)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "检查事件状态失败: ${e.message}")
+            Log.e(TAG, "检查事件状态失败: ${e.javaClass.simpleName}")
         }
 
         manager.notify(notificationId, builder.build())

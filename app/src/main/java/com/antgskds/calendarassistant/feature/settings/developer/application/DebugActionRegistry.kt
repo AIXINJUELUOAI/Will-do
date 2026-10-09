@@ -231,7 +231,7 @@ object DebugActionRegistry {
         targets.forEach { e ->
             val id = e.id ?: return@forEach
             app.scheduleCenter.deleteEvent(id)
-            Log.d(DEBUG_TAG, "  deleted id=$id title=${e.title}")
+            Log.d(DEBUG_TAG, "  deleted id=$id")
         }
         // 删后强制全量重排，清掉重复事件窗口外残留的 rec: 提醒键。
         app.reminderCenter.reconcileAllNow()
@@ -400,12 +400,12 @@ object DebugActionRegistry {
             bundle.patches.forEach { patch ->
                 val id = app.scheduleCenter.addEventFromPatch(patch)
                 created++
-                Log.d(DEBUG_TAG, "developer-test-event created id=$id type=${type.name} title=${patch.title}")
+                Log.d(DEBUG_TAG, "developer-test-event created id=$id type=${type.name}")
             }
             bundle.events.forEach { event ->
                 val id = app.scheduleCenter.addEvent(event)
                 created++
-                Log.d(DEBUG_TAG, "developer-test-event created id=$id type=${type.name} title=${event.title}")
+                Log.d(DEBUG_TAG, "developer-test-event created id=$id type=${type.name}")
             }
         }
         Log.d(DEBUG_TAG, "developer-test-event batch created count=$created types=${types.joinToString { it.name }}")
@@ -642,7 +642,7 @@ object DebugActionRegistry {
             channelId = App.CHANNEL_ID_POPUP,
             smallIcon = smallIcon
         )
-        Log.d(DEBUG_TAG, "plain test fired: $title")
+        Log.d(DEBUG_TAG, "plain test fired")
     }
 
     private fun fireNormalDoubleAction(app: App) {
@@ -949,9 +949,9 @@ object DebugActionRegistry {
 
         Log.d(DEBUG_TAG, "verify-sort: today=$today sampleCount=${sample.size} homeToday=${asc.size}")
         Log.d(DEBUG_TAG, "verify-sort [正序] ↓")
-        asc.forEachIndexed { i, it -> Log.d(DEBUG_TAG, "  $i. ts=${it.startTS} ${it.title}") }
+        asc.forEachIndexed { i, it -> Log.d(DEBUG_TAG, "  $i. ts=${it.startTS}") }
         Log.d(DEBUG_TAG, "verify-sort [倒序] ↓")
-        desc.forEachIndexed { i, it -> Log.d(DEBUG_TAG, "  $i. ts=${it.startTS} ${it.title}") }
+        desc.forEachIndexed { i, it -> Log.d(DEBUG_TAG, "  $i. ts=${it.startTS}") }
         val reversedMatches = asc.map { it.stableKey } == desc.map { it.stableKey }.asReversed()
         Log.d(DEBUG_TAG, "verify-sort: 倒序 == 正序完全翻转 ? $reversedMatches")
     }

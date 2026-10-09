@@ -4,12 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.antgskds.calendarassistant.feature.linkanalysis.domain.*
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog as Limits
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import kotlinx.coroutines.*
 import java.io.File
 import kotlin.math.max
 
 data class LinkPreparedMaterial(val file: File, val mimeType: String, val order: Int, val label: String)
-data class LinkPreparedContent(val text: String, val images: List<LinkPreparedMaterial>, val audio: List<LinkPreparedMaterial>, val warnings: List<String>)
+data class LinkPreparedContent(val text: String, val images: List<LinkPreparedMaterial>, val audio: List<LinkPreparedMaterial>, val warnings: List<String>, val transcript: String = "")
 class LinkMaterialProcessor(private val context: Context) {
     suspend fun prepare(pack: LinkSourcePackage, result: LinkExtractionResult, directory: File, localAudio: Boolean, traceId: String = ""): LinkPreparedContent = withContext(Dispatchers.IO) {
         val client = LinkHttpClient(pack.manifest,traceId)
@@ -17,6 +18,7 @@ class LinkMaterialProcessor(private val context: Context) {
         if (result.status == "partial" || result.body.kind in setOf("description","excerpt"))
             warnings += "源提供的正文不完整，摘要仅依据已取得素材"
         val images = mutableListOf<LinkPreparedMaterial>(); val audio = mutableListOf<LinkPreparedMaterial>()
+        val transcripts = mutableListOf<String>()
         val text = StringBuilder(result.body.text); var downloaded = 0L
         suspend fun download(media: LinkResultMedia): File {
             val file = File(directory, "media-" + media.order); var done = false
@@ -24,7 +26,10 @@ class LinkMaterialProcessor(private val context: Context) {
             for (url in media.urls) {
                 try { client.download(url,media.headers,file); done=true; break }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (failure: Exception) { lastFailure = failure }
+                catch (failure: Exception) {
+                    Log.w("LinkAnalysis","trace=$traceId stage=MEDIA_ATTEMPT_FAIL detail=" + LinkAnalysisFailure.safeDetail(failure))
+                    lastFailure = failure
+                }
             }
             if (!done) throw LinkAnalysisFailure.describe(lastFailure ?: LinkAnalysisFailure(LinkFailureCode.MEDIA_DOWNLOAD), "PREPARING")
             downloaded += file.length(); require(downloaded <= Limits.LINK_MEDIA_TOTAL_BYTES) { "素材总大小超过上限" }
@@ -33,8 +38,16 @@ class LinkMaterialProcessor(private val context: Context) {
             return file
         }
         val ordered = result.media.sortedBy { it.order }
+        suspend fun tryImage(media: LinkResultMedia, label: String) {
+            try { images += image(download(media), media.order, label) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                Log.w("LinkAnalysis","trace=$traceId stage=MEDIA_SKIPPED detail=" + LinkAnalysisFailure.safeDetail(failure))
+                warnings += "部分图片素材不可用，已跳过"
+            }
+        }
         for (media in ordered.filter { it.type == "image" && it.role == "content_image" }) {
-            images += image(download(media), media.order, if (media.group.isBlank()) "图片" else "素材组 " + media.group)
+            tryImage(media, if (media.group.isBlank()) "图片" else "素材组 " + media.group)
         }
         val groups = ordered.filter { it.type in setOf("audio","video") && it.role != "background_music" }.groupBy { it.group }
         if (result.contentType == "video") require(groups.isNotEmpty()) { "源未提供视频音轨，请更新源后重试" }
@@ -58,6 +71,7 @@ class LinkMaterialProcessor(private val context: Context) {
                 if (localAudio) {
                     val transcript = LinkAudioTranscriptionClient(context).transcribe(chunk)
                     require(transcript.isNotBlank()) { "未识别到语音内容，可修改音频处理设置后重试" }
+                    transcripts += transcript.trim()
                     text.append("\n\n").append(label).append("：\n").append(transcript)
                     require(text.length <= Limits.LINK_TEXT_MAX_CHARS) { "转写内容超过处理上限" }
                     chunk.delete()
@@ -69,10 +83,10 @@ class LinkMaterialProcessor(private val context: Context) {
             if (result.contentType in setOf("video","mixed")) warnings += "当前摘要基于视频音轨和文案，未包含画面中的全部信息"
         }
         if (images.isEmpty()) ordered.firstOrNull { it.type == "image" && it.role == "cover" }?.let { cover ->
-            images += image(download(cover),cover.order,"封面（不能代表完整视频画面）")
+            tryImage(cover,"封面（不能代表完整视频画面）")
         }
         require(text.isNotBlank() || images.isNotEmpty() || audio.isNotEmpty()) { "源没有返回可用于摘要的内容" }
-        LinkPreparedContent(text.toString(),images,audio,warnings.distinct())
+        LinkPreparedContent(text.toString(),images,audio,warnings.distinct(), transcripts.joinToString("\n\n"))
     }
     private fun image(file: File, order: Int, label: String): LinkPreparedMaterial {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeFile(file.absolutePath,bounds)

@@ -9,6 +9,15 @@ import com.antgskds.calendarassistant.shared.ui.material.component.LocalAppPageB
 import com.antgskds.calendarassistant.shared.ui.edition.EditionIconButton
 import com.antgskds.calendarassistant.shared.ui.edition.EditionButton
 
+import com.antgskds.calendarassistant.feature.quickmemo.application.QuickMemoExportSnapshot
+import com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisRepository
+import com.antgskds.calendarassistant.shared.ui.material.component.AppDropdownMenu
+import com.antgskds.calendarassistant.shared.ui.material.component.AppMenuItem
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.FileDownload
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.material3.Checkbox
@@ -305,6 +314,34 @@ fun MaterialQuickMemoDetailScreen(
 ) {
     val memo = state.memo
     val haptics = rememberAppHaptics(hapticEnabled)
+    var moreExpanded by remember(memo?.id) { mutableStateOf(false) }
+    var draftTitle by remember(memo?.id) { mutableStateOf(memo?.title.orEmpty()) }
+    var draftBody by remember(memo?.id) { mutableStateOf(memo?.bodyText.orEmpty()) }
+    var observedTitle by remember(memo?.id) { mutableStateOf(memo?.title.orEmpty()) }
+    var observedBody by remember(memo?.id) { mutableStateOf(memo?.bodyText.orEmpty()) }
+    LaunchedEffect(memo?.title, memo?.bodyText) {
+        if (draftTitle == observedTitle) draftTitle = memo?.title.orEmpty()
+        if (draftBody == observedBody) draftBody = memo?.bodyText.orEmpty()
+        observedTitle = memo?.title.orEmpty()
+        observedBody = memo?.bodyText.orEmpty()
+    }
+    val exports = rememberQuickMemoExportActions(QuickMemoExportSnapshot(
+        memo?.copy(title = draftTitle, bodyText = draftBody) ?: QuickMemoEntity(),
+        LinkAnalysisRepository.summary(state.linkAnalysis), state.reminders,
+    ))
+    val linkActive = state.linkAnalysis?.state in setOf("QUEUED", "EXTRACTING", "TRANSCRIBING", "PREPARING", "SUMMARIZING")
+    // 与主页随口记文件夹菜单采用相同的亮暗色与壁纸配色。
+    val menuPalette = rememberAppBackgroundStylePalette(
+        enabled = backgroundMode, miuiBlurEnabled = miuiBlurEnabled, cardAlphaPercent = cardAlphaPercent,
+    )
+    val menuContainerColor = when {
+        backgroundMode -> menuPalette.surface.copy(alpha = MySettings.normalizeAppBackgroundCardAlphaPercent(cardAlphaPercent) / 100f)
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val menuSelectionColor = if (backgroundMode) menuPalette.accent else MaterialTheme.colorScheme.secondaryContainer
+    val menuContentColor = if (backgroundMode) menuPalette.content else MaterialTheme.colorScheme.onSurfaceVariant
+    val menuIconSize = when (uiSize) { 1 -> 24.dp; 2 -> 28.dp; else -> 32.dp }
 
     AppBackgroundStyleTheme(
         enabled = backgroundMode,
@@ -322,6 +359,25 @@ fun MaterialQuickMemoDetailScreen(
                         containerColor = pageContainerColor,
                         navigationIcon = {
                             AppTopBarBackButton(onClick = { haptics.click(); onBack() })
+                        },
+                        actions = {
+                            if (memo != null) Box {
+                                EditionIconButton(onClick = { haptics.click(); moreExpanded = true }) {
+                                    Icon(Icons.Rounded.MoreVert, contentDescription = "更多", modifier = Modifier.size(menuIconSize))
+                                }
+                                AppDropdownMenu(
+                                    expanded = moreExpanded, onDismissRequest = { moreExpanded = false },
+                                    containerColor = menuContainerColor, selectionColor = menuSelectionColor, contentColor = menuContentColor,
+                                    items = buildList {
+                                    if (memo.sourceUrl != null) add(AppMenuItem(
+                                        text = if (linkActive) "停止生成摘要" else if (LinkAnalysisRepository.summary(state.linkAnalysis)?.summary?.isNotBlank() == true) "重新生成摘要" else "生成摘要",
+                                        icon = Icons.Rounded.Refresh,
+                                        onClick = { memo.id?.let { onAction(if (linkActive) QuickMemoUiAction.CancelLinkAnalysis(it) else QuickMemoUiAction.AnalyzeLink(it)) } },
+                                    ))
+                                    add(AppMenuItem("分享随口记", exports.share, Icons.Rounded.Share, enabled = !exports.busy, dividerBefore = memo.sourceUrl != null))
+                                    add(AppMenuItem(if (exports.busy) "正在导出…" else "保存到本地", exports.save, Icons.Rounded.FileDownload, enabled = !exports.busy))
+                                })
+                            }
                         },
                     )
             }
@@ -350,15 +406,14 @@ fun MaterialQuickMemoDetailScreen(
                 }
 
                 QuickMemoDetailContent(
-                    memo = memo,
+                    memo = memo, draftTitle = draftTitle, draftBody = draftBody,
                     linkAnalysis = state.linkAnalysis,
-                    onAnalyzeLink = { memo.id?.let { onAction(QuickMemoUiAction.AnalyzeLink(it)) } },
-                    onCancelLinkAnalysis = { memo.id?.let { onAction(QuickMemoUiAction.CancelLinkAnalysis(it)) } },
                     reminders = state.reminders,
                     suggestions = state.suggestions,
                     playbackState = state.playbackState,
-                    onSaveTitle = { title -> memo.id?.let { onAction(QuickMemoUiAction.UpdateTitle(it, title)) } },
+                    onSaveTitle = { title -> draftTitle = title; memo.id?.let { onAction(QuickMemoUiAction.UpdateTitle(it, title)) } },
                     onSaveBody = { body ->
+                        draftBody = body
                         memo.id?.let { onAction(QuickMemoUiAction.UpdateBody(it, body)) }
                     },
                     onSaveReminder = { reminderId, reminderAt, reminderRRule ->
@@ -741,9 +796,9 @@ internal fun QuickMemoListItem(
 @Composable
 internal fun QuickMemoDetailContent(
     memo: QuickMemoEntity,
+    draftTitle: String,
+    draftBody: String,
     linkAnalysis: com.antgskds.calendarassistant.feature.linkanalysis.data.LinkAnalysisEntity? = null,
-    onAnalyzeLink: () -> Unit = {},
-    onCancelLinkAnalysis: () -> Unit = {},
     reminders: List<QuickMemoReminderEntity>,
     suggestions: List<QuickMemoSuggestionEntity>,
     playbackState: AudioPlaybackState,
@@ -773,8 +828,6 @@ internal fun QuickMemoDetailContent(
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val metrics = quickMemoUiMetrics(uiSize)
-    var draftBody by remember(memo.id, memo.bodyText) { mutableStateOf(memo.bodyText) }
-    var draftTitle by remember(memo.id) { mutableStateOf(memo.title) }
     var bodyEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var isAttachingImage by remember { mutableStateOf(false) }
     var isImageSelected by remember(memo.id, memo.imagePath) { mutableStateOf(false) }
@@ -985,7 +1038,7 @@ internal fun QuickMemoDetailContent(
         val bodySection: @Composable ColumnScope.() -> Unit = {
             BasicTextField(
                 value = draftTitle,
-                onValueChange = { draftTitle = it; onSaveTitle(it) },
+                onValueChange = onSaveTitle,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 textStyle = MaterialTheme.typography.titleLarge.copy(color = detailPrimaryTextColor, fontWeight = FontWeight.Bold),
@@ -1000,12 +1053,11 @@ internal fun QuickMemoDetailContent(
             BasicTextField(
                 value = draftBody,
                 onValueChange = {
-                    draftBody = it
                     onSaveBody(it)
                 },
                 modifier = Modifier.fillMaxWidth()
                     .onGloballyPositioned { coordinates -> bodyEditorBounds = coordinates.boundsInParent() }
-                    .defaultMinSize(minHeight = if (wideLayout) 180.dp else 100.dp),
+                    .defaultMinSize(minHeight = metrics.detailBodyLineHeight.value.dp),
                 textStyle = TextStyle(
                     color = if (isCompleted) detailPrimaryTextColor.copy(alpha = 0.58f) else detailPrimaryTextColor,
                     fontSize = metrics.detailBodyFontSize,
@@ -1032,7 +1084,6 @@ internal fun QuickMemoDetailContent(
                     }
                 },
             )
-            if (memo.sourceUrl != null) com.antgskds.calendarassistant.feature.linkanalysis.ui.LinkSummarySection(linkAnalysis,onAnalyzeLink,onCancelLinkAnalysis)
             if (isVoice && memo.transcriptionStatus == QuickMemoTranscriptionStatus.FAILED) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1059,16 +1110,13 @@ internal fun QuickMemoDetailContent(
                 color = detailSecondaryTextColor.copy(alpha = 0.6f),
             )
         }
-        val supportSection: @Composable ColumnScope.() -> Unit = {
-            if (!recordAudioGranted) {
-                QuickMemoRecordPermissionCard(
-                    onGrantClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                )
-                Spacer(Modifier.height(16.dp))
-            }
-            if (wideLayout) {
-                QuickMemoMetadataCard(memo = memo)
-                Spacer(Modifier.height(16.dp))
+
+
+
+    val auxiliarySection: @Composable ColumnScope.() -> Unit = {
+            if (memo.sourceUrl != null && linkAnalysis != null) {
+                com.antgskds.calendarassistant.feature.linkanalysis.ui.LinkSummarySection(linkAnalysis, textColor = detailPrimaryTextColor)
+                Spacer(Modifier.height(24.dp))
             }
             QuickMemoReminderSection(
                 reminders = reminders,
@@ -1078,12 +1126,12 @@ internal fun QuickMemoDetailContent(
                 hapticEnabled = hapticEnabled,
             )
             if (suggestions.isNotEmpty()) {
-                Spacer(Modifier.height(if (wideLayout) 24.dp else 40.dp))
+                Spacer(Modifier.height(24.dp))
                 Text(
                     text = "日程待办",
                     modifier = Modifier.padding(bottom = 16.dp),
                     style = MaterialTheme.typography.titleMedium,
-                    color = detailPrimaryTextColor,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                 )
                 suggestions.forEach { suggestion ->
@@ -1093,8 +1141,7 @@ internal fun QuickMemoDetailContent(
                     }
                 }
             }
-        }
-
+    }
 
     val sourceUrl = memo.sourceUrl?.takeIf {
         it.startsWith("https://", true) || it.startsWith("http://", true)
@@ -1107,7 +1154,7 @@ internal fun QuickMemoDetailContent(
                 voiceSection()
                 bodySection()
                 Spacer(Modifier.height(24.dp))
-                supportSection()
+                auxiliarySection()
                 Spacer(Modifier.height(toolbarBottomSpace))
             }
         } else {
@@ -1135,29 +1182,7 @@ internal fun QuickMemoDetailContent(
             }
             bodySection()
             Spacer(Modifier.height(24.dp))
-            QuickMemoReminderSection(
-                reminders = reminders,
-                onSaveReminder = onSaveReminder,
-                onDeleteReminder = onDeleteReminder,
-                uiSize = uiSize,
-                hapticEnabled = hapticEnabled,
-            )
-            if (suggestions.isNotEmpty()) {
-                Spacer(Modifier.height(40.dp))
-                Text(
-                    text = "日程待办",
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = detailPrimaryTextColor,
-                    fontWeight = FontWeight.Bold,
-                )
-                suggestions.forEach { suggestion ->
-                    QuickMemoSuggestionItem(suggestion = suggestion, uiSize = uiSize) {
-                        haptics.confirm()
-                        onCreateSuggestion(suggestion)
-                    }
-                }
-            }
+            auxiliarySection()
 
         Spacer(Modifier.height(toolbarBottomSpace))
         Spacer(modifier = Modifier.height(LocalAppPageBottomPadding.current))
@@ -1294,7 +1319,7 @@ private fun formatQuickMemoDateTime(timestamp: Long): String =
     quickMemoDateTimeFormatter.format(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault()))
 
 @Composable
-private fun QuickMemoTextButton(text: String, onClick: () -> Unit) {
+internal fun QuickMemoTextButton(text: String, onClick: () -> Unit) {
     Text(
         text = text,
         modifier = Modifier
@@ -1490,9 +1515,23 @@ internal fun QuickMemoToolbar(
     val sourceButton: @Composable () -> Unit = {
         if (onOpenSource != null) Surface(
             onClick = onOpenSource, modifier = Modifier.size(barHeight), shape = CircleShape,
-            color = containerColor, contentColor = contentColor, shadowElevation = 6.dp,
+            color = if (backgroundMode) Color.Transparent else containerColor,
+            contentColor = contentColor, shadowElevation = if (backgroundMode) 0.dp else 6.dp,
         ) {
-            Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.ArrowForward, "打开原链接") }
+            val buttonContent: @Composable () -> Unit = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.ArrowForward, "打开原链接")
+                }
+            }
+            if (backgroundMode) {
+                AppBackgroundGlassSurface(
+                    enabled = true,
+                    miuiBlurEnabled = miuiBlurEnabled,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = CircleShape,
+                    surfaceColor = containerColor,
+                ) { buttonContent() }
+            } else buttonContent()
         }
     }
     BoxWithConstraints(

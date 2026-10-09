@@ -171,7 +171,6 @@ private fun QuickMemoManageFoldersSheet(
         subtitle = "选择一个文件夹进行重命名或删除",
         onDismissRequest = onDismiss,
         actions = listOf(
-            AppSheetAction("关闭", onDismiss, AppSheetActionRole.Secondary),
             AppSheetAction("重命名", onRename, enabled = selectedId != null),
             AppSheetAction("删除", onDelete, enabled = selectedId != null),
         ),

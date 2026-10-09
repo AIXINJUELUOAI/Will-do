@@ -60,7 +60,7 @@ class WebDavSyncV2Coordinator(
             )
             val credentials = WebDavCredentials(settings.webDavUsername, webDavPassword)
             val deviceId = identityStore.getOrCreate()
-            Log.i(TAG, "sync start device=${deviceId.shortLogId()} force=$force remote=${config.remotePath}")
+            Log.i(TAG, "sync start device=${deviceId.shortLogId()} force=$force")
 
             update(SyncV2RunPhase.CONNECTING, "正在连接远端")
             val vault = ensureVault(config, credentials, syncPassphrase)

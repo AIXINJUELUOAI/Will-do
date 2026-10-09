@@ -52,6 +52,13 @@ class LinkAnalysisFailure(
     cause: Throwable? = null,
 ) : Exception(code.userMessage, cause) {
     companion object {
+        /** Exception messages from scripts/HTTP may contain credentials or extracted content. */
+        fun safeDetail(error: Throwable?): String = when (error) {
+            is LinkAnalysisFailure -> "code=${error.code.name} http_status=${error.statusCode ?: 0}"
+            null -> ""
+            else -> "error_type=${error.javaClass.simpleName}"
+        }
+
         fun describe(error: Throwable, stage: String): LinkAnalysisFailure {
             var current: Throwable? = error
             val seen = mutableSetOf<Throwable>()

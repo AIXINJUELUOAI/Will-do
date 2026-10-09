@@ -62,7 +62,7 @@ object MiuiIslandManager {
         lastNotifId = request.notifId
         MiuiIslandDispatcher.sendBroadcast(context, request)
         shownNotifIds.add(target.notifId)
-        Log.d(TAG, "send island: ${request.title} | ${request.content} | actions=${request.actions.size}")
+        Log.d(TAG, "send island: actions=${request.actions.size}")
     }
 
     @Synchronized

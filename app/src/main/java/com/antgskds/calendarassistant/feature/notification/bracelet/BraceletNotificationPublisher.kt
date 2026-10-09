@@ -150,7 +150,7 @@ class BraceletNotificationPublisher(context: Context) {
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(notificationId, notification)
         prefs.edit().putBoolean(dedupeKey, true).apply()
-        Log.d(TAG, "bracelet notify source=$source key=$dedupeKey title=${content.title} text=${content.text}")
+        Log.d(TAG, "bracelet notify source=$source key=$dedupeKey")
         return true
     }
 

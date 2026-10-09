@@ -12,6 +12,17 @@ import org.junit.rules.TemporaryFolder
 class AppLoggerTest {
     @get:Rule val temp = TemporaryFolder()
 
+    @Test fun formattingFiltersBeforeEitherRuntimeSinkAndOmitsExceptionMessages() {
+        val error = IllegalArgumentException("exception-marker")
+        error.stackTrace = arrayOf(StackTraceElement("Diag", "operation", "Diag.kt", 42))
+        val body = AppLogger.formatBody("stage=FAILED apiKey=key-marker", error)
+        assertFalse(body.contains("key-marker"))
+        assertFalse(body.contains("exception-marker"))
+        assertTrue(body.contains("stage=FAILED"))
+        assertTrue(body.contains("java.lang.IllegalArgumentException"))
+        assertTrue(body.contains("Diag.operation(Diag.kt:42)"))
+    }
+
     @Test fun appendsAllSourcesToSameDayAndRetainsThreeCalendarDays() {
         val dir = temp.newFolder()
         for (day in 10..13) {

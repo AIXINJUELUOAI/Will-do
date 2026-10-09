@@ -131,7 +131,7 @@ object ApiModelProvider {
                 return ApiCallResult.Failure(ApiErrorKind.CONFIG, message = "配置缺失")
             }
 
-            Log.d("ApiModelProvider", "Requesting: $baseUrl (Model: $modelName)")
+            Log.d("ApiModelProvider", "request type=text")
 
             // --- Gemini 原生支持分支 ---
             if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
@@ -147,7 +147,7 @@ object ApiModelProvider {
             )
 
             val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
-            Log.d("DEBUG_HTTP", "服务器原始响应: $rawBody")
+            Log.d("DEBUG_HTTP", "response status=$statusCode chars=${rawBody.length}")
 
             if (statusCode in 200..299) {
                 if (shouldAttemptReasoning) {
@@ -160,11 +160,11 @@ object ApiModelProvider {
                 markReasoningSupport(baseUrl, modelName, false)
                 val fallbackRequest = request.copy(model = modelName, reasoningEffort = null)
                 val (fallbackStatus, fallbackBody) = postJsonWithAuth(baseUrl, apiKey, fallbackRequest)
-                Log.d("DEBUG_HTTP", "服务器重试响应: $fallbackBody")
+                Log.d("DEBUG_HTTP", "retry response status=$fallbackStatus chars=${fallbackBody.length}")
                 if (fallbackStatus in 200..299) {
                     return parseModelResponse(fallbackBody)
                 }
-                Log.e("ApiModelProvider", "Retry failed: HTTP $fallbackStatus - $fallbackBody")
+                Log.e("ApiModelProvider", "Retry failed: HTTP $fallbackStatus")
                 return ApiCallResult.Failure(
                     ApiErrorKind.HTTP,
                     statusCode = fallbackStatus,
@@ -172,7 +172,7 @@ object ApiModelProvider {
                 )
             }
 
-            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode - $rawBody")
+            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode")
             return ApiCallResult.Failure(
                 ApiErrorKind.HTTP,
                 statusCode = statusCode,
@@ -203,10 +203,10 @@ object ApiModelProvider {
                 return ApiCallResult.Failure(ApiErrorKind.CONFIG, message = "配置缺失")
             }
 
-            Log.d("ApiModelProvider", "Requesting (vision): $baseUrl (Model: $modelName)")
+            Log.d("ApiModelProvider", "request type=vision")
             Log.d(
                 "DEBUG_HTTP_VISION",
-                "vision request summary: model=$modelName, url=$baseUrl, mimeType=$mimeType, imageBytes=${imageBytes.size}, promptChars=${prompt.length}"
+                "vision request summary: mimeType=$mimeType, imageBytes=${imageBytes.size}, promptChars=${prompt.length}"
             )
 
             if (baseUrl.contains("googleapis") || baseUrl.contains("gemini")) {
@@ -225,11 +225,11 @@ object ApiModelProvider {
             )
             Log.d(
                 "DEBUG_HTTP_VISION",
-                "vision request envelope: reasoning=${if (shouldAttemptReasoning) "low" else "off"}, dataUrlPrefix=${dataUrl.take(32)}..., payloadChars=${requestBody.toString().length}"
+                "vision request envelope: reasoning=${if (shouldAttemptReasoning) "low" else "off"}, payloadChars=${requestBody.toString().length}"
             )
 
             val (statusCode, rawBody) = postJsonWithAuth(baseUrl, apiKey, requestBody)
-            Log.d("DEBUG_HTTP_VISION", "服务器原始响应: $rawBody")
+            Log.d("DEBUG_HTTP_VISION", "response status=$statusCode chars=${rawBody.length}")
 
             if (statusCode in 200..299) {
                 if (shouldAttemptReasoning) {
@@ -247,11 +247,11 @@ object ApiModelProvider {
                     reasoningEffort = null
                 )
                 val (fallbackStatus, fallbackRaw) = postJsonWithAuth(baseUrl, apiKey, fallbackBody)
-                Log.d("DEBUG_HTTP_VISION", "服务器重试响应: $fallbackRaw")
+                Log.d("DEBUG_HTTP_VISION", "retry response status=$fallbackStatus chars=${fallbackRaw.length}")
                 if (fallbackStatus in 200..299) {
                     return parseModelResponse(fallbackRaw)
                 }
-                Log.e("ApiModelProvider", "Vision retry failed: HTTP $fallbackStatus - $fallbackRaw")
+                Log.e("ApiModelProvider", "Vision retry failed: HTTP $fallbackStatus")
                 return ApiCallResult.Failure(
                     ApiErrorKind.HTTP,
                     statusCode = fallbackStatus,
@@ -259,7 +259,7 @@ object ApiModelProvider {
                 )
             }
 
-            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode - $rawBody")
+            Log.e("ApiModelProvider", "Request failed: HTTP $statusCode")
             return ApiCallResult.Failure(
                 ApiErrorKind.HTTP,
                 statusCode = statusCode,
@@ -326,7 +326,7 @@ object ApiModelProvider {
 
             val choices = root.optJSONArray("choices")
             if (choices == null || choices.length() == 0) {
-                Log.w("DEBUG_HTTP_VISION", "parseModelResponse: no choices field, rootKeys=${root.names()}")
+                Log.w("DEBUG_HTTP_VISION", "parseModelResponse: no choices field, root_key_count=${root.length()}")
                 return ApiCallResult.Failure(ApiErrorKind.PARSE, message = "No Choices", rawBody = rawBody)
             }
 
@@ -340,7 +340,7 @@ object ApiModelProvider {
                 val refusal = message?.opt("refusal")
                 Log.w(
                     "DEBUG_HTTP_VISION",
-                    "parseModelResponse: empty content, finishReason=$finishReason, nativeFinishReason=$nativeFinishReason, reasoningContent=$reasoningContent, refusal=$refusal, message=$message"
+                    "parseModelResponse: empty content, has_finish_reason=${!finishReason.isNullOrBlank()}, has_native_finish_reason=${!nativeFinishReason.isNullOrBlank()}, has_reasoning=${reasoningContent != null}, has_refusal=${refusal != null}"
                 )
                 ApiCallResult.Failure(ApiErrorKind.PARSE, message = "Empty Content", rawBody = rawBody)
             } else {
@@ -749,7 +749,7 @@ object ApiModelProvider {
         }
 
         val rawBody = response.bodyAsText()
-        Log.d("DEBUG_HTTP_GEMINI", "Gemini 响应: $rawBody")
+        Log.d("DEBUG_HTTP_GEMINI", "response status=${response.status.value} chars=${rawBody.length}")
 
         if (response.status.value !in 200..299) {
             return ApiCallResult.Failure(
@@ -826,7 +826,7 @@ object ApiModelProvider {
         }
 
         val rawBody = response.bodyAsText()
-        Log.d("DEBUG_HTTP_GEMINI", "Gemini 视觉响应: $rawBody")
+        Log.d("DEBUG_HTTP_GEMINI", "vision response status=${response.status.value} chars=${rawBody.length}")
 
         if (response.status.value !in 200..299) {
             return ApiCallResult.Failure(

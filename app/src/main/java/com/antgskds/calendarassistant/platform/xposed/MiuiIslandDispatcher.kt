@@ -10,7 +10,7 @@ import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.HyperPicture
@@ -44,7 +44,7 @@ object MiuiIslandDispatcher {
                 val request = MiuiIslandRequest.fromIntent(intent)
                 post(context.applicationContext ?: context, request)
             } catch (e: Exception) {
-                Log.w(TAG, "onReceive error: ${e.message}")
+                Log.w(TAG, "onReceive error_type=${e.javaClass.simpleName}")
             }
         }
     }
@@ -149,11 +149,11 @@ object MiuiIslandDispatcher {
 
             Log.d(
                 TAG,
-                "posted: ${request.title} | ${request.content} | actions=${actions.size}" +
+                "posted: actions=${actions.size}" +
                     " | highlight=${request.highlightColor} | dismiss=${request.dismissIsland}"
             )
         } catch (e: Exception) {
-            Log.w(TAG, "post error: ${e.message}")
+            Log.w(TAG, "post error_type=${e.javaClass.simpleName}")
         }
     }
 

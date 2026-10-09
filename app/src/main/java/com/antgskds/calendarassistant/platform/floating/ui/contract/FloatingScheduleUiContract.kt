@@ -21,6 +21,7 @@ data class FloatingDragTextOptions(
 data class FloatingScheduleUiState(
     val scheduleItems: List<ScheduleDisplayItem>,
     val quickMemos: List<QuickMemoEntity> = emptyList(),
+    val quickMemoSummaries: Map<Long, String> = emptyMap(),
     val voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
     val recentVoiceMemoId: Long? = null,
     val audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
@@ -54,7 +55,8 @@ class FloatingScheduleUiActions(
     val onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     val onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     val onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    val onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    val onSaveQuickMemo: (QuickMemoEntity, String, String, (Boolean) -> Unit) -> Unit = { _, _, _, onComplete -> onComplete(false) },
+    val onOpenQuickMemoLink: (String) -> Unit = {},
     val onReorderQuickMemos: (List<Long>) -> Unit = {},
     val onReorderScheduleItems: (List<String>) -> Unit = {},
     val onStartPlainTextDrag: (String, String, () -> Unit) -> Boolean = { _, _, _ -> false },

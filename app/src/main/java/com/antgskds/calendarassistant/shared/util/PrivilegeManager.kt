@@ -416,7 +416,7 @@ object PrivilegeManager {
             Log.d(TAG, "Root check result: $isRoot")
             isRoot
         } catch (e: Exception) {
-            Log.d(TAG, "Root check failed: ${e.message}")
+            Log.d(TAG, "Root check failed: ${e.javaClass.simpleName}")
             false
         }
     }

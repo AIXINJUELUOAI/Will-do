@@ -785,7 +785,7 @@ class BackupCoordinator(
     private fun ZipOutputStream.putFileEntry(name: String, file: File) {
         if (!file.isReadableRegularFile("zip_entry", "entry=$name")) return
         val input = runCatching { file.inputStream() }.getOrElse { error ->
-            Log.w(TAG, "Skip backup file open failed entry=$name path=${file.absolutePath}", error)
+            Log.w(TAG, "Skip backup file open failed entry=$name", error)
             return
         }
         try {
@@ -795,7 +795,7 @@ class BackupCoordinator(
                 closeEntry()
             }
         } catch (error: Throwable) {
-            Log.e(TAG, "Write backup entry failed entry=$name path=${file.absolutePath}", error)
+            Log.e(TAG, "Write backup entry failed entry=$name", error)
             throw error
         }
     }

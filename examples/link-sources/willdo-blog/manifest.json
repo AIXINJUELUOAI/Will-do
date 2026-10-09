@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 1,
+  "id": "willdo.blog-example",
+  "name": "Will do 博客示例",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "matches": [
+    {"host": "aixinjueluoonline.top", "pathPrefix": "/posts/"}
+  ],
+  "permissions": {
+    "networkHosts": ["aixinjueluoonline.top"],
+    "browser": false,
+    "replay": []
+  }
+}

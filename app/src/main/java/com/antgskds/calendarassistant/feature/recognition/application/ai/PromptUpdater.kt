@@ -94,7 +94,7 @@ object PromptUpdater {
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "检查云端 prompt 失败: ${e.javaClass.simpleName}: ${e.message}")
+            Log.w(TAG, "检查云端 prompt 失败: ${e.javaClass.simpleName}: ${e.javaClass.simpleName}")
             PromptCheckResult.Error("检查失败，请稍后重试")
         }
     }

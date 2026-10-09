@@ -1,0 +1,204 @@
+{
+  "protocolVersion": 1,
+  "description": "离线协议样例，不联网，素材 URL 不可用于下载。",
+  "cases": [
+    {
+      "name": "ok_text",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-ok_text",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-ok_text",
+        "status": "ok",
+        "source": {
+          "url": "https://example.com/post/demo-001",
+          "canonicalUrl": "https://example.com/post/demo-001",
+          "contentId": "demo-001"
+        },
+        "title": "教学示例标题",
+        "author": "示例作者",
+        "contentType": "article",
+        "body": {
+          "kind": "full",
+          "format": "plain",
+          "text": "第一段完整正文。\n\n第二段完整正文。"
+        },
+        "media": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "partial_excerpt",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-partial_excerpt",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-partial_excerpt",
+        "status": "partial",
+        "source": {
+          "url": "https://example.com/post/demo-001",
+          "canonicalUrl": "https://example.com/post/demo-001",
+          "contentId": "demo-001"
+        },
+        "title": "教学示例标题",
+        "author": "示例作者",
+        "contentType": "article",
+        "body": {
+          "kind": "excerpt",
+          "format": "plain",
+          "text": "这是实际取得的一段节选。"
+        },
+        "media": [],
+        "warnings": [
+          "仅取得节选，摘要只能依据这部分文字。"
+        ]
+      }
+    },
+    {
+      "name": "no_article",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-no_article",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-no_article",
+        "status": "error",
+        "error": {
+          "code": "NO_ARTICLE",
+          "message": "这是离线教学案例，不代表对网站发起了请求。"
+        }
+      }
+    },
+    {
+      "name": "access_required",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-access_required",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-access_required",
+        "status": "error",
+        "error": {
+          "code": "ACCESS_REQUIRED",
+          "message": "这是离线教学案例，不代表对网站发起了请求。"
+        }
+      }
+    },
+    {
+      "name": "http_too_large",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-http_too_large",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-http_too_large",
+        "status": "error",
+        "error": {
+          "code": "HTTP_TOO_LARGE",
+          "message": "这是离线教学案例，不代表对网站发起了请求。"
+        }
+      }
+    },
+    {
+      "name": "mixed_media",
+      "input": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-mixed_media",
+        "url": "https://example.com/post/demo-001"
+      },
+      "result": {
+        "protocolVersion": 1,
+        "requestId": "tutorial-mixed_media",
+        "status": "ok",
+        "source": {
+          "url": "https://example.com/post/demo-001",
+          "canonicalUrl": "https://example.com/post/demo-001",
+          "contentId": "demo-001"
+        },
+        "title": "教学示例标题",
+        "author": "示例作者",
+        "contentType": "mixed",
+        "body": {
+          "kind": "full",
+          "format": "plain",
+          "text": "自有演示素材的正文。"
+        },
+        "media": [
+          {
+            "type": "image",
+            "role": "content_image",
+            "urls": [
+              "https://media.example.com/body.jpg"
+            ],
+            "headers": {},
+            "mimeType": "image/jpeg",
+            "order": 0,
+            "group": "article-001"
+          },
+          {
+            "type": "image",
+            "role": "cover",
+            "urls": [
+              "https://media.example.com/cover.jpg"
+            ],
+            "headers": {},
+            "mimeType": "image/jpeg",
+            "order": 1,
+            "group": "video-001"
+          },
+          {
+            "type": "audio",
+            "role": "speech_audio",
+            "urls": [
+              "https://media.example.com/speech.mp3"
+            ],
+            "headers": {},
+            "mimeType": "audio/mpeg",
+            "order": 2,
+            "group": "video-001",
+            "durationMs": 120000
+          },
+          {
+            "type": "audio",
+            "role": "background_music",
+            "urls": [
+              "https://media.example.com/bgm.mp3"
+            ],
+            "headers": {},
+            "mimeType": "audio/mpeg",
+            "order": 3,
+            "group": "music-001",
+            "durationMs": 120000
+          },
+          {
+            "type": "video",
+            "role": "video",
+            "urls": [
+              "https://media.example.com/clip.mp4"
+            ],
+            "headers": {},
+            "mimeType": "video/mp4",
+            "order": 4,
+            "group": "video-001",
+            "durationMs": 120000
+          }
+        ],
+        "warnings": [
+          "媒体地址均为占位值，案例只用于格式演示。"
+        ]
+      }
+    }
+  ]
+}

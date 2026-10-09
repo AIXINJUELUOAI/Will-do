@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.linkanalysis.domain
 
 import com.antgskds.calendarassistant.feature.settings.data.model.MySettings
+import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog as Limits
 import java.net.URI
 
 object LinkAnalysisPolicy {
@@ -19,6 +20,19 @@ object LinkAnalysisPolicy {
         require(it.isNotBlank() && it.length <= com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog.LINK_BROWSER_UA_MAX_CHARS &&
             !it.contains('\r') && !it.contains('\n'))
     }
+
+    fun allowsLoginUrl(manifest: LinkSourceManifest, url: String): Boolean = runCatching {
+        URI(url).scheme.equals("https", ignoreCase = true) &&
+            url.none { it.isISOControl() } && allows(manifest, url)
+    }.getOrDefault(false)
+
+    fun allowsLogin(manifest: LinkSourceManifest, entry: LinkSourceLoginEntry): Boolean =
+        manifest.permissions.browser && entry.name.isNotBlank() &&
+            entry.name.length <= Limits.LINK_LOGIN_NAME_MAX_CHARS && entry.name.none { it.isISOControl() } &&
+            allowsLoginUrl(manifest, entry.url) && runCatching { browserUserAgent(entry.userAgent) }.isSuccess
+
+    fun loginEntries(manifest: LinkSourceManifest): List<LinkSourceLoginEntry> =
+        manifest.loginEntries.filter { allowsLogin(manifest, it) }.take(Limits.LINK_LOGIN_MAX_ENTRIES)
 
     fun enabled(settings: MySettings) = settings.linkAnalysisEnabled
     fun matches(manifest: LinkSourceManifest, url: String): Boolean = runCatching {

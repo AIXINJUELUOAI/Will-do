@@ -21,6 +21,7 @@ class DiagnosticLogRedactorTest {
             assertFalse(redacted.contains(it))
         }
         assertTrue(redacted.contains("<redacted>"))
-        assertTrue(redacted.contains("mode=list"))
+        assertFalse(redacted.contains("mode=list"))
+        assertTrue(redacted.contains("https://example.com"))
     }
 }

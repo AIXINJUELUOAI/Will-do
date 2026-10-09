@@ -8,7 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
+import com.antgskds.calendarassistant.shared.util.AppLogger as Log
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

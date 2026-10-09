@@ -124,7 +124,7 @@ class QuickMemoTranscriptionService : Service() {
                     }
                 }
                 is TranscriptionResult.Failure -> {
-                    Log.w(TAG, "transcription failed memoId=$memoId retryable=${result.retryable}: ${result.message}")
+                    Log.w(TAG, "transcription failed memoId=$memoId retryable=${result.retryable}")
                     repository.updateTranscriptionStatus(memoId, QuickMemoTranscriptionStatus.FAILED)
                     notifyFailed(memoId)
                 }

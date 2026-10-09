@@ -17,6 +17,7 @@ fun HomeActionDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     PredictiveFloatingActionCard(
         visible = visible,
@@ -26,7 +27,7 @@ fun HomeActionDialog(
         dismissText = dismissText,
         isDestructive = isDestructive,
         dismissIsDestructive = dismissIsDestructive,
-        isLoading = false,
+        isLoading = isLoading,
         predictiveBackEnabled = predictiveBackEnabled,
         onConfirm = onConfirm,
         onDismiss = onDismiss,

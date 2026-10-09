@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application
 
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatIncomingPaymentPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import kotlinx.coroutines.ensureActive
@@ -42,12 +43,16 @@ class RecognitionOrchestrator(
 
     override suspend fun analyzeAutomaticAccountingImage(bitmap: Bitmap, settings: MySettings, context: Context,
         sourcePackage: String, traceId: String, isDetailPage: Boolean,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?, publishFeedback: Boolean, capturedAt: Long): AnalysisResult<List<RecognitionDraft>> {
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?, publishFeedback: Boolean, capturedAt: Long,
+        wechatIncoming: WechatIncomingPaymentPolicy.Evidence?): AnalysisResult<List<RecognitionDraft>> {
         if (!automaticAccountingEnabled() || !com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.supports(sourcePackage))
             return AnalysisResult.Empty("自动记账已关闭或来源不支持")
         if (redPacketSent != null && (isDetailPage || sourcePackage != com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.WECHAT))
             return AnalysisResult.Empty("红包成功上下文不适用于此来源")
-        val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context, redPacketSent)
+        if (wechatIncoming != null && (redPacketSent != null || sourcePackage != com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy.WECHAT ||
+                isDetailPage != (wechatIncoming.kind == WechatIncomingPaymentPolicy.Kind.TRANSFER)))
+            return AnalysisResult.Empty("微信收入上下文不适用于此来源")
+        val result = RecognitionMultimodalNode.analyzeImage(bitmap, settings, context, redPacketSent, wechatIncoming)
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         if (!automaticAccountingEnabled()) return AnalysisResult.Empty("自动记账已关闭")
         if (isDetailPage && result is AnalysisResult.Success &&
@@ -60,6 +65,10 @@ class RecognitionOrchestrator(
             val bill = redPacketSent.complete(result.bills)
                 ?: return AnalysisResult.Empty("红包确认图未识别到明确的单笔支出，暂不入库")
             result.copy(data = emptyList(), bills = listOf(bill))
+        } else if (result is AnalysisResult.Success && wechatIncoming != null) {
+            val bill = wechatIncoming.complete(result.bills, result.billIssues)
+                ?: return AnalysisResult.Empty("未识别到本人已到账的单笔收入，暂不入库")
+            result.copy(data = emptyList(), bills = listOf(bill.copy(createdAt = capturedAt)))
         } else if (result is AnalysisResult.Success) result.copy(data = emptyList(),
             bills = result.bills.map { it.copy(createdAt = capturedAt) }) else result
         return ingestImageBills(billsOnly, bitmap, context, "accounting.accessibility", sourcePackage, traceId,
@@ -363,11 +372,11 @@ class RecognitionOrchestrator(
             }
             is AnalysisResult.Empty -> Log.w(
                 RECOGNITION_LOG_TAG,
-                "$prefix empty message=${result.message}"
+                "$prefix empty"
             )
             is AnalysisResult.Failure -> Log.e(
                 RECOGNITION_LOG_TAG,
-                "$prefix failure title=${result.failure.title} detail=${result.failure.detail}"
+                "$prefix failure code=${result.failure.errorCode} retryable=${result.failure.retryable}"
             )
         }
     }

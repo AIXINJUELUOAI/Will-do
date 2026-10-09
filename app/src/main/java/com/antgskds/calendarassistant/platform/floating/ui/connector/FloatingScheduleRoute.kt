@@ -19,6 +19,7 @@ import com.antgskds.calendarassistant.platform.floating.ui.render.FloatingSchedu
 fun FloatingScheduleRoute(
     scheduleItems: List<ScheduleDisplayItem>,
     quickMemos: List<QuickMemoEntity> = emptyList(),
+    quickMemoSummaries: Map<Long, String> = emptyMap(),
     voiceCaptureState: QuickMemoVoiceCaptureState = QuickMemoVoiceCaptureState(),
     recentVoiceMemoId: Long? = null,
     audioPlaybackState: AudioPlaybackState = AudioPlaybackState(),
@@ -41,7 +42,8 @@ fun FloatingScheduleRoute(
     onRemoveQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     onToggleQuickMemoTodo: (QuickMemoEntity) -> Unit = {},
     onDeleteQuickMemo: (QuickMemoEntity, () -> Unit) -> Unit = { _, onComplete -> onComplete() },
-    onSaveQuickMemo: (QuickMemoEntity, String, () -> Unit) -> Unit = { _, _, onComplete -> onComplete() },
+    onSaveQuickMemo: (QuickMemoEntity, String, String, (Boolean) -> Unit) -> Unit = { _, _, _, onComplete -> onComplete(false) },
+    onOpenQuickMemoLink: (String) -> Unit = {},
     onReorderQuickMemos: (List<Long>) -> Unit = {},
     floatingScheduleOrderKeys: List<String> = emptyList(),
     onReorderScheduleItems: (List<String>) -> Unit = {},
@@ -64,6 +66,7 @@ fun FloatingScheduleRoute(
         state = FloatingScheduleUiState(
             scheduleItems = scheduleItems,
             quickMemos = quickMemos,
+            quickMemoSummaries = quickMemoSummaries,
             voiceCaptureState = voiceCaptureState,
             recentVoiceMemoId = recentVoiceMemoId,
             audioPlaybackState = audioPlaybackState,
@@ -97,6 +100,7 @@ fun FloatingScheduleRoute(
             onToggleQuickMemoTodo = onToggleQuickMemoTodo,
             onDeleteQuickMemo = onDeleteQuickMemo,
             onSaveQuickMemo = onSaveQuickMemo,
+            onOpenQuickMemoLink = onOpenQuickMemoLink,
             onReorderQuickMemos = onReorderQuickMemos,
             onReorderScheduleItems = onReorderScheduleItems,
             onStartPlainTextDrag = onStartPlainTextDrag,

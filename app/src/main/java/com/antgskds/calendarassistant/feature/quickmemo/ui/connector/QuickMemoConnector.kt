@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.Column
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.material.QuickMemoFolderPicker
 import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoDraftPolicy
 import com.antgskds.calendarassistant.feature.quickmemo.ui.render.material.QuickMemoSelectionToolbar
-import com.antgskds.calendarassistant.feature.quickmemo.ui.render.material.QuickMemoDeleteConfirmationSheet
+import com.antgskds.calendarassistant.feature.home.ui.render.HomeActionDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -204,11 +204,13 @@ fun QuickMemoPage(
         },
         onError = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() },
     )
-    QuickMemoDeleteConfirmationSheet(
-        visible = deleteIds != null, title = "删除随口记",
-        message = "确认删除 ${deleteIds?.size ?: 0} 条随口记？删除后无法恢复。",
-        confirmText = "删除", isLoading = organizing,
-        confirmEnabled = !deleteIds.isNullOrEmpty(),
+    HomeActionDialog(
+        visible = !deleteIds.isNullOrEmpty(), title = "删除随口记",
+        content = "确认删除 ${deleteIds?.size ?: 0} 条随口记？删除后无法恢复。",
+        confirmText = "删除", dismissText = "取消", isDestructive = true,
+        isLoading = organizing,
+        predictiveBackEnabled = mainUiState.settings.predictiveBackEnabled,
+        modifier = Modifier.padding(bottom = extraBottomPadding + 16.dp),
         onConfirm = {
             deleteIds?.takeIf { !organizing }?.let { ids ->
                 organizing = true
@@ -219,7 +221,7 @@ fun QuickMemoPage(
                 }
             }
         },
-        onDismiss = { deleteIds = null },
+        onDismiss = { if (!organizing) deleteIds = null },
     )
 
     if (!twoPane) {

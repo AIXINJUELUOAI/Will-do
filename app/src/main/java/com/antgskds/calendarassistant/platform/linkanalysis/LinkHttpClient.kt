@@ -20,11 +20,13 @@ class LinkHttpClient(private val manifest: LinkSourceManifest, private val trace
                 (it.address.size == 16 && (it.address[0].toInt() and 254) == 252)
         }) throw LinkAnalysisFailure(LinkFailureCode.HOST_REJECTED)
     }
+    private fun secure(url: String) = if (url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else url
     private suspend fun connect(url: String, headers: Map<String,String>, method: String, body: String?): HttpURLConnection {
         require(calls.incrementAndGet() <= Limits.LINK_HTTP_MAX_CALLS) { "源请求次数超过上限" }
         var current = url; var verb = method; var payload = body
         val originalHost = LinkSourceProtocol.host(url)
         repeat(Limits.LINK_MAX_REDIRECTS + 1) { redirect ->
+            current = secure(current)
             currentCoroutineContext().ensureActive(); checkUrl(current)
             val connection = URL(current).openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = false
@@ -83,7 +85,10 @@ class LinkHttpClient(private val manifest: LinkSourceManifest, private val trace
     suspend fun download(url: String, headers: Map<String,String>, target: File): String = withContext(Dispatchers.IO) {
         val connection = connect(url, headers, "GET", null)
         try {
-            if (connection.responseCode !in 200..299) throw LinkAnalysisFailure(LinkFailureCode.MEDIA_DOWNLOAD, connection.responseCode)
+            if (connection.responseCode !in 200..299) {
+                Log.w("LinkAnalysis","trace=$traceId stage=MEDIA_BLOCKED host=" + runCatching { LinkSourceProtocol.host(url) }.getOrDefault("?") + " status=" + connection.responseCode)
+                throw LinkAnalysisFailure(LinkFailureCode.MEDIA_DOWNLOAD, connection.responseCode)
+            }
             Log.i("LinkAnalysis","trace=$traceId stage=MEDIA_HEADERS http_status=" + connection.responseCode + " declared_bytes=" + connection.contentLengthLong)
             require(connection.contentLengthLong <= Limits.LINK_MEDIA_MAX_BYTES) { "素材超过大小上限" }
             connection.inputStream.use { input ->

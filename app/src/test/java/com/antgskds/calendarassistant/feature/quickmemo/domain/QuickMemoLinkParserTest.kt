@@ -27,9 +27,32 @@ class QuickMemoLinkParserTest {
         }
     }
 
+    @Test fun tiebaZhihuAndWeiboSharesKeepAllParametersAndUsePlatformTitles() {
+        val fixtures = listOf(
+            "贴吧" to "https://tieba.baidu.com/p/11080252133?share=9105&fr=sharewise&see_lz=0&share_from=post&sfc=copy&client_type=2&client_version=22.12.1.0&st=1791523997&is_video=false&unique=synthetic",
+            "知乎" to "https://www.zhihu.com/question/577191325/answer/1939975613629834011?share_code=synthetic&utm_psn=synthetic",
+            "微博" to "https://weibo.com/6048569942/5229181558592183",
+        )
+        fixtures.forEach { (source, url) ->
+            val parsed = requireNotNull(QuickMemoLinkParser.parse("分享文案 $url"))
+            assertEquals(source, parsed.source)
+            assertEquals("${source}收藏", parsed.title)
+            assertEquals(url, parsed.url)
+            assertEquals(url, parsed.dedupKey)
+            assertEquals("分享文案\n$url", parsed.body)
+        }
+    }
+
     @Test fun misleadingHostsAndNonWebSchemesAreNotPlatformLinks() {
         assertEquals("链接", QuickMemoLinkParser.parse("https://v.douyin.com.evil.test/watch")?.source)
         assertEquals("链接", QuickMemoLinkParser.parse("https://example.test/douyin.com")?.source)
+        listOf(
+            "https://tieba.baidu.com.evil.test/p/123",
+            "https://www.zhihu.com.evil.test/question/123",
+            "https://weibo.com.evil.test/123/456",
+            "https://www.baidu.com/s?wd=example",
+            "https://t.cn/synthetic",
+        ).forEach { assertEquals("链接", QuickMemoLinkParser.parse(it)?.source) }
         assertNull(QuickMemoLinkParser.parse("javascript:alert(1)"))
         assertNull(QuickMemoLinkParser.parse("https://user:pass@v.douyin.com/a"))
         assertNull(QuickMemoLinkParser.parse("没有链接"))

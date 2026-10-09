@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.recognition.application.ai.provider
 
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatIncomingPaymentPolicy
 import android.content.Context
 import android.graphics.Bitmap
 import com.antgskds.calendarassistant.feature.recognition.application.ai.AnalysisResult
@@ -21,8 +22,9 @@ object RemoteSemanticProvider : SemanticProvider {
         bitmap: Bitmap,
         settings: MySettings,
         context: Context,
-        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?
+        redPacketSent: WechatRedPacketSessionPolicy.SentEvidence?,
+        wechatIncoming: WechatIncomingPaymentPolicy.Evidence?
     ): AnalysisResult<List<RecognitionDraft>> {
-        return RecognitionProcessor.analyzeImage(bitmap, settings, context, redPacketSent)
+        return RecognitionProcessor.analyzeImage(bitmap, settings, context, redPacketSent, wechatIncoming)
     }
 }

@@ -51,6 +51,7 @@ interface SettingsTransformApi {
         clipboardLinkCollectionEnabled: Boolean? = null,
         linkAnalysisEnabled: Boolean? = null,
         linkAudioLocalTranscription: Boolean? = null,
+        linkTranscriptToBody: Boolean? = null,
         imagePinEnabled: Boolean? = null,
         voiceInputEnabled: Boolean? = null,
         floatingVoiceLongPressEnabled: Boolean? = null,

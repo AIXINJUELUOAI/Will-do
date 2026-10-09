@@ -65,7 +65,7 @@ object AppUpdateChecker {
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "检查软件更新失败: ${e.javaClass.simpleName}: ${e.message}")
+            Log.w(TAG, "检查软件更新失败: ${e.javaClass.simpleName}: ${e.javaClass.simpleName}")
             AppUpdateCheckResult.Error("检查失败，请稍后重试")
         }
     }

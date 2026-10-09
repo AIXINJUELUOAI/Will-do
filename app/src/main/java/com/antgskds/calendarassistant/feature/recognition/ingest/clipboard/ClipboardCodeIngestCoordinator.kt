@@ -52,14 +52,10 @@ data class ClipboardCodePrompt(
 
 private data class ClipboardSnapshot(
     val text: String,
-    val textHash: String,
     val instanceKey: String
 )
 
-private data class ClipboardInstance(
-    val firstSeenElapsed: Long,
-    var lastSeenElapsed: Long
-)
+private data class ClipboardContent(val text: String, val copiedAt: Long)
 
 class ClipboardCodeIngestCoordinator(
     private val appContext: Context,
@@ -108,7 +104,7 @@ class ClipboardCodeIngestCoordinator(
                                         recordProcessRead(event, "clipboard_changed", traceId)
                                         val text = event.text?.trim()?.takeIf(String::isNotBlank)
                                         if (text != null) checkMutex.withLock {
-                                            checkClipboardForPromptInternal("clipboard_changed", traceId, text)
+                                            checkClipboardForPromptInternal("clipboard_changed", traceId, ClipboardContent(text, event.timestamp))
                                         }
                                     }
                                 }
@@ -140,13 +136,15 @@ class ClipboardCodeIngestCoordinator(
         catch (error: Exception) { record("prompt_notification_cancel_failed", prompt.traceId, details = "error_type=${error.javaClass.simpleName}") }
     }
 
-    private suspend fun publishPromptNotification(prompt: ClipboardCodePrompt) {
-        try { publishPromptNotificationInternal(prompt) }
-        catch (error: CancellationException) { throw error }
-        catch (error: Exception) { record("prompt_notification_failed", prompt.traceId, details = "error_type=${error.javaClass.simpleName}") }
+    private suspend fun publishPromptNotification(prompt: ClipboardCodePrompt): Boolean = try {
+        publishPromptNotificationInternal(prompt)
+    } catch (error: CancellationException) { throw error }
+    catch (error: Exception) {
+        record("prompt_notification_failed", prompt.traceId, details = "error_type=${error.javaClass.simpleName}")
+        false
     }
 
-    private suspend fun publishPromptNotificationInternal(prompt: ClipboardCodePrompt) {
+    private suspend fun publishPromptNotificationInternal(prompt: ClipboardCodePrompt): Boolean {
         val key = promptNotificationKey(prompt)
         val created = notificationApi.create(NotificationRequest(
             key = key, kind = NotificationKind.CLIPBOARD_CODE_PROMPT, route = NotificationRoute.AUTO,
@@ -168,14 +166,13 @@ class ClipboardCodeIngestCoordinator(
         val route = notificationApi.get(key)?.route?.name ?: "unknown"
         record("prompt_notification", prompt.traceId, "clipboard_changed",
             "result=$status state=${success?.state?.name ?: "none"} route=$route reason=${(result as? NotificationResult.Failure)?.reason?.name ?: "none"}")
+        return ClipboardCodePromptDeliveryPolicy.isDelivered(result)
     }
     private val handledKeys = LinkedHashMap<String, Long>()
     private val ignoredKeys = LinkedHashMap<String, Long>()
     private val failedKeys = LinkedHashMap<String, Long>()
-    private val contentInstances = LinkedHashMap<String, ClipboardInstance>()
     private val processingKeys = mutableSetOf<String>()
-    private var lastSeenPromptTextHash: String? = null
-    private var lastPromptedTextHash: String? = null
+    private val copyPromptPolicy = ClipboardCopyPromptPolicy()
 
     private val sessionToken = java.util.UUID.randomUUID().toString()
     private val traceSequence = AtomicLong(System.currentTimeMillis())
@@ -278,7 +275,7 @@ class ClipboardCodeIngestCoordinator(
                 if (!settings.clipboardCodeRecognitionEnabled) return "取件类识别已关闭"
                 val candidate = ClipboardPromptAction.code(snapshot.metadata) ?: return "提示已失效"
                 val added = ingestCommandApi.ingestInstantCode(InstantCodeParser.toDraft(candidate), "clipboard_confirm")
-                markHandled(listOfNotNull(snapshot.metadata["instanceKey"], snapshot.metadata["fingerprint"]?.let(::fingerprintKey)))
+                markHandled(listOfNotNull(snapshot.metadata["instanceKey"]))
                 if (added == null) "该${candidate.type.header}已添加" else "已添加${candidate.type.header}"
             }
             NotificationKind.CLIPBOARD_LINK_PROMPT -> {
@@ -386,7 +383,8 @@ class ClipboardCodeIngestCoordinator(
             tapTarget = NotificationTapTarget(NotificationTapTargetType.APP_HOME),
             actions = listOf(ClipboardPromptAction.create(key, "收藏")),
             metadata = ClipboardPromptAction.encode(link),
-            behavior = NotificationBehavior(priority = NotificationPriority.HIGH), source = "clipboard_link",
+            behavior = NotificationBehavior(priority = NotificationPriority.HIGH,
+                timeoutAfterMillis = ClipboardCodePromptDeliveryPolicy.timeout(NotificationKind.CLIPBOARD_LINK_PROMPT)), source = "clipboard_link",
         ))
         val result = if (created is NotificationResult.Failure) created else notificationApi.trigger(NotificationTrigger.ByKey(key))
         val posted = ClipboardCodePromptDeliveryPolicy.isDelivered(result)
@@ -409,13 +407,13 @@ class ClipboardCodeIngestCoordinator(
         }
     }
 
-    private suspend fun checkClipboardForPromptInternal(source: String, traceId: Long, providedText: String? = null) {
+    private suspend fun checkClipboardForPromptInternal(source: String, traceId: Long, providedContent: ClipboardContent? = null) {
         record("check_begin", traceId, source)
         if (!clipboardEnabled()) {
             record("check_skipped", traceId, source, "reason=setting_disabled")
             return
         }
-        val snapshot = (providedText?.let { createSnapshot(it, source, traceId) }
+        val snapshot = (providedContent?.let { createSnapshot(it, source, traceId) }
             ?: readClipboardSnapshot(source, traceId)) ?: return
         if (!clipboardEnabled()) {
             record("check_skipped", traceId, source, "reason=setting_disabled_after_read")
@@ -426,93 +424,75 @@ class ClipboardCodeIngestCoordinator(
             InstantCodeParser.parseClipboard(snapshot.text) else null
         if (candidate == null) {
             val linkHandled = publishLinkNotification(snapshot.text, traceId)
-            if (linkHandled) markPrompted(snapshot.textHash)
+            if (linkHandled) markPrompted(snapshot.instanceKey)
             record("match_complete", traceId, source, "code_matched=false link_handled=$linkHandled")
             return
         }
         record("match_complete", traceId, source, "matched=true type=${candidate.type.name}")
         val draft = InstantCodeParser.toDraft(candidate)
         val fingerprint = SmsPickupFingerprint.fromDraft(draft) ?: fingerprintOf(candidate.code)
-        val processingKeys = listOf(snapshot.instanceKey, fingerprintKey(fingerprint))
+        val processingKeys = listOf(snapshot.instanceKey)
         val shouldProcess = beginProcessing(processingKeys, source, traceId) ?: return
         if (!shouldProcess) return
         try {
             val previous = _pendingPrompt.value
             previous?.let { cancelPromptNotification(it) }
-            markPrompted(snapshot.textHash)
             val prompt = ClipboardCodePrompt(candidate, fingerprint, snapshot.instanceKey, traceId)
             _pendingPrompt.value = prompt
             record("prompt_pending", traceId, source, "delivery=in_app awaits_confirmation=true replacing_pending=${previous != null}")
-            if (source == "clipboard_changed" && windowFocused != true) publishPromptNotification(prompt)
+            if (source == "clipboard_changed" && windowFocused != true) {
+                if (publishPromptNotification(prompt)) markPrompted(snapshot.instanceKey)
+            } else {
+                markPrompted(snapshot.instanceKey)
+            }
         } finally {
             endProcessing(processingKeys)
         }
     }
 
     private suspend fun readClipboardSnapshot(source: String, traceId: Long): ClipboardSnapshot? {
-        val text = readClipboardText(source, traceId) ?: return null
-        return createSnapshot(text, source, traceId)
+        val content = readClipboardContent(source, traceId) ?: return null
+        return createSnapshot(content, source, traceId)
     }
 
-    private suspend fun createSnapshot(text: String, source: String, traceId: Long): ClipboardSnapshot? {
-        val hash = hashText(text)
-        val now = SystemClock.elapsedRealtime()
-        val instanceKey = stateMutex.withLock {
-            cleanupLocked(now)
-            val existing = contentInstances[hash]
-            val instance = if (existing != null && now - existing.lastSeenElapsed <= INSTANCE_REUSE_MS) {
-                existing.lastSeenElapsed = now
-                existing
-            } else {
-                ClipboardInstance(firstSeenElapsed = now, lastSeenElapsed = now).also {
-                    contentInstances[hash] = it
-                }
-            }
-            "$hash:${instance.firstSeenElapsed}"
-        }
-        record("snapshot_created", traceId, source)
-        return ClipboardSnapshot(text = text, textHash = hash, instanceKey = instanceKey)
+    private fun createSnapshot(content: ClipboardContent, source: String, traceId: Long): ClipboardSnapshot {
+        val instanceKey = copyPromptPolicy.instanceKey(hashText(content.text), content.copiedAt)
+        record("snapshot_created", traceId, source, "clipboard_time_ms=${content.copiedAt}")
+        return ClipboardSnapshot(text = content.text, instanceKey = instanceKey)
     }
 
     private suspend fun shouldSkipRepeatedPrompt(snapshot: ClipboardSnapshot, source: String, traceId: Long): Boolean =
         stateMutex.withLock {
-            if (snapshot.textHash != lastSeenPromptTextHash) {
-                lastSeenPromptTextHash = snapshot.textHash
-                lastPromptedTextHash = null
-                return@withLock false
-            }
-            if (snapshot.textHash == lastPromptedTextHash) {
-                record("check_skipped", traceId, source, "reason=unchanged_already_prompted")
-                true
-            } else {
-                false
+            copyPromptPolicy.shouldSkip(snapshot.instanceKey).also { skipped ->
+                if (skipped) record("check_skipped", traceId, source, "reason=same_copy_already_prompted")
             }
         }
 
-    private suspend fun markPrompted(textHash: String) {
-        stateMutex.withLock {
-            lastPromptedTextHash = textHash
-        }
+    private suspend fun markPrompted(instanceKey: String) {
+        stateMutex.withLock { copyPromptPolicy.markPrompted(instanceKey) }
     }
 
-    private suspend fun readClipboardText(source: String, traceId: Long): String? {
+    private suspend fun readClipboardText(source: String, traceId: Long): String? =
+        readClipboardContent(source, traceId)?.text
+
+    private suspend fun readClipboardContent(source: String, traceId: Long): ClipboardContent? {
         val privilege = PrivilegeManager.refreshPrivilege()
         if (privilege != PrivilegeManager.PrivilegeType.NONE) {
             record("read_begin", traceId, source, "requested_mode=${privilege.name}")
             return try {
                 val event = privilegedReader.read()
                 recordProcessRead(event, source, traceId)
-                event.text?.trim()?.takeIf(String::isNotBlank)
+                event.text?.trim()?.takeIf(String::isNotBlank)?.let { ClipboardContent(it, event.timestamp) }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 record("read_exception", traceId, source, "requested_mode=${privilege.name} error_type=${error.javaClass.simpleName} reason=${(error as? ClipboardProcessException)?.reason ?: "unknown"}")
                 null
             }
         }
-        return readAppClipboardText(source, traceId)
+        return readAppClipboardContent(source, traceId)
     }
 
-    private suspend fun readAppClipboardText(source: String, traceId: Long): String? = withContext(Dispatchers.Main) {
+    private suspend fun readAppClipboardContent(source: String, traceId: Long): ClipboardContent? = withContext(Dispatchers.Main) {
         val started = SystemClock.elapsedRealtime()
         record("read_begin", traceId, source, "reader=app_clipboard")
         runCatching {
@@ -532,9 +512,10 @@ class ClipboardCodeIngestCoordinator(
                 return@runCatching null
             }
             val text = clip.getItemAt(0).coerceToText(appContext)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+            val copiedAt = clip.description.timestamp
             record("read_complete", traceId, source,
-                "result=${if (text == null) "blank_text" else "text"} item_count=${clip.itemCount} clipboard_time_ms=${clip.description.timestamp} text_length=${text?.length ?: 0} elapsed_ms=${SystemClock.elapsedRealtime() - started}")
-            text
+                "result=${if (text == null) "blank_text" else "text"} item_count=${clip.itemCount} clipboard_time_ms=$copiedAt text_length=${text?.length ?: 0} elapsed_ms=${SystemClock.elapsedRealtime() - started}")
+            text?.let { ClipboardContent(it, copiedAt) }
         }.onFailure {
             record("read_exception", traceId, source, "error_type=${it.javaClass.simpleName} elapsed_ms=${SystemClock.elapsedRealtime() - started}")
         }.getOrNull()
@@ -598,16 +579,7 @@ class ClipboardCodeIngestCoordinator(
         cleanupMap(handledKeys, now, ENTRY_TTL_MS)
         cleanupMap(ignoredKeys, now, ENTRY_TTL_MS)
         cleanupMap(failedKeys, now, FAILED_TTL_MS)
-        val instanceIterator = contentInstances.entries.iterator()
-        while (instanceIterator.hasNext()) {
-            if (now - instanceIterator.next().value.lastSeenElapsed > INSTANCE_TTL_MS) instanceIterator.remove()
-        }
-        while (contentInstances.size > MAX_ENTRIES) {
-            val eldest = contentInstances.entries.iterator()
-            if (!eldest.hasNext()) return
-            eldest.next()
-            eldest.remove()
-        }
+
     }
 
     private fun cleanupMap(map: LinkedHashMap<String, Long>, now: Long, ttl: Long) {
@@ -625,8 +597,6 @@ class ClipboardCodeIngestCoordinator(
 
     private fun hashText(text: String): String = fingerprintOf(text.trim())
 
-    private fun fingerprintKey(value: String): String = "fingerprint:$value"
-
     private fun fingerprintOf(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
@@ -637,8 +607,6 @@ class ClipboardCodeIngestCoordinator(
         private const val TAG = "ClipboardIngest"
         private const val ENTRY_TTL_MS = 10 * 60 * 1000L
         private const val FAILED_TTL_MS = 15 * 1000L
-        private const val INSTANCE_REUSE_MS = 5 * 1000L
-        private const val INSTANCE_TTL_MS = 10 * 60 * 1000L
         private const val MAX_ENTRIES = 128
     }
 }

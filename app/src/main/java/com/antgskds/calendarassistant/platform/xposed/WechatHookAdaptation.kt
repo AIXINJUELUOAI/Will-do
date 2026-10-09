@@ -1,7 +1,7 @@
 /*
  * Adapted from AutoAccounting 4e707980 AdaptationUtils.kt / HookerClazz.kt.
  * Copyright (C) 2025 ankio (ankio@ankio.net).
- * See docs/third-party/autoaccounting/README.md and LICENSE.
+ * See 开发记录/第三方来源与许可说明.md and LICENSE.
  * Integration: host-private SharedPreferences and Will do logging replace upstream services.
  * No host restart or Tinker modification; a successful scan is used on the next normal launch.
  */

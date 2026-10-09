@@ -891,10 +891,10 @@ class LegacyDataMigrationCoordinator(
                     db.eventsDao().insertOrUpdate(synced.copy(id = id, lastUpdated = System.currentTimeMillis() / 1000L))
                     pushed++
                 } else {
-                    Log.w(TAG, "Imported event was not bound to system calendar: localId=$id title=${latest.title}")
+                    Log.w(TAG, "Imported event was not bound to system calendar: localId=$id")
                 }
             }.onFailure {
-                Log.w(TAG, "Failed to push imported event to system calendar: localId=$id title=${latest.title}", it)
+                Log.w(TAG, "Failed to push imported event to system calendar: localId=$id", it)
             }
         }
         return pushed

@@ -55,7 +55,10 @@ object PipelineCatalog {
     )
 
     val pipelines: List<PipelineEntry> = listOf(
+        PipelineEntry("随口记文件导出", Chain.SUPPORT, "platform/quickmemo/QuickMemoExportFiles", Maturity.PIPELINE, "详情输入快照生成 Markdown 或附件 ZIP，经系统文档选择器保存或用户操作的分享面板分发"),
         PipelineEntry("链接摘要任务", Chain.RECOGNITION, "feature/linkanalysis/application/LinkAnalysisCoordinator", Maturity.PIPELINE, "收藏后唯一任务固定源版本；提取、下载、AI、条件写回、完成通知，取消与旧任务不能覆盖当前结果"),
+
+        PipelineEntry("解析源网页登录", Chain.SUPPORT, "feature/linkanalysis/ui/LinkSourceManagerCard", Maturity.PIPELINE, "当前源声明登录入口，经协议与域名校验后展示公共 sheet，收起后进入隔离的交互式 WebView；不包含内置平台映射或任意网址输入"),
 
         PipelineEntry("随口记文件夹同步", Chain.SYNC, "feature/cloudsync/data/SyncV2LocalRepository", Maturity.PIPELINE, "文件夹以 UUID 独立同步版本与删除标记，空文件夹也同步；随口记携带归属，旧数据保持未分组"),
         PipelineEntry("随口记链接收藏", Chain.INGEST, "feature/quickmemo/application/QuickMemoFacade", Maturity.PIPELINE, "系统分享与剪贴板按钮共用事务去重保存；保留原链接和本地分享文案，不调用 AI"),
@@ -69,6 +72,7 @@ object PipelineCatalog {
         PipelineEntry("自动记账截图排队", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService.enqueueAutomatic", Maturity.PIPELINE, "命中即截图，前后核实归属后写入临时缓存；各笔独立通知、顺序模型识别及统一入库，结束清理缓存"),
         PipelineEntry("截图挂起", Chain.NOTIFICATION, "platform/accessibility/TextAccessibilityService.startImagePinCapture", Maturity.PIPELINE, "磁贴主动触发，检查权限和截图占用、复用截图延迟后采集，PNG 临时文件经 ImagePinController 统一追加并清理；失败保留已有图片"),
         PipelineEntry("图片挂起", Chain.NOTIFICATION, "feature/imagepin/ImagePinController", Maturity.PIPELINE, "受控多图分享/选图、整批校验后追加本地副本、共用胶囊和翻页弹窗；兼容旧单图，失败保留原图，取消本张先保存索引再清理副本并刷新数量；关闭弹窗保留挂起，结束挂起清理全部副本"),
+        PipelineEntry("微信收款与领红包识别", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService", Maturity.PIPELINE, "已知页面与同窗事件先授权截图，转账时间由图片读取；新领取红包用本次领取时刻，历史页面不回填现在；复用截图队列、统一多模态、入库与通知"),
         PipelineEntry("微信红包发送识别", Chain.RECOGNITION, "platform/accessibility/TextAccessibilityService", Maturity.PIPELINE, "原生截图暂存支付确认页，同次已发送后走统一多模态、入库、附件与结果反馈；缓存期不调用 AI"),
         PipelineEntry("财务消息采集", Chain.RECOGNITION, "feature/accounting/application/AccountingMessageCoordinator", Maturity.PIPELINE, "通知和短信串行提交 RecognitionApi，本地规则识别后复用统一去重入库和结果通知；通知实际入库回执供无障碍现场在模型请求前让行"),
         PipelineEntry("支付采集诊断", Chain.SUPPORT, "platform/accessibility/PaymentAccessibilityDiagnostics", Maturity.PIPELINE, "管理微信、支付宝、拼多多、淘宝和京东的诊断会话、即时/延迟采样、独立截图与限量导出；不切换服务配置，结束或导出失败后恢复自动记账"),

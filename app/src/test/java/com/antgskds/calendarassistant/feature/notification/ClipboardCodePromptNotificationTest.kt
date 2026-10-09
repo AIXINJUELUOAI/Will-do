@@ -1,6 +1,7 @@
 package com.antgskds.calendarassistant.feature.notification
 
 import com.antgskds.calendarassistant.feature.notification.model.*
+import com.antgskds.calendarassistant.feature.quickmemo.domain.QuickMemoLinkParser
 import com.antgskds.calendarassistant.feature.notification.policy.ClipboardCodePromptDeliveryPolicy as Policy
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.template.ClipboardCodePromptDisplay as Display
 import com.antgskds.calendarassistant.shared.management.resource.notification.display.live.vendor.xiaomi.XiaomiLiveNotificationTemplate
@@ -24,6 +25,12 @@ class ClipboardCodePromptNotificationTest {
         assertFalse(Policy.owns(NotificationKey("quick-memo:reminder:10")))
     }
 
+    @Test fun linkPromptExpiresInOneMinuteAndCodePromptKeepsItsExistingLifetime() {
+        assertEquals(60_000L, Policy.timeout(NotificationKind.CLIPBOARD_LINK_PROMPT))
+        assertNull(Policy.timeout(NotificationKind.CLIPBOARD_CODE_PROMPT))
+        assertNull(Policy.timeout(NotificationKind.SCHEDULE_REMINDER))
+    }
+
     @Test fun normalAndLiveTemplatesShareCapturedCodeAndDirectAction() {
         val key = Policy.key(10, "session")
         val action = com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardPromptAction.create(key, "添加取件")
@@ -44,9 +51,35 @@ class ClipboardCodePromptNotificationTest {
     @Test fun linkPromptHasSameCollectActionAndGenericTitle() {
         val action = com.antgskds.calendarassistant.feature.recognition.ingest.clipboard.ClipboardPromptAction.create(Policy.key(12), "收藏")
         val live = Display.notification(Display.linkSnapshot("小红书"), listOf(action))
+        assertEquals("小红书链接", live.shortText)
         assertEquals("识别到小红书链接", live.primaryText)
         assertEquals("收藏", live.effectiveActions.single().label)
+        assertEquals("发现链接", Display.linkSnapshot("").shortText)
+        assertEquals("抖音链接", Display.linkSnapshot("抖音").shortText)
         assertEquals("识别到链接", Display.linkSnapshot("").primaryText)
+        listOf(
+            "贴吧" to "https://tieba.baidu.com/p/123?share=synthetic",
+            "知乎" to "https://www.zhihu.com/question/123/answer/456?share_code=synthetic",
+            "微博" to "https://weibo.com/123/456",
+        ).forEach { (source, url) ->
+            val link = requireNotNull(QuickMemoLinkParser.parse(url))
+            val snapshot = Display.linkSnapshot(link.source)
+            val platformLive = Display.notification(snapshot, listOf(action))
+            assertEquals("${source}链接", snapshot.shortText)
+            assertEquals("识别到${source}链接", snapshot.primaryText)
+            assertEquals(snapshot.shortText, platformLive.shortText)
+            assertEquals(snapshot.primaryText, platformLive.primaryText)
+            assertEquals("收藏", platformLive.effectiveActions.single().label)
+            val platformCollapsed = XiaomiLiveNotificationTemplate.create(platformLive, true, true, false, null, 10, 60_010)
+            val platformExpanded = XiaomiLiveNotificationTemplate.create(platformLive, false, true, false, null, 10, 60_010)
+            assertEquals(snapshot.shortText, platformCollapsed.title)
+            assertEquals(snapshot.primaryText, platformExpanded.title)
+        }
+        val collapsed = XiaomiLiveNotificationTemplate.create(live, true, true, false, null, 10, 60_010)
+        val expanded = XiaomiLiveNotificationTemplate.create(live, false, true, false, null, 10, 60_010)
+        assertEquals(live.shortText, collapsed.title)
+        assertEquals(live.primaryText, expanded.title)
+        assertEquals("收藏到随口记，稍后继续查看", live.expandedText)
     }
 
     @Test fun savedLinkUsesDirectDetailTargetAndReplacesCollectWithView() {
@@ -55,6 +88,8 @@ class ClipboardCodePromptNotificationTest {
         val tap = NotificationTapTarget(NotificationTapTargetType.QUICK_MEMO_DETAIL, mapOf("quickMemoId" to memoId.toString()))
         val snapshot = Display.savedLinkSnapshot("小红书收藏")
         val live = Display.notification(snapshot, listOf(action), tap)
+        assertEquals("已收藏", snapshot.shortText)
+        assertEquals(snapshot.shortText, live.shortText)
         assertEquals("已收藏到随口记", snapshot.primaryText)
         assertEquals(snapshot.primaryText, live.primaryText)
         assertEquals("小红书收藏", live.secondaryText)

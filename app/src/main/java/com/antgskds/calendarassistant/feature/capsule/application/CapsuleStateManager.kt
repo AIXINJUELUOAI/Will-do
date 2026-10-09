@@ -788,7 +788,7 @@ class CapsuleStateManager(
                 val capsuleType = if (isExpired) TYPE_PICKUP_EXPIRED else TYPE_PICKUP
                 val display = CapsuleMessageComposer.composePickup(context, event, isExpired)
 
-                Log.d(TAG, "生成胶囊: id=${entry.id}, type=$capsuleType, notifId=${entry.notifId}, title=${display.shortText}")
+                Log.d(TAG, "生成胶囊: id=${entry.id}, type=$capsuleType, notifId=${entry.notifId}")
 
                 capsules.add(createCapsuleItem(
                     id = entry.id,
@@ -933,7 +933,7 @@ class CapsuleStateManager(
 
             !event.isCompleted && now.isBefore(endDateTime) && !now.isBefore(effectiveStartTime)
         } catch (e: Exception) {
-            Log.e(TAG, "解析事件时间失败: ${event.title}", e)
+            Log.e(TAG, "解析事件时间失败 eventId=${event.id}", e)
             false
         }
     }
@@ -953,7 +953,7 @@ class CapsuleStateManager(
                 nowEpochSeconds >= event.startTS - leadSeconds &&
                 nowEpochSeconds < event.startTS
             if (shouldCheckIn && transitAutoCheckInInFlight.add(entry.id)) {
-                Log.i(TAG, "列车/航班自动切换: id=${entry.id}, title=${event.title}")
+                Log.i(TAG, "列车/航班自动切换: id=${entry.id}")
                 scheduleCenter.checkInItem(entry.action)
                 appScope.launch {
                     kotlinx.coroutines.delay(30_000)

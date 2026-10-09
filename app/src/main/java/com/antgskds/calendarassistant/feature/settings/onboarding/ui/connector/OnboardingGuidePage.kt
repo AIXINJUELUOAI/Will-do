@@ -1814,10 +1814,10 @@ private fun canAccessCalendarProvider(context: Context): Boolean {
             cursor.count >= 0
         } == true
     } catch (e: SecurityException) {
-        Log.w(ONBOARDING_LOG_TAG, "CalendarProviderAccess denied: ${e.message}", e)
+        Log.w(ONBOARDING_LOG_TAG, "CalendarProviderAccess denied: ${e.javaClass.simpleName}", e)
         false
     } catch (e: Exception) {
-        Log.w(ONBOARDING_LOG_TAG, "CalendarProviderAccess failed: ${e.message}", e)
+        Log.w(ONBOARDING_LOG_TAG, "CalendarProviderAccess failed: ${e.javaClass.simpleName}", e)
         false
     }.also {
         Log.d(ONBOARDING_LOG_TAG, "SystemProbe calendarProviderAccess=$it")
@@ -1846,7 +1846,7 @@ private fun logRuntimePermission(context: Context, permission: String) {
             null
         }
     }.getOrElse { error ->
-        Log.w(ONBOARDING_LOG_TAG, "PermissionFlagReadFailed permission=$permission error=${error.message}", error)
+        Log.w(ONBOARDING_LOG_TAG, "PermissionFlagReadFailed permission=$permission error=${error.javaClass.simpleName}", error)
         null
     }
     Log.d(

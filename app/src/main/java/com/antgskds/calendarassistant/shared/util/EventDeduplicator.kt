@@ -117,7 +117,7 @@ object EventDeduplicator {
                     // 场景：导入归档事件 vs 现有活跃事件
                     // 策略：以导入为准，将现有事件标记为需要归档
                     toUpdateArchiveStatus.add(existingEvent to true)
-                    Log.d(TAG, "检测到归档状态冲突：现有活跃事件将被归档 - ${importEvent.title}")
+                    Log.d(TAG, "检测到归档状态冲突：现有活跃事件将被归档")
                 }
                 // 重复，跳过
                 toSkip.add(importEvent)
@@ -132,7 +132,7 @@ object EventDeduplicator {
                     // 场景：导入活跃事件 vs 现有归档事件
                     // 策略：以导入为准，将现有归档事件标记为需要还原
                     toUpdateArchiveStatus.add(existingEvent to false)
-                    Log.d(TAG, "检测到归档状态冲突：现有归档事件将被还原 - ${importEvent.title}")
+                    Log.d(TAG, "检测到归档状态冲突：现有归档事件将被还原")
                 }
                 // 重复，跳过
                 toSkip.add(importEvent)

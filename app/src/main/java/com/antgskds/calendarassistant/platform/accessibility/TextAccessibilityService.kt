@@ -52,6 +52,7 @@ import com.antgskds.calendarassistant.feature.accounting.domain.AccountingNotifi
 import com.antgskds.calendarassistant.platform.receiver.AccountingMessageAccessPolicy
 import com.antgskds.calendarassistant.feature.accounting.domain.AutomaticAccountingPolicy
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatRedPacketSessionPolicy
+import com.antgskds.calendarassistant.feature.accounting.domain.WechatIncomingPaymentPolicy
 import com.antgskds.calendarassistant.feature.accounting.domain.WechatPaymentSessionPolicy
 import com.antgskds.calendarassistant.feature.accounting.domain.PaymentDetailPolicy
 import com.antgskds.calendarassistant.shared.management.catalog.ConfigCatalog
@@ -72,6 +73,7 @@ class TextAccessibilityService : AccessibilityService() {
     private val wechatSession = WechatPaymentSessionPolicy()
     private val detailPolicy = PaymentDetailPolicy()
     private val redPacketSession = WechatRedPacketSessionPolicy()
+    private val incomingPaymentPolicy = WechatIncomingPaymentPolicy()
     private var redPacketCaptureJob: Job? = null
     private var redPacketExpiryJob: Job? = null
     private var redPacketBitmap: Bitmap? = null
@@ -79,6 +81,9 @@ class TextAccessibilityService : AccessibilityService() {
     private sealed interface AutomaticRequest {
         val packageName: String
         data class RedPacket(val bitmap: Bitmap, val evidence: WechatRedPacketSessionPolicy.SentEvidence) : AutomaticRequest {
+            override val packageName get() = AutomaticAccountingPolicy.WECHAT
+        }
+        data class WechatIncoming(val candidate: WechatIncomingPaymentPolicy.Candidate) : AutomaticRequest {
             override val packageName get() = AutomaticAccountingPolicy.WECHAT
         }
         data class WechatSuccess(val candidate: WechatPaymentSessionPolicy.Candidate) : AutomaticRequest {
@@ -116,19 +121,22 @@ class TextAccessibilityService : AccessibilityService() {
         automaticCaptures.values.toList().forEach { it.cancel() }
         screenshotQueue.cancelAll()
         detailPolicy.clearTasks()
+        incomingPaymentPolicy.reset()
     }
 
     private fun releaseCapture(request: AutomaticRequest) {
         when (request) {
             is AutomaticRequest.Detail -> detailPolicy.release(request.candidate)
             is AutomaticRequest.WechatSuccess -> wechatSession.release(request.candidate)
+            is AutomaticRequest.WechatIncoming -> incomingPaymentPolicy.release(request.candidate)
             else -> Unit
         }
     }
 
     private fun enqueueAutomatic(request: AutomaticRequest) {
         val id = EventIdentity.newTraceId("accounting")
-        val capturedAt = (request as? AutomaticRequest.RedPacket)?.evidence?.sentAtMillis ?: System.currentTimeMillis()
+        val capturedAt = (request as? AutomaticRequest.RedPacket)?.evidence?.sentAtMillis
+            ?: (request as? AutomaticRequest.WechatIncoming)?.candidate?.evidence?.receivedAtMillis ?: System.currentTimeMillis()
         var completed = false
         val job = serviceScope.launch(CoroutineName("accounting_capture"), start = CoroutineStart.UNDISPATCHED) {
             var bitmap: Bitmap? = (request as? AutomaticRequest.RedPacket)?.bitmap
@@ -136,6 +144,8 @@ class TextAccessibilityService : AccessibilityService() {
             var submitted = false
             var progressPublished = false
             try {
+                // 收款结果和红包领取详情有转场动画；沿用页面稳定等待，再核对现场归属。
+                if (request is AutomaticRequest.WechatIncoming) delay(ConfigCatalog.AUTO_ACCOUNTING_DEBOUNCE_MS.toLong())
                 automaticCaptureMutex.withLock {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || paymentDiagnostics.isActive ||
                         !settingsQueryApi.settings.value.isRecognitionConfigReady() ||
@@ -204,9 +214,11 @@ class TextAccessibilityService : AccessibilityService() {
             try {
                 val result = app.recognitionApi.analyzeAutomaticAccountingImage(bitmap, settingsQueryApi.settings.value,
                     applicationContext, task.request.packageName, id,
-                    isDetailPage = task.request is AutomaticRequest.Detail && !task.request.candidate.isPaymentResult,
+                    isDetailPage = (task.request is AutomaticRequest.Detail && !task.request.candidate.isPaymentResult) ||
+                        (task.request as? AutomaticRequest.WechatIncoming)?.candidate?.evidence?.kind == WechatIncomingPaymentPolicy.Kind.TRANSFER,
                     redPacketSent = (task.request as? AutomaticRequest.RedPacket)?.evidence,
-                    publishFeedback = false, capturedAt = task.capturedAt)
+                    publishFeedback = false, capturedAt = task.capturedAt,
+                    wechatIncoming = (task.request as? AutomaticRequest.WechatIncoming)?.candidate?.evidence)
                 withContext(NonCancellable + Dispatchers.Main) {
                     when (result) {
                         is AnalysisResult.Success -> {
@@ -328,6 +340,7 @@ class TextAccessibilityService : AccessibilityService() {
         resetRedPacket()
         wechatSession.reset()
         detailPolicy.reset()
+        incomingPaymentPolicy.reset()
         paymentDiagnostics.start()
     }
 
@@ -418,6 +431,7 @@ class TextAccessibilityService : AccessibilityService() {
                 .getOrNull()?.let { PaymentWindowReader.Identity(it.packageName, it.windowId) }
         } else null
         foreground?.let { detailPolicy.observeForeground(it.packageName, it.windowId) }
+        if (handleIncomingPaymentEvent(event, foreground?.packageName, foreground?.windowId, now)) return
         if (handleRedPacketEvent(event, foreground?.packageName, foreground?.windowId, now)) return
         val eventIsForeground = foreground != null && foreground.packageName == source && foreground.windowId == event.windowId
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && eventIsForeground) {
@@ -595,6 +609,32 @@ class TextAccessibilityService : AccessibilityService() {
             }
         }
         return source == AutomaticAccountingPolicy.WECHAT && (previous != null || redPacketSession.sessionId != null)
+    }
+
+    private fun handleIncomingPaymentEvent(event: AccessibilityEvent, foregroundPackage: String?, foregroundWindow: Int?, now: Long): Boolean {
+        val source = event.packageName?.toString().orEmpty()
+        val foregroundEvent = source == AutomaticAccountingPolicy.WECHAT && foregroundPackage == source && foregroundWindow == event.windowId
+        val relevant = event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED,
+            AccessibilityEvent.TYPE_VIEW_HOVER_ENTER, AccessibilityEvent.TYPE_ANNOUNCEMENT)
+        val snapshot = if (foregroundEvent && relevant) runCatching { PaymentWindowReader.read(event.source) }
+            .onFailure { logAutomatic("incoming_source", "reason=read_error", source, throttle = true) }.getOrNull() else null
+        val texts = if (foregroundEvent && relevant) event.text.take(ConfigCatalog.AUTO_ACCOUNTING_MAX_NODES)
+            .map { it?.toString().orEmpty().take(ConfigCatalog.AUTO_ACCOUNTING_MAX_TEXT) } +
+            event.contentDescription?.toString().orEmpty().take(ConfigCatalog.AUTO_ACCOUNTING_MAX_TEXT) else emptyList()
+        val validSnapshot = snapshot?.takeIf { it.packageName == source && it.windowId == event.windowId }
+        val candidate = incomingPaymentPolicy.observe(source, event.className?.toString().orEmpty(), event.windowId,
+            texts + validSnapshot?.texts.orEmpty(), validSnapshot?.editable == true,
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            foregroundPackage, foregroundWindow, now, System.currentTimeMillis())
+        if (candidate != null) {
+            automaticTriggerJob?.cancel()
+            logAutomatic("incoming_candidate", "kind=${candidate.evidence.kind} window=${candidate.windowId} visit=${candidate.visit}", source)
+            startRecognition(0.milliseconds, AutomaticRequest.WechatIncoming(candidate))
+            return true
+        }
+        // 已交给收入任务的页面刷新不再进入通用详情入口，避免重复请求模型。
+        return foregroundEvent && incomingPaymentPolicy.hasClaimed(source, event.windowId)
     }
 
     private fun scheduleDetailRecognition(candidate: PaymentDetailPolicy.Candidate) {
@@ -1169,10 +1209,17 @@ class TextAccessibilityService : AccessibilityService() {
         val window = when (expected) {
             is AutomaticRequest.Detail -> expected.candidate.windowId
             is AutomaticRequest.WechatSuccess -> expected.candidate.windowId
+            is AutomaticRequest.WechatIncoming -> expected.candidate.windowId
             is AutomaticRequest.RedPacket -> return !expected.bitmap.isRecycled
         }
         val current = runCatching { PaymentWindowReader.foreground(this, expected.packageName, window) }.getOrNull()
             ?: return false
+        if (expected is AutomaticRequest.WechatIncoming) {
+            val valid = incomingPaymentPolicy.isValid(expected.candidate, current.packageName, current.windowId,
+                current.texts, current.editable, android.os.SystemClock.elapsedRealtime())
+            logAutomatic(phase, "route=wechat_incoming kind=${expected.candidate.evidence.kind} window=${current.windowId} valid=$valid", expected.packageName)
+            return valid
+        }
         if (expected is AutomaticRequest.Detail) {
             val valid = detailPolicy.isValid(expected.candidate, current.packageName, current.windowId, current.texts,
                 current.editable, android.os.SystemClock.elapsedRealtime())
@@ -1195,7 +1242,7 @@ class TextAccessibilityService : AccessibilityService() {
         is AutomaticRequest.Detail -> automatic.candidate.notificationHint.takeIf { automatic.candidate.isPaymentResult }
         // 空树的现场成功信号已有独立会话，金额不可读时仅接受短时内唯一一笔同源支出回执。
         is AutomaticRequest.WechatSuccess, is AutomaticRequest.RedPacket -> AccountingNotificationPriorityPolicy.Hint(null, "EXPENSE")
-        null -> null
+        is AutomaticRequest.WechatIncoming, null -> null
     }
 
     private suspend fun notificationAlreadySaved(automatic: AutomaticRequest?, detectedAt: Long): Boolean {

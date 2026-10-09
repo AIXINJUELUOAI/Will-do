@@ -28,9 +28,12 @@ class LinkAnalysisCoordinator(
     private val gate = Mutex()
     private val work get() = WorkManager.getInstance(context)
     override suspend fun importSource(input: InputStream) = gate.withLock {
-        val imported = store.import(input)
-        work.cancelAllWorkByTag(sourceTag(imported.manifest.id))
-        cancelSourceRecords(imported.manifest.id)
+        val previous = store.sources.value.map { it.manifest.id }
+        val imported = store.import(input) // 完整校验与原子写入成功之后才替换、清理旧任务。
+        (previous + imported.manifest.id).distinct().forEach { id ->
+            work.cancelAllWorkByTag(sourceTag(id))
+            cancelSourceRecords(id)
+        }
     }
     override suspend fun setSourceEnabled(id: String, enabled: Boolean) = gate.withLock {
         store.setEnabled(id,enabled)
@@ -118,7 +121,7 @@ class LinkAnalysisCoordinator(
                 directory.mkdirs()
                 progress("EXTRACTING")
                 repository.state(id,token,"EXTRACTING")
-                val memo = repository.memo(id) ?: return@withTimeout
+                var memo = repository.memo(id) ?: return@withTimeout
                 val result = LinkScriptRuntime(context).extract(pack,LinkSourceInput(requestId=token,url=record.sourceUrl,shareText=memo.bodyText))
                 if (result.status=="error") throw LinkAnalysisFailure(LinkFailureCode.fromSource(result.error?.code))
                 Log.i("LinkAnalysis", "memoId=$id trace=$token stage=EXTRACTED status=" + result.status + " text_chars=" + result.body.text.length + " media_count=" + result.media.size)
@@ -129,14 +132,20 @@ class LinkAnalysisCoordinator(
                 check(repository.current(id,token)!=null)
                 progress("SUMMARIZING")
                 repository.state(id,token,"SUMMARIZING")
-                val summary = LinkSummaryGenerator().summarize(result,content,settings.settings.value)
+                val summary = LinkSummaryGenerator().summarize(result, content, settings.settings.value) { transcript ->
+                    gate.withLock {
+                        if (LinkAnalysisPolicy.enabled(settings.settings.value) && store.load(record.sourceId,record.sourceDigest) != null) {
+                            repository.saveTranscript(id, token, transcript, memo, settings.settings.value.linkTranscriptToBody)?.let { memo = it }
+                        }
+                    }
+                }
                 currentCoroutineContext().ensureActive()
                 progress("SAVING")
                 gate.withLock {
                     if (!LinkAnalysisPolicy.enabled(settings.settings.value) || store.load(record.sourceId,record.sourceDigest)==null) return@withLock
-                    val data = LinkSummaryData(result.title,result.author,result.contentType,content.text,summary,content.warnings,
-                        pack.manifest.id,pack.manifest.version,System.currentTimeMillis())
-                    if (repository.complete(id,token,data)) {
+                    val data = LinkSummaryData(result.title,result.author,result.contentType,content.text,summary.summary,content.warnings + if (summary.transcriptIncomplete) listOf("部分音频未返回转写原文，已保留模型实际返回的文本") else emptyList(),
+                        pack.manifest.id,pack.manifest.version,System.currentTimeMillis(), aiTitle = summary.title, transcript = summary.transcript)
+                    if (repository.complete(id,token,data,memo)) {
                         val currentMemo = repository.memo(id) ?: return@withLock
                         progress("DONE")
                         publishCompleted(id,currentMemo.title.ifBlank { result.title })
@@ -152,13 +161,13 @@ class LinkAnalysisCoordinator(
         } catch (error: Exception) {
             val failure = LinkAnalysisFailure.describe(error, stage)
             repository.state(id,token,"FAILED",failure.code.userMessage)
-            Log.w("LinkAnalysis","memoId=$id trace=$token stage=$stage code=" + failure.code.name + " http_status=" + (failure.statusCode ?: 0) + " error_type=" + error.javaClass.simpleName)
+            Log.w("LinkAnalysis","memoId=$id trace=$token stage=$stage code=" + failure.code.name + " http_status=" + (failure.statusCode ?: 0) + " error_type=" + error.javaClass.simpleName + " detail=" + LinkAnalysisFailure.safeDetail(error))
             // Never print source messages, URLs, headers, page text or provider response bodies.
         } finally { withContext(NonCancellable + Dispatchers.IO) { if (directory.canonicalFile.toPath().startsWith(File(context.cacheDir,"link-analysis").canonicalFile.toPath())) directory.deleteRecursively() } }
     }
     private suspend fun publishCompleted(id: Long,title: String) {
         try {
-        val request = LinkSummaryNotificationPolicy.request(id,title,settings.settings.value)
+        val request = LinkSummaryNotificationPolicy.request(id,title)
         // A process restart after persistence may finish delivery without paying for another AI request.
         val existing = notifications.get(request.key)
         if(existing?.state==NotificationState.POSTED) return
