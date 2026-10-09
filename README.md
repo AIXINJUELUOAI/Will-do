@@ -75,6 +75,8 @@
 | [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting) | Xposed 自动记账、通知与短信信息提取相关实现 |
 | [WakeUpDecoder](https://github.com/airline233/WakeUpDecoder) | 新版 WakeUp 课表分享口令的签名与解密实现，移植为 Kotlin；[来源与许可说明](开发记录/第三方来源与许可说明.md#wakeupdecoder) |
 
+特别感谢 [oishijie](https://github.com/oishijie/Will-do) 对 Will do 的问题修复与功能探索。本项目参考了其搜索／选图重复弹出修复、震动开关修正和日历视图记忆，并从其“闪记／收藏”设计中获得了随口记升级的启发。
+
 感谢上述项目的开发者，以及参与 Will do 测试、反馈问题和提出建议的用户。
 
 ## 五、开源许可
